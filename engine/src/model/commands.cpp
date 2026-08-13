@@ -380,6 +380,7 @@ struct PatternMetaTraits {
       live.name = value.name;
       live.color = value.color;
       live.length = value.length;
+      live.swing = value.swing;
     });
   }
 };

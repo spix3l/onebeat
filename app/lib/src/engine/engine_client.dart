@@ -141,7 +141,27 @@ class EngineException implements Exception {
   String toString() => message;
 }
 
-class EngineClient {
+abstract interface class RackClient {
+  RackPattern readRackPattern();
+  List<RackRow> readRackRows();
+  void setRackRowGrid(String instrumentId, int gridTicks);
+  void setRackLength(int steps);
+  void setRackSwing(double swing);
+  void toggleRackStep(String instrumentId, int step);
+  void setRackStepVelocity(String instrumentId, int step, int velocity);
+  void removeRackSequence(String instrumentId);
+  void beginRackGesture(String name);
+  void commitRackGesture();
+  void abortRackGesture();
+  bool get canUndoProject;
+  bool get canRedoProject;
+  String get undoProjectName;
+  String get redoProjectName;
+  void undoProject();
+  void redoProject();
+}
+
+class EngineClient implements RackClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -150,6 +170,8 @@ class EngineClient {
       _pluginInfo = calloc<ob_plugin_info>(),
       _instanceInfo = calloc<ob_instance_info>(),
       _instrumentInfo = calloc<ob_instrument_info>(),
+      _rackPatternInfo = calloc<ob_rack_pattern_info>(),
+      _rackRowInfo = calloc<ob_rack_row_info>(),
       _paramInfo = calloc<ob_param_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
@@ -196,6 +218,8 @@ class EngineClient {
   final Pointer<ob_plugin_info> _pluginInfo;
   final Pointer<ob_instance_info> _instanceInfo;
   final Pointer<ob_instrument_info> _instrumentInfo;
+  final Pointer<ob_rack_pattern_info> _rackPatternInfo;
+  final Pointer<ob_rack_row_info> _rackRowInfo;
   final Pointer<ob_param_info> _paramInfo;
 
   int _generation = 0;
@@ -576,10 +600,123 @@ class EngineClient {
         _bindings.ob_engine_instrument_remove(_engine, native),
   );
 
+  @override
   bool get canUndoProject => _bindings.ob_engine_project_can_undo(_engine) != 0;
+  @override
   bool get canRedoProject => _bindings.ob_engine_project_can_redo(_engine) != 0;
+  @override
+  String get undoProjectName =>
+      _bindings
+          .ob_engine_project_undo_name(_engine)
+          .cast<Utf8>()
+          .toDartString();
+  @override
+  String get redoProjectName =>
+      _bindings
+          .ob_engine_project_redo_name(_engine)
+          .cast<Utf8>()
+          .toDartString();
+  @override
   void undoProject() => _check(_bindings.ob_engine_project_undo(_engine));
+  @override
   void redoProject() => _check(_bindings.ob_engine_project_redo(_engine));
+
+  @override
+  RackPattern readRackPattern() {
+    _check(_bindings.ob_engine_rack_pattern(_engine, _rackPatternInfo));
+    final ob_rack_pattern_info value = _rackPatternInfo.ref;
+    return RackPattern(
+      id: _readFixedUtf8(value.id, 32),
+      name: _readFixedUtf8(value.name, 128),
+      lengthTicks: value.length_ticks,
+      baseGridTicks: value.base_grid_ticks,
+      swing: value.swing,
+    );
+  }
+
+  @override
+  List<RackRow> readRackRows() {
+    final int count = _bindings.ob_engine_rack_row_count(_engine);
+    final List<RackRow> rows = <RackRow>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_rack_row_at(_engine, index, _rackRowInfo));
+      final ob_rack_row_info value = _rackRowInfo.ref;
+      rows.add(
+        RackRow(
+          instrumentId: _readFixedUtf8(value.instrument_id, 32),
+          gridTicks: value.grid_ticks,
+          hasSequence: (value.flags & 1) != 0,
+          offGridCount: value.off_grid_count,
+          noteCount: value.note_count,
+          steps: List<RackStep>.generate(
+            value.step_count,
+            (int step) => RackStep(
+              active: value.step_active[step] != 0,
+              velocity: value.step_velocity[step],
+            ),
+            growable: false,
+          ),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  @override
+  void setRackRowGrid(String instrumentId, int gridTicks) => _withNativeString(
+    instrumentId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_rack_set_row_grid(_engine, native, gridTicks),
+  );
+
+  @override
+  void setRackLength(int steps) =>
+      _check(_bindings.ob_engine_rack_set_length(_engine, steps));
+
+  @override
+  void setRackSwing(double swing) =>
+      _check(_bindings.ob_engine_rack_set_swing(_engine, swing));
+
+  @override
+  void toggleRackStep(String instrumentId, int step) => _withNativeString(
+    instrumentId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_rack_toggle_step(_engine, native, step),
+  );
+
+  @override
+  void setRackStepVelocity(String instrumentId, int step, int velocity) =>
+      _withNativeString(
+        instrumentId,
+        (Pointer<Char> native) => _bindings.ob_engine_rack_set_step_velocity(
+          _engine,
+          native,
+          step,
+          velocity,
+        ),
+      );
+
+  @override
+  void removeRackSequence(String instrumentId) => _withNativeString(
+    instrumentId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_rack_remove_sequence(_engine, native),
+  );
+
+  @override
+  void beginRackGesture(String name) => _withNativeString(
+    name,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_rack_gesture_begin(_engine, native),
+  );
+
+  @override
+  void commitRackGesture() =>
+      _check(_bindings.ob_engine_rack_gesture_commit(_engine));
+
+  @override
+  void abortRackGesture() =>
+      _check(_bindings.ob_engine_rack_gesture_abort(_engine));
 
   void _withNativeString(String value, ob_status Function(Pointer<Char>) call) {
     final Pointer<Utf8> native = value.toNativeUtf8();
@@ -672,6 +809,8 @@ class EngineClient {
     calloc.free(_pluginInfo);
     calloc.free(_instanceInfo);
     calloc.free(_instrumentInfo);
+    calloc.free(_rackPatternInfo);
+    calloc.free(_rackRowInfo);
     calloc.free(_paramInfo);
   }
 }
@@ -833,6 +972,48 @@ class ProjectInstrument {
   final int affectedPatterns;
   final int affectedClips;
   final int affectedNotes;
+}
+
+class RackPattern {
+  const RackPattern({
+    required this.id,
+    required this.name,
+    required this.lengthTicks,
+    required this.baseGridTicks,
+    required this.swing,
+  });
+
+  final String id;
+  final String name;
+  final int lengthTicks;
+  final int baseGridTicks;
+  final double swing;
+
+  int get baseStepCount => (lengthTicks / baseGridTicks).ceil();
+}
+
+class RackStep {
+  const RackStep({required this.active, required this.velocity});
+  final bool active;
+  final int velocity;
+}
+
+class RackRow {
+  const RackRow({
+    required this.instrumentId,
+    required this.gridTicks,
+    required this.hasSequence,
+    required this.offGridCount,
+    required this.noteCount,
+    required this.steps,
+  });
+
+  final String instrumentId;
+  final int gridTicks;
+  final bool hasSequence;
+  final int offGridCount;
+  final int noteCount;
+  final List<RackStep> steps;
 }
 
 class HostedParameter {

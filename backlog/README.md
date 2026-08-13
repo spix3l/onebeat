@@ -140,18 +140,18 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 |---|---|---|---|
 | ✅ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
 | ✅ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
-| 🟨 | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system — model layer landed; ABI/UI and re-flatten pending | M |
+| ✅ | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system | M |
 | ✅ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
 | 🟨 | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load — format, atomicity and round-trip landed; app New/Open/Save pending | M |
 | ⬜ | [OB-3-06](stage-3-it-sequences/OB-3-06-autosave-crash-recovery.md) | Auto-save & crash recovery | M |
 | ✅ | [OB-3-07](stage-3-it-sequences/OB-3-07-instrument-lifecycle.md) | Instrument lifecycle & management | M |
 | ✅ | [OB-3-08](stage-3-it-sequences/OB-3-08-notesequence-model-editing.md) | NoteSequence: one representation, edit operations | M |
-| ⬜ | [OB-3-09](stage-3-it-sequences/OB-3-09-channel-rack-ui.md) | Channel rack UI (step sequencer) | L |
+| 🟦 | [OB-3-09](stage-3-it-sequences/OB-3-09-channel-rack-ui.md) | Channel rack UI — implementation green; 4-row walkthrough + 120 Hz field profile pending | L |
 | ⬜ | [OB-3-10](stage-3-it-sequences/OB-3-10-piano-roll-ui.md) | Piano roll UI | L |
 | ⬜ | [OB-3-11](stage-3-it-sequences/OB-3-11-pattern-management.md) | Pattern management: selector, usage, Make unique | M |
 | ⬜ | [OB-3-12](stage-3-it-sequences/OB-3-12-arrangement-view.md) | Arrangement view: lanes, clips, playhead | L |
 | ⬜ | [OB-3-13](stage-3-it-sequences/OB-3-13-clip-windowing-transforms.md) | Clip windowing, looping & transpose transform | M |
-| ⬜ | [OB-3-14](stage-3-it-sequences/OB-3-14-ui-test-infrastructure.md) | UI test & interaction-walkthrough infrastructure | M |
+| 🟨 | [OB-3-14](stage-3-it-sequences/OB-3-14-ui-test-infrastructure.md) | UI test infrastructure — fake seam, rack golden and painter budget landed | M |
 | ⬜ | [OB-3-15](stage-3-it-sequences/OB-3-15-v0-3-exit-verification.md) | v0.3 exit verification | S |
 
 **Stage 3 has started.** `OB-3-01` is ✅: [ADR-004](../docs/adr/ADR-004-project-format.md)
@@ -171,13 +171,10 @@ ARCHITECTURE.md §6 walk required by R15 is
 which also records the one deliberate hole (`Project::adopt`, for the loader)
 and the ticket deviation on ID tombstones.
 
-`OB-3-03` is 🟨: the command system, unbounded history, gesture transactions,
-coalescing and the 100k-operation undo fuzz are landed and green under ASan,
-and `tools/seam_check.sh` §5 now fails the build if anything outside
-`model/` mutates the model directly. What remains is the wiring the model
-cannot have yet — ⌘Z through the ABI to a model-backed UI (`OB-3-09`) and the
-re-flatten-per-command path with its "undo is audible within one flatten
-cycle" criterion, which needs the ABI publish wiring of `OB-3-09`.
+`OB-3-03` is ✅: the command system, unbounded history, gesture transactions,
+coalescing and 100k-operation fuzz are joined by ABI 1.6 history names,
+app-wide ⌘Z/⇧⌘Z, and immediate schedule publication after edit, transaction,
+undo and redo. The public-ABI test proves an undo publishes inside the call.
 
 `OB-3-04` is ✅: `model/flattener.h` resolves clips through patterns into an
 absolutely-positioned `core::Schedule`, with clip windowing and looping,
@@ -231,6 +228,17 @@ delete matrix, public-ABI lifecycle test and save/load order checks are green;
 the contract and evidence map are in
 [`docs/instrument-lifecycle.md`](../docs/instrument-lifecycle.md).
 
+`OB-3-09` is 🟦: the model-backed rack, variable grids and pattern length,
+transactional paint/erase, visible velocity editing, D-M5 visibility controls,
+off-grid reporting, persisted deterministic swing, and allocation-free
+snapshot cursor are implemented and green. It was visually checked against the
+shared Pen shell; the behavior and FR-UX-17 map are in
+[`docs/channel-rack.md`](../docs/channel-rack.md). Remaining review evidence is
+the owner's four-instrument <30 s walkthrough and a real 120 Hz zero-drop
+profile. `OB-3-14` is 🟨 with the rack's fake client, interaction tests, dark
+golden and dense painter budget; the cross-editor driver and registry wait for
+the other Stage 3 editors.
+
 ## Epics — `epics/` (break down at stage start)
 
 | ID | Release | Title |
@@ -248,7 +256,7 @@ Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
 Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/07/08 (implementation landed; validation remains) → OB-2-06 (deferred) → ~~OB-2-09/10/11~~ (done).
 
-Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-05 (engine layer done) → ~~OB-3-08~~ → ~~OB-3-07~~ → **OB-3-09 next** → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
+Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → ~~OB-3-03~~ → ~~OB-3-04~~ → OB-3-05 (engine layer done) → ~~OB-3-08~~ → ~~OB-3-07~~ → **OB-3-09 review gates** → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with OB-3-09/10/12 and now has its first rack-backed slice.
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the

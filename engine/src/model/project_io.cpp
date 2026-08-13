@@ -403,6 +403,7 @@ json::Value writePattern(const Pattern& pattern, const Residue& residue) {
   out.emplace("name", json::Value::string(pattern.name));
   out.emplace("color", json::Value::string(pattern.color));
   out.emplace("length", json::Value::integer(pattern.length));
+  out.emplace("swing", json::Value::real(pattern.swing));
   out.emplace("sequences", json::Value::object(std::move(sequences)));
   return json::Value::object(std::move(out));
 }
@@ -848,6 +849,11 @@ class Loader {
       if (pattern.length <= 0) {
         warn("Pattern '" + pattern.name + "' has no length; using one bar.");
         pattern.length = TicksPerBarFourFour;
+      }
+      pattern.swing = takeDouble(*fields, "swing", 0.0);
+      if (pattern.swing < 0.0 || pattern.swing > 1.0) {
+        warn("Pattern '" + pattern.name + "' has invalid swing; using none.");
+        pattern.swing = 0.0;
       }
 
       json::Value sequences_value = take(*fields, "sequences");

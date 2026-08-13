@@ -25,11 +25,31 @@ The FL-workflow heart: per-instrument step rows inside the current pattern. Patt
 ## Acceptance criteria
 
 - [ ] Program a 16-step drum pattern across 4 instruments in <30 s of clicks (self-timed sanity check of interaction cost); it plays with the step cursor tracking.
-- [ ] Swing audibly and deterministically offsets off-beat steps (golden render test).
-- [ ] D-M5 behaviours all present: scoped rows, add-instrument action, show-all toggle, remove-from-pattern vs delete distinction.
-- [ ] Velocity paintable and visible; every action discoverable without right-click (FR-UX-17 walkthrough recorded).
+- [x] Swing audibly and deterministically offsets off-beat steps (golden render test).
+- [x] D-M5 behaviours all present: scoped rows, add-instrument action, show-all toggle, remove-from-pattern vs delete distinction.
+- [x] Velocity paintable and visible; every action discoverable without right-click (FR-UX-17 walkthrough recorded).
 - [ ] 120 Hz playback with the rack visible: zero dropped frames (profile run).
-- [ ] Token lint clean; matches the design's rack region.
+- [x] Token lint clean; matches the design's rack region.
+
+**In review (13 August 2026).** The implementation and automated evidence are
+complete; the two unchecked items are field gates, not missing code. ABI 1.6
+provides the current pattern, ordered rows, variable per-row divisors, step and
+velocity edits, sequence removal, swing and gesture transactions. The shell is
+now the real model-backed rack, and [`docs/channel-rack.md`](../../docs/channel-rack.md)
+records the Pen comparison, FR-UX-17 walkthrough and exact behavior.
+
+Native ABI coverage programs steps, changes velocity and swing, removes and
+undoes a sequence, changes the divisor and grows the pattern. The swing golden
+fixes 50% swing at `0, 300, 315, 480, 780` ticks, including an unchanged
+off-grid onset. Flutter has a fake-client store test and the first Stage 3 dark
+golden. The dense 8 × 64-cell painter measures 0.27–0.31 ms locally against an
+8.33 ms 120 Hz frame and allocates its paints outside `paint()`.
+
+The app was built and launched with the bundled ABI 1.6 engine, reaching its
+first usable frame in 274 ms. A real four-instrument under-30-second walkthrough
+and a zero-drop profile on a 120 Hz panel remain owner/hardware evidence; this
+MacBook Air reports a 60 Hz panel, so the ticket is review rather than falsely
+closed.
 
 ## Out of scope
 

@@ -24,7 +24,7 @@ class OneBeatButton extends StatefulWidget {
 
   final String label;
   final String? semanticLabel;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool active;
   final bool wide;
 
@@ -39,17 +39,23 @@ class _OneBeatButtonState extends State<OneBeatButton> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final bool enabled = widget.onPressed != null;
     final Color background =
-        widget.active
+        widget.active && enabled
             ? tokens.color.accent
             : _hovered
             ? tokens.color.surfaceRaised
             : tokens.color.surfacePanel;
     final Color foreground =
-        widget.active ? tokens.color.surfaceDeep : tokens.color.textPrimary;
+        !enabled
+            ? tokens.color.textMuted
+            : widget.active
+            ? tokens.color.surfaceDeep
+            : tokens.color.textPrimary;
 
     return Semantics(
       button: true,
+      enabled: enabled,
       label: widget.semanticLabel ?? widget.label,
       child: FocusableActionDetector(
         onShowHoverHighlight: (bool value) => setState(() => _hovered = value),
@@ -61,7 +67,7 @@ class _OneBeatButtonState extends State<OneBeatButton> {
         actions: <Type, Action<Intent>>{
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
-              widget.onPressed();
+              widget.onPressed?.call();
               return null;
             },
           ),

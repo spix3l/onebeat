@@ -107,6 +107,9 @@ struct Pattern {
   std::string name;
   ColorHex color = "#6C8CFF";
   Ticks length = TicksPerBarFourFour * 4;
+  // 0..1. At 1, every odd sixteenth is delayed by half a sixteenth.
+  // Stored on the pattern because swing is part of the groove, not transport.
+  double swing = 0.0;
   std::map<InstrumentId, NoteSequence> sequences;
 };
 

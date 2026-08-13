@@ -860,6 +860,36 @@ class OneBeatBindings {
   late final _ob_engine_project_can_redo = _ob_engine_project_can_redoPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>)>();
 
+  ffi.Pointer<ffi.Char> ob_engine_project_undo_name(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return _ob_engine_project_undo_name(engine);
+  }
+
+  late final _ob_engine_project_undo_namePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)
+        >
+      >('ob_engine_project_undo_name');
+  late final _ob_engine_project_undo_name = _ob_engine_project_undo_namePtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
+  ffi.Pointer<ffi.Char> ob_engine_project_redo_name(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return _ob_engine_project_redo_name(engine);
+  }
+
+  late final _ob_engine_project_redo_namePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)
+        >
+      >('ob_engine_project_redo_name');
+  late final _ob_engine_project_redo_name = _ob_engine_project_redo_namePtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
   ob_status ob_engine_project_undo(ffi.Pointer<ob_engine> engine) {
     return ob_status.fromValue(_ob_engine_project_undo(engine));
   }
@@ -880,6 +910,252 @@ class OneBeatBindings {
         ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>
       >('ob_engine_project_redo');
   late final _ob_engine_project_redo = _ob_engine_project_redoPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_rack_pattern(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ob_rack_pattern_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_rack_pattern(engine, out_info));
+  }
+
+  late final _ob_engine_rack_patternPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ob_rack_pattern_info>,
+          )
+        >
+      >('ob_engine_rack_pattern');
+  late final _ob_engine_rack_pattern = _ob_engine_rack_patternPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ob_rack_pattern_info>)
+      >();
+
+  int ob_engine_rack_row_count(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_rack_row_count(engine);
+  }
+
+  late final _ob_engine_rack_row_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_rack_row_count',
+      );
+  late final _ob_engine_rack_row_count = _ob_engine_rack_row_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_rack_row_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_rack_row_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_rack_row_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_rack_row_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_rack_row_info>,
+          )
+        >
+      >('ob_engine_rack_row_at');
+  late final _ob_engine_rack_row_at = _ob_engine_rack_row_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_rack_row_info>)
+      >();
+
+  ob_status ob_engine_rack_set_row_grid(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    int grid_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_set_row_grid(engine, utf8_instrument_id, grid_ticks),
+    );
+  }
+
+  late final _ob_engine_rack_set_row_gridPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_rack_set_row_grid');
+  late final _ob_engine_rack_set_row_grid = _ob_engine_rack_set_row_gridPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_rack_set_length(
+    ffi.Pointer<ob_engine> engine,
+    int base_step_count,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_set_length(engine, base_step_count),
+    );
+  }
+
+  late final _ob_engine_rack_set_lengthPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Int32)
+        >
+      >('ob_engine_rack_set_length');
+  late final _ob_engine_rack_set_length = _ob_engine_rack_set_lengthPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
+
+  ob_status ob_engine_rack_set_swing(
+    ffi.Pointer<ob_engine> engine,
+    double swing,
+  ) {
+    return ob_status.fromValue(_ob_engine_rack_set_swing(engine, swing));
+  }
+
+  late final _ob_engine_rack_set_swingPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Double)
+        >
+      >('ob_engine_rack_set_swing');
+  late final _ob_engine_rack_set_swing = _ob_engine_rack_set_swingPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, double)>();
+
+  ob_status ob_engine_rack_toggle_step(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    int step_index,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_toggle_step(engine, utf8_instrument_id, step_index),
+    );
+  }
+
+  late final _ob_engine_rack_toggle_stepPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_rack_toggle_step');
+  late final _ob_engine_rack_toggle_step = _ob_engine_rack_toggle_stepPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_rack_set_step_velocity(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    int step_index,
+    int velocity,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_set_step_velocity(
+        engine,
+        utf8_instrument_id,
+        step_index,
+        velocity,
+      ),
+    );
+  }
+
+  late final _ob_engine_rack_set_step_velocityPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+            ffi.Uint16,
+          )
+        >
+      >('ob_engine_rack_set_step_velocity');
+  late final _ob_engine_rack_set_step_velocity =
+      _ob_engine_rack_set_step_velocityPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<ob_engine>,
+              ffi.Pointer<ffi.Char>,
+              int,
+              int,
+            )
+          >();
+
+  ob_status ob_engine_rack_remove_sequence(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_remove_sequence(engine, utf8_instrument_id),
+    );
+  }
+
+  late final _ob_engine_rack_remove_sequencePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_rack_remove_sequence');
+  late final _ob_engine_rack_remove_sequence =
+      _ob_engine_rack_remove_sequencePtr
+          .asFunction<
+            int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+          >();
+
+  ob_status ob_engine_rack_gesture_begin(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_rack_gesture_begin(engine, utf8_name),
+    );
+  }
+
+  late final _ob_engine_rack_gesture_beginPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_rack_gesture_begin');
+  late final _ob_engine_rack_gesture_begin = _ob_engine_rack_gesture_beginPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_rack_gesture_commit(ffi.Pointer<ob_engine> engine) {
+    return ob_status.fromValue(_ob_engine_rack_gesture_commit(engine));
+  }
+
+  late final _ob_engine_rack_gesture_commitPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>
+      >('ob_engine_rack_gesture_commit');
+  late final _ob_engine_rack_gesture_commit = _ob_engine_rack_gesture_commitPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_rack_gesture_abort(ffi.Pointer<ob_engine> engine) {
+    return ob_status.fromValue(_ob_engine_rack_gesture_abort(engine));
+  }
+
+  late final _ob_engine_rack_gesture_abortPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>
+      >('ob_engine_rack_gesture_abort');
+  late final _ob_engine_rack_gesture_abort = _ob_engine_rack_gesture_abortPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>)>();
 }
 
@@ -1403,13 +1679,62 @@ final class ob_instrument_info extends ffi.Struct {
   external ffi.Array<ffi.Char> plugin_path;
 }
 
+final class ob_rack_pattern_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Int64()
+  external int length_ticks;
+
+  @ffi.Int64()
+  external int base_grid_ticks;
+
+  @ffi.Double()
+  external double swing;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+}
+
+final class ob_rack_row_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Int64()
+  external int grid_ticks;
+
+  @ffi.Int32()
+  external int step_count;
+
+  @ffi.Uint32()
+  external int note_count;
+
+  @ffi.Uint32()
+  external int off_grid_count;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> instrument_id;
+
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Uint8> step_active;
+
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Uint16> step_velocity;
+}
+
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 5;
+const int OB_ABI_VERSION_MINOR = 6;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 66816;
+const int OB_ABI_VERSION_PACKED = 67072;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -1422,3 +1747,5 @@ const int OB_INSTANCE_FLAG_BYPASSED = 2;
 const int OB_INSTANCE_FLAG_HAS_EDITOR = 4;
 
 const int OB_INSTANCE_FLAG_NEEDS_RESTART = 8;
+
+const int OB_RACK_MAX_STEPS = 256;

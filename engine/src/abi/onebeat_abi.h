@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 5
+#define OB_ABI_VERSION_MINOR 6
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -491,8 +491,63 @@ OB_API ob_status ob_engine_instrument_duplicate(ob_engine* engine, const char* u
 OB_API ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instrument_id);
 OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
 OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);
+/* Main/UI thread. Never blocks. Engine-owned UTF-8, valid until the next call
+ * to the same getter; caller must not free. */
+OB_API const char* ob_engine_project_undo_name(ob_engine* engine);
+OB_API const char* ob_engine_project_redo_name(ob_engine* engine);
 OB_API ob_status ob_engine_project_undo(ob_engine* engine);
 OB_API ob_status ob_engine_project_redo(ob_engine* engine);
+
+/* ------------------------------------------------------------------------- */
+/* Channel rack (added in ABI 1.6, OB-3-09)                                  */
+/* ------------------------------------------------------------------------- */
+
+#define OB_RACK_MAX_STEPS 256
+
+typedef struct ob_rack_pattern_info {
+  uint32_t struct_size;
+  int64_t length_ticks;
+  int64_t base_grid_ticks;
+  double swing;
+  char id[32];
+  char name[128];
+} ob_rack_pattern_info;
+
+typedef struct ob_rack_row_info {
+  uint32_t struct_size;
+  uint32_t flags; /* bit 0: sequence has notes; bit 1: off-grid notes present */
+  int64_t grid_ticks;
+  int32_t step_count;
+  uint32_t note_count;
+  uint32_t off_grid_count;
+  char instrument_id[32];
+  uint8_t step_active[OB_RACK_MAX_STEPS];
+  uint16_t step_velocity[OB_RACK_MAX_STEPS];
+} ob_rack_row_info;
+
+/* Main/UI thread. Never blocks. Rack rows follow project instrument order and
+ * are copied into caller-owned fixed-layout output structs. */
+OB_API ob_status ob_engine_rack_pattern(ob_engine* engine, ob_rack_pattern_info* out_info);
+OB_API int32_t ob_engine_rack_row_count(ob_engine* engine);
+OB_API ob_status ob_engine_rack_row_at(ob_engine* engine, int32_t index,
+                                       ob_rack_row_info* out_info);
+/* Main/UI thread. Never blocks. Presentation state only; does not flatten. */
+OB_API ob_status ob_engine_rack_set_row_grid(ob_engine* engine, const char* utf8_instrument_id,
+                                             int64_t grid_ticks);
+/* Main/UI thread. May block briefly while the model is flattened and its
+ * immutable schedule is published. Input strings are copied before return. */
+OB_API ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count);
+OB_API ob_status ob_engine_rack_set_swing(ob_engine* engine, double swing);
+OB_API ob_status ob_engine_rack_toggle_step(ob_engine* engine, const char* utf8_instrument_id,
+                                            int32_t step_index);
+OB_API ob_status ob_engine_rack_set_step_velocity(ob_engine* engine, const char* utf8_instrument_id,
+                                                  int32_t step_index, uint16_t velocity);
+OB_API ob_status ob_engine_rack_remove_sequence(ob_engine* engine, const char* utf8_instrument_id);
+/* Main/UI thread. Begin never blocks; commit/abort may briefly flatten and
+ * publish. A paint drag is one undo entry even when it changes many cells. */
+OB_API ob_status ob_engine_rack_gesture_begin(ob_engine* engine, const char* utf8_name);
+OB_API ob_status ob_engine_rack_gesture_commit(ob_engine* engine);
+OB_API ob_status ob_engine_rack_gesture_abort(ob_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

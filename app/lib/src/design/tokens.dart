@@ -128,6 +128,13 @@ class SizeTokens {
   double get sliderHeight => 18;
   double get stockPianoControlSize => 72;
   double get stockPianoKeyboardHeight => 150;
+  double get rackToolbarHeight => 58;
+  double get rackHeaderWidth => 316;
+  double get rackRowHeight => 52;
+  double get rackStepWidth => 34;
+  double get rackStepInset => 3;
+  double get rackVelocityHeight => 4;
+  double get rackCursorWidth => 2;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW

@@ -143,14 +143,21 @@ class _PluginListPanelState extends State<PluginListDebugPanel> {
                               for (final PluginListing item in available)
                                 _AvailableRow(
                                   listing: item,
-                                  onAdd: () => library.add(item),
+                                  onAdd: () {
+                                    library.add(item);
+                                    widget.controller.rack.refresh();
+                                  },
                                   onReplace:
                                       library.instruments.any(
                                             (ProjectInstrument instrument) =>
                                                 instrument.selected,
                                           )
-                                          ? () => library
-                                              .replaceSelectedInstrument(item)
+                                          ? () {
+                                            library.replaceSelectedInstrument(
+                                              item,
+                                            );
+                                            widget.controller.rack.refresh();
+                                          }
                                           : null,
                                 ),
                             ],
