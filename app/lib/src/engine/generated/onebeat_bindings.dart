@@ -260,6 +260,97 @@ class OneBeatBindings {
       >('ob_engine_output_device_name');
   late final _ob_engine_output_device_name = _ob_engine_output_device_namePtr
       .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_plugin_cache_load(ffi.Pointer<ob_engine> engine) {
+    return ob_status.fromValue(_ob_engine_plugin_cache_load(engine));
+  }
+
+  late final _ob_engine_plugin_cache_loadPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>
+      >('ob_engine_plugin_cache_load');
+  late final _ob_engine_plugin_cache_load = _ob_engine_plugin_cache_loadPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_plugin_scan_start(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_directories,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_plugin_scan_start(engine, utf8_directories),
+    );
+  }
+
+  late final _ob_engine_plugin_scan_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_plugin_scan_start');
+  late final _ob_engine_plugin_scan_start = _ob_engine_plugin_scan_startPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_plugin_scan_cancel(ffi.Pointer<ob_engine> engine) {
+    return ob_status.fromValue(_ob_engine_plugin_scan_cancel(engine));
+  }
+
+  late final _ob_engine_plugin_scan_cancelPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>
+      >('ob_engine_plugin_scan_cancel');
+  late final _ob_engine_plugin_scan_cancel = _ob_engine_plugin_scan_cancelPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_plugin_scan_status(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ob_plugin_scan_status> out_status,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_plugin_scan_status(engine, out_status),
+    );
+  }
+
+  late final _ob_engine_plugin_scan_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ob_plugin_scan_status>,
+          )
+        >
+      >('ob_engine_plugin_scan_status');
+  late final _ob_engine_plugin_scan_status = _ob_engine_plugin_scan_statusPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ob_plugin_scan_status>)
+      >();
+
+  ob_status ob_engine_plugin_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_plugin_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_plugin_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_plugin_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_plugin_info>,
+          )
+        >
+      >('ob_engine_plugin_at');
+  late final _ob_engine_plugin_at = _ob_engine_plugin_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_plugin_info>)
+      >();
 }
 
 enum ob_status {
@@ -494,12 +585,157 @@ final class ob_event extends ffi.Struct {
   external ffi.Array<ffi.Char> text;
 }
 
+enum ob_scan_state {
+  OB_SCAN_IDLE(0),
+  OB_SCAN_DISCOVERING(1),
+  OB_SCAN_PROBING(2),
+  OB_SCAN_COMPLETE(3),
+  OB_SCAN_CANCELLED(4);
+
+  final int value;
+  const ob_scan_state(this.value);
+
+  static ob_scan_state fromValue(int value) => switch (value) {
+    0 => OB_SCAN_IDLE,
+    1 => OB_SCAN_DISCOVERING,
+    2 => OB_SCAN_PROBING,
+    3 => OB_SCAN_COMPLETE,
+    4 => OB_SCAN_CANCELLED,
+    _ => throw ArgumentError('Unknown value for ob_scan_state: $value'),
+  };
+}
+
+enum ob_plugin_format {
+  OB_PLUGIN_FORMAT_UNKNOWN(0),
+  OB_PLUGIN_FORMAT_BUILTIN(1),
+  OB_PLUGIN_FORMAT_CLAP(2),
+  OB_PLUGIN_FORMAT_VST3(3),
+  OB_PLUGIN_FORMAT_AU(4);
+
+  final int value;
+  const ob_plugin_format(this.value);
+
+  static ob_plugin_format fromValue(int value) => switch (value) {
+    0 => OB_PLUGIN_FORMAT_UNKNOWN,
+    1 => OB_PLUGIN_FORMAT_BUILTIN,
+    2 => OB_PLUGIN_FORMAT_CLAP,
+    3 => OB_PLUGIN_FORMAT_VST3,
+    4 => OB_PLUGIN_FORMAT_AU,
+    _ => throw ArgumentError('Unknown value for ob_plugin_format: $value'),
+  };
+}
+
+enum ob_scan_outcome {
+  OB_SCAN_OK(0),
+  OB_SCAN_NOT_A_PLUGIN(1),
+  OB_SCAN_CRASHED(2),
+  OB_SCAN_TIMED_OUT(3);
+
+  final int value;
+  const ob_scan_outcome(this.value);
+
+  static ob_scan_outcome fromValue(int value) => switch (value) {
+    0 => OB_SCAN_OK,
+    1 => OB_SCAN_NOT_A_PLUGIN,
+    2 => OB_SCAN_CRASHED,
+    3 => OB_SCAN_TIMED_OUT,
+    _ => throw ArgumentError('Unknown value for ob_scan_outcome: $value'),
+  };
+}
+
+final class ob_plugin_scan_status extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int state;
+
+  @ffi.Uint32()
+  external int bundles_discovered;
+
+  @ffi.Uint32()
+  external int bundles_reused;
+
+  @ffi.Uint32()
+  external int bundles_probed;
+
+  @ffi.Uint32()
+  external int plugins_found;
+
+  @ffi.Uint32()
+  external int plugin_count;
+
+  @ffi.Uint32()
+  external int list_generation;
+
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Char> current;
+}
+
+final class ob_plugin_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int format;
+
+  @ffi.Uint32()
+  external int outcome;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Uint32()
+  external int features;
+
+  @ffi.Uint32()
+  external int param_count;
+
+  @ffi.Uint32()
+  external int index_in_bundle;
+
+  @ffi.Uint32()
+  external int audio_input_count;
+
+  @ffi.Uint32()
+  external int audio_output_count;
+
+  @ffi.Uint32()
+  external int note_input_count;
+
+  @ffi.Uint32()
+  external int note_output_count;
+
+  @ffi.Uint32()
+  external int padding_;
+
+  @ffi.Int64()
+  external int scanned_at_nanos;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> vendor;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> version;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Char> path;
+}
+
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 0;
+const int OB_ABI_VERSION_MINOR = 1;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 65536;
+const int OB_ABI_VERSION_PACKED = 65792;
 
 const int OB_SNAPSHOT_VERSION = 1;
+
+const int OB_PLUGIN_FLAG_INTROSPECTED = 1;

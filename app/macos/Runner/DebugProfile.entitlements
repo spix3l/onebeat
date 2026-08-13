@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Debug and profile builds. The sandbox is off for the same reason it is off in
+  Release.entitlements — read that file for the argument — and additionally
+  because a sandboxed debug build cannot see the developer's own plug-in folder,
+  which would make the two configurations disagree about what exists.
+-->
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!-- Flutter's debug build compiles Dart at runtime. -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- The Dart VM service (hot reload, DevTools) listens on localhost. -->
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>

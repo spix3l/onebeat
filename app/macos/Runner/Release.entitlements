@@ -1,8 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  OneBeat is NOT sandboxed, and cannot be.
+
+  A plug-in host has to read /Library/Audio/Plug-Ins and ~/Library/Audio/Plug-Ins
+  and then load and execute code out of them. The App Sandbox permits neither:
+  there is no entitlement for the plug-in folders, and $HOME is redirected into a
+  container the user's plug-in installers know nothing about. With the sandbox on
+  (Flutter's macOS template turns it on), OB-2-02's scan finds exactly zero
+  plug-ins in a shipped build, and ADR-003's out-of-process helper cannot be
+  spawned the way it is designed either. This is why every shipping macOS DAW is
+  distributed with Developer ID signing and notarization rather than through the
+  Mac App Store.
+
+  So this is a deliberate architectural position, not a shortcut around a
+  permission error. What replaces the sandbox as the containment story:
+
+    - plug-ins run in a separate helper process (ADR-003, OB-2-05), which is what
+      actually protects the user's work from a plug-in crash (G3);
+    - the helper is the only binary carrying disable-library-validation; the main
+      app keeps library validation on;
+    - no network entitlement, here or in the helper.
+
+  OB-2-06 (Gate G-B) owns signing and notarization and re-checks this decision.
+-->
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<!-- Hardened Runtime, which notarization requires, is set in the Xcode
+	     project rather than here. These are the exceptions to it. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<false/>
 </dict>
 </plist>

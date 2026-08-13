@@ -11,8 +11,10 @@
 #include <memory>
 #include <new>
 #include <string>
+#include <vector>
 
 #include "core/engine.h"
+#include "plugin/scan/plugin_library.h"
 
 namespace {
 
@@ -25,11 +27,71 @@ ob_status fail(ob_status status, const char* message) {
   return status;
 }
 
+// Truncating, always-terminating copy into a fixed C array. `strncpy` does not
+// terminate when the source fills the buffer, which is the classic way a POD
+// boundary struct starts leaking the bytes that follow it.
+void copyText(char* destination, size_t capacity, const char* source) {
+  if (capacity == 0) {
+    return;
+  }
+  if (source == nullptr) {
+    destination[0] = '\0';
+    return;
+  }
+  const size_t length = std::strlen(source);
+  const size_t copied = length < capacity - 1 ? length : capacity - 1;
+  std::memcpy(destination, source, copied);
+  destination[copied] = '\0';
+}
+
+// NUL-separated, double-NUL-terminated — the shape Dart can build with one
+// string join and one allocation, rather than marshalling an array of pointers
+// across the FFI boundary and having to own their lifetimes (ADR-002 §7).
+std::vector<std::string> splitDirectories(const char* utf8_directories) {
+  std::vector<std::string> directories;
+  if (utf8_directories == nullptr) {
+    return directories;
+  }
+  const char* cursor = utf8_directories;
+  while (*cursor != '\0') {
+    const size_t length = std::strlen(cursor);
+    directories.emplace_back(cursor, length);
+    cursor += length + 1;
+  }
+  return directories;
+}
+
 }  // namespace
 
 struct ob_engine {
   std::unique_ptr<onebeat::core::Engine> engine;
+  // Not part of the Engine: the plugin library is filesystem work and a
+  // background thread, and nothing in it goes near the audio thread (OB-2-02).
+  std::unique_ptr<onebeat::plugin::scan::PluginLibrary> library;
 };
+
+namespace {
+
+// Created on first use rather than in ob_engine_create, so an engine that never
+// hosts a plugin — every Stage 1 test, the offline renderer, the devtool's
+// device sweep — pays nothing for it, not even a file stat.
+//
+// The cache lives beside the session logs, which makes the rule "point the
+// engine at a scratch `log_directory` and everything it writes goes there". A
+// test that did not get that would silently overwrite the developer's real
+// plugin cache with an empty one.
+onebeat::plugin::scan::PluginLibrary& pluginLibrary(ob_engine& handle) {
+  if (handle.library == nullptr) {
+    const std::string& log_directory = handle.engine->config().log_directory;
+    const std::string cache_path =
+        log_directory.empty() ? std::string() : log_directory + "/plugin-cache.bin";
+    handle.library = std::make_unique<onebeat::plugin::scan::PluginLibrary>(
+        cache_path, &handle.engine->diagnostics());
+  }
+  return *handle.library;
+}
+
+}  // namespace
 
 extern "C" {
 
@@ -38,7 +100,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.0.0";
+  return "1.1.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -237,6 +299,122 @@ const char* ob_engine_output_device_name(ob_engine* engine) {
     name = "";
   }
   return name.c_str();
+}
+
+/* --------------------------------------------------------------------------
+ * Plugin library (OB-2-02)
+ * ------------------------------------------------------------------------ */
+
+ob_status ob_engine_plugin_cache_load(ob_engine* engine) {
+  if (engine == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  }
+  try {
+    onebeat::plugin::scan::PluginLibrary& library = pluginLibrary(*engine);
+    library.loadCache();
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::bad_alloc&) {
+    return fail(OB_ERR_OUT_OF_MEMORY, "Out of memory while loading the plugin cache.");
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_plugin_scan_start(ob_engine* engine, const char* utf8_directories) {
+  if (engine == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  }
+  try {
+    onebeat::plugin::scan::PluginLibrary& library = pluginLibrary(*engine);
+    library.setSearchPaths(splitDirectories(utf8_directories));
+    if (!library.startScan()) {
+      return fail(OB_ERR_ALREADY_RUNNING, "A plugin scan is already running.");
+    }
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::bad_alloc&) {
+    return fail(OB_ERR_OUT_OF_MEMORY, "Out of memory while starting the plugin scan.");
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_plugin_scan_cancel(ob_engine* engine) {
+  if (engine == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  }
+  try {
+    pluginLibrary(*engine).cancelScan();
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_plugin_scan_status(ob_engine* engine, ob_plugin_scan_status* out_status) {
+  if (engine == nullptr || out_status == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine and out_status must not be null.");
+  }
+  try {
+    onebeat::plugin::scan::PluginLibrary& library = pluginLibrary(*engine);
+    // Folding streamed results into the list happens here rather than in a
+    // timer, so the list only ever changes on a call the UI made.
+    library.pump();
+
+    const onebeat::plugin::scan::ScanProgress progress = library.progress();
+    std::memset(out_status, 0, sizeof(*out_status));
+    out_status->struct_size = static_cast<uint32_t>(sizeof(*out_status));
+    out_status->state = static_cast<uint32_t>(progress.state);
+    out_status->bundles_discovered = progress.bundles_discovered;
+    out_status->bundles_reused = progress.bundles_reused;
+    out_status->bundles_probed = progress.bundles_probed;
+    out_status->plugins_found = progress.plugins_found;
+    out_status->plugin_count = static_cast<uint32_t>(library.plugins().size());
+    out_status->list_generation = static_cast<uint32_t>(library.generation());
+    copyText(out_status->current, sizeof(out_status->current), progress.current.text());
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine and out_info must not be null.");
+  }
+  try {
+    const auto& plugins = pluginLibrary(*engine).plugins();
+    if (index < 0 || static_cast<size_t>(index) >= plugins.size()) {
+      return fail(OB_ERR_INVALID_ARGUMENT, "Plugin index is out of range.");
+    }
+    const onebeat::plugin::scan::PluginDescriptor& descriptor = plugins[static_cast<size_t>(index)];
+
+    std::memset(out_info, 0, sizeof(*out_info));
+    out_info->struct_size = static_cast<uint32_t>(sizeof(*out_info));
+    out_info->format = static_cast<uint32_t>(descriptor.format);
+    out_info->outcome = static_cast<uint32_t>(descriptor.outcome);
+    out_info->flags = descriptor.flags;
+    out_info->features = descriptor.features;
+    out_info->param_count = descriptor.param_count;
+    out_info->index_in_bundle = descriptor.index_in_bundle;
+    out_info->audio_input_count = descriptor.audio_input_count;
+    out_info->audio_output_count = descriptor.audio_output_count;
+    out_info->note_input_count = descriptor.note_input_count;
+    out_info->note_output_count = descriptor.note_output_count;
+    out_info->scanned_at_nanos = descriptor.scanned_at_nanos;
+    copyText(out_info->id, sizeof(out_info->id), descriptor.id.text());
+    copyText(out_info->name, sizeof(out_info->name), descriptor.name.text());
+    copyText(out_info->vendor, sizeof(out_info->vendor), descriptor.vendor.text());
+    copyText(out_info->version, sizeof(out_info->version), descriptor.version.text());
+    copyText(out_info->path, sizeof(out_info->path), descriptor.path.text());
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
 }
 
 }  // extern "C"

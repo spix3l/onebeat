@@ -8,6 +8,8 @@
 //   onebeat_devtool formats                 open every rate/buffer combination and
 //                                           report the granted format and latency
 //   onebeat_devtool render <out.wav>        offline render, no hardware needed
+//   onebeat_devtool scan [cache-path]       scan the plug-in folders and list what
+//                                           was found; run it twice to see the cache work
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -18,6 +20,7 @@
 
 #include "abi/onebeat_abi.h"
 #include "core/engine.h"
+#include "plugin/scan/plugin_library.h"
 #include "testing/offline_driver.h"
 
 namespace {
@@ -193,10 +196,78 @@ int render(const std::string& path) {
   return 0;
 }
 
+// Runs a real scan against the machine's actual plug-in folders and prints what
+// it found, with timings. The terminal half of the OB-2-02 acceptance criteria:
+// running it twice is how "no rescan of unchanged plugins" is demonstrated
+// without reading a log file.
+int scan(const std::string& cache_path) {
+  namespace scan_ns = onebeat::plugin::scan;
+
+  scan_ns::PluginLibrary library(cache_path);
+
+  const auto load_start = std::chrono::steady_clock::now();
+  const scan_ns::CacheLoadResult loaded = library.loadCache();
+  const auto load_millis =
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - load_start)
+          .count();
+  std::printf("cache %s in %.2f ms: %zu plugins\n", scan_ns::cacheLoadResultName(loaded),
+              load_millis, library.plugins().size());
+
+  // A colon-separated override, so the acceptance criteria can be demonstrated
+  // against a synthetic library on a machine that has no plug-ins installed.
+  if (const char* directories = std::getenv("ONEBEAT_PLUGIN_PATH"); directories != nullptr) {
+    std::vector<std::string> paths;
+    std::string current;
+    for (const char* cursor = directories;; ++cursor) {
+      if (*cursor == ':' || *cursor == '\0') {
+        if (!current.empty()) {
+          paths.push_back(current);
+        }
+        current.clear();
+        if (*cursor == '\0') {
+          break;
+        }
+        continue;
+      }
+      current.push_back(*cursor);
+    }
+    library.setSearchPaths(std::move(paths));
+  }
+
+  const auto scan_start = std::chrono::steady_clock::now();
+  if (!library.startScan()) {
+    std::printf("A scan is already running.\n");
+    return 1;
+  }
+  while (library.scanning()) {
+    library.pump();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  library.pump();
+  const auto scan_millis =
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - scan_start)
+          .count();
+
+  const scan_ns::ScanProgress progress = library.progress();
+  std::printf("scan %s in %.0f ms: %u bundles (%u reused from cache, %u opened)\n",
+              scan_ns::scanStateName(progress.state), scan_millis, progress.bundles_discovered,
+              progress.bundles_reused, progress.bundles_probed);
+
+  for (const scan_ns::PluginDescriptor& plugin : library.plugins()) {
+    std::printf("  %-40s %-8s %-16s %s\n", plugin.name.text(), scan_ns::formatName(plugin.format),
+                scan_ns::outcomeName(plugin.outcome),
+                plugin.introspected() ? "" : "(not yet inspected)");
+  }
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   const std::string mode = argc > 1 ? argv[1] : "play";
+  if (mode == "scan") {
+    return scan(argc > 2 ? argv[2] : std::string());
+  }
   if (mode == "devices") {
     return listDevices();
   }
@@ -211,6 +282,8 @@ int main(int argc, char** argv) {
     const double tempo = argc > 3 ? std::atof(argv[3]) : 120.0;
     return play(seconds, tempo);
   }
-  std::printf("usage: onebeat_devtool [devices|play [seconds] [bpm]|formats|render <out.wav>]\n");
+  std::printf(
+      "usage: onebeat_devtool [scan [cache-path]|devices|play [seconds] [bpm]|formats|render "
+      "<out.wav>]\n");
   return 64;
 }

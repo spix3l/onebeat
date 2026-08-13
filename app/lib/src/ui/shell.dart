@@ -3,15 +3,19 @@
 // A skeleton of the designed layout: real top bar, real status bar, and a centre
 // that is an *empty state* rather than a placeholder — it says what the app can
 // do right now and invites the one action that works (FR-UX-13).
+import 'dart:io' show stdout;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../main.dart' show startupStopwatch;
 import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
 import 'meter.dart';
 import 'performance_overlay.dart';
+import 'plugin_list_debug.dart';
 import 'token_gallery.dart';
 import 'transport_readout.dart';
 
@@ -28,6 +32,7 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
   late final EngineController _controller;
   final FocusNode _rootFocus = FocusNode(debugLabel: 'shell');
   bool _showTokenGallery = false;
+  bool _showPluginList = false;
 
   @override
   void initState() {
@@ -38,6 +43,17 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
       motion: OneBeatTokens.dark().motion,
     );
     widget.client.setStepPattern(EngineController.demoPattern);
+    // Synchronous, and deliberately before the first frame: the cache read is
+    // one file, and doing it here is what makes the list present at startup
+    // rather than appearing a moment later (FR-PLG-05, OB-2-02).
+    _controller.library.load();
+    // NFR-04's number, printed on every launch rather than measured once and
+    // written into a document that then goes stale. This is the frame the user
+    // can act on: engine up, plug-in list populated from the cache.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      stdout.writeln('onebeat: usable in ${startupStopwatch.elapsedMilliseconds} ms '
+          'with ${_controller.library.plugins.length} plug-ins from cache');
+    });
   }
 
   @override
@@ -68,6 +84,7 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
         SingleActivator(LogicalKeyboardKey.space): _TogglePlayIntent(),
         SingleActivator(LogicalKeyboardKey.f8): _TogglePerformanceOverlayIntent(),
         SingleActivator(LogicalKeyboardKey.f9): _ToggleTokenGalleryIntent(),
+        SingleActivator(LogicalKeyboardKey.f10): _TogglePluginListIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -90,6 +107,12 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
               return null;
             },
           ),
+          _TogglePluginListIntent: CallbackAction<_TogglePluginListIntent>(
+            onInvoke: (_) {
+              setState(() => _showPluginList = !_showPluginList);
+              return null;
+            },
+          ),
         },
         child: Focus(
           focusNode: _rootFocus,
@@ -105,6 +128,8 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
                     children: <Widget>[
                       if (_showTokenGallery)
                         const TokenGallery()
+                      else if (_showPluginList)
+                        PluginListDebugPanel(controller: _controller)
                       else
                         _EmptyStage(controller: _controller),
                       FrameTimingOverlay(controller: _controller),
@@ -131,6 +156,10 @@ class _TogglePerformanceOverlayIntent extends Intent {
 
 class _ToggleTokenGalleryIntent extends Intent {
   const _ToggleTokenGalleryIntent();
+}
+
+class _TogglePluginListIntent extends Intent {
+  const _TogglePluginListIntent();
 }
 
 class _TopBar extends StatelessWidget {

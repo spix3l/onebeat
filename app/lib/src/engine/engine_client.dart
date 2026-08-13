@@ -7,13 +7,37 @@
 //   - the command struct is allocated once and rewritten in place;
 //   - the event struct is allocated once and drained into plain Dart objects
 //     only when an event actually arrives.
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
 import 'engine_library.dart';
 import 'generated/onebeat_bindings.dart';
+
+/// Reads a fixed-size, NUL-terminated UTF-8 field out of a native struct.
+///
+/// Decoding as UTF-8 rather than character-by-character matters here: plug-in
+/// and vendor names are full of accented characters and the occasional CJK
+/// title, and treating each byte as a code point renders those as mojibake.
+String _readFixedUtf8(Array<Char> field, int capacity) {
+  final Uint8List bytes = Uint8List(capacity);
+  int length = 0;
+  while (length < capacity) {
+    final int byte = field[length];
+    if (byte == 0) {
+      break;
+    }
+    bytes[length] = byte;
+    length++;
+  }
+  // `allowMalformed`: this is data from disk, so a truncated multi-byte
+  // sequence at the capacity boundary is possible. A replacement character in
+  // a plug-in name beats an exception during a scan.
+  return utf8.decode(bytes.sublist(0, length), allowMalformed: true);
+}
 
 /// A plain Dart copy of one snapshot. Constructed only when the UI wants an
 /// immutable value to hold; the per-frame path reads the native struct directly.
@@ -115,7 +139,9 @@ class EngineClient {
   EngineClient._(this._bindings, this._engine)
       : _snapshot = calloc<ob_snapshot>(),
         _command = calloc<ob_command>(),
-        _event = calloc<ob_event>();
+        _event = calloc<ob_event>(),
+        _scanStatus = calloc<ob_plugin_scan_status>(),
+        _pluginInfo = calloc<ob_plugin_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
   /// is how widget tests and CI drive the UI without audio hardware.
@@ -153,6 +179,10 @@ class EngineClient {
   final Pointer<ob_snapshot> _snapshot;
   final Pointer<ob_command> _command;
   final Pointer<ob_event> _event;
+  // Reused the same way, though the plug-in path is not per-frame: the list is
+  // re-read only when the scan's list generation moves.
+  final Pointer<ob_plugin_scan_status> _scanStatus;
+  final Pointer<ob_plugin_info> _pluginInfo;
 
   int _generation = 0;
   bool _disposed = false;
@@ -250,18 +280,88 @@ class EngineClient {
     List<EngineEvent>? events;
     while (_bindings.ob_engine_poll_event(_engine, _event) == 1) {
       final ob_event e = _event.ref;
-      final StringBuffer text = StringBuffer();
-      for (int index = 0; index < 96; index++) {
-        final int char = e.text[index];
-        if (char == 0) {
-          break;
-        }
-        text.writeCharCode(char);
-      }
       (events ??= <EngineEvent>[])
-          .add(EngineEvent(e.type, e.code, e.i64_a, e.f64_a, text.toString()));
+          .add(EngineEvent(e.type, e.code, e.i64_a, e.f64_a, _readFixedUtf8(e.text, 96)));
     }
     return events ?? const <EngineEvent>[];
+  }
+
+  // --- plugin library (OB-2-02) ---------------------------------------------
+
+  /// Loads the persistent scan cache. Blocking, and meant to be: it is one file
+  /// read, and doing it before the first frame is what makes the plug-in list
+  /// present at startup instead of appearing seconds later (FR-PLG-05).
+  void loadPluginCache() => _bindings.ob_engine_plugin_cache_load(_engine);
+
+  /// Starts a background scan. [directories] empty scans the standard folders.
+  /// Returns false if a scan is already running.
+  bool startPluginScan({List<String> directories = const <String>[]}) {
+    if (directories.isEmpty) {
+      return _bindings.ob_engine_plugin_scan_start(_engine, nullptr) == ob_status.OB_OK;
+    }
+    // NUL-separated and double-NUL-terminated, which is what the ABI takes so
+    // that neither side has to own an array of string pointers.
+    final Uint8List encoded = Uint8List.fromList(<int>[
+      for (final String directory in directories) ...<int>[...utf8.encode(directory), 0],
+      0,
+    ]);
+    final Pointer<Uint8> buffer = calloc<Uint8>(encoded.length);
+    try {
+      buffer.asTypedList(encoded.length).setAll(0, encoded);
+      return _bindings.ob_engine_plugin_scan_start(_engine, buffer.cast<Char>()) ==
+          ob_status.OB_OK;
+    } finally {
+      calloc.free(buffer);
+    }
+  }
+
+  void cancelPluginScan() => _bindings.ob_engine_plugin_scan_cancel(_engine);
+
+  /// Reads scan progress. Also the call that folds streamed results into the
+  /// list, so it must be made regularly while a scan is running.
+  PluginScanStatus readPluginScanStatus() {
+    _bindings.ob_engine_plugin_scan_status(_engine, _scanStatus);
+    final ob_plugin_scan_status s = _scanStatus.ref;
+    return PluginScanStatus(
+      state: ScanState.values[s.state.clamp(0, ScanState.values.length - 1)],
+      bundlesDiscovered: s.bundles_discovered,
+      bundlesReused: s.bundles_reused,
+      bundlesProbed: s.bundles_probed,
+      pluginsFound: s.plugins_found,
+      pluginCount: s.plugin_count,
+      listGeneration: s.list_generation,
+      current: _readFixedUtf8(s.current, 256),
+    );
+  }
+
+  /// Copies the whole list out. Called when `listGeneration` moves, never per
+  /// frame — a thousand ~1 KB copies is not a frame budget item.
+  List<PluginListing> readPluginList(int count) {
+    final List<PluginListing> plugins = <PluginListing>[];
+    for (int index = 0; index < count; index++) {
+      if (_bindings.ob_engine_plugin_at(_engine, index, _pluginInfo) != ob_status.OB_OK) {
+        break;  // the list changed under us; the next generation will re-read it
+      }
+      final ob_plugin_info p = _pluginInfo.ref;
+      plugins.add(
+        PluginListing(
+          id: _readFixedUtf8(p.id, 128),
+          name: _readFixedUtf8(p.name, 128),
+          vendor: _readFixedUtf8(p.vendor, 128),
+          version: _readFixedUtf8(p.version, 32),
+          path: _readFixedUtf8(p.path, 512),
+          format: PluginFormat.values[p.format.clamp(0, PluginFormat.values.length - 1)],
+          outcome: ScanOutcome.values[p.outcome.clamp(0, ScanOutcome.values.length - 1)],
+          introspected: (p.flags & obPluginFlagIntrospected) != 0,
+          paramCount: p.param_count,
+          audioInputCount: p.audio_input_count,
+          audioOutputCount: p.audio_output_count,
+          noteInputCount: p.note_input_count,
+          noteOutputCount: p.note_output_count,
+        ),
+      );
+    }
+    return plugins;
   }
 
   void dispose() {
@@ -274,7 +374,100 @@ class EngineClient {
     calloc.free(_snapshot);
     calloc.free(_command);
     calloc.free(_event);
+    calloc.free(_scanStatus);
+    calloc.free(_pluginInfo);
   }
+}
+
+/// Mirrors `ob_scan_state`.
+enum ScanState { idle, discovering, probing, complete, cancelled }
+
+/// Mirrors `ob_plugin_format`.
+enum PluginFormat { unknown, builtin, clap, vst3, audioUnit }
+
+/// Mirrors `ob_scan_outcome`. Everything but [ok] is a plug-in the user cannot
+/// use, and each one gets different copy (FR-UX-12) — which is why they are not
+/// collapsed into a single "failed".
+enum ScanOutcome { ok, notAPlugin, crashed, timedOut }
+
+const int obPluginFlagIntrospected = 0x1;
+
+class PluginScanStatus {
+  const PluginScanStatus({
+    required this.state,
+    required this.bundlesDiscovered,
+    required this.bundlesReused,
+    required this.bundlesProbed,
+    required this.pluginsFound,
+    required this.pluginCount,
+    required this.listGeneration,
+    required this.current,
+  });
+
+  const PluginScanStatus.idle()
+      : state = ScanState.idle,
+        bundlesDiscovered = 0,
+        bundlesReused = 0,
+        bundlesProbed = 0,
+        pluginsFound = 0,
+        pluginCount = 0,
+        listGeneration = 0,
+        current = '';
+
+  final ScanState state;
+  final int bundlesDiscovered;
+  final int bundlesReused;
+  final int bundlesProbed;
+  final int pluginsFound;
+  final int pluginCount;
+  final int listGeneration;
+
+  /// The bundle being opened right now, for the progress line. Empty unless the
+  /// scan is in [ScanState.probing].
+  final String current;
+
+  bool get isScanning =>
+      state == ScanState.discovering || state == ScanState.probing;
+}
+
+/// One row of the plug-in list, as the UI sees it.
+class PluginListing {
+  const PluginListing({
+    required this.id,
+    required this.name,
+    required this.vendor,
+    required this.version,
+    required this.path,
+    required this.format,
+    required this.outcome,
+    required this.introspected,
+    required this.paramCount,
+    required this.audioInputCount,
+    required this.audioOutputCount,
+    required this.noteInputCount,
+    required this.noteOutputCount,
+  });
+
+  final String id;
+  final String name;
+  final String vendor;
+  final String version;
+  final String path;
+  final PluginFormat format;
+  final ScanOutcome outcome;
+
+  /// False until something has actually opened the plug-in. While it is false,
+  /// [vendor], [version], [paramCount] and the port counts are placeholders and
+  /// must not be shown as facts (OB-2-07 sets it).
+  final bool introspected;
+
+  final int paramCount;
+  final int audioInputCount;
+  final int audioOutputCount;
+  final int noteInputCount;
+  final int noteOutputCount;
+
+  bool get isUsable => outcome == ScanOutcome.ok;
 }
 
 /// Command type constants, mirroring ob_command_type. ffigen renders the C enum

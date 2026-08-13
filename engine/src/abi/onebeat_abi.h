@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 0
+#define OB_ABI_VERSION_MINOR 1
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -94,7 +94,10 @@ typedef struct ob_engine_config {
   double sample_rate;        /* 0 => device default, else 44100..96000 */
   int32_t block_frames;      /* 0 => 512; else 64..2048, device may grant other */
   int32_t use_null_device;   /* 1 => headless null backend (tests, CI) */
-  const char* log_directory; /* UTF-8, may be NULL => platform app-support dir */
+  const char* log_directory; /* UTF-8, may be NULL => platform app-support dir.
+                              * Also where the plug-in scan cache is written, so
+                              * that pointing this at a scratch directory keeps
+                              * everything the engine writes together. */
 } ob_engine_config;
 
 /* Main/UI thread only. May block (opens the audio device). Writes *out_engine
@@ -251,6 +254,121 @@ OB_API ob_status ob_engine_set_step_pattern(ob_engine* engine, const uint8_t* st
 /* Main/UI thread. Never blocks. Human-readable name of the active output
  * device; static per-engine storage, valid until the next device change. */
 OB_API const char* ob_engine_output_device_name(ob_engine* engine);
+
+/* ------------------------------------------------------------------------- */
+/* Plugin library: scan progress and the plugin list (OB-2-02, FR-PLG-05)     */
+/* ------------------------------------------------------------------------- */
+
+/* None of this touches the audio thread. The plugin list is main-thread-owned
+ * state read from a persistent cache and a background scanner, so the
+ * "no synchronous ask-and-wait" rule of ADR-002 §8 — which is about state the
+ * audio thread owns — does not apply and no snapshot field is involved. The
+ * list is not frame-rate data: read it when the scan generation changes, not
+ * every frame. */
+
+typedef enum ob_scan_state {
+  OB_SCAN_IDLE = 0,
+  OB_SCAN_DISCOVERING = 1, /* walking the plug-in folders */
+  OB_SCAN_PROBING = 2,     /* opening the bundles that changed */
+  OB_SCAN_COMPLETE = 3,
+  OB_SCAN_CANCELLED = 4
+} ob_scan_state;
+
+typedef enum ob_plugin_format {
+  OB_PLUGIN_FORMAT_UNKNOWN = 0,
+  OB_PLUGIN_FORMAT_BUILTIN = 1,
+  OB_PLUGIN_FORMAT_CLAP = 2,
+  OB_PLUGIN_FORMAT_VST3 = 3, /* Stage 5 */
+  OB_PLUGIN_FORMAT_AU = 4    /* Stage 5 */
+} ob_plugin_format;
+
+/* Why a plugin is not available. OB-2-03 fills in the crash and hang cases; the
+ * values exist here from the start so the UI's copy table is written once. */
+typedef enum ob_scan_outcome {
+  OB_SCAN_OK = 0,
+  OB_SCAN_NOT_A_PLUGIN = 1,
+  OB_SCAN_CRASHED = 2,
+  OB_SCAN_TIMED_OUT = 3
+} ob_scan_outcome;
+
+/* Bit flags describing how much of an ob_plugin_info is actually known. */
+#define OB_PLUGIN_FLAG_INTROSPECTED                 \
+  0x1u /* the plugin was opened and asked; without  \
+        * this, id/vendor/version and the port and  \
+        * parameter counts are placeholders and the \
+        * UI must say "not yet inspected" rather    \
+        * than show them as facts */
+
+typedef struct ob_plugin_scan_status {
+  uint32_t struct_size; /* = sizeof(ob_plugin_scan_status) */
+  uint32_t state;       /* ob_scan_state */
+
+  uint32_t bundles_discovered;
+  uint32_t bundles_reused; /* unchanged since the last scan, so never opened */
+  uint32_t bundles_probed;
+  uint32_t plugins_found;
+
+  uint32_t plugin_count; /* rows currently retrievable via ob_engine_plugin_at */
+  /* Increments whenever the list changes. The UI re-reads the list when this
+   * moves and otherwise does nothing, which is what keeps the per-frame path
+   * allocation-free. */
+  uint32_t list_generation;
+
+  char current[256]; /* bundle being opened right now; "" when not probing */
+} ob_plugin_scan_status;
+
+/* One row of the plugin list. ~1 KB, POD, caller-owned: allocate one and reuse
+ * it across the loop that reads the list. Copied out rather than pointed at
+ * because the list is rebuilt underneath as the scan streams in. */
+typedef struct ob_plugin_info {
+  uint32_t struct_size; /* = sizeof(ob_plugin_info) */
+  uint32_t format;      /* ob_plugin_format */
+  uint32_t outcome;     /* ob_scan_outcome */
+  uint32_t flags;       /* OB_PLUGIN_FLAG_* */
+
+  uint32_t features;        /* reserved for the browser's filters (FR-PLG-13) */
+  uint32_t param_count;     /* 0 unless OB_PLUGIN_FLAG_INTROSPECTED */
+  uint32_t index_in_bundle; /* one bundle can contain many plugins */
+  uint32_t audio_input_count;
+  uint32_t audio_output_count;
+  uint32_t note_input_count;
+  uint32_t note_output_count;
+  uint32_t padding_;
+
+  int64_t scanned_at_nanos; /* Unix nanoseconds */
+
+  char id[128];
+  char name[128];
+  char vendor[128];
+  char version[32];
+  char path[512];
+} ob_plugin_info;
+
+/* Main/UI thread. May block briefly: reads the scan cache from disk. Call once
+ * at startup, before the first frame — that is the whole point of the cache.
+ * Safe to call again; it discards and reloads. */
+OB_API ob_status ob_engine_plugin_cache_load(ob_engine* engine);
+
+/* Main/UI thread. Never blocks: launches the background scan and returns.
+ * Returns OB_ERR_ALREADY_RUNNING if a scan is in flight. Passing NULL or an
+ * empty `utf8_directories` scans the standard plug-in folders; otherwise it is
+ * a NUL-separated, double-NUL-terminated list of directories (so the UI can add
+ * user folders without an array-of-pointers marshalling dance). */
+OB_API ob_status ob_engine_plugin_scan_start(ob_engine* engine, const char* utf8_directories);
+
+/* Main/UI thread. Never blocks. Asks the scan to stop at the next bundle; a
+ * cancelled scan does not update the cache. */
+OB_API ob_status ob_engine_plugin_scan_cancel(ob_engine* engine);
+
+/* Main/UI thread. Never blocks. Also the point at which streamed results are
+ * folded into the list, so call it once per frame while a scan is running. */
+OB_API ob_status ob_engine_plugin_scan_status(ob_engine* engine, ob_plugin_scan_status* out_status);
+
+/* Main/UI thread. Never blocks. Copies row `index` (0-based, ordered by display
+ * name) into caller-owned memory. Returns OB_ERR_INVALID_ARGUMENT for an index
+ * past the end — which is how a stale index is detected after the list changed
+ * under the caller. */
+OB_API ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin_info* out_info);
 
 #ifdef __cplusplus
 } /* extern "C" */

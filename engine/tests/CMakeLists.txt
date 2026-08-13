@@ -19,6 +19,7 @@ add_executable(onebeat_tests
   test_abi.cpp
   test_plugin_events.cpp
   test_plugin_model.cpp
+  test_plugin_scan.cpp
   test_stress_publish.cpp
 )
 target_link_libraries(onebeat_tests PRIVATE onebeat_abi onebeat_core onebeat_testing onebeat_doctest)

@@ -12,10 +12,12 @@
 #include "test_helpers.h"
 
 TEST_SUITE("abi") {
-  TEST_CASE("ABI version is 1.0.0 and packs as documented") {
+  // The minor version moves when functions or structs are *added* (ADR-002 §8);
+  // the major is what a client refuses to run against, and it has not moved.
+  TEST_CASE("ABI version is 1.1.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.0.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.1.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -70,6 +72,72 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_event, i64_a) == 8);
     CHECK(offsetof(ob_event, f64_a) == 16);
     CHECK(offsetof(ob_event, text) == 24);
+  }
+
+  // Added in ABI 1.1 (OB-2-02). Frozen from here on for the same reason as the
+  // rest: ffigen generates Dart structs from these offsets.
+  TEST_CASE("ob_plugin_scan_status layout is frozen") {
+    CHECK(sizeof(ob_plugin_scan_status) == 288);
+    CHECK(offsetof(ob_plugin_scan_status, struct_size) == 0);
+    CHECK(offsetof(ob_plugin_scan_status, state) == 4);
+    CHECK(offsetof(ob_plugin_scan_status, bundles_discovered) == 8);
+    CHECK(offsetof(ob_plugin_scan_status, bundles_reused) == 12);
+    CHECK(offsetof(ob_plugin_scan_status, bundles_probed) == 16);
+    CHECK(offsetof(ob_plugin_scan_status, plugins_found) == 20);
+    CHECK(offsetof(ob_plugin_scan_status, plugin_count) == 24);
+    CHECK(offsetof(ob_plugin_scan_status, list_generation) == 28);
+    CHECK(offsetof(ob_plugin_scan_status, current) == 32);
+  }
+
+  TEST_CASE("ob_plugin_info layout is frozen") {
+    CHECK(sizeof(ob_plugin_info) == 984);
+    CHECK(offsetof(ob_plugin_info, struct_size) == 0);
+    CHECK(offsetof(ob_plugin_info, format) == 4);
+    CHECK(offsetof(ob_plugin_info, outcome) == 8);
+    CHECK(offsetof(ob_plugin_info, flags) == 12);
+    CHECK(offsetof(ob_plugin_info, features) == 16);
+    CHECK(offsetof(ob_plugin_info, param_count) == 20);
+    CHECK(offsetof(ob_plugin_info, index_in_bundle) == 24);
+    CHECK(offsetof(ob_plugin_info, audio_input_count) == 28);
+    CHECK(offsetof(ob_plugin_info, audio_output_count) == 32);
+    CHECK(offsetof(ob_plugin_info, note_input_count) == 36);
+    CHECK(offsetof(ob_plugin_info, note_output_count) == 40);
+    CHECK(offsetof(ob_plugin_info, scanned_at_nanos) == 48);
+    CHECK(offsetof(ob_plugin_info, id) == 56);
+    CHECK(offsetof(ob_plugin_info, name) == 184);
+    CHECK(offsetof(ob_plugin_info, vendor) == 312);
+    CHECK(offsetof(ob_plugin_info, version) == 440);
+    CHECK(offsetof(ob_plugin_info, path) == 472);
+  }
+
+  TEST_CASE("The plugin list is reachable through the C surface") {
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/logs";
+
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    // Scans a directory that does not exist, so the test is hermetic: it must
+    // not depend on what the machine running it happens to have installed.
+    REQUIRE(ob_engine_plugin_scan_start(engine, "/nonexistent/onebeat-test-plugins\0\0") == OB_OK);
+    CHECK(ob_engine_plugin_scan_start(engine, nullptr) == OB_ERR_ALREADY_RUNNING);
+
+    ob_plugin_scan_status status{};
+    for (int i = 0; i < 2000 && status.state != OB_SCAN_COMPLETE; ++i) {
+      REQUIRE(ob_engine_plugin_scan_status(engine, &status) == OB_OK);
+    }
+    CHECK(status.state == OB_SCAN_COMPLETE);
+    CHECK(status.struct_size == sizeof(ob_plugin_scan_status));
+    CHECK(status.bundles_discovered == 0);
+    CHECK(status.plugin_count == 0);
+
+    ob_plugin_info info{};
+    CHECK(ob_engine_plugin_at(engine, 0, &info) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_plugin_at(engine, -1, &info) == OB_ERR_INVALID_ARGUMENT);
+
+    ob_engine_destroy(engine);
   }
 
   TEST_CASE("The full lifecycle round-trips through the C surface") {

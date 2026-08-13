@@ -2,8 +2,10 @@
 //
 // The app owns the engine handle: it is created here, on the UI isolate, and
 // destroyed when the app closes (ADR-002 §6).
+import 'dart:io' show stdout;
 import 'dart:ui' show AppExitResponse;
 
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'src/design/tokens.dart';
@@ -11,8 +13,27 @@ import 'src/engine/engine_client.dart';
 import 'src/engine/engine_library.dart';
 import 'src/ui/shell.dart';
 
+/// Time from Dart entry to a window the user can act on. NFR-04 puts a five
+/// second ceiling on cold start with a large plug-in library, and the only way
+/// to know whether a change moved it is to have the number printed on every
+/// launch rather than measured once into a document that then goes stale.
+///
+/// Started explicitly at the top of `main` and *not* with a top-level
+/// initialiser: top-level finals in Dart are lazy, so `Stopwatch()..start()`
+/// there would not run until something first read the variable — which is the
+/// moment the elapsed time is asked for, and it would read zero every time.
+/// (It did.)
+final Stopwatch startupStopwatch = Stopwatch();
+
 void main() {
+  startupStopwatch.start();
   WidgetsFlutterBinding.ensureInitialized();
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    // stdout rather than developer.log or debugPrint: this has to survive a
+    // release build, because a release build is what the five second ceiling
+    // is about. One line, once, at startup.
+    stdout.writeln('onebeat: first frame in ${startupStopwatch.elapsedMilliseconds} ms');
+  });
   runApp(const OneBeatApp());
 }
 

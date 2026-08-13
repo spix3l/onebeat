@@ -10,9 +10,11 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'frame_stats.dart';
 import 'meter_state.dart';
+import 'plugin_library_store.dart';
 
 class EngineController extends ChangeNotifier {
-  EngineController({required this.client, required TickerProvider vsync, required this.motion}) {
+  EngineController({required this.client, required TickerProvider vsync, required this.motion})
+      : library = PluginLibraryStore(client) {
     _ticker = vsync.createTicker(_onFrame)..start();
   }
 
@@ -20,6 +22,9 @@ class EngineController extends ChangeNotifier {
   final MotionTokens motion;
   final MeterState meter = MeterState();
   final FrameStats frameStats = FrameStats();
+
+  /// Driven from this controller's frame callback rather than its own ticker.
+  final PluginLibraryStore library;
 
   late final Ticker _ticker;
 
@@ -36,6 +41,11 @@ class EngineController extends ChangeNotifier {
   void _onFrame(Duration _) {
     snapshot = client.readSnapshot();
     meter.update(snapshot, motion);
+    // Only while a scan is in flight: an idle app should not be making a native
+    // call every frame to be told nothing happened.
+    if (library.status.isScanning) {
+      library.pump();
+    }
 
     for (final EngineEvent event in client.pollEvents()) {
       switch (event.type) {
@@ -70,6 +80,8 @@ class EngineController extends ChangeNotifier {
   void dispose() {
     _ticker.dispose();
     frameStats.dispose();
+    library.cancelScan();
+    library.dispose();
     super.dispose();
   }
 }
