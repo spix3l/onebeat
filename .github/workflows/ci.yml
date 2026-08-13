@@ -145,7 +145,8 @@ jobs:
           cmake -S engine -B build-tidy -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
             -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang"
-          find engine/src/core engine/src/audio_io engine/src/plugin -name '*.cpp' -print0 \
+          find engine/src/core engine/src/audio_io engine/src/plugin engine/src/model \
+               -name '*.cpp' -print0 \
             | xargs -0 "$LLVM_PREFIX/bin/clang-tidy" -p build-tidy --quiet
 
   clone-to-build:

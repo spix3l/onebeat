@@ -997,7 +997,9 @@ class Loader {
         // §7: an entity we cannot model stays in the file untouched rather
         // than being modelled wrongly or thrown away. It is not in the session
         // and not playable, and the next save writes it back as it was.
-        note("Kept, not understood: clip '" + key + "' plays a '" + type + "' source.");
+        std::string message = "Kept, not understood: clip '";
+        message.append(key).append("' plays a '").append(type).append("' source.");
+        note(std::move(message));
         continue;
       }
 
@@ -1223,8 +1225,10 @@ class Loader {
       size_t steps = 0;
       while (true) {
         const auto entry = tables_.mixer_tracks.find(walker);
-        if (entry == tables_.mixer_tracks.end() || !entry->second.output.has_value()) break;
-        walker = *entry->second.output;
+        if (entry == tables_.mixer_tracks.end()) break;
+        const std::optional<MixerTrackId> output = entry->second.output;
+        if (!output.has_value()) break;
+        walker = *output;
         if (walker == id || ++steps > tables_.mixer_tracks.size()) {
           warn("Mixer track '" + track.name + "' fed back into itself; routed to the master.");
           track.output = tables_.master;
