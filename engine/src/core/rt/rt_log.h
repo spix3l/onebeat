@@ -22,13 +22,13 @@ enum class LogLevel : uint8_t { Trace = 0, Debug = 1, Info = 2, Warn = 3, Error 
 // message means adding an id here and a format string in rt_log.cpp.
 enum class RtMessage : uint16_t {
   None = 0,
-  CallbackStarted = 1,        // a0 = sample rate, a1 = block frames
-  Xrun = 2,                   // a0 = render nanos, a1 = budget nanos
-  SchedulePicked = 3,         // a0 = schedule generation, a1 = event count
-  VoiceStolen = 4,            // a0 = note stolen, a1 = note starting
-  TransportStateChanged = 5,  // a0 = playing, a1 = position frames
-  DeviceFormatChanged = 6,    // a0 = sample rate, a1 = block frames
-  CommandQueueFull = 7,       // a0 = command type
+  CallbackStarted = 1,           // a0 = sample rate, a1 = block frames
+  Xrun = 2,                      // a0 = render nanos, a1 = budget nanos
+  SchedulePicked = 3,            // a0 = schedule generation, a1 = event count
+  VoiceStolen = 4,               // a0 = note stolen, a1 = note starting
+  TransportStateChanged = 5,     // a0 = playing, a1 = position frames
+  DeviceFormatChanged = 6,       // a0 = sample rate, a1 = block frames
+  CommandQueueFull = 7,          // a0 = command type
   SampleSwapped = 8,             // a0 = frames, a1 = channels
   EventListFull = 9,             // a0 = events dropped, a1 = list capacity
   InstrumentProcessFailed = 10,  // a0 = port count, a1 = frames

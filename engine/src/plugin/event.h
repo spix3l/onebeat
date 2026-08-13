@@ -76,13 +76,13 @@ enum class EventType : uint16_t {
 
 // CLAP's note expression identifiers, with CLAP's value ranges.
 enum class NoteExpressionId : uint32_t {
-  Volume = 0,     // 0 .. 4  (linear gain, 1 = nominal)
-  Pan = 1,        // 0 .. 1  (0.5 = centre)
-  Tuning = 2,     // -120 .. +120 semitones
-  Vibrato = 3,    // 0 .. 1
-  Expression = 4, // 0 .. 1
-  Brightness = 5, // 0 .. 1
-  Pressure = 6,   // 0 .. 1
+  Volume = 0,      // 0 .. 4  (linear gain, 1 = nominal)
+  Pan = 1,         // 0 .. 1  (0.5 = centre)
+  Tuning = 2,      // -120 .. +120 semitones
+  Vibrato = 3,     // 0 .. 1
+  Expression = 4,  // 0 .. 1
+  Brightness = 5,  // 0 .. 1
+  Pressure = 6,    // 0 .. 1
 };
 
 enum EventFlags : uint16_t {
@@ -118,10 +118,10 @@ struct PluginEvent {
   uint32_t id = 0;
 
   union Payload {
-    double number;          // velocity, parameter value, modulation amount, expression value
-    const uint8_t* sysex;   // MidiSysex only; `id` holds the length
-    uint8_t midi1[4];       // status + 2 data bytes
-    uint32_t midi2[4];      // one UMP packet
+    double number;         // velocity, parameter value, modulation amount, expression value
+    const uint8_t* sysex;  // MidiSysex only; `id` holds the length
+    uint8_t midi1[4];      // status + 2 data bytes
+    uint32_t midi2[4];     // one UMP packet
   } payload = {0.0};
 
   EventType kind() const noexcept OB_NONBLOCKING { return static_cast<EventType>(type); }
@@ -150,7 +150,8 @@ struct PluginEvent {
   static PluginEvent noteOff(uint32_t time_frames, int16_t key_value, double velocity = 0.0,
                              NoteId note = AnyNote, int16_t channel_value = 0,
                              int16_t port = 0) noexcept OB_NONBLOCKING {
-    return makeNote(EventType::NoteOff, time_frames, key_value, velocity, note, channel_value, port);
+    return makeNote(EventType::NoteOff, time_frames, key_value, velocity, note, channel_value,
+                    port);
   }
 
   static PluginEvent noteChoke(uint32_t time_frames, int16_t key_value, NoteId note = AnyNote,
@@ -213,8 +214,8 @@ struct PluginEvent {
 
   static PluginEvent paramGesture(uint32_t time_frames, ParamId param,
                                   bool begin) noexcept OB_NONBLOCKING {
-    return makeParam(begin ? EventType::ParamGestureBegin : EventType::ParamGestureEnd,
-                      time_frames, param, 0.0, EventFlagNone);
+    return makeParam(begin ? EventType::ParamGestureBegin : EventType::ParamGestureEnd, time_frames,
+                     param, 0.0, EventFlagNone);
   }
 
   static PluginEvent transportDiscontinuity(uint32_t time_frames) noexcept OB_NONBLOCKING {
@@ -278,7 +279,8 @@ struct PluginEvent {
   }
 };
 
-static_assert(sizeof(PluginEvent) == 40, "PluginEvent layout is frozen (see docs/clap-coverage.md)");
+static_assert(sizeof(PluginEvent) == 40,
+              "PluginEvent layout is frozen (see docs/clap-coverage.md)");
 
 // --------------------------------------------------------------------------
 // Lists

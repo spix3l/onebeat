@@ -198,11 +198,11 @@ TEST_SUITE("unit") {
     Rig rig;
     std::array<char, 64> text{};
 
-    REQUIRE(rig.instrument.paramValueToText(SamplerPlugin::ParamGain, 1.0, text.data(),
-                                            text.size()));
+    REQUIRE(
+        rig.instrument.paramValueToText(SamplerPlugin::ParamGain, 1.0, text.data(), text.size()));
     CHECK(std::string(text.data()) == "0.0 dB");
-    REQUIRE(rig.instrument.paramValueToText(SamplerPlugin::ParamGain, 0.5, text.data(),
-                                            text.size()));
+    REQUIRE(
+        rig.instrument.paramValueToText(SamplerPlugin::ParamGain, 0.5, text.data(), text.size()));
     CHECK(std::string(text.data()) == "-6.0 dB");
 
     double parsed = 0.0;
@@ -246,19 +246,18 @@ TEST_SUITE("unit") {
     // Set the base to full, then modulate it down. The audible result changes;
     // the value the user sees and the project would save does not. Collapsing
     // these two is precisely the bug D5 exists to prevent.
-    const float unmodulated =
-        rig.render({PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
-                    PluginEvent::noteOn(0, 60, 1.0)});
+    const float unmodulated = rig.render({PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
+                                          PluginEvent::noteOn(0, 60, 1.0)});
 
     double base_before = 0.0;
     REQUIRE(rig.instrument.paramValue(SamplerPlugin::ParamGain, base_before));
     CHECK(base_before == doctest::Approx(1.0));
 
     Rig modulated_rig;
-    const float modulated = modulated_rig.render(
-        {PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
-         PluginEvent::paramModulation(0, SamplerPlugin::ParamGain, -0.5),
-         PluginEvent::noteOn(0, 60, 1.0)});
+    const float modulated =
+        modulated_rig.render({PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
+                              PluginEvent::paramModulation(0, SamplerPlugin::ParamGain, -0.5),
+                              PluginEvent::noteOn(0, 60, 1.0)});
 
     double base_after = 0.0;
     REQUIRE(modulated_rig.instrument.paramValue(SamplerPlugin::ParamGain, base_after));
@@ -274,10 +273,10 @@ TEST_SUITE("unit") {
     Rig plain;
     Rig explicit_defaults;
     const float without = plain.render({PluginEvent::noteOn(0, 60, 1.0)});
-    const float with = explicit_defaults.render(
-        {PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
-         PluginEvent::paramValue(0, SamplerPlugin::ParamTranspose, 0.0),
-         PluginEvent::noteOn(0, 60, 1.0)});
+    const float with =
+        explicit_defaults.render({PluginEvent::paramValue(0, SamplerPlugin::ParamGain, 1.0),
+                                  PluginEvent::paramValue(0, SamplerPlugin::ParamTranspose, 0.0),
+                                  PluginEvent::noteOn(0, 60, 1.0)});
     CHECK(without == with);  // exactly, not approximately
   }
 
@@ -464,7 +463,8 @@ TEST_SUITE("engine") {
     engine->postCommand(onebeat::tests::command(OB_CMD_SET_LOOP, 0, 0.0, 64.0));
     engine->postCommand(onebeat::tests::command(OB_CMD_TRANSPORT_PLAY));
 
-    const auto result = onebeat::testing::renderOffline(*engine, static_cast<int64_t>(Notes) * 37, 128);
+    const auto result =
+        onebeat::testing::renderOffline(*engine, static_cast<int64_t>(Notes) * 37, 128);
     CHECK(result.peak() > 0.05F);
 
     ob_snapshot snapshot{};

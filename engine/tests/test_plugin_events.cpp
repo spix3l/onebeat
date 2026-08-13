@@ -87,7 +87,8 @@ TEST_SUITE("unit") {
     CHECK(event.payload.midi1[2] == 100);
 
     const std::array<uint8_t, 4> dump = {0xF0, 0x7E, 0x00, 0xF7};
-    const PluginEvent sysex = PluginEvent::midiSysex(0, dump.data(), static_cast<uint32_t>(dump.size()));
+    const PluginEvent sysex =
+        PluginEvent::midiSysex(0, dump.data(), static_cast<uint32_t>(dump.size()));
     CHECK(sysex.id == 4);  // length rides in `id`; the bytes are borrowed
     CHECK(sysex.payload.sysex == dump.data());
   }

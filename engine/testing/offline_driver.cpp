@@ -145,8 +145,8 @@ bool EventCapturePlugin::audioPortInfo(plugin::PortDirection direction, uint32_t
   return true;
 }
 
-plugin::ProcessStatus EventCapturePlugin::process(
-    const plugin::ProcessBlock& block) noexcept OB_NONBLOCKING {
+plugin::ProcessStatus EventCapturePlugin::process(const plugin::ProcessBlock& block) noexcept
+    OB_NONBLOCKING {
   for (const plugin::PluginEvent& event : block.in_events) {
     const int64_t absolute = frame_ + static_cast<int64_t>(event.time);
     switch (event.kind()) {
@@ -156,9 +156,9 @@ plugin::ProcessStatus EventCapturePlugin::process(
         break;
       case plugin::EventType::NoteOff:
         // A wildcarded key is the model's "all notes off" (see event.h).
-        record(Captured{event.key == plugin::AnyKey ? Captured::Kind::AllNotesOff
-                                                    : Captured::Kind::NoteOff,
-                        event.key, 0.0F, absolute});
+        record(Captured{
+            event.key == plugin::AnyKey ? Captured::Kind::AllNotesOff : Captured::Kind::NoteOff,
+            event.key, 0.0F, absolute});
         break;
       default:
         break;

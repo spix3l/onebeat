@@ -21,7 +21,7 @@ struct SamplerState {
   double transpose;
 };
 
-ParamInfo makeGainInfo() {
+ParamInfo makeGainInfo() noexcept {
   ParamInfo value;
   value.id = SamplerPlugin::ParamGain;
   value.name.assign("Gain");
@@ -33,7 +33,7 @@ ParamInfo makeGainInfo() {
   return value;
 }
 
-ParamInfo makeTransposeInfo() {
+ParamInfo makeTransposeInfo() noexcept {
   ParamInfo value;
   value.id = SamplerPlugin::ParamTranspose;
   value.name.assign("Transpose");
@@ -52,8 +52,13 @@ ParamInfo makeTransposeInfo() {
 // thread-safe initialisation guard is a lock, and these are read from
 // applyEvent() on the audio thread. Same reasoning as rt.cpp's GlobalTimebase —
 // they are built when the library loads, long before an audio thread exists.
-const ParamInfo GainParam = makeGainInfo();        // NOLINT(cert-err58-cpp)
-const ParamInfo TransposeParam = makeTransposeInfo();  // NOLINT(cert-err58-cpp)
+//
+// The makers are `noexcept` because a static initialiser that throws terminates
+// the process before main() with nowhere to catch it. ParamInfo is a POD with
+// fixed-capacity text, so there is nothing here that could throw; saying so lets
+// the compiler and clang-tidy hold us to it.
+const ParamInfo GainParam = makeGainInfo();
+const ParamInfo TransposeParam = makeTransposeInfo();
 
 }  // namespace
 
@@ -70,8 +75,7 @@ bool SamplerPlugin::onConfigure(const ProcessSetup& setup) {
   }
   // Every allocation the instance will ever perform happens here.
   sampler_.prepare(setup.sample_rate, static_cast<int>(setup.max_block_frames));
-  tail_frames_ =
-      static_cast<uint32_t>(core::Sampler::ReleaseSeconds * setup.sample_rate) + 1U;
+  tail_frames_ = static_cast<uint32_t>(core::Sampler::ReleaseSeconds * setup.sample_rate) + 1U;
   return true;
 }
 
@@ -99,8 +103,7 @@ void SamplerPlugin::applyEvent(const PluginEvent& event) noexcept OB_NONBLOCKING
     case EventType::NoteOn: {
       const double semitones = transpose_.effective(TransposeParam);
       const auto key = static_cast<int16_t>(event.key + static_cast<int16_t>(semitones));
-      const auto velocity =
-          static_cast<float>(event.value() * gain_.effective(GainParam));
+      const auto velocity = static_cast<float>(event.value() * gain_.effective(GainParam));
       sampler_.noteOn(key, velocity);
       break;
     }
@@ -297,8 +300,7 @@ uint32_t SamplerPlugin::notePortCount(PortDirection direction) const {
   return direction == PortDirection::Input ? 1U : 0U;
 }
 
-bool SamplerPlugin::notePortInfo(PortDirection direction, uint32_t index,
-                                 NotePortInfo& out) const {
+bool SamplerPlugin::notePortInfo(PortDirection direction, uint32_t index, NotePortInfo& out) const {
   if (direction != PortDirection::Input || index != 0) {
     return false;
   }

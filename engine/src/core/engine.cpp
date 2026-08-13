@@ -122,8 +122,7 @@ bool Engine::initialise(std::string& error) {
   // ring holds 1024 entries, and a block can in principle carry a schedule event
   // on every frame. Overflow is counted and logged, never grown.
   command_events_.reserve(CommandQueueCapacity);
-  chunk_events_.reserve(CommandQueueCapacity +
-                        static_cast<uint32_t>(granted.block_frames) * 2U);
+  chunk_events_.reserve(CommandQueueCapacity + static_cast<uint32_t>(granted.block_frames) * 2U);
 
   // An empty schedule, so the audio thread never sees a null pointer.
   ScheduleBuilder builder;
@@ -457,7 +456,16 @@ void Engine::publishSnapshot(const ProcessContext& context,
   // One-pole smoothing so the UI shows a usable number rather than block noise.
   cpu_load_ = (cpu_load_ * 0.9F) + (load * 0.1F);
 
-  if (render_nanos > 0 && static_cast<double>(render_nanos) > budget_nanos) {
+  // An xrun is a *device* underrun: the callback missed a deadline the hardware
+  // was holding it to. An offline render has no device and no deadline — it runs
+  // as fast as the machine allows — so comparing its wall-clock render time
+  // against a real-time budget measures the scheduler, not the engine. On a
+  // shared CI runner a render thread can lose 3 ms to descheduling with nothing
+  // wrong, which is exactly how this counter produced an intermittent failure in
+  // the Release stress test. FR-ENG-06 makes offline share the *processing*
+  // path; it does not give it a deadline to miss.
+  const bool has_deadline = !config_.use_null_device;
+  if (has_deadline && render_nanos > 0 && static_cast<double>(render_nanos) > budget_nanos) {
     const uint64_t total = xruns_.fetch_add(1, std::memory_order_relaxed) + 1;
     rt_log_.log(rt::LogLevel::Warn, rt::RtMessage::Xrun, static_cast<int64_t>(render_nanos),
                 static_cast<int64_t>(budget_nanos));

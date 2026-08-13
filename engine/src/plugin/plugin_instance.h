@@ -24,8 +24,8 @@
 #include "plugin/event.h"
 #include "plugin/host.h"
 #include "plugin/parameters.h"
-#include "plugin/ports.h"
 #include "plugin/plugin_types.h"
+#include "plugin/ports.h"
 #include "plugin/state.h"
 
 namespace onebeat::plugin {
@@ -264,9 +264,11 @@ class PluginInstance {
   // active. A plugin changes them from Configured and tells the host via
   // PluginHost::audioPortsRescan().
   virtual uint32_t audioPortCount(PortDirection direction) const = 0;
-  virtual bool audioPortInfo(PortDirection direction, uint32_t index,
-                             AudioPortInfo& out) const = 0;
-  virtual uint32_t notePortCount(PortDirection direction) const { (void)direction; return 0; }
+  virtual bool audioPortInfo(PortDirection direction, uint32_t index, AudioPortInfo& out) const = 0;
+  virtual uint32_t notePortCount(PortDirection direction) const {
+    (void)direction;
+    return 0;
+  }
   virtual bool notePortInfo(PortDirection direction, uint32_t index, NotePortInfo& out) const {
     (void)direction;
     (void)index;

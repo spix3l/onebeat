@@ -1,0 +1,74 @@
+name: Set up Homebrew LLVM
+description: >
+  Installs an LLVM new enough for RealtimeSanitizer and clang-tidy, caching the
+  Homebrew bottles so only the first run on a given version pays the download.
+  Exports LLVM_PREFIX.
+
+outputs:
+  prefix:
+    description: Installation prefix (the directory containing bin/clang++)
+    value: ${{ steps.install.outputs.prefix }}
+  version:
+    description: Resolved LLVM version
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    # The runner image ships Homebrew llvm@18, which has no RTSan (it needs 20+)
+    # and a clang-format three majors behind the one the formula installs. So
+    # this really does install a new formula; it is not re-doing work the image
+    # already did.
+    - name: Resolve the LLVM version Homebrew would install
+      id: resolve
+      shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+      run: |
+        version="$(brew info --json=v2 llvm | jq -r '.formulae[0].versions.stable')"
+        echo "Homebrew would install LLVM $version"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    # Caching the *download* cache rather than the installed Cellar. Restoring a
+    # poured Cellar means restoring absolute paths and dependency symlinks that
+    # brew normally owns, which breaks in ways that are hard to diagnose from a
+    # CI log. The bottles are the part that costs 30 s; pouring them is seconds.
+    - name: Restore cached LLVM bottles
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Caches/Homebrew/downloads
+        key: brew-llvm-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve.outputs.version }}
+        # A near-miss is still worth having: llvm's dependencies rarely all move
+        # at once, so an older key usually supplies most of the bytes.
+        restore-keys: |
+          brew-llvm-${{ runner.os }}-${{ runner.arch }}-
+
+    - name: Install LLVM
+      id: install
+      shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      run: |
+        set -euo pipefail
+        brew install llvm
+        prefix="$(brew --prefix llvm)"
+        if [ ! -x "$prefix/bin/clang++" ]; then
+          echo "::error::brew installed llvm but $prefix/bin/clang++ is missing"
+          exit 1
+        fi
+
+        # RealtimeSanitizer landed in LLVM 20. Failing here with a sentence beats
+        # failing later inside CMake's compiler probe with a link error.
+        major="$("$prefix/bin/clang++" --version | sed -n 's/.*version \([0-9]*\).*/\1/p' | head -1)"
+        if [ "$major" -lt 20 ]; then
+          echo "::error::LLVM $major is too old; RealtimeSanitizer needs 20 or newer"
+          exit 1
+        fi
+
+        # Printed on every run because clang-format's output changes between
+        # majors: when the format check starts failing on a commit that touched
+        # no C++, this line is how you find out why.
+        "$prefix/bin/clang-format" --version
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "LLVM_PREFIX=$prefix" >> "$GITHUB_ENV"

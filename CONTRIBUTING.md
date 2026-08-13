@@ -71,7 +71,27 @@ to be a port rather than a rewrite (NFR-11).
 ## Style
 
 - C++: `.clang-format` (Google-derived, 100 columns) and `.clang-tidy`. Both run
-  in CI.
+  in CI, which installs Homebrew LLVM for them (`.github/actions/setup-llvm`).
+
+  Locally, Xcode ships `clang-format` but **not** `clang-tidy`, so the tidy job
+  is the one you cannot reproduce with the tools you already have. Without
+  installing 1.5 GB of Homebrew LLVM:
+
+  ```sh
+  xcrun clang-format -i $(find engine \( -name '*.cpp' -o -name '*.h' \))
+
+  python3 -m venv /tmp/tidy && /tmp/tidy/bin/pip install -q clang-tidy
+  cmake -S engine -B build-tidy -DCMAKE_BUILD_TYPE=Debug
+  SDK=$(xcrun --show-sdk-path)
+  find engine/src/core engine/src/audio_io engine/src/plugin -name '*.cpp' -print0 \
+    | xargs -0 /tmp/tidy/bin/clang-tidy -p build-tidy --quiet \
+        --extra-arg="-isysroot$SDK" --extra-arg="-isystem$SDK/usr/include/c++/v1"
+  ```
+
+  The two `--extra-arg`s are not optional. The compile database comes from Apple
+  clang and the tool is upstream clang, so without them it uses its own resource
+  directory, fails to find `<atomic>`, and then reports a page of nonsense
+  findings caused by headers that never parsed.
 - Dart: `flutter analyze` with `app/analysis_options.yaml`.
 - Comments explain *why*. The code already says what it does; a comment that
   repeats it is noise, and a comment that explains a non-obvious constraint is

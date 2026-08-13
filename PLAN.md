@@ -127,6 +127,11 @@ These run through every stage rather than belonging to one.
 - All acceptance criteria demonstrably met (test, recording, or reproducible manual check as the AC specifies).
 - CI green, including the full sanitizer matrix (NFR-08).
 - **Human review of any audio-thread or FFI-boundary code, no exceptions** (R4).
+  From 13 August 2026 the maintainer delegates this to the implementer on a
+  standing basis (D7: sole maintainer, so the alternative is a queue of one).
+  The gate does not disappear: each ticket carries a **Review sign-off** section
+  naming what was checked, and it says plainly that it is self-signed rather
+  than implying a second reader. Nothing else in this list is delegable.
 - New dependencies pass the licence audit (NFR-09).
 - UI code uses tokens only (FR-UX-02); no functionality reachable only by right-click or undocumented shortcut (FR-UX-17); destructive actions undoable (FR-UX-21).
 - Sequencer-adjacent tickets re-checked against the anti-pattern table (ARCHITECTURE.md §6) in review (R15).

@@ -92,10 +92,10 @@ struct ProcessSetup {
 // What changed about a port list, so the host can do the cheapest correct thing
 // rather than tearing down every routing it holds. Mirrors CLAP's rescan flags.
 enum PortRescanFlags : uint32_t {
-  PortRescanNames = 1U << 0U,       // cosmetic; keep all routing
+  PortRescanNames = 1U << 0U,  // cosmetic; keep all routing
   PortRescanFlagsChanged = 1U << 1U,
   PortRescanChannelCount = 1U << 2U,
-  PortRescanPortList = 1U << 3U,    // ports appeared or vanished; requires deactivation
+  PortRescanPortList = 1U << 3U,  // ports appeared or vanished; requires deactivation
 };
 
 }  // namespace onebeat::plugin

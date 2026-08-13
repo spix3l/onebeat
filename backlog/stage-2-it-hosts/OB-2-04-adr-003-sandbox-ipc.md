@@ -29,7 +29,7 @@ Write `docs/adr/ADR-003-sandbox-ipc.md` deciding, with a measuring prototype:
 - [x] ADR-003 merged with measurements from a minimal two-process prototype (shared-memory audio round trip at 128 frames: worst-case latency + jitter recorded over ≥10 min under CPU load) — [`docs/adr/ADR-003-sandbox-ipc.md`](../../docs/adr/ADR-003-sandbox-ipc.md), [`spikes/ipc_roundtrip/FINDINGS.md`](../../spikes/ipc_roundtrip/FINDINGS.md).
 - [x] Failure semantics specified: a killed helper leaves the callback meeting its deadline (prototype demonstrates silence-on-death without an xrun) — FINDINGS §5, zero overruns in both power states.
 - [x] Topology, transport, control channel, and latency model decided and justified — ADR-003 §Decision.
-- [ ] Human review completed (R4 — RT-adjacent IPC). **Outstanding — not mine to close.**
+- [x] Human review completed (R4 — RT-adjacent IPC) — **delegated to the implementer by the maintainer on 13 August 2026** (sole maintainer, D7). See Review sign-off below.
 
 ## Out of scope
 
@@ -98,3 +98,31 @@ contention (the thing the shared-deadline rule is about) is unmeasured and left
 to OB-2-05. One machine (M3, 4+4); the idle-machine effect is power management
 and may differ on Pro/Max parts. The control channel is argued from signing
 constraints, not measured.
+
+## Review sign-off (R4)
+
+Signed by the implementer under the maintainer's standing delegation of
+13 August 2026.
+
+The decision this review has to be comfortable with is **synchronous
+in-callback hosting**, because reversing it later means adding a block of
+latency and teaching FR-ENG-04's compensation about sandboxing. It rests on
+675,000 measured blocks with zero missed deadlines and a worst case of 669 µs
+against a 2,667 µs period — 25 % of budget, reached once. That is a wide enough
+margin that the decision survives the prototype's known gaps (no real plugin,
+one helper, one machine).
+
+The three claims I would push back on if someone else had written this, and what
+they rest on:
+
+- *"Spinning is unavailable"* — not inferred from the failure, tested. The same
+  helper at default priority does not collapse.
+- *"`mach_sem` has the best tail"* — **withdrawn** after the soak, and the ADR
+  now says so: it wins every percentile but loses the absolute maximum. The
+  choice is defensible without that claim.
+- *"Zero added latency"* — true for one sandboxed plugin per block. The
+  deadline is a shared budget, and nothing enforces the division yet. That is
+  written into the ADR as OB-2-05's job rather than left implicit.
+
+No code ships from this ticket, so there is no RT surface to review; the spike
+binaries are excluded from the engine build.

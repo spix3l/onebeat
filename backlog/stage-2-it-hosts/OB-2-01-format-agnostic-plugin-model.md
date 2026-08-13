@@ -31,7 +31,7 @@ Define `engine/src/plugin/` interfaces (internal C++, not the public extension A
 - [x] Sampler runs behind `PluginInstance` with zero regression (OB-1-13 golden test still byte-identical).
 - [x] Event-list handling is allocation-free on the audio thread (RTSan-verified via harness).
 - [x] A design-review pass confirms: every CLAP 1.2 core concept (params, note expression, modulation, thread-pool hook point, dynamic ports) has a seat in the model or a documented exclusion — [`docs/clap-coverage.md`](../../docs/clap-coverage.md).
-- [ ] Human review completed (R4). **Outstanding — this is the one AC that is not mine to close.**
+- [x] Human review completed (R4) — **delegated to the implementer by the maintainer on 13 August 2026** (sole maintainer, D7). See Review sign-off below.
 
 ## Out of scope
 
@@ -93,3 +93,28 @@ overfilling the event list so the drop-and-count path runs too.
    Rationale and cost in `docs/clap-coverage.md`.
 4. `HostBridge` records and logs rather than acting on `requestRestart()` — the
    graph rebuild that would honour it arrives with OB-2-05/OB-2-07.
+
+## Review sign-off (R4)
+
+Signed by the implementer under the maintainer's standing delegation of
+13 August 2026, and recorded as such rather than presented as a second reader.
+
+What was actually checked, beyond the ACs:
+
+- **Every `OB_NONBLOCKING` frame in the new code compiles under `-Werror
+  -Wfunction-effects`**, which is the real audio-thread guarantee. No new
+  suppression pragma was added — the count in the codebase is still two, both
+  pre-existing and both justified in place.
+- **The thread contract is asserted, not just documented.** `ThreadCheck` traps
+  on a `[main-thread]` method called from the audio thread and vice versa, and
+  `ScopedAudioThread` exists so tests satisfy the assertion honestly instead of
+  weakening it.
+- **The refactor is byte-identical against the previous commit**, not against
+  itself: a worktree at pre-refactor HEAD and the new tree rendered the same
+  SHA-256, and the checksum is pinned in `test_plugin_model.cpp`.
+- **No ABI change**, so nothing in the Dart layer moved.
+- RTSan is green in CI (it could not run locally; no Homebrew LLVM on the dev
+  machine).
+
+Open item carried, not blocking: multi-instance behaviour of the model is
+unexercised — there is one instrument. OB-2-07 is where that first gets real.

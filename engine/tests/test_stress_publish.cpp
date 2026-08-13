@@ -12,7 +12,6 @@ using onebeat::tests::command;
 using onebeat::tests::makeOfflineEngine;
 
 TEST_SUITE("stress") {
-
   TEST_CASE("The plugin event path is allocation- and lock-free under load") {
     // The RTSan target for OB-2-01 AC 3. Everything the model does on the audio
     // thread runs here at volume: building an event list, sorting it, splitting
@@ -40,7 +39,8 @@ TEST_SUITE("stress") {
     // note-off carry and the schedule path all run in the same blocks.
     for (int round = 0; round < 20; ++round) {
       engine->postCommand(command(OB_CMD_NOTE_ON, 72, 1.0));
-      engine->postCommand(command(OB_CMD_TRANSPORT_SEEK_FRAMES, round * 1000));
+      engine->postCommand(
+          command(OB_CMD_TRANSPORT_SEEK_FRAMES, static_cast<int64_t>(round) * 1000));
       engine->postCommand(command(OB_CMD_ALL_NOTES_OFF));
       const auto result = onebeat::testing::renderOffline(*engine, 48000, 512);
       CHECK(result.frames() == 48000);
@@ -83,9 +83,18 @@ TEST_SUITE("stress") {
     CHECK(result.peak() > 0.0F);         // the swaps never silenced playback
     CHECK(std::isfinite(result.rms()));  // and never corrupted it
 
+    // This used to assert `snapshot.xrun_count == 0`, and it was wrong to.
+    // An offline render has no device and therefore no deadline to miss, so the
+    // counter was measuring how often CI's scheduler descheduled the render
+    // thread during the storm — which it did, intermittently, in Release only.
+    // The engine no longer counts xruns without a device (`engine.cpp`
+    // publishSnapshot), so the assertion would now be vacuous. What the storm
+    // could genuinely break is checked above: every swap landed, playback never
+    // went silent, and the audio stayed finite. The one thing a snapshot can
+    // still add is that the last schedule to land is the live one.
     ob_snapshot snapshot{};
     engine->readSnapshot(snapshot);
-    CHECK(snapshot.xrun_count == 0);
+    CHECK(snapshot.schedule_event_count > 0);
   }
 
   TEST_CASE("Retired schedules are all reclaimed once playback stops") {
