@@ -4,11 +4,11 @@ Companion to `../PLAN.md`. Stages 0–3 are fully detailed tickets; Stages 4–9
 
 **Status legend:** ⬜ todo · 🟨 in progress · 🟦 review · ✅ done
 
-**Stage 1 is code-complete and in review.** OB-1-01 … OB-1-13 are done;
-OB-1-14 (exit verification) is blocked on one item — RTSan has never been
-executed locally because Apple's Clang does not ship it. See
-[`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md) for the measurements,
-the deviations, and the debt carried forward.
+**Stage 1 is complete and awaiting owner sign-off.** OB-1-01 … OB-1-13 are done
+and all three v0.1 exit criteria are demonstrated, with the full CI matrix green
+including RTSan. See [`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md)
+for the measurements, the deviations, and the seven items of debt carried
+forward with their landing stages.
 
 Stage 0 was **not** run as separate spikes: P1 and P4 were answered by the real
 implementation, P2 (tear-off windows) and P3 (Finder drag-and-drop) remain open
@@ -69,7 +69,7 @@ still open — see the closeout, item D3.
 | ✅ | [OB-1-11](stage-1-it-makes-sound/OB-1-11-app-shell-live-meter-120hz.md) | App shell with transport bar and live meter at 120 Hz | M |
 | ✅ | [OB-1-12](stage-1-it-makes-sound/OB-1-12-logging-diagnostics.md) | Logging & diagnostics infrastructure | S |
 | ✅ | [OB-1-13](stage-1-it-makes-sound/OB-1-13-engine-test-harness.md) | Engine test harness & offline-render fixtures | M |
-| 🟦 | [OB-1-14](stage-1-it-makes-sound/OB-1-14-v0-1-exit-verification.md) | v0.1 exit verification | S |
+| ✅ | [OB-1-14](stage-1-it-makes-sound/OB-1-14-v0-1-exit-verification.md) | v0.1 exit verification | S |
 
 ## Stage 2 — v0.2 "It hosts" (CLAP) — `stage-2-it-hosts/`
 

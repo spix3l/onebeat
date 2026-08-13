@@ -22,10 +22,9 @@ tools/build.sh          # engine + tests + app bundle
 open app/build/macos/Build/Products/Release/onebeat.app
 ```
 
-Reference timing (M-series, `build/` and `app/build/` deleted, Xcode and pub
-caches warm): **19 s** for `tools/build.sh --debug`. The cold clone-to-build
-path — a fresh runner, no caches — is measured by the `clone-to-build` CI job on
-every push against the 15-minute budget (NFR-07).
+Clone to running app on a fresh machine with no caches: **73 s**, against a
+15-minute budget (NFR-07). CI re-measures it on every push, so it cannot drift.
+Incrementally, with caches warm, `tools/build.sh --debug` takes about 19 s.
 
 For day-to-day work, `tools/dev.sh` rebuilds the engine and starts the app with
 hot reload.
