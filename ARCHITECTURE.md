@@ -209,6 +209,12 @@ Design rules:
 - **Clips reference lanes; lanes do not list clips.** Moving a clip touches one record.
 - **Plugin binary state lives in a sidecar**, referenced by ID, so the text file stays diffable.
 
+Decided in [ADR-004](docs/adr/ADR-004-project-format.md) (OQ-2) and specified in
+[`docs/project-format.md`](docs/project-format.md): JSON in a `.obt` directory
+bundle, integer ticks at 960 PPQ, ULID identities, and a canonical writer whose
+load → save round-trip is byte-identical. `group_id` is reserved on lanes so
+DM-Q1 stays a value change rather than a schema change.
+
 ---
 
 ## 9. Open decisions

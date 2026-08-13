@@ -18,7 +18,7 @@ Implements ADR-004: the text project file + binary sidecars, with canonical form
 1. **Writer:** model → canonical `project.json` (per ADR-004's formatter rules: stable ordering, fixed float formatting, one note per line); plugin state chunks → `state/<instance-id>.bin`; atomic save (write-temp-then-rename of the whole bundle) so a crash mid-save never corrupts the previous save.
 2. **Loader:** parse + validate; referential integrity check with **specific** recoverable errors (FR-UX-12: "Clip 34 references missing pattern P9 — removed" collected into a load report, not a refusal); unknown fields/entities preserved and round-tripped (forward compat, FR-PRJ-03); schema version gate with a migration hook (identity migration for v1).
 3. **Missing-asset handling at load:** missing plugin → OB-2-10 placeholder; missing audio file → offline AudioClip stub retaining the path (full UX in Stage 9).
-4. **App integration:** New/Open/Save/Save As with unsaved-changes tracking (dirty flag from the command bus) and native dialogs; recent-projects list; `.onebeat` bundle association.
+4. **App integration:** New/Open/Save/Save As with unsaved-changes tracking (dirty flag from the command bus) and native dialogs; recent-projects list; `.obt` bundle association.
 5. **Round-trip guarantee:** load → save byte-identical (the canonical-writer test); save → load → deep model equality.
 
 ## Acceptance criteria

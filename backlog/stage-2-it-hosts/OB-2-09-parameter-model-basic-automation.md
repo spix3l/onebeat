@@ -23,10 +23,10 @@ Stage 2 must prove parameters automate through the whole stack (PRD v0.2 scope: 
 
 ## Acceptance criteria
 
-- [ ] A scheduled parameter ramp audibly sweeps a hosted plugin (e.g. filter cutoff) sample-accurately (offline render shows monotone parameter application at correct positions).
-- [ ] Modulation events applied non-destructively on a supporting plugin: underlying value unchanged after modulation returns to zero.
-- [ ] Live UI changes and scheduled automation coexist without fighting per the documented semantics.
-- [ ] RTSan/TSan clean across the new paths; human review completed (R4).
+- [x] A scheduled parameter ramp audibly sweeps a hosted plugin (e.g. filter cutoff) sample-accurately (offline render shows monotone parameter application at correct positions).
+- [x] Modulation events applied non-destructively on a supporting plugin: underlying value unchanged after modulation returns to zero.
+- [x] Live UI changes and scheduled automation coexist without fighting per the documented semantics.
+- [x] RTSan/TSan clean across the new paths; human review completed (R4).
 
 ## Out of scope
 

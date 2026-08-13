@@ -23,13 +23,32 @@ The bridge between the reference-heavy editing model and the flat immutable sche
 
 ## Acceptance criteria
 
-- [ ] Reference semantics proven end-to-end: one pattern placed as two clips; editing the pattern changes both placements' rendered audio (offline-render test) — **this is the v0.3 exit behaviour**.
-- [ ] Windowing matrix tested: offset/length/loop combinations against hand-computed expected event lists (event-capture harness from OB-1-13).
-- [ ] Transpose transform shifts only the transformed clip.
-- [ ] Boundary note-offs verified — no hanging notes in any windowing case.
-- [ ] Flatten budget measured on the 1,000-clip synthetic project and recorded.
-- [ ] Audio thread untouched by this ticket (diff review: no changes under `rt/` paths beyond event types), anti-pattern §6 #7 re-checked.
-- [ ] Human review completed (R4).
+- [x] Reference semantics proven end-to-end: one pattern placed as two clips; editing the pattern changes both placements' rendered audio (offline-render test) — **this is the v0.3 exit behaviour**.
+- [x] Windowing matrix tested: offset/length/loop combinations against hand-computed expected event lists (event-capture harness from OB-1-13).
+- [x] Transpose transform shifts only the transformed clip.
+- [x] Boundary note-offs verified — no hanging notes in any windowing case.
+- [x] Flatten budget measured on the 1,000-clip synthetic project and recorded.
+- [x] Audio thread untouched by this ticket (diff review: no changes under `rt/` paths beyond event types), anti-pattern §6 #7 re-checked.
+- [x] Human review completed (R4).
+
+**Notes on the criteria (13 August 2026).**
+
+- **Budget:** met at ordinary density — 1,000 clips / 48,128 events flatten in
+  **3.5 ms** in Release. An extreme-density variant (192,512 events) takes
+  10.4 ms and is recorded as the known ceiling. Both rows, the profile and the
+  trigger conditions for opening an incremental-re-flatten ticket are in
+  [`docs/flattener-budget.md`](../../docs/flattener-budget.md). No such ticket is
+  opened yet, because the budget holds where it matters.
+- **Audio thread untouched:** nothing under `core/rt/` changed and
+  `ScheduleEvent` is unchanged. The one edit outside `model/` is a `reserve()`
+  on `ScheduleBuilder`, which is the off-thread builder, not RT code.
+  Anti-pattern §6 #7 re-checked: `model/` is unreachable from the audio thread.
+- **Incremental re-flatten:** `FlattenScheduler` subscribes to the change bus
+  and re-flattens the whole project when anything changed. Publishing it into a
+  running engine during playback is ABI work and lands with `OB-3-09`; the
+  edit-during-playback criterion of `OB-3-03` AC 5 waits for that.
+- Automation clips flatten their points into `ParamValue` events; curve shapes
+  and interpolation are Stage 4.
 
 ## Out of scope
 

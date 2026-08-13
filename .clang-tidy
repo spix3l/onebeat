@@ -33,7 +33,7 @@ Checks: >
 WarningsAsErrors: '*'
 # The public ABI header is C, not C++: it is checked by the standalone
 # `clang -x c` syntax job (OB-1-04) rather than by C++ tidy checks.
-HeaderFilterRegex: 'engine/src/(core|audio_io|plugin|testing)/.*'
+HeaderFilterRegex: 'engine/src/(core|audio_io|plugin|model|testing)/.*'
 
 CheckOptions:
   - key: readability-identifier-naming.ClassCase
