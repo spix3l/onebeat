@@ -216,8 +216,8 @@ range/lasso selection, snapped move/resize, velocity edits, strength quantise,
 transpose, duplicate, instrument-default entry, and the DM-Q4 step mapping.
 Off-grid notes are explicitly reported and never removed by a rack toggle.
 Every mutation is an undoable command, replacement streams coalesce per
-gesture, and the 10,000-note acceptance test measures a 0.05 ms range query plus
-a 7.69 ms full edit in Debug against the 16.667 ms frame budget. The behavior
+gesture, and the 10,000-note acceptance test measures a 0.09 ms range query plus
+a 1.11 ms full edit in Debug against the 16.667 ms frame budget. The behavior
 contract and benchmark method are in
 [`docs/note-sequence-editing.md`](../docs/note-sequence-editing.md).
 

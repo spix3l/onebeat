@@ -42,7 +42,7 @@ Completed 13 August 2026 on branch `ob-3-08-notesequence-editing`.
   validate atomically and use indexed removal rather than repeated vector
   erasure.
 - `test_note_edit.cpp` covers every operation and hand-computed 50% quantise
-  fixtures. Its 10,000-note test measured a 0.05 ms range query and 7.69 ms full
+  fixtures. Its 10,000-note test measured a 0.09 ms range query and 1.11 ms full
   edit in Debug against the 16.667 ms UI-frame budget; the continuing benchmark
   contract is documented in `docs/note-sequence-editing.md`.
 - The complete local CI matrix is green: Debug, Release, ASan/UBSan, TSan,

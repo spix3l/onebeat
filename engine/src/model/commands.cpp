@@ -396,6 +396,16 @@ class NoteCommand : public Command {
     const std::vector<Note>& current =
         existing == pattern->sequences.end() ? empty : existing->second.notes();
 
+    // Piano-roll "select all" operations are a common 10k-note path. When the
+    // command replaces the entire canonical sequence, no removal index or
+    // merge is needed: validate once and adopt the already ordered result.
+    if (take == current) {
+      if (!std::all_of(give.begin(), give.end(), isValidNote)) return false;
+      NoteSequence edited;
+      edited.assignSorted(give);
+      return project.restoreSequence(pattern_, instrument_, std::move(edited));
+    }
+
     const auto fullOrder = [](const Note& left, const Note& right) {
       if (noteOrderBefore(left, right)) return true;
       if (noteOrderBefore(right, left)) return false;
@@ -631,6 +641,8 @@ CommandPtr removeNotes(PatternId pattern, InstrumentId instrument, std::vector<N
 CommandPtr replaceNotes(PatternId pattern, InstrumentId instrument, std::vector<Note> before,
                         std::vector<Note> after) {
   if (before.size() != after.size()) return nullptr;
+  std::stable_sort(before.begin(), before.end(), noteOrderBefore);
+  std::stable_sort(after.begin(), after.end(), noteOrderBefore);
   const std::string name =
       "Edit " + std::to_string(before.size()) + (before.size() == 1 ? " note" : " notes");
   return std::make_unique<NoteCommand>(pattern, instrument, std::move(before), std::move(after),

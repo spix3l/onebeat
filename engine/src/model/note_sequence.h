@@ -100,7 +100,9 @@ class NoteSequence {
   // invariant. Sorting here rather than trusting the file means a hand-edited
   // project cannot poison the binary searches downstream.
   void assignSorted(std::vector<Note> notes) {
-    std::stable_sort(notes.begin(), notes.end(), noteOrderBefore);
+    if (!std::is_sorted(notes.begin(), notes.end(), noteOrderBefore)) {
+      std::stable_sort(notes.begin(), notes.end(), noteOrderBefore);
+    }
     notes_ = std::move(notes);
   }
 

@@ -57,6 +57,6 @@ fit the 16.667 ms frame budget; sanitizer builds run the same correctness path
 without asserting wall-clock time.
 
 On 13 August 2026, the Debug build on the development Apple Silicon Mac measured
-0.05 ms for the range query and 7.69 ms for the full 10,000-note edit (7.74 ms
+0.09 ms for the range query and 1.11 ms for the full 10,000-note edit (1.20 ms
 combined). The executable test remains the authority because CI hardware and
 future implementations will differ.
