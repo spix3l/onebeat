@@ -15,6 +15,10 @@ Checks: >
   modernize-use-nullptr,
   modernize-use-using,
   performance-*,
+  # Enum base types here are ABI and POD-layout decisions: RtMessage sits in a
+  # frozen 32-byte log record and EventType in a frozen 24-byte schedule event.
+  # Shrinking them to uint8_t would change layouts the freeze tests pin.
+  -performance-enum-size,
   readability-identifier-naming
 
 WarningsAsErrors: '*'

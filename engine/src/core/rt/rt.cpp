@@ -9,7 +9,9 @@ namespace {
 // audio thread exists, so the audio thread only ever reads it. A function-local
 // static would be wrong here — its thread-safe initialisation guard is a lock.
 struct Timebase {
-  Timebase() {
+  // noexcept: this runs during static initialisation, where an escaping
+  // exception is uncatchable and terminates the process.
+  Timebase() noexcept {
     mach_timebase_info_data_t info{};
     mach_timebase_info(&info);
     numerator = info.numer;

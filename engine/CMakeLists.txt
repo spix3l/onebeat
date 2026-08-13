@@ -55,8 +55,15 @@ if(ONEBEAT_TSAN)
   target_link_options(onebeat_flags INTERFACE -fsanitize=thread)
 endif()
 if(ONEBEAT_RTSAN)
-  include(CheckCXXCompilerFlag)
-  check_cxx_compiler_flag(-fsanitize=realtime ONEBEAT_HAVE_RTSAN)
+  # The probe must compile *and link*, with the flag on both command lines:
+  # -fsanitize=realtime pulls in a runtime library, so a compile-only check
+  # fails with undefined symbols even on a toolchain that fully supports RTSan.
+  include(CheckCXXSourceCompiles)
+  set(CMAKE_REQUIRED_FLAGS "-fsanitize=realtime")
+  set(CMAKE_REQUIRED_LINK_OPTIONS "-fsanitize=realtime")
+  check_cxx_source_compiles("int main() { return 0; }" ONEBEAT_HAVE_RTSAN)
+  unset(CMAKE_REQUIRED_FLAGS)
+  unset(CMAKE_REQUIRED_LINK_OPTIONS)
   if(NOT ONEBEAT_HAVE_RTSAN)
     message(FATAL_ERROR
       "This toolchain has no RealtimeSanitizer. Xcode's clang does not ship it; "
