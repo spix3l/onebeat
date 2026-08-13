@@ -36,6 +36,10 @@ struct PatternMeta {
 // `addInstrument` is a composite: D-M2's auto-created mixer track is part of
 // the same user action, so it undoes with it.
 CommandPtr addInstrument(Project& project, const std::string& name, const PluginRef& plugin);
+// User-facing creation: derives a unique name from the descriptor and cycles
+// through the instrument palette. The explicit-name overload remains useful
+// for import and tests.
+CommandPtr addInstrument(Project& project, const PluginRef& plugin);
 CommandPtr addPattern(Project& project, const std::string& name,
                       Ticks length = TicksPerBarFourFour * 4);
 CommandPtr addLane(Project& project, const std::string& name);
@@ -52,6 +56,14 @@ CommandPtr removePattern(PatternId id);
 CommandPtr removeLane(ArrangementLaneId id);
 CommandPtr removeClip(ClipId id);
 CommandPtr removeMixerTrack(MixerTrackId id);
+
+// ----- instrument lifecycle ----------------------------------------------
+// Duplication owns a fresh ID and dedicated mixer track but copies the plugin
+// reference/state, note defaults and presentation. Replacement deliberately
+// changes only the plugin: sequences belong to patterns and survive.
+CommandPtr duplicateInstrument(Project& project, InstrumentId id);
+CommandPtr replaceInstrument(const Project& project, InstrumentId id, const PluginRef& plugin);
+CommandPtr reorderInstrument(const Project& project, InstrumentId id, int32_t target_order);
 
 // ----- edit ---------------------------------------------------------------
 // `mutator` runs on a copy to derive the "after" state, so the command owns

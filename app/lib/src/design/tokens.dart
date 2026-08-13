@@ -120,6 +120,7 @@ class SizeTokens {
   double get pluginEditorWidth => 760;
   double get pluginEditorHeight => 620;
   double get pluginRowHeight => 54;
+  double get instrumentStripWidth => 264;
   double get parameterRowHeight => 42;
   double get searchHeight => 34;
   double get parameterLabelWidth => 210;
@@ -254,6 +255,24 @@ class OneBeatTokens {
   final SizeTokens size;
   final MotionTokens motion;
 }
+
+/// Project colours are user data rather than chrome tokens, but parsing them
+/// belongs at the design boundary so UI widgets never invent colour literals.
+Color projectColor(String hex, Color fallback) {
+  if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return fallback;
+  return Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
+}
+
+const List<String> instrumentPalette = <String>[
+  '#6C8CFF',
+  '#B779F2',
+  '#EF6F91',
+  '#F59E5B',
+  '#E7C75F',
+  '#66C58F',
+  '#50B8C6',
+  '#8294B8',
+];
 
 /// Exposes tokens to the widget tree. Material's theme is not used at all: the
 /// app is built on `WidgetsApp`, so no Material default can leak a colour that

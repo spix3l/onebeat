@@ -19,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.4.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.5.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.4.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.5.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -132,6 +132,17 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_param_info, display) == 304);
   }
 
+  TEST_CASE("ABI 1.5 project instrument layout is frozen") {
+    CHECK(sizeof(ob_instrument_info) == 1088);
+    CHECK(offsetof(ob_instrument_info, order) == 4);
+    CHECK(offsetof(ob_instrument_info, affected_pattern_count) == 12);
+    CHECK(offsetof(ob_instrument_info, id) == 24);
+    CHECK(offsetof(ob_instrument_info, name) == 56);
+    CHECK(offsetof(ob_instrument_info, color) == 184);
+    CHECK(offsetof(ob_instrument_info, plugin_id) == 192);
+    CHECK(offsetof(ob_instrument_info, plugin_path) == 576);
+  }
+
   TEST_CASE("The plugin list is reachable through the C surface") {
     ob_engine_config config{};
     config.struct_size = sizeof(config);
@@ -200,8 +211,40 @@ TEST_SUITE("abi") {
     CHECK(param.param_id == 17);
     CHECK(std::string(param.name) == "Gain");
     CHECK_FALSE(std::string(param.display).empty());
+
+    CHECK(ob_engine_instrument_count(engine) == 1);
+    ob_instrument_info project_instrument{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
+    CHECK(std::string(project_instrument.name) == "OneBeat Test Synth");
+    CHECK((project_instrument.flags & 2U) != 0U);
+    CHECK(std::string(project_instrument.plugin_id) == "dev.onebeat.test.synth");
+    REQUIRE(ob_engine_instrument_set_muted(engine, project_instrument.id, 1) == OB_OK);
+    REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
+    CHECK((project_instrument.flags & 1U) != 0U);
+    REQUIRE(ob_engine_instrument_replace(engine, project_instrument.id, bundle.c_str(),
+                                         "dev.onebeat.test.synth") == OB_OK);
+
+    REQUIRE(ob_engine_instrument_rename(engine, project_instrument.id, "Lead") == OB_OK);
+    REQUIRE(ob_engine_instrument_duplicate(engine, project_instrument.id) == OB_OK);
+    CHECK(ob_engine_instrument_count(engine) == 2);
+    ob_instrument_info duplicate{};
+    REQUIRE(ob_engine_instrument_at(engine, 1, &duplicate) == OB_OK);
+    CHECK(std::string(duplicate.name) == "Lead 2");
+    CHECK(std::string(duplicate.id) != std::string(project_instrument.id));
+    CHECK((duplicate.flags & 2U) != 0U);
+
+    REQUIRE(ob_engine_instrument_reorder(engine, duplicate.id, 0) == OB_OK);
+    REQUIRE(ob_engine_instrument_at(engine, 0, &duplicate) == OB_OK);
+    CHECK(std::string(duplicate.name) == "Lead 2");
+    CHECK(ob_engine_project_can_undo(engine) == 1);
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);
+    REQUIRE(ob_engine_project_redo(engine) == OB_OK);
+
+    REQUIRE(ob_engine_instrument_remove(engine, project_instrument.id) == OB_OK);
+    CHECK(ob_engine_instrument_count(engine) == 1);
     CHECK(ob_engine_instance_remove(engine, instance.instance_id) == OB_OK);
     CHECK(ob_engine_instance_count(engine) == 0);
+    CHECK(ob_engine_instrument_count(engine) == 0);
     ob_engine_destroy(engine);
   }
 

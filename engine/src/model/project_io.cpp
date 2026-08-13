@@ -371,6 +371,7 @@ json::Value writeInstrument(const Instrument& instrument,
   json::Object out;
   out.emplace("name", json::Value::string(instrument.name));
   out.emplace("color", json::Value::string(instrument.color));
+  out.emplace("order", json::Value::integer(instrument.order));
   out.emplace("muted", json::Value::boolean(instrument.muted));
   out.emplace("plugin", json::Value::object(std::move(plugin)));
   out.emplace("note_defaults", json::Value::object(std::move(defaults)));
@@ -749,6 +750,7 @@ class Loader {
     json::Value value = take(root, "instruments");
     json::Object* map = value.asObject();
     if (map == nullptr) return;
+    int32_t fallback_order = 0;
     for (auto& [key, entry] : *map) {
       json::Object* fields = entry.asObject();
       if (fields == nullptr) continue;
@@ -761,6 +763,8 @@ class Loader {
       instrument.id = *id;
       instrument.name = takeString(*fields, "name", "Instrument");
       instrument.color = takeString(*fields, "color", "#6C8CFF");
+      instrument.order = static_cast<int32_t>(takeInt(*fields, "order", fallback_order));
+      ++fallback_order;
       instrument.muted = takeBool(*fields, "muted");
 
       json::Value plugin_value = take(*fields, "plugin");

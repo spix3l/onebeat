@@ -13,10 +13,13 @@
 #include <fstream>
 #include <memory>
 #include <new>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "core/engine.h"
+#include "model/command.h"
+#include "model/commands.h"
 #include "plugin/scan/plugin_library.h"
 #include "plugin/scan/subprocess_probe.h"
 
@@ -69,6 +72,9 @@ std::vector<std::string> splitDirectories(const char* utf8_directories) {
 
 struct ob_engine {
   std::unique_ptr<onebeat::core::Engine> engine;
+  onebeat::model::Project project;
+  onebeat::model::CommandBus commands{project};
+  std::optional<onebeat::model::InstrumentId> selected_instrument;
   // Not part of the Engine: the plugin library is filesystem work and a
   // background thread, and nothing in it goes near the audio thread (OB-2-02).
   std::unique_ptr<onebeat::plugin::scan::PluginLibrary> library;
@@ -104,6 +110,34 @@ onebeat::plugin::scan::PluginLibrary& pluginLibrary(ob_engine& handle) {
   return *handle.library;
 }
 
+std::optional<onebeat::model::InstrumentId> instrumentId(const char* text) {
+  if (text == nullptr) return std::nullopt;
+  return onebeat::model::InstrumentId::parse(text);
+}
+
+const onebeat::model::Instrument* orderedInstrument(const ob_engine& handle, int32_t index) {
+  if (index < 0 || static_cast<size_t>(index) >= handle.project.instruments().size())
+    return nullptr;
+  for (const auto& [id, instrument] : handle.project.instruments()) {
+    (void)id;
+    size_t lower = 0;
+    for (const auto& [other_id, other] : handle.project.instruments()) {
+      (void)other_id;
+      if (other.order < instrument.order) ++lower;
+    }
+    if (lower == static_cast<size_t>(index)) return &instrument;
+  }
+  return nullptr;
+}
+
+ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
+  if (command == nullptr || !handle.commands.execute(std::move(command))) {
+    return fail(OB_ERR_INVALID_ARGUMENT, failure);
+  }
+  g_last_error.clear();
+  return OB_OK;
+}
+
 }  // namespace
 
 extern "C" {
@@ -113,7 +147,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.4.0";
+  return "1.5.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -477,6 +511,21 @@ ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path
       }
     }
     engine->instance_state.clear();
+    onebeat::model::PluginRef plugin;
+    plugin.format = static_cast<onebeat::model::PluginFormat>(engine->instance_format);
+    plugin.id = engine->instance_plugin_id;
+    plugin.name = engine->instance_name;
+    plugin.vendor = engine->instance_vendor;
+    plugin.path_hint = engine->instance_path;
+    if (!engine->commands.execute(onebeat::model::addInstrument(engine->project, plugin))) {
+      return fail(OB_ERR_INTERNAL, "Could not add the instrument to the project.");
+    }
+    for (const auto& [id, instrument] : engine->project.instruments()) {
+      if (instrument.order == static_cast<int32_t>(engine->project.instruments().size() - 1)) {
+        engine->selected_instrument = id;
+        break;
+      }
+    }
     g_last_error.clear();
     return OB_OK;
   } catch (const std::bad_alloc&) {
@@ -497,6 +546,13 @@ ob_status ob_engine_instance_remove(ob_engine* engine, uint32_t instance_id) {
     engine->has_instance = false;
     engine->instance_missing = false;
     engine->instance_state.clear();
+    if (engine->selected_instrument.has_value()) {
+      if (!engine->commands.execute(
+              onebeat::model::removeInstrument(*engine->selected_instrument))) {
+        return fail(OB_ERR_INTERNAL, "Could not remove the instrument from the project.");
+      }
+      engine->selected_instrument = std::nullopt;
+    }
     return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
@@ -683,6 +739,253 @@ ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path) {
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
   }
+}
+
+int32_t ob_engine_instrument_count(ob_engine* engine) {
+  if (engine == nullptr) return 0;
+  const size_t count = engine->project.instruments().size();
+  return count > static_cast<size_t>(INT32_MAX) ? INT32_MAX : static_cast<int32_t>(count);
+}
+
+ob_status ob_engine_instrument_at(ob_engine* engine, int32_t index, ob_instrument_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and output row are required.");
+  }
+  const onebeat::model::Instrument* instrument = orderedInstrument(*engine, index);
+  if (instrument == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Instrument index is out of range.");
+  }
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->order = instrument->order;
+  if (instrument->muted) out_info->flags |= 1U;
+  if (engine->selected_instrument.has_value() && *engine->selected_instrument == instrument->id) {
+    out_info->flags |= 2U;
+  }
+  const onebeat::model::InstrumentImpact impact = engine->project.instrumentImpact(instrument->id);
+  out_info->affected_pattern_count = static_cast<uint32_t>(impact.patterns.size());
+  out_info->affected_clip_count = static_cast<uint32_t>(impact.pattern_clips.size());
+  out_info->affected_note_count = static_cast<uint32_t>(impact.note_count);
+  copyText(out_info->id, sizeof(out_info->id), instrument->id.str().c_str());
+  copyText(out_info->name, sizeof(out_info->name), instrument->name.c_str());
+  copyText(out_info->color, sizeof(out_info->color), instrument->color.c_str());
+  copyText(out_info->plugin_id, sizeof(out_info->plugin_id), instrument->plugin.id.c_str());
+  copyText(out_info->plugin_name, sizeof(out_info->plugin_name), instrument->plugin.name.c_str());
+  copyText(out_info->plugin_vendor, sizeof(out_info->plugin_vendor),
+           instrument->plugin.vendor.c_str());
+  copyText(out_info->plugin_path, sizeof(out_info->plugin_path),
+           instrument->plugin.path_hint.c_str());
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instrument_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Instrument* instrument = id ? engine->project.findInstrument(*id) : nullptr;
+  if (instrument == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  if (engine->selected_instrument == id) return OB_OK;
+  try {
+    std::string error;
+    if (!engine->engine->createSandboxedInstrument(
+            instrument->plugin.path_hint, instrument->plugin.id,
+            onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
+      return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
+    }
+    engine->has_instance = true;
+    engine->instance_missing = false;
+    engine->instance_path = instrument->plugin.path_hint;
+    engine->instance_plugin_id = instrument->plugin.id;
+    engine->instance_name = instrument->plugin.name;
+    engine->instance_vendor = instrument->plugin.vendor;
+    engine->instance_format = static_cast<uint32_t>(instrument->plugin.format);
+    engine->selected_instrument = *id;
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instrument_rename(ob_engine* engine, const char* utf8_instrument_id,
+                                      const char* utf8_name) {
+  if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An instrument and non-empty name are required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  const std::string name = utf8_name;
+  return executeModel(
+      *engine,
+      onebeat::model::editInstrument(
+          engine->project, *id, onebeat::model::ChangeField::Name,
+          [&name](onebeat::model::Instrument& value) { value.name = name; }, "Rename instrument"),
+      "The instrument does not exist.");
+}
+
+ob_status ob_engine_instrument_recolor(ob_engine* engine, const char* utf8_instrument_id,
+                                       const char* utf8_color) {
+  if (engine == nullptr || utf8_color == nullptr || std::strlen(utf8_color) != 7 ||
+      utf8_color[0] != '#') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Colour must be #RRGGBB.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  const std::string color = utf8_color;
+  return executeModel(*engine,
+                      onebeat::model::editInstrument(
+                          engine->project, *id, onebeat::model::ChangeField::Color,
+                          [&color](onebeat::model::Instrument& value) { value.color = color; },
+                          "Recolour instrument"),
+                      "The instrument does not exist.");
+}
+
+ob_status ob_engine_instrument_reorder(ob_engine* engine, const char* utf8_instrument_id,
+                                       int32_t order) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  const onebeat::model::Instrument* instrument = engine->project.findInstrument(*id);
+  if (instrument == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  if (instrument->order == order) return OB_OK;
+  return executeModel(*engine, onebeat::model::reorderInstrument(engine->project, *id, order),
+                      "Could not reorder the instrument.");
+}
+
+ob_status ob_engine_instrument_set_muted(ob_engine* engine, const char* utf8_instrument_id,
+                                         int32_t muted) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  return executeModel(*engine,
+                      onebeat::model::editInstrument(
+                          engine->project, *id, onebeat::model::ChangeField::Muted,
+                          [muted](onebeat::model::Instrument& value) { value.muted = muted != 0; },
+                          muted != 0 ? "Mute instrument" : "Unmute instrument"),
+                      "The instrument does not exist.");
+}
+
+ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instrument_id,
+                                       const char* utf8_bundle_path, const char* utf8_plugin_id) {
+  if (engine == nullptr || utf8_bundle_path == nullptr || utf8_bundle_path[0] == '\0' ||
+      utf8_plugin_id == nullptr || utf8_plugin_id[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An instrument, plug-in path and ID are required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  try {
+    onebeat::model::PluginRef plugin;
+    plugin.format = onebeat::model::PluginFormat::Clap;
+    plugin.id = utf8_plugin_id;
+    plugin.name = utf8_plugin_id;
+    plugin.path_hint = utf8_bundle_path;
+    for (const auto& row : pluginLibrary(*engine).plugins()) {
+      if (row.path.text() == plugin.path_hint && row.id.text() == plugin.id) {
+        plugin.format = row.format;
+        plugin.name = row.name.text();
+        plugin.vendor = row.vendor.text();
+        break;
+      }
+    }
+    if (engine->selected_instrument == id) {
+      std::string error;
+      if (!engine->engine->createSandboxedInstrument(
+              plugin.path_hint, plugin.id,
+              onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
+        return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
+      }
+      engine->instance_path = plugin.path_hint;
+      engine->instance_plugin_id = plugin.id;
+      engine->instance_name = engine->engine->instrument().name().text();
+      engine->instance_vendor = plugin.vendor;
+      engine->instance_format = static_cast<uint32_t>(plugin.format);
+      plugin.name = engine->instance_name;
+    }
+    return executeModel(*engine, onebeat::model::replaceInstrument(engine->project, *id, plugin),
+                        "The instrument could not be replaced.");
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instrument_duplicate(ob_engine* engine, const char* utf8_instrument_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  const ob_status status =
+      executeModel(*engine, onebeat::model::duplicateInstrument(engine->project, *id),
+                   "The instrument could not be duplicated.");
+  if (status != OB_OK) return status;
+  const onebeat::model::Instrument* duplicate =
+      orderedInstrument(*engine, static_cast<int32_t>(engine->project.instruments().size() - 1));
+  if (duplicate != nullptr) engine->selected_instrument = duplicate->id;
+  return OB_OK;
+}
+
+ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instrument_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  if (engine->selected_instrument == id) {
+    std::string error;
+    if (!engine->engine->restoreBuiltinInstrument(error))
+      return fail(OB_ERR_INTERNAL, error.c_str());
+    engine->has_instance = false;
+    engine->selected_instrument = std::nullopt;
+  }
+  const ob_status status = executeModel(*engine, onebeat::model::removeInstrument(*id),
+                                        "The instrument could not be removed.");
+  if (status != OB_OK) return status;
+  if (!engine->selected_instrument.has_value() && !engine->project.instruments().empty()) {
+    const onebeat::model::Instrument* first = orderedInstrument(*engine, 0);
+    if (first != nullptr) {
+      const std::string next = first->id.str();
+      (void)ob_engine_instrument_select(engine, next.c_str());
+    }
+  }
+  return OB_OK;
+}
+
+int32_t ob_engine_project_can_undo(ob_engine* engine) {
+  return engine != nullptr && engine->commands.canUndo() ? 1 : 0;
+}
+
+int32_t ob_engine_project_can_redo(ob_engine* engine) {
+  return engine != nullptr && engine->commands.canRedo() ? 1 : 0;
+}
+
+ob_status ob_engine_project_undo(ob_engine* engine) {
+  if (engine == nullptr || !engine->commands.undo()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "There is no project edit to undo.");
+  }
+  if (engine->selected_instrument.has_value() &&
+      engine->project.findInstrument(*engine->selected_instrument) == nullptr) {
+    std::string error;
+    (void)engine->engine->restoreBuiltinInstrument(error);
+    engine->has_instance = false;
+    engine->selected_instrument = std::nullopt;
+  }
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_project_redo(ob_engine* engine) {
+  if (engine == nullptr || !engine->commands.redo()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "There is no project edit to redo.");
+  }
+  if (engine->selected_instrument.has_value() &&
+      engine->project.findInstrument(*engine->selected_instrument) == nullptr) {
+    std::string error;
+    (void)engine->engine->restoreBuiltinInstrument(error);
+    engine->has_instance = false;
+    engine->selected_instrument = std::nullopt;
+  }
+  g_last_error.clear();
+  return OB_OK;
 }
 
 }  // extern "C"

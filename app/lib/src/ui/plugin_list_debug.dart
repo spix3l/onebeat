@@ -144,6 +144,14 @@ class _PluginListPanelState extends State<PluginListDebugPanel> {
                                 _AvailableRow(
                                   listing: item,
                                   onAdd: () => library.add(item),
+                                  onReplace:
+                                      library.instruments.any(
+                                            (ProjectInstrument instrument) =>
+                                                instrument.selected,
+                                          )
+                                          ? () => library
+                                              .replaceSelectedInstrument(item)
+                                          : null,
                                 ),
                             ],
                           ),
@@ -158,9 +166,14 @@ class _PluginListPanelState extends State<PluginListDebugPanel> {
 }
 
 class _AvailableRow extends StatelessWidget {
-  const _AvailableRow({required this.listing, required this.onAdd});
+  const _AvailableRow({
+    required this.listing,
+    required this.onAdd,
+    required this.onReplace,
+  });
   final PluginListing listing;
   final VoidCallback onAdd;
+  final VoidCallback? onReplace;
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens t = OneBeatTheme.of(context);
@@ -194,6 +207,14 @@ class _AvailableRow extends StatelessWidget {
             semanticLabel: 'Add ${listing.name}',
             onPressed: onAdd,
           ),
+          if (onReplace != null) ...<Widget>[
+            SizedBox(width: t.spacing.xs),
+            OneBeatButton(
+              label: 'REPLACE',
+              semanticLabel: 'Replace selected instrument with ${listing.name}',
+              onPressed: onReplace!,
+            ),
+          ],
         ],
       ),
     );

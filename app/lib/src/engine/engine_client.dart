@@ -149,6 +149,7 @@ class EngineClient {
       _scanStatus = calloc<ob_plugin_scan_status>(),
       _pluginInfo = calloc<ob_plugin_info>(),
       _instanceInfo = calloc<ob_instance_info>(),
+      _instrumentInfo = calloc<ob_instrument_info>(),
       _paramInfo = calloc<ob_param_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
@@ -194,6 +195,7 @@ class EngineClient {
   final Pointer<ob_plugin_scan_status> _scanStatus;
   final Pointer<ob_plugin_info> _pluginInfo;
   final Pointer<ob_instance_info> _instanceInfo;
+  final Pointer<ob_instrument_info> _instrumentInfo;
   final Pointer<ob_param_info> _paramInfo;
 
   int _generation = 0;
@@ -476,6 +478,133 @@ class EngineClient {
     }
   }
 
+  List<ProjectInstrument> readInstruments() {
+    final int count = _bindings.ob_engine_instrument_count(_engine);
+    final List<ProjectInstrument> result = <ProjectInstrument>[];
+    for (int index = 0; index < count; index++) {
+      if (_bindings.ob_engine_instrument_at(_engine, index, _instrumentInfo) !=
+          ob_status.OB_OK) {
+        break;
+      }
+      final ob_instrument_info value = _instrumentInfo.ref;
+      result.add(
+        ProjectInstrument(
+          id: _readFixedUtf8(value.id, 32),
+          name: _readFixedUtf8(value.name, 128),
+          color: _readFixedUtf8(value.color, 8),
+          order: value.order,
+          pluginId: _readFixedUtf8(value.plugin_id, 128),
+          pluginName: _readFixedUtf8(value.plugin_name, 128),
+          pluginVendor: _readFixedUtf8(value.plugin_vendor, 128),
+          pluginPath: _readFixedUtf8(value.plugin_path, 512),
+          muted: (value.flags & 1) != 0,
+          selected: (value.flags & 2) != 0,
+          affectedPatterns: value.affected_pattern_count,
+          affectedClips: value.affected_clip_count,
+          affectedNotes: value.affected_note_count,
+        ),
+      );
+    }
+    return result;
+  }
+
+  void selectInstrument(String id) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_select(_engine, native),
+  );
+
+  void renameInstrument(String id, String name) => _withTwoNativeStrings(
+    id,
+    name,
+    (Pointer<Char> nativeId, Pointer<Char> nativeName) =>
+        _bindings.ob_engine_instrument_rename(_engine, nativeId, nativeName),
+  );
+
+  void recolorInstrument(String id, String color) => _withTwoNativeStrings(
+    id,
+    color,
+    (Pointer<Char> nativeId, Pointer<Char> nativeColor) =>
+        _bindings.ob_engine_instrument_recolor(_engine, nativeId, nativeColor),
+  );
+
+  void setInstrumentMuted(String id, {required bool muted}) =>
+      _withNativeString(
+        id,
+        (Pointer<Char> native) => _bindings.ob_engine_instrument_set_muted(
+          _engine,
+          native,
+          muted ? 1 : 0,
+        ),
+      );
+
+  void replaceInstrument(String id, PluginListing plugin) {
+    final Pointer<Utf8> nativeId = id.toNativeUtf8();
+    final Pointer<Utf8> nativePath = plugin.path.toNativeUtf8();
+    final Pointer<Utf8> nativePluginId = plugin.id.toNativeUtf8();
+    try {
+      _check(
+        _bindings.ob_engine_instrument_replace(
+          _engine,
+          nativeId.cast<Char>(),
+          nativePath.cast<Char>(),
+          nativePluginId.cast<Char>(),
+        ),
+      );
+    } finally {
+      calloc.free(nativeId);
+      calloc.free(nativePath);
+      calloc.free(nativePluginId);
+    }
+  }
+
+  void reorderInstrument(String id, int order) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_reorder(_engine, native, order),
+  );
+
+  void duplicateInstrument(String id) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_duplicate(_engine, native),
+  );
+
+  void deleteInstrument(String id) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_remove(_engine, native),
+  );
+
+  bool get canUndoProject => _bindings.ob_engine_project_can_undo(_engine) != 0;
+  bool get canRedoProject => _bindings.ob_engine_project_can_redo(_engine) != 0;
+  void undoProject() => _check(_bindings.ob_engine_project_undo(_engine));
+  void redoProject() => _check(_bindings.ob_engine_project_redo(_engine));
+
+  void _withNativeString(String value, ob_status Function(Pointer<Char>) call) {
+    final Pointer<Utf8> native = value.toNativeUtf8();
+    try {
+      _check(call(native.cast<Char>()));
+    } finally {
+      calloc.free(native);
+    }
+  }
+
+  void _withTwoNativeStrings(
+    String first,
+    String second,
+    ob_status Function(Pointer<Char>, Pointer<Char>) call,
+  ) {
+    final Pointer<Utf8> nativeFirst = first.toNativeUtf8();
+    final Pointer<Utf8> nativeSecond = second.toNativeUtf8();
+    try {
+      _check(call(nativeFirst.cast<Char>(), nativeSecond.cast<Char>()));
+    } finally {
+      calloc.free(nativeFirst);
+      calloc.free(nativeSecond);
+    }
+  }
+
   void removePlugin(int instanceId) =>
       _check(_bindings.ob_engine_instance_remove(_engine, instanceId));
 
@@ -542,6 +671,7 @@ class EngineClient {
     calloc.free(_scanStatus);
     calloc.free(_pluginInfo);
     calloc.free(_instanceInfo);
+    calloc.free(_instrumentInfo);
     calloc.free(_paramInfo);
   }
 }
@@ -671,6 +801,38 @@ class HostedInstance {
   final bool hasEditor;
   final bool needsRestart;
   final int paramCount;
+}
+
+class ProjectInstrument {
+  const ProjectInstrument({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.order,
+    required this.pluginId,
+    required this.pluginName,
+    required this.pluginVendor,
+    required this.pluginPath,
+    required this.muted,
+    required this.selected,
+    required this.affectedPatterns,
+    required this.affectedClips,
+    required this.affectedNotes,
+  });
+
+  final String id;
+  final String name;
+  final String color;
+  final int order;
+  final String pluginId;
+  final String pluginName;
+  final String pluginVendor;
+  final String pluginPath;
+  final bool muted;
+  final bool selected;
+  final int affectedPatterns;
+  final int affectedClips;
+  final int affectedNotes;
 }
 
 class HostedParameter {

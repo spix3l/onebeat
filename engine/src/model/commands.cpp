@@ -1,10 +1,43 @@
 #include "model/commands.h"
 
+#include <algorithm>
+#include <array>
 #include <map>
+#include <set>
 #include <utility>
 
 namespace onebeat::model {
 namespace {
+
+constexpr std::array<const char*, 8> KInstrumentColors = {
+    "#6C8CFF", "#B779F2", "#EF6F91", "#F59E5B", "#E7C75F", "#66C58F", "#50B8C6", "#8294B8"};
+
+std::string uniqueInstrumentName(const Project& project, std::string base) {
+  if (base.empty()) base = "Instrument";
+  std::set<std::string> names;
+  for (const auto& [instrument_id, instrument] : project.instruments()) {
+    (void)instrument_id;
+    names.insert(instrument.name);
+  }
+  if (names.count(base) == 0) return base;
+  for (size_t suffix = 2;; ++suffix) {
+    std::string candidate = base + " " + std::to_string(suffix);
+    if (names.count(candidate) == 0) return candidate;
+  }
+}
+
+int32_t nextInstrumentOrder(const Project& project) {
+  int32_t highest = -1;
+  for (const auto& [instrument_id, instrument] : project.instruments()) {
+    (void)instrument_id;
+    highest = std::max(highest, instrument.order);
+  }
+  return highest + 1;
+}
+
+ColorHex nextInstrumentColor(const Project& project) {
+  return KInstrumentColors[project.instruments().size() % KInstrumentColors.size()];
+}
 
 // --------------------------------------------------------------------------
 // Create / delete
@@ -502,6 +535,8 @@ CommandPtr addInstrument(Project& project, const std::string& name, const Plugin
   Instrument instrument;
   instrument.id = project.mintId<EntityKind::Instrument>();
   instrument.name = name;
+  instrument.color = nextInstrumentColor(project);
+  instrument.order = nextInstrumentOrder(project);
   instrument.plugin = plugin;
 
   MixerTrackId destination = project.masterTrack();
@@ -516,6 +551,66 @@ CommandPtr addInstrument(Project& project, const std::string& name, const Plugin
   instrument.routing.push_back(OutputRoute{0, destination});
   composite->add(std::make_unique<AddCommand<Instrument>>(std::move(instrument), "Add instrument"));
   return composite;
+}
+
+CommandPtr addInstrument(Project& project, const PluginRef& plugin) {
+  return addInstrument(project, uniqueInstrumentName(project, plugin.name), plugin);
+}
+
+CommandPtr duplicateInstrument(Project& project, InstrumentId id) {
+  const Instrument* source = project.findInstrument(id);
+  if (source == nullptr) return nullptr;
+
+  auto composite = std::make_unique<CompositeCommand>("Duplicate instrument");
+  MixerTrack track;
+  track.id = project.mintId<EntityKind::MixerTrack>();
+  track.name = uniqueInstrumentName(project, source->name);
+  track.output = project.masterTrack();
+
+  Instrument copy = *source;
+  copy.id = project.mintId<EntityKind::Instrument>();
+  copy.name = track.name;
+  copy.order = nextInstrumentOrder(project);
+  copy.routing = {OutputRoute{0, track.id}};
+
+  composite->add(std::make_unique<AddCommand<MixerTrack>>(std::move(track), "Add mixer track"));
+  composite->add(std::make_unique<AddCommand<Instrument>>(std::move(copy), "Add instrument"));
+  return composite;
+}
+
+CommandPtr replaceInstrument(const Project& project, InstrumentId id, const PluginRef& plugin) {
+  return editInstrument(
+      project, id, ChangeField::Plugin,
+      [&plugin](Instrument& instrument) { instrument.plugin = plugin; }, "Replace instrument");
+}
+
+CommandPtr reorderInstrument(const Project& project, InstrumentId id, int32_t target_order) {
+  const Instrument* moving = project.findInstrument(id);
+  if (moving == nullptr || project.instruments().empty()) return nullptr;
+
+  const int32_t maximum = static_cast<int32_t>(project.instruments().size() - 1);
+  target_order = std::clamp(target_order, int32_t{0}, maximum);
+  if (moving->order == target_order) return nullptr;
+
+  auto command = std::make_unique<CompositeCommand>("Reorder instrument");
+  const int32_t source_order = moving->order;
+  for (const auto& [other_id, other] : project.instruments()) {
+    int32_t next = other.order;
+    if (other_id == id) {
+      next = target_order;
+    } else if (source_order < target_order && other.order > source_order &&
+               other.order <= target_order) {
+      --next;
+    } else if (source_order > target_order && other.order >= target_order &&
+               other.order < source_order) {
+      ++next;
+    }
+    if (next == other.order) continue;
+    command->add(editInstrument(
+        project, other_id, ChangeField::Order,
+        [next](Instrument& instrument) { instrument.order = next; }, "Reorder instrument"));
+  }
+  return command;
 }
 
 CommandPtr addPattern(Project& project, const std::string& name, Ticks length) {

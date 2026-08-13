@@ -23,10 +23,29 @@ Instruments are project-global with stable IDs — the single join between the t
 
 ## Acceptance criteria
 
-- [ ] Create → audition → rename/recolour → duplicate → delete round trip, all undoable.
-- [ ] Delete confirmation shows the correct pattern count; undo restores all sequences (test on a 5-pattern matrix).
-- [ ] Every new instrument carries a valid dedicated `MixerTrackId` routing entry (D-M2 data path verified even though audio behaviour waits for Stage 4).
-- [ ] IDs stable across save/load; no reuse after delete.
+- [x] Create → audition → rename/recolour → duplicate → delete round trip, all undoable.
+- [x] Delete confirmation shows the correct pattern count; undo restores all sequences (test on a 5-pattern matrix).
+- [x] Every new instrument carries a valid dedicated `MixerTrackId` routing entry (D-M2 data path verified even though audio behaviour waits for Stage 4).
+- [x] IDs stable across save/load; no reuse after delete.
+
+## Closeout evidence
+
+- `model/commands.cpp` owns generated unique names, palette colours, stable
+  presentation order, dedicated tracks, duplicate and replace semantics. The
+  five-pattern delete/undo matrix is in `test_model_commands.cpp`.
+- ABI 1.5 exposes the project instrument registry and every lifecycle command;
+  `test_abi.cpp` drives the whole surface through the C boundary and freezes the
+  new POD layout.
+- `instrument_strip.dart` is the permanent channel-rack header strip: selection,
+  inline rename, colour, mute, preview, reorder, duplicate and an impact-aware
+  two-step delete. The plug-in browser exposes Add and Replace as separate
+  visible actions.
+- `Instrument::order` is canonical project data and is covered by the worked
+  example plus byte-identical and field-by-field save/load tests. Older files
+  without the field receive deterministic map order on load.
+- Full local CI is green: Debug, Release, ASan/UBSan, TSan, RTSan, ABI-C,
+  clang-tidy, clang-format, seam/license/token checks, Flutter analyze and
+  Flutter tests. See [`docs/instrument-lifecycle.md`](../../docs/instrument-lifecycle.md).
 
 ## Out of scope
 

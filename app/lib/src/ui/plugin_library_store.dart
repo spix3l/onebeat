@@ -19,6 +19,7 @@ class PluginLibraryStore extends ChangeNotifier {
 
   PluginScanStatus status = const PluginScanStatus.idle();
   List<PluginListing> plugins = const <PluginListing>[];
+  List<ProjectInstrument> instruments = const <ProjectInstrument>[];
   final Set<String> _dismissedQuarantinePaths = <String>{};
   HostedInstance? instance;
   List<HostedParameter> parameters = const <HostedParameter>[];
@@ -42,11 +43,13 @@ class PluginLibraryStore extends ChangeNotifier {
     _client.loadPluginCache();
     _refresh(force: true);
     refreshInstance();
+    refreshInstruments();
   }
 
   void add(PluginListing plugin) {
     _client.addPlugin(plugin);
     refreshInstance();
+    refreshInstruments();
   }
 
   void removeInstance() {
@@ -56,6 +59,7 @@ class PluginLibraryStore extends ChangeNotifier {
     instance = null;
     parameters = const <HostedParameter>[];
     showParameters = false;
+    refreshInstruments();
     notifyListeners();
   }
 
@@ -112,6 +116,74 @@ class PluginLibraryStore extends ChangeNotifier {
 
   void auditionNoteOn(int note) => _client.noteOn(note, 0.82);
   void auditionNoteOff(int note) => _client.noteOff(note);
+
+  void refreshInstruments() {
+    instruments = _client.readInstruments();
+    notifyListeners();
+  }
+
+  void selectInstrument(ProjectInstrument instrument) {
+    _client.selectInstrument(instrument.id);
+    refreshInstance();
+    refreshInstruments();
+  }
+
+  void renameInstrument(ProjectInstrument instrument, String name) {
+    _client.renameInstrument(instrument.id, name);
+    refreshInstruments();
+  }
+
+  void recolorInstrument(ProjectInstrument instrument, String color) {
+    _client.recolorInstrument(instrument.id, color);
+    refreshInstruments();
+  }
+
+  void toggleInstrumentMuted(ProjectInstrument instrument) {
+    _client.setInstrumentMuted(instrument.id, muted: !instrument.muted);
+    refreshInstruments();
+  }
+
+  void replaceSelectedInstrument(PluginListing plugin) {
+    ProjectInstrument? selected;
+    for (final ProjectInstrument instrument in instruments) {
+      if (instrument.selected) selected = instrument;
+    }
+    if (selected == null) return;
+    _client.replaceInstrument(selected.id, plugin);
+    refreshInstance();
+    refreshInstruments();
+  }
+
+  void moveInstrument(ProjectInstrument instrument, int order) {
+    _client.reorderInstrument(instrument.id, order);
+    refreshInstruments();
+  }
+
+  void duplicateInstrument(ProjectInstrument instrument) {
+    _client.duplicateInstrument(instrument.id);
+    refreshInstruments();
+  }
+
+  void deleteInstrument(ProjectInstrument instrument) {
+    _client.deleteInstrument(instrument.id);
+    refreshInstance();
+    refreshInstruments();
+  }
+
+  bool get canUndo => _client.canUndoProject;
+  bool get canRedo => _client.canRedoProject;
+
+  void undo() {
+    _client.undoProject();
+    refreshInstance();
+    refreshInstruments();
+  }
+
+  void redo() {
+    _client.redoProject();
+    refreshInstance();
+    refreshInstruments();
+  }
 
   void refreshInstance() {
     instance = _client.readHostedInstance();

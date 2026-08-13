@@ -207,6 +207,7 @@ void requireSameModel(const Project& a, const Project& b) {
     REQUIRE(right != nullptr);
     CHECK(left.name == right->name);
     CHECK(left.color == right->color);
+    CHECK(left.order == right->order);
     CHECK(left.muted == right->muted);
     CHECK(left.plugin.format == right->plugin.format);
     CHECK(left.plugin.id == right->plugin.id);
