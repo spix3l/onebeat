@@ -51,14 +51,17 @@ if(ONEBEAT_WERROR)
 endif()
 
 if(ONEBEAT_ASAN)
+  target_compile_definitions(onebeat_flags INTERFACE ONEBEAT_SANITIZER_BUILD=1)
   target_compile_options(onebeat_flags INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
   target_link_options(onebeat_flags INTERFACE -fsanitize=address,undefined)
 endif()
 if(ONEBEAT_TSAN)
+  target_compile_definitions(onebeat_flags INTERFACE ONEBEAT_SANITIZER_BUILD=1)
   target_compile_options(onebeat_flags INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
   target_link_options(onebeat_flags INTERFACE -fsanitize=thread)
 endif()
 if(ONEBEAT_RTSAN)
+  target_compile_definitions(onebeat_flags INTERFACE ONEBEAT_SANITIZER_BUILD=1)
   # The probe must compile *and link*, with the flag on both command lines:
   # -fsanitize=realtime pulls in a runtime library, so a compile-only check
   # fails with undefined symbols even on a toolchain that fully supports RTSan.

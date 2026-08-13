@@ -77,12 +77,14 @@ class ClapPluginInstance final : public PluginInstance {
   ClapPluginInstance(PluginHost* host, std::string bundle_path, void* library,
                      const clap_plugin_entry_t* entry, const clap_plugin_t* plugin);
 
+ protected:
   bool onConfigure(const ProcessSetup& setup) override;
   bool onActivate() override;
   void onDeactivate() override;
   bool onStartProcessing() noexcept OB_NONBLOCKING override;
   void onStopProcessing() noexcept OB_NONBLOCKING override;
 
+ private:
   void cacheExtensions();
   const clap_event_header_t* convertInput(const PluginEvent& event,
                                           ClapEventStorage& storage) noexcept OB_NONBLOCKING;

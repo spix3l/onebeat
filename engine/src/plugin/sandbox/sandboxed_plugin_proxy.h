@@ -52,13 +52,14 @@ class SandboxedPluginProxy final : public PluginInstance {
   pid_t helperPid() const noexcept { return child_pid_; }
   const std::string& lastError() const noexcept { return last_error_; }
 
- private:
+ protected:
   bool onConfigure(const ProcessSetup& setup) override;
   bool onActivate() override;
   void onDeactivate() override;
   bool onStartProcessing() noexcept OB_NONBLOCKING override;
   void onStopProcessing() noexcept OB_NONBLOCKING override;
 
+ private:
   bool launch(const ProcessSetup& setup);
   void shutdown();
   bool control(const ControlRequest& request, ControlResponse& response,

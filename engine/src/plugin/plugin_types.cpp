@@ -1,12 +1,28 @@
 #include "plugin/plugin_types.h"
 
+#include <pthread.h>
+
+#include <atomic>
+#include <cstdint>
+
 namespace onebeat::plugin {
 namespace {
 
-// Zero-initialised POD with constant initialisation: no guard variable, no
-// __cxa_thread_atexit registration, no lazy construction. The audio thread only
-// ever reads and writes a single byte in its own TLS block.
-thread_local ThreadRole GlobalRole = ThreadRole::Unknown;
+// Darwin allocates a thread's TLV block lazily on its first `thread_local`
+// access. That makes even a constant-initialised TLS byte unsafe in the first
+// CoreAudio callback (RTSan correctly intercepts the allocation). A process has
+// one render thread, so identify it with pthread_self() instead. Darwin creates
+// the pthread object before invoking us; reading its identity does not allocate.
+std::atomic<uintptr_t> AudioThread{0};
+std::atomic<uintptr_t> MainThread{0};
+
+uintptr_t currentThread() noexcept OB_NONBLOCKING {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfunction-effects"
+  const auto thread = reinterpret_cast<uintptr_t>(::pthread_self());
+#pragma clang diagnostic pop
+  return thread;
+}
 
 }  // namespace
 
@@ -16,32 +32,24 @@ thread_local ThreadRole GlobalRole = ThreadRole::Unknown;
 #pragma clang diagnostic ignored "-Wfunction-effects"
 
 void ThreadCheck::enterMainThread() noexcept {
-  GlobalRole = ThreadRole::Main;
+  MainThread.store(currentThread(), std::memory_order_release);
 }
 
 void ThreadCheck::enterAudioThread() noexcept OB_NONBLOCKING {
-  GlobalRole = ThreadRole::Audio;
+  AudioThread.store(currentThread(), std::memory_order_release);
 }
 
 void ThreadCheck::leaveAudioThread() noexcept OB_NONBLOCKING {
-  GlobalRole = ThreadRole::Unknown;
+  AudioThread.store(0, std::memory_order_release);
 }
 
 #pragma clang diagnostic pop
 
 ThreadRole ThreadCheck::current() noexcept OB_NONBLOCKING {
-  // On Darwin a thread_local read goes through libSystem's `tlv_get_addr`
-  // trampoline, which Clang cannot see into — so the effect check is suppressed
-  // for this one access exactly as rt::monotonicNanos() does for the commpage
-  // read. tlv_get_addr is a load plus a predictable branch for an already
-  // initialised, constant-initialised slot; RTSan verifies it at runtime and
-  // has never flagged it. The whole call disappears in release builds anyway,
-  // where nothing but the assertions consults it.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfunction-effects"
-  const ThreadRole role = GlobalRole;
-#pragma clang diagnostic pop
-  return role;
+  const uintptr_t thread = currentThread();
+  if (AudioThread.load(std::memory_order_acquire) == thread) return ThreadRole::Audio;
+  if (MainThread.load(std::memory_order_acquire) == thread) return ThreadRole::Main;
+  return ThreadRole::Unknown;
 }
 
 bool ThreadCheck::onMainThread() noexcept OB_NONBLOCKING {

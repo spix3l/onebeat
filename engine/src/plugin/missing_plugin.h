@@ -45,12 +45,14 @@ class MissingPlugin final : public PluginInstance {
            reader.read(state_bytes_.data(), state_bytes_.size()) == state_bytes_.size();
   }
 
- private:
+ protected:
   bool onConfigure(const ProcessSetup&) override { return true; }
   bool onActivate() override { return true; }
   void onDeactivate() override {}
   bool onStartProcessing() noexcept OB_NONBLOCKING override { return true; }
   void onStopProcessing() noexcept OB_NONBLOCKING override {}
+
+ private:
   std::string name_;
   std::vector<uint8_t> state_bytes_;
 };

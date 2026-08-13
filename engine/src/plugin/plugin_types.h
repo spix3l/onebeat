@@ -89,7 +89,9 @@ using ModulePath = FixedText<128>;  // "/osc1/shape" — the parameter tree (CLA
 // a violation is a trap at the call site rather than a rare corruption.
 //
 // Release builds compile the checks away entirely: `ThreadRole` is only ever
-// consulted inside `OB_ASSERT_*_THREAD`.
+// consulted inside `OB_ASSERT_*_THREAD`. The implementation compares the
+// process's render-thread identity rather than using TLS because Darwin may
+// allocate a TLS block on its first access inside the audio callback.
 enum class ThreadRole : uint8_t { Unknown = 0, Main = 1, Audio = 2 };
 
 class ThreadCheck {
@@ -99,11 +101,11 @@ class ThreadCheck {
   // `enterMainThread()` from initialise().
   static void enterMainThread() noexcept;
   // Nonblocking: Engine::process() claims and releases the role on every block,
-  // and it is itself an OB_NONBLOCKING function. A single TLS byte store.
+  // and it is itself an OB_NONBLOCKING function.
   static void enterAudioThread() noexcept OB_NONBLOCKING;
   static void leaveAudioThread() noexcept OB_NONBLOCKING;
 
-  // Cheap enough to call from the audio thread: reads a thread-local byte.
+  // Cheap enough to call from the audio thread: compares pthread identities.
   static ThreadRole current() noexcept OB_NONBLOCKING;
   static bool onMainThread() noexcept OB_NONBLOCKING;
   static bool onAudioThread() noexcept OB_NONBLOCKING;

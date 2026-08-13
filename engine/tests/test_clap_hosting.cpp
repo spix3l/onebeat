@@ -202,7 +202,12 @@ TEST_SUITE("engine") {
     CHECK(rig.render({PluginEvent::noteOn(0, 60, 1.0)}) == ProcessStatus::Error);
     CHECK(rig.render() == ProcessStatus::Error);
     CHECK_FALSE(rig.plugin->healthy());
-    CHECK(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(100));
+#ifdef ONEBEAT_SANITIZER_BUILD
+    constexpr auto max_test_deadline = std::chrono::milliseconds(250);
+#else
+    constexpr auto max_test_deadline = std::chrono::milliseconds(100);
+#endif
+    CHECK(std::chrono::steady_clock::now() - started < max_test_deadline);
   }
 
   TEST_CASE("A killed helper restarts from the last opaque state checkpoint") {

@@ -321,8 +321,14 @@ ProcessStatus SandboxedPluginProxy::process(const ProcessBlock& block) noexcept 
   ::semaphore_signal(to_helper_);
   const uint64_t period_nanos = static_cast<uint64_t>(
       (static_cast<double>(block.frames) * 1'000'000'000.0) / setup().sample_rate);
-  const kern_return_t waited =
-      ::semaphore_timedwait(to_host_, relativeDeadline(period_nanos * 3U / 5U));
+  uint64_t deadline_nanos = period_nanos * 3U / 5U;
+#ifdef ONEBEAT_SANITIZER_BUILD
+  // Instrumented helper processes are intentionally much slower. Preserve the
+  // real 60%-of-block production deadline while giving sanitizer builds enough
+  // wall time to inspect the same IPC and rendering paths without timing out.
+  deadline_nanos = std::max(deadline_nanos, 100'000'000ULL);
+#endif
+  const kern_return_t waited = ::semaphore_timedwait(to_host_, relativeDeadline(deadline_nanos));
 #pragma clang diagnostic pop
   const bool answered =
       waited == KERN_SUCCESS && shared_->response.load(std::memory_order_acquire) == request;
