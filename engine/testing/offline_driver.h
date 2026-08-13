@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "core/engine.h"
-#include "core/instrument.h"
 #include "core/schedule.h"
+#include "plugin/plugin_instance.h"
 
 namespace onebeat::testing {
 
@@ -48,27 +48,43 @@ std::unique_ptr<core::Schedule> makeGridSchedule(int note_count, int16_t note, d
                                                  double step_beats, double tempo_bpm,
                                                  float velocity = 1.0F);
 
-// Records the events it receives instead of rendering. Sequencer tests assert
-// on the event stream rather than on audio (used from Stage 3 onwards).
-class EventCaptureInstrument final : public core::Instrument {
+// Records the events it receives instead of rendering, and produces silence.
+// Sequencer tests assert on the event stream rather than on audio (used from
+// Stage 3 onwards).
+//
+// It is a full `PluginInstance` because after OB-2-01 there is no other kind of
+// processor — which is the point: a test double that satisfies the real
+// interface is a standing check that the interface is implementable.
+class EventCapturePlugin final : public plugin::PluginInstance {
  public:
   struct Captured {
     enum class Kind : uint8_t { NoteOn, NoteOff, AllNotesOff };
     Kind kind;
     int16_t note;
     float velocity;
+    // Absolute frame across the whole render, so a test can assert on timing
+    // without tracking block boundaries itself.
     int64_t frame;
   };
 
-  void prepare(double sample_rate, int max_block_frames) override;
-  void release() override {}
+  EventCapturePlugin() : PluginInstance(nullptr) {}
+
+  plugin::PluginName name() const override { return plugin::PluginName("Event Capture"); }
+
   void reset() noexcept OB_NONBLOCKING override {}
-  void noteOn(int16_t note, float velocity) noexcept OB_NONBLOCKING override;
-  void noteOff(int16_t note) noexcept OB_NONBLOCKING override;
-  void allNotesOff() noexcept OB_NONBLOCKING override;
-  void render(const core::AudioBufferView& output, int start_frame,
-              int num_frames) noexcept OB_NONBLOCKING override;
-  int activeVoices() const noexcept OB_NONBLOCKING override { return 0; }
+  plugin::ProcessStatus process(const plugin::ProcessBlock& block) noexcept OB_NONBLOCKING override;
+
+  uint32_t paramCount() const override { return 0; }
+  bool paramInfo(uint32_t, plugin::ParamInfo&) const override { return false; }
+  bool paramValue(plugin::ParamId, double&) const override { return false; }
+  bool paramValueToText(plugin::ParamId, double, char*, size_t) const override { return false; }
+  bool paramTextToValue(plugin::ParamId, const char*, double&) const override { return false; }
+
+  uint32_t audioPortCount(plugin::PortDirection direction) const override {
+    return direction == plugin::PortDirection::Output ? 1U : 0U;
+  }
+  bool audioPortInfo(plugin::PortDirection direction, uint32_t index,
+                     plugin::AudioPortInfo& out) const override;
 
   static constexpr size_t Capacity = 8192;
 
@@ -81,6 +97,15 @@ class EventCaptureInstrument final : public core::Instrument {
     count_ = 0;
     overflowed_ = 0;
   }
+
+ protected:
+  bool onConfigure(const plugin::ProcessSetup& /*setup*/) override {
+    count_ = 0;
+    frame_ = 0;
+    return true;
+  }
+  bool onActivate() override { return true; }
+  void onDeactivate() override {}
 
  private:
   void record(Captured event) noexcept OB_NONBLOCKING;

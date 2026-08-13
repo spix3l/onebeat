@@ -26,6 +26,10 @@
 #include "core/sampler.h"
 #include "core/schedule.h"
 #include "core/transport.h"
+#include "plugin/builtin/sampler_plugin.h"
+#include "plugin/event.h"
+#include "plugin/host.h"
+#include "plugin/plugin_instance.h"
 
 namespace onebeat::core {
 
@@ -99,7 +103,13 @@ class Engine final : public audio_io::RenderCallback {
   void requestSampleLoad(const std::string& path);
   void applyPendingWorkForTests();
 
-  Sampler& sampler() { return sampler_; }
+  // The engine holds its instrument as a `PluginInstance` and nothing else: a
+  // hosted CLAP plugin (OB-2-07) drops in here with no change above this line.
+  plugin::PluginInstance& instrument() { return instrument_; }
+  static constexpr uint32_t CommandQueueCapacity = 1024;
+  // Sample loading has no place in a format-agnostic interface, so it stays on
+  // the concrete built-in.
+  Sampler& sampler() { return instrument_.sampler(); }
   Transport& transportForTests() { return transport_; }
   Diagnostics& diagnostics() { return diagnostics_; }
   rt::RtLog& rtLog() { return rt_log_; }
@@ -108,13 +118,50 @@ class Engine final : public audio_io::RenderCallback {
   std::string deviceName() const;
 
  private:
-  void drainCommands() noexcept OB_NONBLOCKING;
-  void applyCommand(const ob_command& command) noexcept OB_NONBLOCKING;
-  void renderRange(const AudioBufferView& output, int start_frame,
-                   int num_frames) noexcept OB_NONBLOCKING;
-  void runSchedule(const AudioBufferView& output, int block_offset,
-                   int num_frames) noexcept OB_NONBLOCKING;
-  void applyScheduleEvent(const ScheduleEvent& event) noexcept OB_NONBLOCKING;
+  // What the instrument may ask of the engine. Stage 2's implementation is
+  // deliberately conservative — it records and logs rather than acting — because
+  // honouring a restart request needs the graph rebuild that arrives with
+  // OB-2-05/OB-2-07. The seat exists now so those tickets add behaviour, not
+  // structure.
+  class HostBridge final : public plugin::PluginHost {
+   public:
+    void requestRestart() noexcept override { restart_requested_.store(true); }
+    void requestProcess() noexcept override { process_requested_.store(true); }
+    void requestCallback() noexcept override { callback_requested_.store(true); }
+    void paramsRescan(uint32_t flags) noexcept override { params_rescan_.fetch_or(flags); }
+    void paramsClear(plugin::ParamId /*param*/, uint32_t /*flags*/) noexcept override {}
+    void audioPortsRescan(uint32_t flags) noexcept override { ports_rescan_.fetch_or(flags); }
+    void notePortsRescan(uint32_t flags) noexcept override { ports_rescan_.fetch_or(flags); }
+    void latencyChanged() noexcept override { latency_dirty_.store(true); }
+    void tailChanged() noexcept override {}
+    // OneBeat has no worker pool until the graph lands in Stage 4 (FR-ENG-05).
+    // Declining is always legal; the plugin does the work itself.
+    bool requestThreadPoolExec(uint32_t /*num_tasks*/) noexcept OB_NONBLOCKING override {
+      return false;
+    }
+
+    bool takeCallbackRequest() noexcept { return callback_requested_.exchange(false); }
+    bool restartRequested() const noexcept { return restart_requested_.load(); }
+
+   private:
+    std::atomic<bool> restart_requested_{false};
+    std::atomic<bool> process_requested_{false};
+    std::atomic<bool> callback_requested_{false};
+    std::atomic<bool> latency_dirty_{false};
+    std::atomic<uint32_t> params_rescan_{0};
+    std::atomic<uint32_t> ports_rescan_{0};
+  };
+
+  void drainCommands(plugin::EventList& block_events) noexcept OB_NONBLOCKING;
+  void applyCommand(const ob_command& command,
+                    plugin::EventList& block_events) noexcept OB_NONBLOCKING;
+  void runSchedule(const AudioBufferView& output, int block_offset, int num_frames,
+                   const plugin::EventList& block_events) noexcept OB_NONBLOCKING;
+  // One process() call: builds the instrument's event list for [chunk_start,
+  // chunk_start + num_frames) and hands it a view of the output at `offset`.
+  void processChunk(const AudioBufferView& output, int offset, int num_frames,
+                    const Schedule* schedule, int64_t chunk_start,
+                    const plugin::EventList* block_events) noexcept OB_NONBLOCKING;
   void publishSnapshot(const ProcessContext& context,
                        uint64_t render_nanos) noexcept OB_NONBLOCKING;
   void housekeepingLoop();
@@ -126,10 +173,16 @@ class Engine final : public audio_io::RenderCallback {
 
   std::unique_ptr<audio_io::AudioDevice> device_;
   Transport transport_;
-  Sampler sampler_{&rt_log_};
+  HostBridge host_bridge_;
+  plugin::builtin::SamplerPlugin instrument_{&host_bridge_, &rt_log_};
   rt::NonRealtimeMutable<Schedule> schedule_;
 
-  rt::SpscRing<ob_command, 1024> commands_;
+  // Both reserved at initialise() time and never resized afterwards: pushing an
+  // event on the audio thread must never allocate (OB-2-01 AC 3).
+  plugin::EventBuffer command_events_;  // commands drained this block, all at time 0
+  plugin::EventBuffer chunk_events_;    // commands + schedule events for one process() call
+
+  rt::SpscRing<ob_command, CommandQueueCapacity> commands_;
   rt::MpscRing<ob_event, 256> events_;
   SnapshotSlot snapshot_;
 
@@ -144,6 +197,11 @@ class Engine final : public audio_io::RenderCallback {
   int32_t latency_frames_roundtrip_ = 0;
   uint64_t callback_count_ = 0;
   uint64_t last_command_generation_ = 0;
+  int32_t active_voices_ = 0;
+  // A loop wrap at the very end of a block has no following chunk to carry its
+  // note-off into, so it rides to the next block. Audibly identical: voices only
+  // advance their fade while rendering, and nothing renders in between.
+  bool pending_all_notes_off_ = false;
 
   std::atomic<uint64_t> xruns_{0};
   std::atomic<bool> running_{false};

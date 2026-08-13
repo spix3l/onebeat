@@ -101,7 +101,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 
 | Status | ID | Title | Est |
 |---|---|---|---|
-| ⬜ | [OB-2-01](stage-2-it-hosts/OB-2-01-format-agnostic-plugin-model.md) | Format-agnostic internal plugin model (CLAP semantics) | L |
+| 🟦 | [OB-2-01](stage-2-it-hosts/OB-2-01-format-agnostic-plugin-model.md) | Format-agnostic internal plugin model (CLAP semantics) | L |
 | ⬜ | [OB-2-02](stage-2-it-hosts/OB-2-02-plugin-scanner-cache.md) | Plugin scanner with persistent cache | M |
 | ⬜ | [OB-2-03](stage-2-it-hosts/OB-2-03-scan-crash-quarantine.md) | Scan crash quarantine & reporting | S |
 | ⬜ | [OB-2-04](stage-2-it-hosts/OB-2-04-adr-003-sandbox-ipc.md) | ADR-003: sandbox IPC mechanism | M |
@@ -148,4 +148,11 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
-Stage 2: ~~OB-0-02~~ (done) → OB-2-01 → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+Stage 2: ~~OB-0-02~~ (done) → OB-2-01 (in review) → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+
+**OB-2-01 is 🟦 review, not ✅.** Four of its five acceptance criteria are met
+and verified; the fifth is **human review (R4)**, which is required for
+audio-thread and FFI code and is not the implementer's to sign. The model,
+`docs/plugin-threading-contract.md` and `docs/clap-coverage.md` are what needs
+reading. Note also that RTSan ran only in CI, not locally — see the ticket's
+close-out.

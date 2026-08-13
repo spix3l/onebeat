@@ -30,6 +30,10 @@ constexpr MessageSpec Messages[] = {
      "command queue full, dropped command type %" PRId64 " (a1=%" PRId64 ")"},
     {RtMessage::SampleSwapped, "sample_swapped",
      "sample swapped in: %" PRId64 " frames, %" PRId64 " channels"},
+    {RtMessage::EventListFull, "event_list_full",
+     "instrument event list full, dropped %" PRId64 " events (capacity %" PRId64 ")"},
+    {RtMessage::InstrumentProcessFailed, "instrument_process_failed",
+     "instrument process() returned Error (a0=%" PRId64 " a1=%" PRId64 ")"},
 };
 
 const MessageSpec& specFor(RtMessage message) noexcept {

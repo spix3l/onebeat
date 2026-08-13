@@ -123,14 +123,9 @@ std::unique_ptr<core::Schedule> makeGridSchedule(int note_count, int16_t note, d
   return builder.build(sample_rate, 1);
 }
 
-void EventCaptureInstrument::prepare(double /*sample_rate*/, int /*max_block_frames*/) {
-  count_ = 0;
-  frame_ = 0;
-}
-
 // Storage is a fixed array so that recording an event on the audio thread is
 // provably allocation-free; overflow is counted, not grown.
-void EventCaptureInstrument::record(Captured event) noexcept OB_NONBLOCKING {
+void EventCapturePlugin::record(Captured event) noexcept OB_NONBLOCKING {
   if (count_ < Capacity) {
     storage_[count_++] = event;
   } else {
@@ -138,21 +133,39 @@ void EventCaptureInstrument::record(Captured event) noexcept OB_NONBLOCKING {
   }
 }
 
-void EventCaptureInstrument::noteOn(int16_t note, float velocity) noexcept OB_NONBLOCKING {
-  record(Captured{Captured::Kind::NoteOn, note, velocity, frame_});
+bool EventCapturePlugin::audioPortInfo(plugin::PortDirection direction, uint32_t index,
+                                       plugin::AudioPortInfo& out) const {
+  if (direction != plugin::PortDirection::Output || index != 0) {
+    return false;
+  }
+  out = plugin::AudioPortInfo{};
+  out.id = 0;
+  out.name.assign("Main");
+  out.is_main = true;
+  return true;
 }
 
-void EventCaptureInstrument::noteOff(int16_t note) noexcept OB_NONBLOCKING {
-  record(Captured{Captured::Kind::NoteOff, note, 0.0F, frame_});
-}
-
-void EventCaptureInstrument::allNotesOff() noexcept OB_NONBLOCKING {
-  record(Captured{Captured::Kind::AllNotesOff, -1, 0.0F, frame_});
-}
-
-void EventCaptureInstrument::render(const core::AudioBufferView& /*output*/, int /*start_frame*/,
-                                    int num_frames) noexcept OB_NONBLOCKING {
-  frame_ += num_frames;
+plugin::ProcessStatus EventCapturePlugin::process(
+    const plugin::ProcessBlock& block) noexcept OB_NONBLOCKING {
+  for (const plugin::PluginEvent& event : block.in_events) {
+    const int64_t absolute = frame_ + static_cast<int64_t>(event.time);
+    switch (event.kind()) {
+      case plugin::EventType::NoteOn:
+        record(Captured{Captured::Kind::NoteOn, event.key, static_cast<float>(event.value()),
+                        absolute});
+        break;
+      case plugin::EventType::NoteOff:
+        // A wildcarded key is the model's "all notes off" (see event.h).
+        record(Captured{event.key == plugin::AnyKey ? Captured::Kind::AllNotesOff
+                                                    : Captured::Kind::NoteOff,
+                        event.key, 0.0F, absolute});
+        break;
+      default:
+        break;
+    }
+  }
+  frame_ += static_cast<int64_t>(block.frames);
+  return plugin::ProcessStatus::Sleep;  // silence: this one never writes audio
 }
 
 }  // namespace onebeat::testing

@@ -103,8 +103,27 @@ bool Engine::initialise(std::string& error) {
   config_.sample_rate = granted.sample_rate;
   config_.block_frames = granted.block_frames;
 
+  plugin::ThreadCheck::enterMainThread();
   transport_.prepare(granted.sample_rate, 120.0);
-  sampler_.prepare(granted.sample_rate, granted.block_frames);
+
+  // Every audio-thread allocation the instrument will ever need happens inside
+  // configure(); after activate() returns, the RT path is allocation-free.
+  plugin::ProcessSetup setup;
+  setup.sample_rate = granted.sample_rate;
+  setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
+  setup.is_offline = config_.use_null_device;
+  if (!instrument_.configure(setup) || !instrument_.activate()) {
+    error = "The built-in instrument could not be configured for this device format.";
+    diagnostics_.log(LogLevel::Error, "plugin", error);
+    return false;
+  }
+
+  // Sized for the worst honest case rather than the typical one: the command
+  // ring holds 1024 entries, and a block can in principle carry a schedule event
+  // on every frame. Overflow is counted and logged, never grown.
+  command_events_.reserve(CommandQueueCapacity);
+  chunk_events_.reserve(CommandQueueCapacity +
+                        static_cast<uint32_t>(granted.block_frames) * 2U);
 
   // An empty schedule, so the audio thread never sees a null pointer.
   ScheduleBuilder builder;
@@ -172,22 +191,32 @@ void Engine::renderAudio(const audio_io::RenderBlock& block) noexcept OB_NONBLOC
 }
 
 void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
+  // Claims the audio-thread role for the duration of the call, so every
+  // `[audio-thread]` assertion below this point is checked and every
+  // `[main-thread]` one trips. The offline driver calls process() from an
+  // ordinary thread and gets the same discipline for free.
+  plugin::ThreadCheck::enterAudioThread();
   const uint64_t started_ns = rt::monotonicNanos();
 
   // Exactly one epoch tick per block on every publisher the audio thread reads:
-  // reclamation correctness depends on it (rt/publisher.h).
+  // reclamation correctness depends on it (rt/publisher.h). The instrument gets
+  // one tick per *callback*, not per process() call — a callback split at a loop
+  // seam is still one block.
   schedule_.beginBlock();
-  sampler_.beginBlock();
+  instrument_.beginAudioBlock();
 
-  drainCommands();
+  plugin::EventList block_events = command_events_.list();
+  drainCommands(block_events);
 
   const AudioBufferView& output = context.output;
   output.clear();
 
   if (transport_.playing()) {
-    runSchedule(output, 0, context.num_frames);
+    runSchedule(output, 0, context.num_frames, block_events);
   } else {
-    renderRange(output, 0, context.num_frames);
+    // Stopped: no schedule, but manual note commands still sound (FR-ENG-06's
+    // audition path), so the block's command events still go to the instrument.
+    processChunk(output, 0, context.num_frames, nullptr, 0, &block_events);
   }
 
   // Master gain and metering in one pass.
@@ -223,29 +252,120 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   const uint64_t render_nanos = rt::monotonicNanos() - started_ns;
   ++callback_count_;
   publishSnapshot(context, render_nanos);
+  // Released rather than left set, so the offline driver's caller — an ordinary
+  // thread that will go on to make main-thread calls — is not stuck holding the
+  // audio role and tripping the opposite assertion.
+  plugin::ThreadCheck::leaveAudioThread();
 }
 
-void Engine::renderRange(const AudioBufferView& output, int start_frame,
-                         int num_frames) noexcept OB_NONBLOCKING {
+void Engine::processChunk(const AudioBufferView& output, int offset, int num_frames,
+                          const Schedule* schedule, int64_t chunk_start,
+                          const plugin::EventList* block_events) noexcept OB_NONBLOCKING {
   if (num_frames <= 0) {
     return;
   }
-  sampler_.render(output, start_frame, num_frames);
+
+  plugin::EventList events = chunk_events_.list();
+
+  // A loop wrap that landed on the previous block boundary releases here, before
+  // anything else, so it still precedes every note this chunk starts.
+  if (pending_all_notes_off_) {
+    events.push(plugin::PluginEvent::allNotesOff(0));
+    pending_all_notes_off_ = false;
+  }
+
+  // Commands first, at frame 0 — they were drained before the block rendered,
+  // and the stable sort below keeps them ahead of any schedule event at 0.
+  if (block_events != nullptr) {
+    for (uint32_t index = 0; index < block_events->size(); ++index) {
+      events.push((*block_events)[index]);
+    }
+  }
+
+  if (schedule != nullptr) {
+    const int32_t event_count = schedule->eventCount();
+    const ScheduleEvent* schedule_events = schedule->events();
+    const int64_t chunk_end = chunk_start + num_frames;
+    for (int32_t index = schedule->lowerBound(chunk_start);
+         index < event_count && schedule_events[index].frame < chunk_end; ++index) {
+      const ScheduleEvent& event = schedule_events[index];
+      const auto time = static_cast<uint32_t>(event.frame - chunk_start);
+      switch (static_cast<EventType>(event.type)) {
+        case EventType::NoteOn:
+          events.push(
+              plugin::PluginEvent::noteOn(time, event.note, static_cast<double>(event.value)));
+          break;
+        case EventType::NoteOff:
+          events.push(plugin::PluginEvent::noteOff(time, event.note));
+          break;
+        case EventType::TempoChange:
+          // Tempo is the *host's* clock, not the instrument's: it never reaches
+          // process(). Applied here, before the chunk renders and before the
+          // transport advances, which is exactly where v0.1 applied it.
+          transport_.setTempo(static_cast<double>(event.value));
+          break;
+      }
+    }
+  }
+
+  events.sortByTime();
+  if (events.overflowCount() > 0) {
+    rt_log_.log(rt::LogLevel::Warn, rt::RtMessage::EventListFull,
+                static_cast<int64_t>(events.overflowCount()),
+                static_cast<int64_t>(events.capacity()));
+  }
+
+  // A window onto the output at `offset`. Stack storage, no allocation: the
+  // instrument's ports are addressed from frame 0 of what it is given, so the
+  // host does the offsetting rather than every plugin having to.
+  float* slice[MaxChannels] = {nullptr, nullptr};
+  const int channels = std::min(output.numChannels(), MaxChannels);
+  for (int channel = 0; channel < channels; ++channel) {
+    slice[channel] = output.channel(channel) + offset;
+  }
+  const AudioBufferView port(slice, channels, num_frames);
+
+  plugin::ProcessBlock block;
+  block.frames = static_cast<uint32_t>(num_frames);
+  block.audio_outputs = &port;
+  block.audio_output_count = 1;
+  block.in_events = events.view();
+  block.steady_time_frames = static_cast<int64_t>(callback_count_);
+
+  plugin::TransportInfo& transport = block.transport;
+  transport.is_valid = true;
+  transport.is_playing = transport_.playing();
+  transport.is_loop_active = transport_.loopEnabled();
+  transport.tempo_bpm = transport_.tempo();
+  transport.position_frames = chunk_start;
+  transport.position_beats = transport_.timeMap().framesToBeats(chunk_start);
+  transport.position_seconds = transport_.timeMap().framesToSeconds(chunk_start);
+  transport.loop_start_beats = transport_.loopStartBeats();
+  transport.loop_end_beats = transport_.loopEndBeats();
+
+  const plugin::ProcessStatus status = instrument_.process(block);
+  if (status == plugin::ProcessStatus::Error) {
+    rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed, 0, 0);
+  }
+  active_voices_ = instrument_.activeVoiceCount();
 }
 
-void Engine::runSchedule(const AudioBufferView& output, int block_offset,
-                         int num_frames) noexcept OB_NONBLOCKING {
+void Engine::runSchedule(const AudioBufferView& output, int block_offset, int num_frames,
+                         const plugin::EventList& block_events) noexcept OB_NONBLOCKING {
   const Schedule* schedule = schedule_.acquire();
   int64_t remaining = num_frames;
   int offset = block_offset;
   int wrap_guard = 0;
+  bool first_chunk = true;
 
   while (remaining > 0) {
     const int64_t chunk = transport_.framesUntilLoopWrap(remaining);
     if (chunk <= 0) {
       // Loop wrap: release sounding voices so nothing hangs across the seam,
-      // then jump back to the loop start sample-accurately.
-      sampler_.allNotesOff();
+      // then jump back to the loop start sample-accurately. The release rides
+      // into the next chunk as a wildcarded note-off at frame 0 — the same
+      // instant, expressed in the model's vocabulary instead of a direct call.
+      pending_all_notes_off_ = true;
       transport_.seekFrames(transport_.loopStartFrames());
       if (++wrap_guard > 8) {
         break;  // degenerate loop region; do not spin on the audio thread
@@ -254,35 +374,15 @@ void Engine::runSchedule(const AudioBufferView& output, int block_offset,
     }
     wrap_guard = 0;
 
-    const int64_t chunk_start = transport_.positionFrames();
-    int64_t consumed = 0;
-    int32_t index = schedule != nullptr ? schedule->lowerBound(chunk_start) : 0;
-    const int32_t event_count = schedule != nullptr ? schedule->eventCount() : 0;
-    const ScheduleEvent* events = schedule != nullptr ? schedule->events() : nullptr;
-
-    while (consumed < chunk) {
-      const int64_t position = chunk_start + consumed;
-      int64_t next_event_frame = chunk_start + chunk;
-      if (index < event_count && events[index].frame < chunk_start + chunk) {
-        next_event_frame = std::max(events[index].frame, position);
-      }
-      const int64_t sub_frames = next_event_frame - position;
-      if (sub_frames > 0) {
-        renderRange(output, offset + static_cast<int>(consumed), static_cast<int>(sub_frames));
-        consumed += sub_frames;
-      }
-      while (index < event_count && events[index].frame <= chunk_start + consumed &&
-             events[index].frame < chunk_start + chunk) {
-        applyScheduleEvent(events[index]);
-        ++index;
-      }
-    }
+    processChunk(output, offset, static_cast<int>(chunk), schedule, transport_.positionFrames(),
+                 first_chunk ? &block_events : nullptr);
+    first_chunk = false;
 
     transport_.advance(chunk);
     // Wrap as soon as the loop end is reached rather than at the top of the
     // next block, so the reported position is never momentarily past the end.
     if (transport_.loopEnabled() && transport_.positionFrames() >= transport_.loopEndFrames()) {
-      sampler_.allNotesOff();
+      pending_all_notes_off_ = true;
       transport_.seekFrames(transport_.loopStartFrames());
     }
     offset += static_cast<int>(chunk);
@@ -290,31 +390,18 @@ void Engine::runSchedule(const AudioBufferView& output, int block_offset,
   }
 }
 
-void Engine::applyScheduleEvent(const ScheduleEvent& event) noexcept OB_NONBLOCKING {
-  switch (static_cast<EventType>(event.type)) {
-    case EventType::NoteOn:
-      sampler_.noteOn(event.note, event.value);
-      break;
-    case EventType::NoteOff:
-      sampler_.noteOff(event.note);
-      break;
-    case EventType::TempoChange:
-      transport_.setTempo(static_cast<double>(event.value));
-      break;
-  }
-}
-
-void Engine::drainCommands() noexcept OB_NONBLOCKING {
+void Engine::drainCommands(plugin::EventList& block_events) noexcept OB_NONBLOCKING {
   ob_command command{};
   int drained = 0;
   // Bounded: a runaway producer must not extend the block indefinitely.
   while (drained < 256 && commands_.tryPop(command)) {
-    applyCommand(command);
+    applyCommand(command, block_events);
     ++drained;
   }
 }
 
-void Engine::applyCommand(const ob_command& command) noexcept OB_NONBLOCKING {
+void Engine::applyCommand(const ob_command& command,
+                          plugin::EventList& block_events) noexcept OB_NONBLOCKING {
   last_command_generation_ = command.generation;
   switch (static_cast<ob_command_type>(command.type)) {
     case OB_CMD_TRANSPORT_PLAY:
@@ -324,16 +411,16 @@ void Engine::applyCommand(const ob_command& command) noexcept OB_NONBLOCKING {
       break;
     case OB_CMD_TRANSPORT_STOP:
       transport_.stop();
-      sampler_.allNotesOff();
+      block_events.push(plugin::PluginEvent::allNotesOff(0));
       rt_log_.log(rt::LogLevel::Info, rt::RtMessage::TransportStateChanged, 0,
                   transport_.positionFrames());
       break;
     case OB_CMD_TRANSPORT_SEEK_FRAMES:
-      sampler_.allNotesOff();  // click-safe seek
+      block_events.push(plugin::PluginEvent::allNotesOff(0));  // click-safe seek
       transport_.seekFrames(command.i64_a);
       break;
     case OB_CMD_TRANSPORT_SEEK_BEATS:
-      sampler_.allNotesOff();
+      block_events.push(plugin::PluginEvent::allNotesOff(0));
       transport_.seekBeats(command.f64_a);
       break;
     case OB_CMD_SET_TEMPO:
@@ -343,13 +430,14 @@ void Engine::applyCommand(const ob_command& command) noexcept OB_NONBLOCKING {
       transport_.setLoop(command.f64_a, command.f64_b, command.i64_a != 0);
       break;
     case OB_CMD_NOTE_ON:
-      sampler_.noteOn(static_cast<int16_t>(command.i64_a), static_cast<float>(command.f64_a));
+      block_events.push(
+          plugin::PluginEvent::noteOn(0, static_cast<int16_t>(command.i64_a), command.f64_a));
       break;
     case OB_CMD_NOTE_OFF:
-      sampler_.noteOff(static_cast<int16_t>(command.i64_a));
+      block_events.push(plugin::PluginEvent::noteOff(0, static_cast<int16_t>(command.i64_a)));
       break;
     case OB_CMD_ALL_NOTES_OFF:
-      sampler_.allNotesOff();
+      block_events.push(plugin::PluginEvent::allNotesOff(0));
       break;
     case OB_CMD_SET_MASTER_GAIN:
       master_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
@@ -403,7 +491,7 @@ void Engine::publishSnapshot(const ProcessContext& context,
   snapshot.beat = musical.beat;
   snapshot.tick = musical.tick;
   snapshot.block_frames = frames;
-  snapshot.active_voices = sampler_.activeVoices();
+  snapshot.active_voices = active_voices_;
   // Latency is cached off the audio thread (device queries are virtual calls
   // into the backend and are not RT-safe); it only changes when the device does.
   snapshot.latency_frames_output = latency_frames_output_;
@@ -472,7 +560,7 @@ bool Engine::loadSample(const std::string& path, std::string& error) {
 
   const std::string name = sample->name;
   const int64_t frames = sample->frames;
-  sampler_.setSample(std::move(sample));
+  instrument_.sampler().setSample(std::move(sample));
   diagnostics_.logf(LogLevel::Info, "sampler", "loaded '%s' (%lld frames)", name.c_str(),
                     static_cast<long long>(frames));
 
@@ -529,7 +617,7 @@ void Engine::housekeepingLoop() {
     // Free everything the audio thread provably cannot reach any more.
     const bool rt_running = running_.load(std::memory_order_acquire);
     schedule_.collect(rt_running);
-    sampler_.collectRetiredSamples(rt_running);
+    instrument_.sampler().collectRetiredSamples(rt_running);
   }
 }
 
@@ -559,9 +647,19 @@ void Engine::onDeviceNotification(audio_io::DeviceNotification notification,
     const audio_io::StreamFormat granted = device_->format();
     if (granted.sample_rate != config_.sample_rate) {
       config_.sample_rate = granted.sample_rate;
-      // Instruments reallocate off the audio thread; the device is stopped
-      // while reopening, so this cannot race with a render.
-      sampler_.prepare(granted.sample_rate, granted.block_frames);
+      // Instruments reallocate off the audio thread, and reconfiguring one is
+      // legal only while it is deactivated (DM-Q5) — so this is a full
+      // deactivate/configure/activate cycle, not a poke at the DSP. The device
+      // is stopped while reopening, so it cannot race with a render.
+      plugin::ProcessSetup setup;
+      setup.sample_rate = granted.sample_rate;
+      setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
+      setup.is_offline = config_.use_null_device;
+      instrument_.deactivate();
+      if (!instrument_.configure(setup) || !instrument_.activate()) {
+        diagnostics_.log(LogLevel::Error, "plugin",
+                         "the built-in instrument rejected the new device format");
+      }
     }
     config_.block_frames = granted.block_frames;
     latency_frames_output_ = device_->outputLatencyFrames();

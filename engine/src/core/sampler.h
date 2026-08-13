@@ -3,6 +3,13 @@
 // Scope discipline: pitch by playback-rate resampling, velocity to gain, fixed
 // polyphony with stealing, anti-click fades. ADSR, filter, looping and multi
 // format land in Stage 7; do not grow this file in the meantime.
+//
+// This is **only** the voice allocator. It has no notion of parameters, events,
+// ports or activation states: those live in `plugin::builtin::SamplerPlugin`,
+// which wraps this and presents it through the one interface every processor in
+// OneBeat implements (OB-2-01). The engine never talks to this class directly.
+// v0.1's `core::Instrument` was the minimal ancestor of that interface and has
+// been retired into it — there is now exactly one processor abstraction.
 #pragma once
 
 #include <array>
@@ -10,7 +17,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "core/instrument.h"
+#include "core/audio_buffer.h"
 #include "core/rt/publisher.h"
 #include "core/rt/rt.h"
 #include "core/rt/rt_log.h"
@@ -18,7 +25,7 @@
 
 namespace onebeat::core {
 
-class Sampler final : public Instrument {
+class Sampler final {
  public:
   static constexpr int MaxVoices = 32;
   static constexpr int16_t RootNote = 60;          // C3 plays the sample at its own pitch
@@ -27,16 +34,16 @@ class Sampler final : public Instrument {
 
   explicit Sampler(rt::RtLog* log = nullptr) : log_(log) {}
 
-  void prepare(double sample_rate, int max_block_frames) override;
-  void release() override;
+  void prepare(double sample_rate, int max_block_frames);
+  void release();
 
-  void reset() noexcept OB_NONBLOCKING override;
-  void noteOn(int16_t note, float velocity) noexcept OB_NONBLOCKING override;
-  void noteOff(int16_t note) noexcept OB_NONBLOCKING override;
-  void allNotesOff() noexcept OB_NONBLOCKING override;
+  void reset() noexcept OB_NONBLOCKING;
+  void noteOn(int16_t note, float velocity) noexcept OB_NONBLOCKING;
+  void noteOff(int16_t note) noexcept OB_NONBLOCKING;
+  void allNotesOff() noexcept OB_NONBLOCKING;
   void render(const AudioBufferView& output, int start_frame,
-              int num_frames) noexcept OB_NONBLOCKING override;
-  int activeVoices() const noexcept OB_NONBLOCKING override;
+              int num_frames) noexcept OB_NONBLOCKING;
+  int activeVoices() const noexcept OB_NONBLOCKING;
 
   // Non-RT thread. Takes ownership; the previous sample is retired, not freed.
   void setSample(std::unique_ptr<SampleData> sample);

@@ -12,6 +12,40 @@ using onebeat::tests::command;
 using onebeat::tests::makeOfflineEngine;
 
 TEST_SUITE("stress") {
+
+  TEST_CASE("The plugin event path is allocation- and lock-free under load") {
+    // The RTSan target for OB-2-01 AC 3. Everything the model does on the audio
+    // thread runs here at volume: building an event list, sorting it, splitting
+    // the block at every event, and dispatching through a virtual process()
+    // call. RTSan aborts the run on the first malloc or lock inside any
+    // [[clang::nonblocking]] frame, so a green run *is* the proof.
+    //
+    // Deliberately overfilled: the list is pushed past its capacity so the
+    // overflow path — which must drop and count, never grow — is exercised too.
+    auto engine = makeOfflineEngine(48000.0, 512);
+    REQUIRE(engine != nullptr);
+
+    onebeat::core::ScheduleBuilder builder;
+    constexpr int Notes = 20000;
+    for (int index = 0; index < Notes; ++index) {
+      builder.addNote(onebeat::core::DefaultInstrument, static_cast<int16_t>(36 + (index % 36)),
+                      0.8F, static_cast<int64_t>(index) * 5, 4);
+    }
+    builder.setLengthFrames(static_cast<int64_t>(Notes) * 5);
+    engine->publishSchedule(builder.build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_SET_LOOP, 1, 0.0, 8.0));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    // Interleave transport commands so the command-to-event path, the loop-wrap
+    // note-off carry and the schedule path all run in the same blocks.
+    for (int round = 0; round < 20; ++round) {
+      engine->postCommand(command(OB_CMD_NOTE_ON, 72, 1.0));
+      engine->postCommand(command(OB_CMD_TRANSPORT_SEEK_FRAMES, round * 1000));
+      engine->postCommand(command(OB_CMD_ALL_NOTES_OFF));
+      const auto result = onebeat::testing::renderOffline(*engine, 48000, 512);
+      CHECK(result.frames() == 48000);
+    }
+  }
   TEST_CASE("1000+ schedule publishes during continuous playback lose no events") {
     // The publisher does a fixed number of swaps and the render loop keeps
     // going until it has finished. Rendering for a fixed duration instead makes

@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 
 #include "doctest.h"
@@ -157,18 +158,41 @@ TEST_SUITE("engine") {
     CHECK(snapshot.callback_count == 10);
   }
 
-  TEST_CASE("The event-capture instrument records what it was sent") {
-    onebeat::testing::EventCaptureInstrument instrument;
-    instrument.prepare(48000.0, 128);
-    instrument.noteOn(60, 1.0F);
-    instrument.render(onebeat::core::AudioBufferView(), 0, 128);
-    instrument.noteOff(60);
+  TEST_CASE("The event-capture plugin records what it was sent, at the right frame") {
+    using onebeat::plugin::PluginEvent;
+    using Kind = onebeat::testing::EventCapturePlugin::Captured::Kind;
 
-    REQUIRE(instrument.captured().size() == 2);
-    CHECK(instrument.captured()[0].kind ==
-          onebeat::testing::EventCaptureInstrument::Captured::Kind::NoteOn);
-    CHECK(instrument.captured()[0].frame == 0);
-    CHECK(instrument.captured()[1].frame == 128);
+    onebeat::testing::EventCapturePlugin instrument;
+    REQUIRE(instrument.configure(onebeat::plugin::ProcessSetup{}));
+    REQUIRE(instrument.activate());
+
+    // process() is `[audio-thread]` and asserts it, so a test that drives it
+    // says so rather than weakening the assertion.
+    const onebeat::plugin::ThreadCheck::ScopedAudioThread audio_thread;
+
+    std::array<PluginEvent, 4> storage{};
+    onebeat::plugin::EventList events(storage.data(), static_cast<uint32_t>(storage.size()));
+    events.push(PluginEvent::noteOn(0, 60, 1.0));
+    events.push(PluginEvent::noteOff(64, 60));
+
+    onebeat::plugin::ProcessBlock block;
+    block.frames = 128;
+    block.audio_output_count = 1;
+    const onebeat::core::AudioBufferView silence;
+    block.audio_outputs = &silence;
+    block.in_events = events.view();
+    instrument.process(block);
+    // A second block, to prove the recorded frame is absolute across blocks.
+    instrument.process(block);
+
+    const auto captured = instrument.captured();
+    REQUIRE(captured.size() == 4);
+    CHECK(captured[0].kind == Kind::NoteOn);
+    CHECK(captured[0].frame == 0);
+    CHECK(captured[1].kind == Kind::NoteOff);
+    CHECK(captured[1].frame == 64);
+    CHECK(captured[2].frame == 128);
+    CHECK(captured[3].frame == 128 + 64);
   }
 
 }  // TEST_SUITE

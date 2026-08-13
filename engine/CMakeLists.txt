@@ -100,6 +100,8 @@ add_library(onebeat_core STATIC
   src/core/diagnostics.cpp
   src/core/rt/rt.cpp
   src/core/rt/rt_log.cpp
+  src/plugin/plugin_types.cpp
+  src/plugin/builtin/sampler_plugin.cpp
   src/audio_io/null/null_device.cpp
   ${ONEBEAT_PLATFORM_SOURCES}
 )

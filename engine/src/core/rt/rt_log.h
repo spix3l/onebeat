@@ -29,7 +29,9 @@ enum class RtMessage : uint16_t {
   TransportStateChanged = 5,  // a0 = playing, a1 = position frames
   DeviceFormatChanged = 6,    // a0 = sample rate, a1 = block frames
   CommandQueueFull = 7,       // a0 = command type
-  SampleSwapped = 8           // a0 = frames, a1 = channels
+  SampleSwapped = 8,             // a0 = frames, a1 = channels
+  EventListFull = 9,             // a0 = events dropped, a1 = list capacity
+  InstrumentProcessFailed = 10,  // a0 = port count, a1 = frames
 };
 
 struct RtLogRecord {
