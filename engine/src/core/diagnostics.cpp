@@ -47,7 +47,14 @@ std::string timestampForLine() {
 }  // namespace
 
 Diagnostics::~Diagnostics() {
-  close();
+  // A destructor is noexcept by default, and close() both locks a mutex and
+  // writes to a file — either can throw. Letting that escape would terminate
+  // the process during shutdown, losing the very logs this class exists to
+  // keep.
+  try {
+    close();
+  } catch (...) {  // NOLINT(bugprone-empty-catch): there is nothing left to do
+  }
 }
 
 std::string Diagnostics::defaultLogDirectory() {
