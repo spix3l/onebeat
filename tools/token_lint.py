@@ -5,9 +5,9 @@
 checked. This fails the build on a literal colour or a raw dimension in widget
 code, and names the line.
 
-Scope: app/lib/src/ui/** and app/lib/main.dart. The token definitions themselves
-(app/lib/src/design/) and generated code are exempt — they are where the numbers
-are allowed to live.
+Scope: app/lib/src/ui/**, app/lib/src/stock_plugins/**, and app/lib/main.dart.
+The token definitions themselves (app/lib/src/design/) and generated code are
+exempt — they are where the numbers are allowed to live.
 
 Usage: python3 tools/token_lint.py [--verbose]
 """
@@ -20,7 +20,11 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LINT_ROOTS = [REPO_ROOT / "app" / "lib" / "src" / "ui", REPO_ROOT / "app" / "lib" / "main.dart"]
+LINT_ROOTS = [
+    REPO_ROOT / "app" / "lib" / "src" / "ui",
+    REPO_ROOT / "app" / "lib" / "src" / "stock_plugins",
+    REPO_ROOT / "app" / "lib" / "main.dart",
+]
 EXEMPT_DIRS = {"design", "generated"}
 
 Rule = tuple[str, re.Pattern[str], str]

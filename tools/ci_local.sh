@@ -54,7 +54,7 @@ if [[ -n "$LLVM_PREFIX" && -x "$LLVM_PREFIX/bin/clang++" ]]; then
   if [[ "$ONLY" == "all" ]]; then
     run "clang-tidy" bash -c "
       cmake -S engine -B build-ci-tidy -DCMAKE_BUILD_TYPE=Debug >/dev/null &&
-      find engine/src/core engine/src/audio_io -name '*.cpp' |
+      find engine/src/core engine/src/audio_io engine/src/plugin -name '*.cpp' |
         xargs '$LLVM_PREFIX/bin/clang-tidy' -p build-ci-tidy --quiet"
   fi
 else
@@ -67,7 +67,7 @@ fi
 if [[ "$ONLY" == "all" ]]; then
   # Xcode ships clang-format; clang-tidy comes with the LLVM install below.
   run "clang-format" bash -c \
-    "find engine -name '*.cpp' -o -name '*.h' | xargs \"\$(xcrun -f clang-format)\" --dry-run --Werror"
+    "find engine \\( -name '*.cpp' -o -name '*.h' \\) -print0 | xargs -0 \"\$(xcrun -f clang-format)\" --dry-run --Werror"
   run "seam check"    tools/seam_check.sh
   run "licence audit" python3 tools/license_audit.py
   run "token lint"    python3 tools/token_lint.py

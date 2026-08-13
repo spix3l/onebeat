@@ -157,10 +157,12 @@ set_target_properties(onebeat_engine PROPERTIES
 # creeping into the plug-in model and gives a clean install one playable
 # instrument without writing into the user's global CLAP directory.
 set(ONEBEAT_STOCK_PLUGIN_DIR ${CMAKE_BINARY_DIR}/stock-plugins)
-add_library(onebeat_stock_piano MODULE stock_plugins/piano/onebeat_piano.mm)
+add_library(onebeat_stock_piano MODULE
+  stock_plugins/piano/piano_clap.cpp
+  stock_plugins/piano/piano_engine.cpp)
 target_include_directories(onebeat_stock_piano SYSTEM PRIVATE
   ${ONEBEAT_THIRD_PARTY}/clap/include)
-target_link_libraries(onebeat_stock_piano PRIVATE onebeat_flags "-framework AppKit")
+target_link_libraries(onebeat_stock_piano PRIVATE onebeat_flags)
 set_target_properties(onebeat_stock_piano PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"

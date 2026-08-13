@@ -328,9 +328,9 @@ std::string SubprocessProbe::discoverHelperPath() {
     }
     // 3. A shipped bundle. The helper owns native editor windows, so macOS
     //    requires it to have its own application bundle and bundle identity.
-    const std::string helper_app = (directory / ".." / "Helpers" / "onebeat-plugin-host.app" /
-                                    "Contents" / "MacOS" / HelperFileName)
-                                       .string();
+    std::string helper_app = (directory / ".." / "Helpers" / "onebeat-plugin-host.app" /
+                              "Contents" / "MacOS" / HelperFileName)
+                                 .string();
     if (exists(helper_app)) {
       return helper_app;
     }

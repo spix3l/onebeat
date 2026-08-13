@@ -66,12 +66,14 @@ engine/            C++20 core — platform-independent
   src/audio_io/      abstract device interface
     coreaudio/       the only CoreAudio-aware code in the repository
   src/abi/           the extern "C" surface — the only door to the app
+  stock_plugins/     first-party CLAP plug-ins; DSP and CLAP adapters stay isolated
   testing/           offline render driver and fixtures
   tests/             unit / engine / abi / stress suites
   tools/             onebeat_devtool
 app/               Flutter macOS application
   lib/src/design/    design tokens — every colour and size in the app
   lib/src/engine/    FFI client (bindings generated from the ABI header)
+  lib/src/stock_plugins/ docked editors and routing for shipped plug-ins
   lib/src/ui/        widgets; tokens only, enforced by CI
 third_party/       vendored dependencies, each with its licence
 docs/adr/          architecture decision records
