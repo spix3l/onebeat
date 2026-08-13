@@ -13,8 +13,11 @@ import 'meter_state.dart';
 import 'plugin_library_store.dart';
 
 class EngineController extends ChangeNotifier {
-  EngineController({required this.client, required TickerProvider vsync, required this.motion})
-      : library = PluginLibraryStore(client) {
+  EngineController({
+    required this.client,
+    required TickerProvider vsync,
+    required this.motion,
+  }) : library = PluginLibraryStore(client) {
     _ticker = vsync.createTicker(_onFrame)..start();
   }
 
@@ -50,7 +53,8 @@ class EngineController extends ChangeNotifier {
     for (final EngineEvent event in client.pollEvents()) {
       switch (event.type) {
         case evtDeviceLost:
-          status = 'Output device "${event.text}" disappeared. Playing on the default device.';
+          status =
+              'Output device "${event.text}" disappeared. Playing on the default device.';
         case evtDeviceChanged:
           status = 'Output device changed to "${event.text}".';
         case evtError:

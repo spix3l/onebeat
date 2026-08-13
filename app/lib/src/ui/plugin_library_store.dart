@@ -20,6 +20,9 @@ class PluginLibraryStore extends ChangeNotifier {
   PluginScanStatus status = const PluginScanStatus.idle();
   List<PluginListing> plugins = const <PluginListing>[];
   final Set<String> _dismissedQuarantinePaths = <String>{};
+  HostedInstance? instance;
+  List<HostedParameter> parameters = const <HostedParameter>[];
+  bool showParameters = false;
 
   Iterable<PluginListing> get availablePlugins =>
       plugins.where((PluginListing plugin) => !plugin.isQuarantined);
@@ -38,6 +41,75 @@ class PluginLibraryStore extends ChangeNotifier {
   void load() {
     _client.loadPluginCache();
     _refresh(force: true);
+    refreshInstance();
+  }
+
+  void add(PluginListing plugin) {
+    _client.addPlugin(plugin);
+    refreshInstance();
+  }
+
+  void removeInstance() {
+    final HostedInstance? current = instance;
+    if (current == null) return;
+    _client.removePlugin(current.id);
+    instance = null;
+    parameters = const <HostedParameter>[];
+    showParameters = false;
+    notifyListeners();
+  }
+
+  void openParameters() {
+    final HostedInstance? current = instance;
+    if (current == null || current.missing) return;
+    parameters = _client.readParameters(current);
+    showParameters = true;
+    notifyListeners();
+  }
+
+  void openEditor() {
+    final HostedInstance? current = instance;
+    if (current == null) return;
+    _client.openPluginEditor(current.id);
+  }
+
+  void closeParameters() {
+    showParameters = false;
+    notifyListeners();
+  }
+
+  void setParameter(HostedParameter parameter, double value) {
+    _client.setParameter(parameter.id, value);
+    final int index = parameters.indexWhere(
+      (HostedParameter item) => item.id == parameter.id,
+    );
+    if (index >= 0) {
+      parameters = List<HostedParameter>.of(parameters)
+        ..[index] = HostedParameter(
+          id: parameter.id,
+          name: parameter.name,
+          module: parameter.module,
+          display: value.toStringAsFixed(3),
+          value: value,
+          minimum: parameter.minimum,
+          maximum: parameter.maximum,
+          defaultValue: parameter.defaultValue,
+        );
+      notifyListeners();
+    }
+  }
+
+  void beginParameterGesture(int paramId) =>
+      _client.beginParameterGesture(paramId);
+  void endParameterGesture(int paramId) => _client.endParameterGesture(paramId);
+
+  void refreshInstance() {
+    instance = _client.readHostedInstance();
+    parameters =
+        instance == null || instance!.missing
+            ? const <HostedParameter>[]
+            : _client.readParameters(instance!);
+    notifyListeners();
   }
 
   bool startScan({List<String> directories = const <String>[]}) {

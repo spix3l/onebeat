@@ -372,6 +372,197 @@ class OneBeatBindings {
       .asFunction<
         int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_plugin_info>)
       >();
+
+  ob_status ob_engine_instance_add(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_bundle_path,
+    ffi.Pointer<ffi.Char> utf8_plugin_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instance_add(engine, utf8_bundle_path, utf8_plugin_id),
+    );
+  }
+
+  late final _ob_engine_instance_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_instance_add');
+  late final _ob_engine_instance_add = _ob_engine_instance_addPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
+  ob_status ob_engine_instance_remove(
+    ffi.Pointer<ob_engine> engine,
+    int instance_id,
+  ) {
+    return ob_status.fromValue(_ob_engine_instance_remove(engine, instance_id));
+  }
+
+  late final _ob_engine_instance_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Uint32)
+        >
+      >('ob_engine_instance_remove');
+  late final _ob_engine_instance_remove = _ob_engine_instance_removePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
+
+  int ob_engine_instance_count(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_instance_count(engine);
+  }
+
+  late final _ob_engine_instance_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_instance_count',
+      );
+  late final _ob_engine_instance_count = _ob_engine_instance_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_instance_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_instance_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_instance_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_instance_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_instance_info>,
+          )
+        >
+      >('ob_engine_instance_at');
+  late final _ob_engine_instance_at = _ob_engine_instance_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_instance_info>)
+      >();
+
+  ob_status ob_engine_param_at(
+    ffi.Pointer<ob_engine> engine,
+    int instance_id,
+    int index,
+    ffi.Pointer<ob_param_info> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_param_at(engine, instance_id, index, out_info),
+    );
+  }
+
+  late final _ob_engine_param_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Uint32,
+            ffi.Int32,
+            ffi.Pointer<ob_param_info>,
+          )
+        >
+      >('ob_engine_param_at');
+  late final _ob_engine_param_at = _ob_engine_param_atPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          int,
+          int,
+          ffi.Pointer<ob_param_info>,
+        )
+      >();
+
+  ob_status ob_engine_instance_editor_open(
+    ffi.Pointer<ob_engine> engine,
+    int instance_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instance_editor_open(engine, instance_id),
+    );
+  }
+
+  late final _ob_engine_instance_editor_openPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Uint32)
+        >
+      >('ob_engine_instance_editor_open');
+  late final _ob_engine_instance_editor_open =
+      _ob_engine_instance_editor_openPtr
+          .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
+
+  ob_status ob_engine_instance_editor_close(
+    ffi.Pointer<ob_engine> engine,
+    int instance_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instance_editor_close(engine, instance_id),
+    );
+  }
+
+  late final _ob_engine_instance_editor_closePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Uint32)
+        >
+      >('ob_engine_instance_editor_close');
+  late final _ob_engine_instance_editor_close =
+      _ob_engine_instance_editor_closePtr
+          .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
+
+  ob_status ob_engine_session_save(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_path,
+  ) {
+    return ob_status.fromValue(_ob_engine_session_save(engine, utf8_path));
+  }
+
+  late final _ob_engine_session_savePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_session_save');
+  late final _ob_engine_session_save = _ob_engine_session_savePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_session_load(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_path,
+  ) {
+    return ob_status.fromValue(_ob_engine_session_load(engine, utf8_path));
+  }
+
+  late final _ob_engine_session_loadPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_session_load');
+  late final _ob_engine_session_load = _ob_engine_session_loadPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
 }
 
 enum ob_status {
@@ -435,7 +626,10 @@ enum ob_command_type {
   OB_CMD_NOTE_ON(7),
   OB_CMD_NOTE_OFF(8),
   OB_CMD_ALL_NOTES_OFF(9),
-  OB_CMD_SET_MASTER_GAIN(10);
+  OB_CMD_SET_MASTER_GAIN(10),
+  OB_CMD_PLUGIN_PARAM_BEGIN(11),
+  OB_CMD_PLUGIN_PARAM_VALUE(12),
+  OB_CMD_PLUGIN_PARAM_END(13);
 
   final int value;
   const ob_command_type(this.value);
@@ -452,6 +646,9 @@ enum ob_command_type {
     8 => OB_CMD_NOTE_OFF,
     9 => OB_CMD_ALL_NOTES_OFF,
     10 => OB_CMD_SET_MASTER_GAIN,
+    11 => OB_CMD_PLUGIN_PARAM_BEGIN,
+    12 => OB_CMD_PLUGIN_PARAM_VALUE,
+    13 => OB_CMD_PLUGIN_PARAM_END,
     _ => throw ArgumentError('Unknown value for ob_command_type: $value'),
   };
 }
@@ -780,14 +977,87 @@ final class ob_plugin_info extends ffi.Struct {
   external int retry_count;
 }
 
+final class ob_instance_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int instance_id;
+
+  @ffi.Uint32()
+  external int format;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Uint32()
+  external int param_count;
+
+  @ffi.Uint32()
+  external int reserved;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> plugin_id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> vendor;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Char> path;
+}
+
+final class ob_param_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int instance_id;
+
+  @ffi.Uint32()
+  external int param_id;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Double()
+  external double min_value;
+
+  @ffi.Double()
+  external double max_value;
+
+  @ffi.Double()
+  external double default_value;
+
+  @ffi.Double()
+  external double value;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> module;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> display;
+}
+
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 2;
+const int OB_ABI_VERSION_MINOR = 3;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 66048;
+const int OB_ABI_VERSION_PACKED = 66304;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
 const int OB_PLUGIN_FLAG_INTROSPECTED = 1;
+
+const int OB_INSTANCE_FLAG_MISSING = 1;
+
+const int OB_INSTANCE_FLAG_BYPASSED = 2;
+
+const int OB_INSTANCE_FLAG_HAS_EDITOR = 4;

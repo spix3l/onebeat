@@ -7,7 +7,10 @@
 //   - every entry point validates its handle and returns a status code.
 #include "abi/onebeat_abi.h"
 
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <new>
 #include <string>
@@ -15,6 +18,7 @@
 
 #include "core/engine.h"
 #include "plugin/scan/plugin_library.h"
+#include "plugin/scan/subprocess_probe.h"
 
 namespace {
 
@@ -68,6 +72,15 @@ struct ob_engine {
   // Not part of the Engine: the plugin library is filesystem work and a
   // background thread, and nothing in it goes near the audio thread (OB-2-02).
   std::unique_ptr<onebeat::plugin::scan::PluginLibrary> library;
+  bool has_instance = false;
+  bool instance_missing = false;
+  uint32_t instance_id = 1;
+  uint32_t instance_format = OB_PLUGIN_FORMAT_CLAP;
+  std::string instance_plugin_id;
+  std::string instance_name;
+  std::string instance_vendor;
+  std::string instance_path;
+  std::vector<uint8_t> instance_state;
 };
 
 namespace {
@@ -100,7 +113,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.2.0";
+  return "1.3.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -431,6 +444,229 @@ ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin_info* 
     out_info->failure_signal = descriptor.failure_signal;
     out_info->retry_count = descriptor.retry_count;
     g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path,
+                                 const char* utf8_plugin_id) {
+  if (engine == nullptr || utf8_bundle_path == nullptr || utf8_bundle_path[0] == '\0' ||
+      utf8_plugin_id == nullptr || utf8_plugin_id[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A plug-in bundle path and ID are required.");
+  }
+  try {
+    std::string error;
+    if (!engine->engine->createSandboxedInstrument(
+            utf8_bundle_path, utf8_plugin_id,
+            onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
+      return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
+    }
+    engine->has_instance = true;
+    engine->instance_missing = false;
+    engine->instance_path = utf8_bundle_path;
+    engine->instance_plugin_id = utf8_plugin_id;
+    engine->instance_name = engine->engine->instrument().name().text();
+    engine->instance_vendor.clear();
+    for (const auto& row : pluginLibrary(*engine).plugins()) {
+      if (row.path.text() == engine->instance_path && row.id.text() == engine->instance_plugin_id) {
+        engine->instance_vendor = row.vendor.text();
+        engine->instance_format = static_cast<uint32_t>(row.format);
+        break;
+      }
+    }
+    engine->instance_state.clear();
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::bad_alloc&) {
+    return fail(OB_ERR_OUT_OF_MEMORY, "Out of memory while adding the plug-in.");
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instance_remove(ob_engine* engine, uint32_t instance_id) {
+  if (engine == nullptr || !engine->has_instance || instance_id != engine->instance_id) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
+  }
+  try {
+    std::string error;
+    if (!engine->engine->restoreBuiltinInstrument(error))
+      return fail(OB_ERR_INTERNAL, error.c_str());
+    engine->has_instance = false;
+    engine->instance_missing = false;
+    engine->instance_state.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+int32_t ob_engine_instance_count(ob_engine* engine) {
+  return engine != nullptr && engine->has_instance ? 1 : 0;
+}
+
+ob_status ob_engine_instance_at(ob_engine* engine, int32_t index, ob_instance_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index != 0 || !engine->has_instance) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Plug-in instance index is out of range.");
+  }
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->instance_id = engine->instance_id;
+  out_info->format = engine->instance_format;
+  out_info->flags = engine->instance_missing ? OB_INSTANCE_FLAG_MISSING : 0U;
+  if (engine->engine->hostedHasEditor()) out_info->flags |= OB_INSTANCE_FLAG_HAS_EDITOR;
+  out_info->param_count = engine->engine->hostedParamCount();
+  copyText(out_info->plugin_id, sizeof(out_info->plugin_id), engine->instance_plugin_id.c_str());
+  copyText(out_info->name, sizeof(out_info->name), engine->instance_name.c_str());
+  copyText(out_info->vendor, sizeof(out_info->vendor), engine->instance_vendor.c_str());
+  copyText(out_info->path, sizeof(out_info->path), engine->instance_path.c_str());
+  return OB_OK;
+}
+
+ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int32_t index,
+                             ob_param_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || !engine->has_instance ||
+      instance_id != engine->instance_id || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Plug-in parameter index is out of range.");
+  }
+  onebeat::plugin::ParamInfo info;
+  if (!engine->engine->hostedParamInfo(static_cast<uint32_t>(index), info)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Plug-in parameter index is out of range.");
+  }
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->instance_id = instance_id;
+  out_info->param_id = info.id;
+  out_info->flags = info.flags;
+  out_info->min_value = info.min_value;
+  out_info->max_value = info.max_value;
+  out_info->default_value = info.default_value;
+  engine->engine->hostedParamValue(info.id, out_info->value);
+  copyText(out_info->name, sizeof(out_info->name), info.name.text());
+  copyText(out_info->module, sizeof(out_info->module), info.module.text());
+  if (!engine->engine->instrument().paramValueToText(info.id, out_info->value, out_info->display,
+                                                     sizeof(out_info->display))) {
+    std::snprintf(out_info->display, sizeof(out_info->display), "%.3f", out_info->value);
+  }
+  return OB_OK;
+}
+
+ob_status ob_engine_instance_editor_open(ob_engine* engine, uint32_t instance_id) {
+  if (engine == nullptr || !engine->has_instance || instance_id != engine->instance_id)
+    return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
+  return engine->engine->openHostedEditor()
+             ? OB_OK
+             : fail(OB_ERR_FILE_UNSUPPORTED, "This plug-in has no native editor.");
+}
+
+ob_status ob_engine_instance_editor_close(ob_engine* engine, uint32_t instance_id) {
+  if (engine == nullptr || !engine->has_instance || instance_id != engine->instance_id)
+    return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
+  engine->engine->closeHostedEditor();
+  return OB_OK;
+}
+
+ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path) {
+  if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A scratch session path is required.");
+  }
+  try {
+    std::vector<uint8_t> state = engine->instance_state;
+    if (engine->has_instance && !engine->instance_missing &&
+        !engine->engine->saveHostedState(state)) {
+      const std::string detail = engine->engine->hostedError();
+      return fail(OB_ERR_INTERNAL,
+                  detail.empty() ? "The plug-in state could not be saved." : detail.c_str());
+    }
+    std::ofstream file(utf8_path, std::ios::binary | std::ios::trunc);
+    if (!file) return fail(OB_ERR_INTERNAL, "The scratch session could not be created.");
+    const uint32_t magic = 0x4F425332U;  // OBS2
+    const uint32_t version = 1;
+    const uint32_t present = engine->has_instance ? 1U : 0U;
+    const uint32_t lengths[] = {static_cast<uint32_t>(engine->instance_plugin_id.size()),
+                                static_cast<uint32_t>(engine->instance_name.size()),
+                                static_cast<uint32_t>(engine->instance_vendor.size()),
+                                static_cast<uint32_t>(engine->instance_path.size()),
+                                static_cast<uint32_t>(state.size())};
+    file.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
+    file.write(reinterpret_cast<const char*>(&version), sizeof(version));
+    file.write(reinterpret_cast<const char*>(&present), sizeof(present));
+    file.write(reinterpret_cast<const char*>(&engine->instance_format),
+               sizeof(engine->instance_format));
+    file.write(reinterpret_cast<const char*>(lengths), sizeof(lengths));
+    file.write(engine->instance_plugin_id.data(), lengths[0]);
+    file.write(engine->instance_name.data(), lengths[1]);
+    file.write(engine->instance_vendor.data(), lengths[2]);
+    file.write(engine->instance_path.data(), lengths[3]);
+    if (!state.empty())
+      file.write(reinterpret_cast<const char*>(state.data()),
+                 static_cast<std::streamsize>(state.size()));
+    if (!file) return fail(OB_ERR_INTERNAL, "The scratch session could not be written.");
+    engine->instance_state = std::move(state);
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path) {
+  if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A scratch session path is required.");
+  }
+  try {
+    std::ifstream file(utf8_path, std::ios::binary);
+    if (!file) return fail(OB_ERR_FILE_NOT_FOUND, "The scratch session was not found.");
+    uint32_t magic = 0, version = 0, present = 0, format = 0, lengths[5]{};
+    file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    file.read(reinterpret_cast<char*>(&version), sizeof(version));
+    file.read(reinterpret_cast<char*>(&present), sizeof(present));
+    file.read(reinterpret_cast<char*>(&format), sizeof(format));
+    file.read(reinterpret_cast<char*>(lengths), sizeof(lengths));
+    if (!file || magic != 0x4F425332U || version != 1 || lengths[0] > 4096 || lengths[1] > 4096 ||
+        lengths[2] > 4096 || lengths[3] > 16384 || lengths[4] > 64U * 1024U * 1024U) {
+      return fail(OB_ERR_FILE_UNSUPPORTED, "The scratch session is invalid.");
+    }
+    auto readString = [&file](uint32_t size) {
+      std::string value(size, '\0');
+      if (size) file.read(value.data(), size);
+      return value;
+    };
+    const std::string plugin_id = readString(lengths[0]);
+    const std::string name = readString(lengths[1]);
+    const std::string vendor = readString(lengths[2]);
+    const std::string path = readString(lengths[3]);
+    std::vector<uint8_t> state(lengths[4]);
+    if (!state.empty())
+      file.read(reinterpret_cast<char*>(state.data()), static_cast<std::streamsize>(state.size()));
+    if (!file) return fail(OB_ERR_FILE_UNSUPPORTED, "The scratch session is truncated.");
+    std::string error;
+    if (present == 0) {
+      if (engine->has_instance && !engine->engine->restoreBuiltinInstrument(error))
+        return fail(OB_ERR_INTERNAL, error.c_str());
+      engine->has_instance = false;
+      return OB_OK;
+    }
+    const bool available = std::filesystem::exists(path);
+    if (available) {
+      if (!engine->engine->createSandboxedInstrument(
+              path, plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(),
+              error) ||
+          !engine->engine->loadHostedState(state))
+        return fail(OB_ERR_FILE_UNSUPPORTED,
+                    error.empty() ? "The saved plug-in could not be restored." : error.c_str());
+    } else if (!engine->engine->installMissingInstrument(name, state, error)) {
+      return fail(OB_ERR_INTERNAL, error.c_str());
+    }
+    engine->has_instance = true;
+    engine->instance_missing = !available;
+    engine->instance_format = format;
+    engine->instance_plugin_id = plugin_id;
+    engine->instance_name = name;
+    engine->instance_vendor = vendor;
+    engine->instance_path = path;
+    engine->instance_state = std::move(state);
     return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());

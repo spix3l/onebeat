@@ -50,6 +50,9 @@ while IFS= read -r APP_DIR; do
   cp "$REPO_ROOT/build/onebeat-plugin-host" "$APP_DIR/Contents/MacOS/"
   codesign --force --sign - "$APP_DIR/Contents/Frameworks/libonebeat_engine.dylib" 2>/dev/null || true
   codesign --force --sign - "$APP_DIR/Contents/MacOS/onebeat-plugin-host" 2>/dev/null || true
+  # Replacing nested code invalidates the outer seal. Re-sign the development
+  # bundle last, mirroring the inside-out order used by release_macos.sh.
+  codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true
   echo "==> Engine and plug-in scan helper refreshed in $APP_DIR"
 done < <(find build/macos/Build/Products -maxdepth 2 -name 'onebeat.app' 2>/dev/null)
 

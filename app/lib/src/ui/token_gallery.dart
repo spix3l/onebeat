@@ -53,20 +53,32 @@ class TokenGallery extends StatelessWidget {
               ],
             ),
             SizedBox(height: tokens.spacing.xl),
-            _section(tokens, 'Type — Archivo for words, Martian Mono for numbers'),
+            _section(
+              tokens,
+              'Type — Archivo for words, Martian Mono for numbers',
+            ),
             Text('Title — the quick brown fox', style: tokens.type.title),
             SizedBox(height: tokens.spacing.xs),
-            Text('Body — the quick brown fox jumps over the lazy dog', style: tokens.type.body),
+            Text(
+              'Body — the quick brown fox jumps over the lazy dog',
+              style: tokens.type.body,
+            ),
             SizedBox(height: tokens.spacing.xs),
             Text('LABEL — SIDECHAIN COMPRESSION', style: tokens.type.label),
             SizedBox(height: tokens.spacing.xs),
-            Text('LABEL DENSE — SIDECHAIN COMPRESSION', style: tokens.type.labelDense),
+            Text(
+              'LABEL DENSE — SIDECHAIN COMPRESSION',
+              style: tokens.type.labelDense,
+            ),
             SizedBox(height: tokens.spacing.xs),
             Text('012.3.480   00:04.75   -6.0 dB', style: tokens.type.numeric),
             SizedBox(height: tokens.spacing.xs),
             Text('001.1.000', style: tokens.type.numericLarge),
             SizedBox(height: tokens.spacing.xs),
-            Text('48000 Hz · 128 frames · 5.7 ms', style: tokens.type.numericSmall),
+            Text(
+              '48000 Hz · 128 frames · 5.7 ms',
+              style: tokens.type.numericSmall,
+            ),
             SizedBox(height: tokens.spacing.xl),
             _section(tokens, 'Spacing'),
             Row(
@@ -88,28 +100,32 @@ class TokenGallery extends StatelessWidget {
   }
 
   Widget _section(OneBeatTokens tokens, String title) => Padding(
-        padding: EdgeInsets.only(bottom: tokens.spacing.sm),
-        child: Text(title, style: tokens.type.title),
-      );
+    padding: EdgeInsets.only(bottom: tokens.spacing.sm),
+    child: Text(title, style: tokens.type.title),
+  );
 
   Widget _swatch(OneBeatTokens tokens, String name, Color color) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Container(
-            width: tokens.size.overlayLabelWidth * 2,
-            height: tokens.size.controlHeight,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: tokens.radius.controlBorder,
-              border: Border.all(color: tokens.color.line, width: tokens.border.hairline),
-            ),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Container(
+        width: tokens.size.overlayLabelWidth * 2,
+        height: tokens.size.controlHeight,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: tokens.radius.controlBorder,
+          border: Border.all(
+            color: tokens.color.line,
+            width: tokens.border.hairline,
           ),
-          SizedBox(height: tokens.spacing.xxs),
-          Text(name, style: tokens.type.label),
-        ],
-      );
+        ),
+      ),
+      SizedBox(height: tokens.spacing.xxs),
+      Text(name, style: tokens.type.label),
+    ],
+  );
 
-  Widget _spacingBar(OneBeatTokens tokens, String name, double value) => Padding(
+  Widget _spacingBar(OneBeatTokens tokens, String name, double value) =>
+      Padding(
         padding: EdgeInsets.only(right: tokens.spacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

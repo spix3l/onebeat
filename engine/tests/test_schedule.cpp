@@ -54,4 +54,17 @@ TEST_SUITE("unit") {
     CHECK(builder.build(48000.0, 1)->lengthFrames() == 4800);
   }
 
+  TEST_CASE("Parameter value and modulation remain sample-positioned and distinct") {
+    ScheduleBuilder builder;
+    builder.addParamValue(DefaultInstrument, 17, 0.25F, 32);
+    builder.addParamModulation(DefaultInstrument, 17, 0.5F, 96);
+    const auto schedule = builder.build(48000.0, 2);
+    REQUIRE(schedule->eventCount() == 2);
+    CHECK(schedule->events()[0].frame == 32);
+    CHECK(schedule->events()[0].type == static_cast<uint16_t>(EventType::ParamValue));
+    CHECK(schedule->events()[0].reserved == 17);
+    CHECK(schedule->events()[1].frame == 96);
+    CHECK(schedule->events()[1].type == static_cast<uint16_t>(EventType::ParamModulation));
+  }
+
 }  // TEST_SUITE

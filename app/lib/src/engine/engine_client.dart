@@ -147,7 +147,9 @@ class EngineClient {
       _command = calloc<ob_command>(),
       _event = calloc<ob_event>(),
       _scanStatus = calloc<ob_plugin_scan_status>(),
-      _pluginInfo = calloc<ob_plugin_info>();
+      _pluginInfo = calloc<ob_plugin_info>(),
+      _instanceInfo = calloc<ob_instance_info>(),
+      _paramInfo = calloc<ob_param_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
   /// is how widget tests and CI drive the UI without audio hardware.
@@ -191,6 +193,8 @@ class EngineClient {
   // re-read only when the scan's list generation moves.
   final Pointer<ob_plugin_scan_status> _scanStatus;
   final Pointer<ob_plugin_info> _pluginInfo;
+  final Pointer<ob_instance_info> _instanceInfo;
+  final Pointer<ob_param_info> _paramInfo;
 
   int _generation = 0;
   bool _disposed = false;
@@ -430,6 +434,97 @@ class EngineClient {
     return plugins;
   }
 
+  HostedInstance? readHostedInstance() {
+    if (_bindings.ob_engine_instance_count(_engine) == 0 ||
+        _bindings.ob_engine_instance_at(_engine, 0, _instanceInfo) !=
+            ob_status.OB_OK) {
+      return null;
+    }
+    final ob_instance_info value = _instanceInfo.ref;
+    return HostedInstance(
+      id: value.instance_id,
+      pluginId: _readFixedUtf8(value.plugin_id, 128),
+      name: _readFixedUtf8(value.name, 128),
+      vendor: _readFixedUtf8(value.vendor, 128),
+      path: _readFixedUtf8(value.path, 512),
+      format:
+          PluginFormat.values[value.format.clamp(
+            0,
+            PluginFormat.values.length - 1,
+          )],
+      missing: (value.flags & 1) != 0,
+      hasEditor: (value.flags & 4) != 0,
+      paramCount: value.param_count,
+    );
+  }
+
+  void addPlugin(PluginListing plugin) {
+    final Pointer<Utf8> path = plugin.path.toNativeUtf8();
+    final Pointer<Utf8> id = plugin.id.toNativeUtf8();
+    try {
+      _check(
+        _bindings.ob_engine_instance_add(
+          _engine,
+          path.cast<Char>(),
+          id.cast<Char>(),
+        ),
+      );
+    } finally {
+      calloc.free(path);
+      calloc.free(id);
+    }
+  }
+
+  void removePlugin(int instanceId) =>
+      _check(_bindings.ob_engine_instance_remove(_engine, instanceId));
+
+  void openPluginEditor(int instanceId) =>
+      _check(_bindings.ob_engine_instance_editor_open(_engine, instanceId));
+
+  List<HostedParameter> readParameters(HostedInstance instance) {
+    final List<HostedParameter> result = <HostedParameter>[];
+    for (int index = 0; index < instance.paramCount; index++) {
+      if (_bindings.ob_engine_param_at(
+            _engine,
+            instance.id,
+            index,
+            _paramInfo,
+          ) !=
+          ob_status.OB_OK) {
+        break;
+      }
+      final ob_param_info value = _paramInfo.ref;
+      result.add(
+        HostedParameter(
+          id: value.param_id,
+          name: _readFixedUtf8(value.name, 128),
+          module: _readFixedUtf8(value.module, 128),
+          display: _readFixedUtf8(value.display, 128),
+          value: value.value,
+          minimum: value.min_value,
+          maximum: value.max_value,
+          defaultValue: value.default_value,
+        ),
+      );
+    }
+    return result;
+  }
+
+  void beginParameterGesture(int paramId) =>
+      _post(cmdPluginParamBegin, i64: paramId);
+  void setParameter(int paramId, double value) =>
+      _post(cmdPluginParamValue, i64: paramId, f64a: value);
+  void endParameterGesture(int paramId) =>
+      _post(cmdPluginParamEnd, i64: paramId);
+
+  void _check(ob_status status) {
+    if (status != ob_status.OB_OK) {
+      throw EngineException(
+        _bindings.ob_last_error_message().cast<Utf8>().toDartString(),
+      );
+    }
+  }
+
   void dispose() {
     if (_disposed) {
       return;
@@ -442,6 +537,8 @@ class EngineClient {
     calloc.free(_event);
     calloc.free(_scanStatus);
     calloc.free(_pluginInfo);
+    calloc.free(_instanceInfo);
+    calloc.free(_paramInfo);
   }
 }
 
@@ -547,6 +644,50 @@ class PluginListing {
       outcome == ScanOutcome.crashed || outcome == ScanOutcome.timedOut;
 }
 
+class HostedInstance {
+  const HostedInstance({
+    required this.id,
+    required this.pluginId,
+    required this.name,
+    required this.vendor,
+    required this.path,
+    required this.format,
+    required this.missing,
+    required this.hasEditor,
+    required this.paramCount,
+  });
+  final int id;
+  final String pluginId;
+  final String name;
+  final String vendor;
+  final String path;
+  final PluginFormat format;
+  final bool missing;
+  final bool hasEditor;
+  final int paramCount;
+}
+
+class HostedParameter {
+  const HostedParameter({
+    required this.id,
+    required this.name,
+    required this.module,
+    required this.display,
+    required this.value,
+    required this.minimum,
+    required this.maximum,
+    required this.defaultValue,
+  });
+  final int id;
+  final String name;
+  final String module;
+  final String display;
+  final double value;
+  final double minimum;
+  final double maximum;
+  final double defaultValue;
+}
+
 /// Command type constants, mirroring ob_command_type. ffigen renders the C enum
 /// as a Dart enum; these ints keep the call sites readable and are pinned by the
 /// ABI freeze test on the C side.
@@ -560,6 +701,9 @@ const int cmdNoteOn = 7;
 const int cmdNoteOff = 8;
 const int cmdAllNotesOff = 9;
 const int cmdSetMasterGain = 10;
+const int cmdPluginParamBegin = 11;
+const int cmdPluginParamValue = 12;
+const int cmdPluginParamEnd = 13;
 
 const int evtDeviceChanged = 1;
 const int evtDeviceLost = 2;

@@ -105,11 +105,32 @@ class Engine final : public audio_io::RenderCallback {
 
   // The engine holds its instrument as a `PluginInstance` and nothing else: a
   // hosted CLAP plugin (OB-2-07) drops in here with no change above this line.
-  plugin::PluginInstance& instrument() { return instrument_; }
+  plugin::PluginInstance& instrument() { return *instrument_; }
+  const plugin::PluginInstance& instrument() const { return *instrument_; }
+  // Replaces the v0.1 built-in instrument while the device is stopped around
+  // the swap. Ownership stays with the engine so the audio thread only ever
+  // observes a stable pointer.
+  bool installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance,
+                               std::string& error);
+  bool restoreBuiltinInstrument(std::string& error);
+  bool hasHostedInstrument() const noexcept { return hosted_instrument_ != nullptr; }
+  bool createSandboxedInstrument(const std::string& bundle_path, const std::string& plugin_id,
+                                 const std::string& helper_path, std::string& error);
+  bool installMissingInstrument(const std::string& name, const std::vector<uint8_t>& state,
+                                std::string& error);
+  uint32_t hostedParamCount() const;
+  bool hostedParamInfo(uint32_t index, plugin::ParamInfo& out) const;
+  bool hostedParamValue(plugin::ParamId param, double& out) const;
+  bool saveHostedState(std::vector<uint8_t>& out) const;
+  std::string hostedError() const;
+  bool loadHostedState(const std::vector<uint8_t>& bytes);
+  bool hostedHasEditor() const;
+  bool openHostedEditor();
+  void closeHostedEditor();
   static constexpr uint32_t CommandQueueCapacity = 1024;
   // Sample loading has no place in a format-agnostic interface, so it stays on
   // the concrete built-in.
-  Sampler& sampler() { return instrument_.sampler(); }
+  Sampler& sampler() { return builtin_instrument_.sampler(); }
   Transport& transportForTests() { return transport_; }
   Diagnostics& diagnostics() { return diagnostics_; }
   rt::RtLog& rtLog() { return rt_log_; }
@@ -174,7 +195,9 @@ class Engine final : public audio_io::RenderCallback {
   std::unique_ptr<audio_io::AudioDevice> device_;
   Transport transport_;
   HostBridge host_bridge_;
-  plugin::builtin::SamplerPlugin instrument_{&host_bridge_, &rt_log_};
+  plugin::builtin::SamplerPlugin builtin_instrument_{&host_bridge_, &rt_log_};
+  std::unique_ptr<plugin::PluginInstance> hosted_instrument_;
+  plugin::PluginInstance* instrument_ = &builtin_instrument_;
   rt::NonRealtimeMutable<Schedule> schedule_;
 
   // Both reserved at initialise() time and never resized afterwards: pushing an

@@ -45,10 +45,26 @@ class FrameTimingOverlay extends StatelessWidget {
                   children: <Widget>[
                     Text('FRAME TIMING  (F8)', style: tokens.type.label),
                     SizedBox(height: tokens.spacing.sm),
-                    _row(tokens, 'budget', '${stats.budgetMillis.toStringAsFixed(2)} ms'),
-                    _row(tokens, 'build', '${stats.averageBuildMillis.toStringAsFixed(2)} ms'),
-                    _row(tokens, 'raster', '${stats.averageRasterMillis.toStringAsFixed(2)} ms'),
-                    _row(tokens, 'worst', '${stats.worstFrameMillis.toStringAsFixed(2)} ms'),
+                    _row(
+                      tokens,
+                      'budget',
+                      '${stats.budgetMillis.toStringAsFixed(2)} ms',
+                    ),
+                    _row(
+                      tokens,
+                      'build',
+                      '${stats.averageBuildMillis.toStringAsFixed(2)} ms',
+                    ),
+                    _row(
+                      tokens,
+                      'raster',
+                      '${stats.averageRasterMillis.toStringAsFixed(2)} ms',
+                    ),
+                    _row(
+                      tokens,
+                      'worst',
+                      '${stats.worstFrameMillis.toStringAsFixed(2)} ms',
+                    ),
                     _row(tokens, 'frames', '${stats.totalFrames}'),
                     _row(
                       tokens,
@@ -57,15 +73,29 @@ class FrameTimingOverlay extends StatelessWidget {
                       warn: stats.droppedFrames > 0,
                     ),
                     SizedBox(height: tokens.spacing.sm),
-                    _row(tokens, 'xruns', '${controller.snapshot.xrunCount}',
-                        warn: controller.snapshot.xrunCount > 0),
-                    _row(tokens, 'voices', '${controller.snapshot.activeVoices}'),
-                    _row(tokens, 'events', '${controller.snapshot.scheduleEventCount}'),
+                    _row(
+                      tokens,
+                      'xruns',
+                      '${controller.snapshot.xrunCount}',
+                      warn: controller.snapshot.xrunCount > 0,
+                    ),
+                    _row(
+                      tokens,
+                      'voices',
+                      '${controller.snapshot.activeVoices}',
+                    ),
+                    _row(
+                      tokens,
+                      'events',
+                      '${controller.snapshot.scheduleEventCount}',
+                    ),
                     if (kDebugMode) ...<Widget>[
                       SizedBox(height: tokens.spacing.sm),
                       Text(
                         'debug build — measure in profile mode',
-                        style: tokens.type.label.copyWith(color: tokens.color.warning),
+                        style: tokens.type.label.copyWith(
+                          color: tokens.color.warning,
+                        ),
                       ),
                     ],
                   ],
@@ -78,7 +108,12 @@ class FrameTimingOverlay extends StatelessWidget {
     );
   }
 
-  Widget _row(OneBeatTokens tokens, String label, String value, {bool warn = false}) {
+  Widget _row(
+    OneBeatTokens tokens,
+    String label,
+    String value, {
+    bool warn = false,
+  }) {
     return Padding(
       padding: EdgeInsets.only(bottom: tokens.spacing.xxs),
       child: Row(

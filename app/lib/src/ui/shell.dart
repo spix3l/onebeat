@@ -28,7 +28,8 @@ class OneBeatShell extends StatefulWidget {
   State<OneBeatShell> createState() => _OneBeatShellState();
 }
 
-class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderStateMixin {
+class _OneBeatShellState extends State<OneBeatShell>
+    with SingleTickerProviderStateMixin {
   late final EngineController _controller;
   final FocusNode _rootFocus = FocusNode(debugLabel: 'shell');
   bool _showTokenGallery = false;
@@ -51,8 +52,10 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
     // written into a document that then goes stale. This is the frame the user
     // can act on: engine up, plug-in list populated from the cache.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      stdout.writeln('onebeat: usable in ${startupStopwatch.elapsedMilliseconds} ms '
-          'with ${_controller.library.plugins.length} plug-ins from cache');
+      stdout.writeln(
+        'onebeat: usable in ${startupStopwatch.elapsedMilliseconds} ms '
+        'with ${_controller.library.plugins.length} plug-ins from cache',
+      );
     });
   }
 
@@ -82,7 +85,8 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
     return Shortcuts(
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.space): _TogglePlayIntent(),
-        SingleActivator(LogicalKeyboardKey.f8): _TogglePerformanceOverlayIntent(),
+        SingleActivator(LogicalKeyboardKey.f8):
+            _TogglePerformanceOverlayIntent(),
         SingleActivator(LogicalKeyboardKey.f9): _ToggleTokenGalleryIntent(),
         SingleActivator(LogicalKeyboardKey.f10): _TogglePluginListIntent(),
       },
@@ -96,11 +100,11 @@ class _OneBeatShellState extends State<OneBeatShell> with SingleTickerProviderSt
           ),
           _TogglePerformanceOverlayIntent:
               CallbackAction<_TogglePerformanceOverlayIntent>(
-            onInvoke: (_) {
-              _controller.togglePerformanceOverlay();
-              return null;
-            },
-          ),
+                onInvoke: (_) {
+                  _controller.togglePerformanceOverlay();
+                  return null;
+                },
+              ),
           _ToggleTokenGalleryIntent: CallbackAction<_ToggleTokenGalleryIntent>(
             onInvoke: (_) {
               setState(() => _showTokenGallery = !_showTokenGallery);
@@ -175,38 +179,46 @@ class _TopBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
       decoration: BoxDecoration(
         color: tokens.color.surfacePanel,
-        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
+        border: Border(
+          bottom: BorderSide(
+            color: tokens.color.line,
+            width: tokens.border.hairline,
+          ),
+        ),
       ),
       child: Row(
         children: <Widget>[
           AnimatedBuilder(
             animation: controller,
-            builder: (BuildContext context, Widget? child) => Row(
-              children: <Widget>[
-                OneBeatButton(
-                  label: controller.snapshot.playing ? 'STOP' : 'PLAY',
-                  semanticLabel: controller.snapshot.playing
-                      ? 'Stop playback, space bar'
-                      : 'Start playback, space bar',
-                  active: controller.snapshot.playing,
-                  onPressed: controller.togglePlay,
+            builder:
+                (BuildContext context, Widget? child) => Row(
+                  children: <Widget>[
+                    OneBeatButton(
+                      label: controller.snapshot.playing ? 'STOP' : 'PLAY',
+                      semanticLabel:
+                          controller.snapshot.playing
+                              ? 'Stop playback, space bar'
+                              : 'Start playback, space bar',
+                      active: controller.snapshot.playing,
+                      onPressed: controller.togglePlay,
+                    ),
+                    SizedBox(width: tokens.spacing.sm),
+                    OneBeatButton(
+                      label: 'RTZ',
+                      semanticLabel: 'Return to zero',
+                      onPressed: () => controller.client.seekFrames(0),
+                    ),
+                  ],
                 ),
-                SizedBox(width: tokens.spacing.sm),
-                OneBeatButton(
-                  label: 'RTZ',
-                  semanticLabel: 'Return to zero',
-                  onPressed: () => controller.client.seekFrames(0),
-                ),
-              ],
-            ),
           ),
           SizedBox(width: tokens.spacing.xl),
           AnimatedBuilder(
             animation: controller,
-            builder: (BuildContext context, Widget? child) => TempoField(
-              tempo: controller.snapshot.tempoBpm,
-              onChanged: controller.client.setTempo,
-            ),
+            builder:
+                (BuildContext context, Widget? child) => TempoField(
+                  tempo: controller.snapshot.tempoBpm,
+                  onChanged: controller.client.setTempo,
+                ),
           ),
           SizedBox(width: tokens.spacing.xs),
           Text('BPM', style: tokens.type.label),
@@ -261,7 +273,8 @@ class _DemoPads extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final _OneBeatShellState state = context.findAncestorStateOfType<_OneBeatShellState>()!;
+    final _OneBeatShellState state =
+        context.findAncestorStateOfType<_OneBeatShellState>()!;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -291,7 +304,12 @@ class _StatusBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
       decoration: BoxDecoration(
         color: tokens.color.surfacePanel,
-        border: Border(top: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
+        border: Border(
+          top: BorderSide(
+            color: tokens.color.line,
+            width: tokens.border.hairline,
+          ),
+        ),
       ),
       child: AnimatedBuilder(
         animation: controller,
@@ -307,7 +325,10 @@ class _StatusBar extends StatelessWidget {
                 style: tokens.type.numericSmall,
               ),
               SizedBox(width: tokens.spacing.lg),
-              Text('${snapshot.activeVoices} voices', style: tokens.type.numericSmall),
+              Text(
+                '${snapshot.activeVoices} voices',
+                style: tokens.type.numericSmall,
+              ),
               SizedBox(width: tokens.spacing.lg),
               Text(
                 'CPU ${(snapshot.cpuLoad * 100).toStringAsFixed(0)}%',
@@ -317,7 +338,9 @@ class _StatusBar extends StatelessWidget {
                 SizedBox(width: tokens.spacing.lg),
                 Text(
                   '${snapshot.xrunCount} dropouts',
-                  style: tokens.type.numericSmall.copyWith(color: tokens.color.warning),
+                  style: tokens.type.numericSmall.copyWith(
+                    color: tokens.color.warning,
+                  ),
                 ),
               ],
               const Spacer(),
@@ -326,7 +349,9 @@ class _StatusBar extends StatelessWidget {
                   child: Text(
                     controller.status,
                     overflow: TextOverflow.ellipsis,
-                    style: tokens.type.label.copyWith(color: tokens.color.textPrimary),
+                    style: tokens.type.label.copyWith(
+                      color: tokens.color.textPrimary,
+                    ),
                   ),
                 ),
             ],

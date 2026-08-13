@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
-project(onebeat_engine VERSION 0.1.0 LANGUAGES C CXX)
+project(onebeat_engine VERSION 0.2.0 LANGUAGES C CXX)
+if(APPLE)
+  enable_language(OBJCXX)
+endif()
 
 # The engine builds standalone: no Flutter, no app, no network. `cmake -S engine
 # -B build && cmake --build build` is the whole story (OB-1-01).
@@ -28,6 +31,7 @@ set(ONEBEAT_THIRD_PARTY ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
 add_library(onebeat_third_party INTERFACE)
 target_include_directories(onebeat_third_party SYSTEM INTERFACE
   ${ONEBEAT_THIRD_PARTY}/dr_libs
+  ${ONEBEAT_THIRD_PARTY}/clap/include
 )
 
 # ---------------------------------------------------------------------------
@@ -82,8 +86,14 @@ endif()
 # ---------------------------------------------------------------------------
 if(APPLE)
   set(ONEBEAT_PLATFORM_SOURCES src/audio_io/coreaudio/coreaudio_device.cpp)
+  if(ONEBEAT_ASAN OR ONEBEAT_TSAN OR ONEBEAT_RTSAN)
+    set(ONEBEAT_EDITOR_SOURCE src/plugin/clap/clap_editor_stub.cpp)
+  else()
+    set(ONEBEAT_EDITOR_SOURCE src/plugin/clap/clap_editor_mac.mm)
+  endif()
   set(ONEBEAT_PLATFORM_LIBS
-    "-framework CoreAudio" "-framework AudioToolbox" "-framework CoreFoundation")
+    "-framework CoreAudio" "-framework AudioToolbox" "-framework CoreFoundation"
+    "-framework AppKit" "-framework QuartzCore")
 else()
   message(FATAL_ERROR "OneBeat v0.1 targets macOS. Windows/Linux backends are a v2 port: "
                       "add engine/src/audio_io/<platform>/ and implement createPlatformAudioDevice().")
@@ -101,6 +111,10 @@ add_library(onebeat_core STATIC
   src/core/rt/rt.cpp
   src/core/rt/rt_log.cpp
   src/plugin/plugin_types.cpp
+  src/plugin/clap/clap_plugin_instance.cpp
+  ${ONEBEAT_EDITOR_SOURCE}
+  src/plugin/sandbox/sandboxed_plugin_proxy.cpp
+  src/plugin/sandbox/runtime_host.cpp
   src/plugin/builtin/sampler_plugin.cpp
   src/plugin/scan/descriptor.cpp
   src/plugin/scan/plugin_cache.cpp

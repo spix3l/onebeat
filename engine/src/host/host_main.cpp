@@ -38,13 +38,21 @@
 #include <string>
 #include <vector>
 
+#include <clap/clap.h>
+
+#include "plugin/sandbox/runtime_host.h"
 #include "plugin/scan/descriptor.h"
 #include "plugin/scan/scan_protocol.h"
 
 namespace {
 
 namespace fs = std::filesystem;
+using onebeat::plugin::scan::DescriptorFlagIntrospected;
 using onebeat::plugin::scan::PluginDescriptor;
+using onebeat::plugin::scan::PluginFeatureAnalyzer;
+using onebeat::plugin::scan::PluginFeatureAudioEffect;
+using onebeat::plugin::scan::PluginFeatureInstrument;
+using onebeat::plugin::scan::PluginFeatureNoteEffect;
 using onebeat::plugin::scan::ScanPhase;
 using onebeat::plugin::scan::ScanRecordHeader;
 using onebeat::plugin::scan::ScanRecordMagic;
@@ -168,21 +176,59 @@ void installCrashHandlers() {
   }
 }
 
-// --- CLAP entry point, minimally ---------------------------------------------
+// --- CLAP scan host ----------------------------------------------------------
 
-// The first 24 bytes of `clap_plugin_entry_t`, which is all this ticket needs.
-// Declared here rather than vendoring the CLAP headers because nothing is
-// *called* through it: OB-2-07 vendors the SDK and replaces this outright.
-// Reading the version is enough to distinguish "a CLAP bundle" from "a dylib
-// that happens to live in the CLAP folder".
-struct ClapEntryPrefix {
-  uint32_t clap_version_major;
-  uint32_t clap_version_minor;
-  uint32_t clap_version_revision;
-  bool (*init)(const char* plugin_path);
-  void (*deinit)();
-  const void* (*get_factory)(const char* factory_id);
+bool scanIsMainThread(const clap_host_t*) {
+  return true;
+}
+bool scanIsAudioThread(const clap_host_t*) {
+  return false;
+}
+const clap_host_thread_check_t ScanThreadCheck{scanIsMainThread, scanIsAudioThread};
+
+const void* scanHostExtension(const clap_host_t*, const char* id) {
+  return std::strcmp(id, CLAP_EXT_THREAD_CHECK) == 0 ? &ScanThreadCheck : nullptr;
+}
+void scanHostNoop(const clap_host_t*) {}
+
+const clap_host_t ScanHost{
+    CLAP_VERSION,
+    nullptr,
+    "OneBeat Scanner",
+    "OneBeat",
+    "https://github.com/spix3l/onebeat",
+    "0.2.0",
+    scanHostExtension,
+    scanHostNoop,
+    scanHostNoop,
+    scanHostNoop,
 };
+
+uint32_t featureFlags(const char* const* features) {
+  uint32_t flags = 0;
+  if (features == nullptr) return flags;
+  for (size_t index = 0; features[index] != nullptr; ++index) {
+    const char* feature = features[index];
+    if (std::strcmp(feature, CLAP_PLUGIN_FEATURE_INSTRUMENT) == 0) flags |= PluginFeatureInstrument;
+    if (std::strcmp(feature, CLAP_PLUGIN_FEATURE_AUDIO_EFFECT) == 0)
+      flags |= PluginFeatureAudioEffect;
+    if (std::strcmp(feature, CLAP_PLUGIN_FEATURE_NOTE_EFFECT) == 0)
+      flags |= PluginFeatureNoteEffect;
+    if (std::strcmp(feature, CLAP_PLUGIN_FEATURE_ANALYZER) == 0) flags |= PluginFeatureAnalyzer;
+  }
+  return flags;
+}
+
+void copyFeatures(const char* const* features, onebeat::plugin::FixedText<256>& out) {
+  std::string joined;
+  if (features != nullptr) {
+    for (size_t index = 0; features[index] != nullptr; ++index) {
+      if (!joined.empty()) joined += ',';
+      joined += features[index];
+    }
+  }
+  out.assign(joined.c_str());
+}
 
 // A bundle is a directory with the binary inside it; CLAP also allows a bare
 // dylib. Mirrors `fingerprintBundle`'s rule — first regular file in
@@ -212,7 +258,8 @@ std::string binaryInside(const std::string& bundle_path) {
 
 int usage() {
   writeLiteral(STDERR_FILENO,
-               "usage: onebeat-plugin-host --scan <bundle> [--crash-log <file>] [--pipe-fd <n>]\n");
+               "usage: onebeat-plugin-host --scan <bundle> [--crash-log <file>] [--pipe-fd <n>]\n"
+               "       onebeat-plugin-host --host <bundle> --plugin-id <id> --shm-name <name>\n");
   return 2;
 }
 
@@ -221,12 +268,22 @@ int usage() {
 int main(int argc, char** argv) {
   std::string bundle_path;
   std::string crash_log_path;
+  std::string plugin_id;
+  std::string shared_memory_name;
+  bool runtime_mode = false;
 
   for (int i = 1; i < argc; ++i) {
     const std::string argument(argv[i]);
     const bool has_value = i + 1 < argc;
     if (argument == "--scan" && has_value) {
       bundle_path = argv[++i];
+    } else if (argument == "--host" && has_value) {
+      runtime_mode = true;
+      bundle_path = argv[++i];
+    } else if (argument == "--plugin-id" && has_value) {
+      plugin_id = argv[++i];
+    } else if (argument == "--shm-name" && has_value) {
+      shared_memory_name = argv[++i];
     } else if (argument == "--crash-log" && has_value) {
       crash_log_path = argv[++i];
     } else if (argument == "--pipe-fd" && has_value) {
@@ -244,6 +301,11 @@ int main(int argc, char** argv) {
     g_crash_fd = ::open(crash_log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   }
   installCrashHandlers();
+
+  if (runtime_mode) {
+    if (plugin_id.empty() || shared_memory_name.empty()) return usage();
+    return onebeat::plugin::sandbox::runRuntimeHost(bundle_path, plugin_id, shared_memory_name);
+  }
 
   const std::string binary = binaryInside(bundle_path);
   if (binary.empty()) {
@@ -275,21 +337,53 @@ int main(int argc, char** argv) {
   const void* symbol = ::dlsym(handle, "clap_entry");
   std::vector<PluginDescriptor> found;
   if (symbol != nullptr) {
-    const ClapEntryPrefix* entry = static_cast<const ClapEntryPrefix*>(symbol);
-    // Only CLAP 1.x. A 0.x or 2.x entry point is a bundle we cannot host, and
-    // guessing would mean calling function pointers whose signatures we do not
-    // know — which is a crash with extra steps.
-    if (entry->clap_version_major == 1 && entry->get_factory != nullptr) {
-      PluginDescriptor descriptor;
-      const std::string stem = fs::path(bundle_path).stem().string();
-      descriptor.name.assign(stem.c_str());
-      // Still not the plugin's real id: reading that means calling `init` and
-      // walking the factory, which is OB-2-07's job and another crash surface.
-      // The row is honestly marked as not introspected.
-      descriptor.id.assign(bundle_path.c_str());
-      descriptor.flags = onebeat::plugin::scan::DescriptorFlagNone;
-      descriptor.failure_phase = ScanPhase::None;
-      found.push_back(descriptor);
+    const auto* entry = static_cast<const clap_plugin_entry_t*>(symbol);
+    if (clap_version_is_compatible(entry->clap_version) && entry->init != nullptr &&
+        entry->init(bundle_path.c_str()) && entry->get_factory != nullptr) {
+      const auto* factory =
+          static_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
+      if (factory != nullptr) {
+        const uint32_t count = factory->get_plugin_count(factory);
+        for (uint32_t index = 0; index < count; ++index) {
+          const clap_plugin_descriptor_t* info = factory->get_plugin_descriptor(factory, index);
+          if (info == nullptr || info->id == nullptr || info->name == nullptr) continue;
+
+          PluginDescriptor descriptor;
+          descriptor.id.assign(info->id);
+          descriptor.name.assign(info->name);
+          descriptor.vendor.assign(info->vendor);
+          descriptor.version.assign(info->version);
+          descriptor.index_in_bundle = static_cast<uint16_t>(std::min(index, 65535U));
+          descriptor.features = featureFlags(info->features);
+          copyFeatures(info->features, descriptor.feature_text);
+
+          announce(ScanPhase::Instantiate);
+          const clap_plugin_t* plugin = factory->create_plugin(factory, &ScanHost, info->id);
+          if (plugin != nullptr && plugin->init != nullptr && plugin->init(plugin)) {
+            const auto* params = static_cast<const clap_plugin_params_t*>(
+                plugin->get_extension(plugin, CLAP_EXT_PARAMS));
+            const auto* audio_ports = static_cast<const clap_plugin_audio_ports_t*>(
+                plugin->get_extension(plugin, CLAP_EXT_AUDIO_PORTS));
+            const auto* note_ports = static_cast<const clap_plugin_note_ports_t*>(
+                plugin->get_extension(plugin, CLAP_EXT_NOTE_PORTS));
+            descriptor.param_count = params != nullptr ? params->count(plugin) : 0;
+            descriptor.audio_input_count = static_cast<uint16_t>(
+                std::min(audio_ports != nullptr ? audio_ports->count(plugin, true) : 0U, 65535U));
+            descriptor.audio_output_count = static_cast<uint16_t>(
+                std::min(audio_ports != nullptr ? audio_ports->count(plugin, false) : 0U, 65535U));
+            descriptor.note_input_count = static_cast<uint16_t>(
+                std::min(note_ports != nullptr ? note_ports->count(plugin, true) : 0U, 65535U));
+            descriptor.note_output_count = static_cast<uint16_t>(
+                std::min(note_ports != nullptr ? note_ports->count(plugin, false) : 0U, 65535U));
+            descriptor.flags = DescriptorFlagIntrospected;
+            plugin->destroy(plugin);
+          } else if (plugin != nullptr && plugin->destroy != nullptr) {
+            plugin->destroy(plugin);
+          }
+          descriptor.failure_phase = ScanPhase::None;
+          found.push_back(descriptor);
+        }
+      }
     }
   }
 

@@ -19,6 +19,8 @@ set(OB_TEST_PLUGIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/test-plugins)
 
 function(onebeat_add_test_plugin name behaviour)
   add_library(${name} MODULE fixtures/test_plugins.cpp)
+  target_include_directories(${name} SYSTEM PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/clap/include)
   if(NOT behaviour STREQUAL "")
     target_compile_definitions(${name} PRIVATE ${behaviour})
   endif()
@@ -52,6 +54,8 @@ endfunction()
 onebeat_add_test_plugin(ob_test_plugin_ok "")
 onebeat_add_test_plugin(ob_test_plugin_crash OB_TEST_PLUGIN_CRASH)
 onebeat_add_test_plugin(ob_test_plugin_hang OB_TEST_PLUGIN_HANG)
+onebeat_add_test_plugin(ob_test_plugin_process_crash OB_TEST_PLUGIN_PROCESS_CRASH)
+onebeat_add_test_plugin(ob_test_plugin_process_hang OB_TEST_PLUGIN_PROCESS_HANG)
 
 add_executable(onebeat_tests
   test_main.cpp
@@ -64,6 +68,7 @@ add_executable(onebeat_tests
   test_abi.cpp
   test_plugin_events.cpp
   test_plugin_model.cpp
+  test_clap_hosting.cpp
   test_plugin_scan.cpp
   test_plugin_quarantine.cpp
   test_stress_publish.cpp
@@ -77,7 +82,8 @@ target_compile_definitions(onebeat_tests PRIVATE
   OB_TEST_PLUGIN_DIR="${OB_TEST_PLUGIN_DIR}"
   OB_TEST_HELPER="$<TARGET_FILE:onebeat_plugin_host>")
 add_dependencies(onebeat_tests
-  onebeat_plugin_host ob_test_plugin_ok ob_test_plugin_crash ob_test_plugin_hang)
+  onebeat_plugin_host ob_test_plugin_ok ob_test_plugin_crash ob_test_plugin_hang
+  ob_test_plugin_process_crash ob_test_plugin_process_hang)
 
 # doctest test-suite names map 1:1 to labels.
 foreach(suite unit engine abi stress)

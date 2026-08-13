@@ -116,6 +116,15 @@ class SizeTokens {
   double get overlayLabelWidth => 66;
   double get proseWidth => 420;
   double get dialogProseWidth => 460;
+  double get pluginBrowserWidth => 860;
+  double get pluginEditorWidth => 760;
+  double get pluginEditorHeight => 620;
+  double get pluginRowHeight => 54;
+  double get parameterRowHeight => 42;
+  double get searchHeight => 34;
+  double get parameterLabelWidth => 210;
+  double get parameterValueWidth => 104;
+  double get sliderHeight => 18;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW
@@ -150,44 +159,46 @@ class TypeTokens {
   static const String numericFamily = 'MartianMono';
 
   TextStyle get title => TextStyle(
-        fontFamily: uiFamily,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.1,
-        color: textPrimary,
-      );
+    fontFamily: uiFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.1,
+    color: textPrimary,
+  );
 
   TextStyle get body => TextStyle(
-        fontFamily: uiFamily,
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
-        color: textPrimary,
-      );
+    fontFamily: uiFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    color: textPrimary,
+  );
 
   TextStyle get label => TextStyle(
-        fontFamily: uiFamily,
-        fontSize: 11,
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.4,
-        color: textMuted,
-      );
+    fontFamily: uiFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.4,
+    color: textMuted,
+  );
 
   /// Dense chrome labels use the condensed width axis of Archivo.
   TextStyle get labelDense => label.copyWith(
-        fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
-      );
+    fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
+  );
 
   /// All numerics: tabular figures, fixed width, no jitter as values change.
   TextStyle get numeric => TextStyle(
-        fontFamily: numericFamily,
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-        color: textPrimary,
-      );
+    fontFamily: numericFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    color: textPrimary,
+  );
 
-  TextStyle get numericLarge => numeric.copyWith(fontSize: 19, letterSpacing: -0.5);
-  TextStyle get numericSmall => numeric.copyWith(fontSize: 11, color: textMuted);
+  TextStyle get numericLarge =>
+      numeric.copyWith(fontSize: 19, letterSpacing: -0.5);
+  TextStyle get numericSmall =>
+      numeric.copyWith(fontSize: 11, color: textMuted);
 }
 
 /// The resolved token set for one theme.
@@ -251,8 +262,12 @@ class OneBeatTheme extends InheritedWidget {
   final OneBeatTokens tokens;
 
   static OneBeatTokens of(BuildContext context) {
-    final OneBeatTheme? theme = context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
-    assert(theme != null, 'No OneBeatTheme found. Wrap the app in OneBeatTheme.');
+    final OneBeatTheme? theme =
+        context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
+    assert(
+      theme != null,
+      'No OneBeatTheme found. Wrap the app in OneBeatTheme.',
+    );
     return theme!.tokens;
   }
 

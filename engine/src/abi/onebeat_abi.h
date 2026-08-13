@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 2
+#define OB_ABI_VERSION_MINOR 3
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -130,7 +130,10 @@ typedef enum ob_command_type {
   OB_CMD_NOTE_ON = 7,               /* i64_a = midi note, f64_a = velocity 0..1 */
   OB_CMD_NOTE_OFF = 8,              /* i64_a = midi note */
   OB_CMD_ALL_NOTES_OFF = 9,         /* -- */
-  OB_CMD_SET_MASTER_GAIN = 10       /* f64_a = linear gain, 0..2 */
+  OB_CMD_SET_MASTER_GAIN = 10,      /* f64_a = linear gain, 0..2 */
+  OB_CMD_PLUGIN_PARAM_BEGIN = 11,   /* i64_a = ParamId */
+  OB_CMD_PLUGIN_PARAM_VALUE = 12,   /* i64_a = ParamId, f64_a = value */
+  OB_CMD_PLUGIN_PARAM_END = 13      /* i64_a = ParamId */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).
@@ -389,6 +392,61 @@ OB_API ob_status ob_engine_plugin_scan_status(ob_engine* engine, ob_plugin_scan_
  * past the end — which is how a stale index is detected after the list changed
  * under the caller. */
 OB_API ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin_info* out_info);
+
+/* ------------------------------------------------------------------------- */
+/* Hosted instance + parameters (added in ABI 1.3, OB-2-09/10)               */
+/* ------------------------------------------------------------------------- */
+
+#define OB_INSTANCE_FLAG_MISSING 0x1u
+#define OB_INSTANCE_FLAG_BYPASSED 0x2u
+#define OB_INSTANCE_FLAG_HAS_EDITOR 0x4u
+
+typedef struct ob_instance_info {
+  uint32_t struct_size;
+  uint32_t instance_id;
+  uint32_t format; /* ob_plugin_format */
+  uint32_t flags;  /* OB_INSTANCE_FLAG_* */
+  uint32_t param_count;
+  uint32_t reserved;
+  char plugin_id[128];
+  char name[128];
+  char vendor[128];
+  char path[512];
+} ob_instance_info;
+
+typedef struct ob_param_info {
+  uint32_t struct_size;
+  uint32_t instance_id;
+  uint32_t param_id;
+  uint32_t flags;
+  double min_value;
+  double max_value;
+  double default_value;
+  double value;
+  char name[128];
+  char module[128];
+  char display[128];
+} ob_param_info;
+
+/* Main/UI thread. May block while the helper launches and the plug-in loads.
+ * Strings are copied before return. v0.2 has one flat instrument slot. */
+OB_API ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path,
+                                        const char* utf8_plugin_id);
+/* Main/UI thread. May block while the helper exits. Restores the built-in. */
+OB_API ob_status ob_engine_instance_remove(ob_engine* engine, uint32_t instance_id);
+/* Main/UI thread. Never blocks. The v0.2 flat list contains zero or one row. */
+OB_API int32_t ob_engine_instance_count(ob_engine* engine);
+OB_API ob_status ob_engine_instance_at(ob_engine* engine, int32_t index,
+                                       ob_instance_info* out_info);
+/* Main/UI thread. May block briefly on the helper control channel. */
+OB_API ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int32_t index,
+                                    ob_param_info* out_info);
+/* Main/UI thread. May block briefly on helper window creation. */
+OB_API ob_status ob_engine_instance_editor_open(ob_engine* engine, uint32_t instance_id);
+OB_API ob_status ob_engine_instance_editor_close(ob_engine* engine, uint32_t instance_id);
+/* Main/UI thread. May block on filesystem and opaque plug-in state I/O. */
+OB_API ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path);
+OB_API ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -22,10 +22,11 @@ using InstrumentId = uint32_t;
 inline constexpr InstrumentId DefaultInstrument = 0;
 
 enum class EventType : uint16_t {
-  NoteOn = 0,      // value = velocity 0..1
-  NoteOff = 1,     // value unused
-  TempoChange = 2  // value = bpm
-  // Stage 3+ adds AutomationPoint, ClipWindow, ... without touching publish.
+  NoteOn = 0,          // value = velocity 0..1
+  NoteOff = 1,         // value unused
+  TempoChange = 2,     // value = bpm
+  ParamValue = 3,      // reserved = ParamId, value is the absolute value
+  ParamModulation = 4  // reserved = ParamId, value is a non-destructive offset
 };
 
 // POD, 24 bytes, sorted by `frame`. Deliberately cache-friendly: a block scan
@@ -95,6 +96,20 @@ class ScheduleBuilder {
 
   ScheduleBuilder& addEvent(const ScheduleEvent& event) {
     events_.push_back(event);
+    return *this;
+  }
+
+  ScheduleBuilder& addParamValue(InstrumentId instrument, uint32_t param, float value,
+                                 int64_t frame) {
+    events_.push_back(ScheduleEvent{frame, instrument, static_cast<uint16_t>(EventType::ParamValue),
+                                    -1, value, param});
+    return *this;
+  }
+
+  ScheduleBuilder& addParamModulation(InstrumentId instrument, uint32_t param, float amount,
+                                      int64_t frame) {
+    events_.push_back(ScheduleEvent{
+        frame, instrument, static_cast<uint16_t>(EventType::ParamModulation), -1, amount, param});
     return *this;
   }
 

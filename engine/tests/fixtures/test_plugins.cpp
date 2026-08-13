@@ -1,90 +1,261 @@
-// The three plugins OB-2-03 needs in order to be tested at all.
-//
-// A quarantine feature cannot be demonstrated against real plugins: the ones
-// that crash do so on somebody else's machine, at somebody else's version, and
-// a test that depends on that is not a test. So the failures are built here, in
-// the repository, as real `.clap` bundles that the real helper really `dlopen`s
-// (`engine/tests/CMakeLists.txt` assembles them).
-//
-// **They crash from a static initialiser on purpose.** That is not a contrived
-// choice — it is where scan crashes actually happen, because `dlopen` runs a
-// plugin's constructors, its licence check and its dongle probe before any host
-// code gets a say. A test plugin that crashed in a function we called would be
-// testing a much easier problem.
-//
-// One file, three targets, selected by a macro so the harmless parts stay
-// identical between them.
-#include <cstdint>
+// Real CLAP fixtures used by scanning, hosting, state and containment tests.
+#include <clap/clap.h>
 
-#if defined(OB_TEST_PLUGIN_HANG)
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <new>
+
+#if defined(OB_TEST_PLUGIN_HANG) || defined(OB_TEST_PLUGIN_PROCESS_HANG)
 #include <time.h>
 #endif
 
-// `__attribute__((constructor))` rather than a static initialiser with a side
-// effect: an unused constant's initialiser is something the optimiser is
-// entitled to delete, and a "crashing" plugin that quietly loads would make
-// this whole test file lie. A constructor function is the same dyld hook a real
-// plugin's global objects run through, and it cannot be elided.
 #if defined(OB_TEST_PLUGIN_CRASH)
-
-// A null store through a volatile pointer. The volatile is what stops the
-// compiler from replacing the undefined behaviour with something cheaper —
-// including nothing at all.
 __attribute__((constructor)) void obTestCrashOnLoad() {
   volatile int* nowhere = nullptr;
   *nowhere = 1;
 }
-
 #elif defined(OB_TEST_PLUGIN_HANG)
-
-// Never returns, so `dlopen` never returns, so the helper is wedged with the
-// dyld lock held — the shape of a real licence check waiting on a dongle that
-// is not there. Nothing short of SIGKILL gets us out of it, which is why the
-// watchdog sends SIGKILL.
 __attribute__((constructor)) void obTestHangOnLoad() {
   while (true) {
     const timespec interval{1, 0};
     nanosleep(&interval, nullptr);
   }
 }
-
 #endif
 
-// The prefix of `clap_plugin_entry_t`. Matches `ClapEntryPrefix` in the helper;
-// both are replaced by the vendored CLAP headers in OB-2-07.
-struct TestClapEntry {
-  uint32_t clap_version_major;
-  uint32_t clap_version_minor;
-  uint32_t clap_version_revision;
-  bool (*init)(const char* plugin_path);
-  void (*deinit)();
-  const void* (*get_factory)(const char* factory_id);
+namespace {
+
+constexpr clap_id GainParam = 17;
+
+struct TestPlugin {
+  clap_plugin_t plugin{};
+  double sample_rate = 48000.0;
+  double gain = 0.5;
+  double phase = 0.0;
+  bool note_on = false;
 };
 
-extern "C" {
+TestPlugin& self(const clap_plugin_t* plugin) {
+  return *static_cast<TestPlugin*>(plugin->plugin_data);
+}
 
-bool obTestInit(const char*) {
+bool pluginInit(const clap_plugin_t*) {
   return true;
 }
-void obTestDeinit() {}
-const void* obTestGetFactory(const char*) {
-  return nullptr;
+void pluginDestroy(const clap_plugin_t* plugin) {
+  delete &self(plugin);
+}
+bool pluginActivate(const clap_plugin_t* plugin, double sample_rate, uint32_t, uint32_t) {
+  self(plugin).sample_rate = sample_rate;
+  return true;
+}
+void pluginDeactivate(const clap_plugin_t*) {}
+bool pluginStart(const clap_plugin_t*) {
+  return true;
+}
+void pluginStop(const clap_plugin_t*) {}
+void pluginReset(const clap_plugin_t* plugin) {
+  self(plugin).phase = 0.0;
+  self(plugin).note_on = false;
 }
 
-// Exported by all three, including the ones that never reach the point of being
-// asked for it: the crash and hang fixtures are otherwise valid CLAP bundles,
-// which is what makes them a fair test of the helper rather than of its
-// argument parsing.
-//
-// `extern` is load-bearing. A namespace-scope `const` object has *internal*
-// linkage in C++ unless it says otherwise, so without it this symbol would not
-// be exported and `dlsym` would find nothing — the bundle would scan as
-// "not a plugin" and the happy-path test would fail for a reason unrelated to
-// anything it is testing. Real CLAP plugins written in C++ carry the same
-// `extern`.
-extern __attribute__((visibility("default"))) const TestClapEntry clap_entry;
-const TestClapEntry clap_entry = {
-    1, 2, 0, obTestInit, obTestDeinit, obTestGetFactory,
+clap_process_status pluginProcess(const clap_plugin_t* plugin, const clap_process_t* process) {
+#if defined(OB_TEST_PLUGIN_PROCESS_CRASH)
+  volatile int* nowhere = nullptr;
+  *nowhere = 1;
+#elif defined(OB_TEST_PLUGIN_PROCESS_HANG)
+  while (true) {
+    const timespec interval{1, 0};
+    nanosleep(&interval, nullptr);
+  }
+#endif
+  TestPlugin& instance = self(plugin);
+  for (uint32_t index = 0; index < process->in_events->size(process->in_events); ++index) {
+    const clap_event_header_t* header = process->in_events->get(process->in_events, index);
+    if (header == nullptr || header->space_id != CLAP_CORE_EVENT_SPACE_ID) continue;
+    if (header->type == CLAP_EVENT_NOTE_ON) instance.note_on = true;
+    if (header->type == CLAP_EVENT_NOTE_OFF || header->type == CLAP_EVENT_NOTE_CHOKE) {
+      instance.note_on = false;
+    }
+    if (header->type == CLAP_EVENT_PARAM_VALUE) {
+      const auto* param = reinterpret_cast<const clap_event_param_value_t*>(header);
+      if (param->param_id == GainParam) instance.gain = param->value;
+    }
+  }
+  if (process->audio_outputs_count == 0) return CLAP_PROCESS_CONTINUE;
+  clap_audio_buffer_t& output = process->audio_outputs[0];
+  for (uint32_t frame = 0; frame < process->frames_count; ++frame) {
+    const float sample = instance.note_on
+                             ? static_cast<float>(std::sin(instance.phase) * instance.gain * 0.2)
+                             : 0.0F;
+    instance.phase += (440.0 * 6.283185307179586) / instance.sample_rate;
+    for (uint32_t channel = 0; channel < output.channel_count; ++channel) {
+      output.data32[channel][frame] = sample;
+    }
+  }
+  return CLAP_PROCESS_CONTINUE;
+}
+
+uint32_t paramsCount(const clap_plugin_t*) {
+  return 1;
+}
+bool paramsGetInfo(const clap_plugin_t*, uint32_t index, clap_param_info_t* info) {
+  if (index != 0 || info == nullptr) return false;
+  *info = {};
+  info->id = GainParam;
+  info->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE;
+  std::strncpy(info->name, "Gain", sizeof(info->name) - 1);
+  std::strncpy(info->module, "Output", sizeof(info->module) - 1);
+  info->min_value = 0.0;
+  info->max_value = 1.0;
+  info->default_value = 0.5;
+  return true;
+}
+bool paramsGetValue(const clap_plugin_t* plugin, clap_id id, double* value) {
+  if (id != GainParam || value == nullptr) return false;
+  *value = self(plugin).gain;
+  return true;
+}
+bool paramsValueToText(const clap_plugin_t*, clap_id id, double value, char* display,
+                       uint32_t size) {
+  if (id != GainParam || display == nullptr || size == 0) return false;
+  const int percent = static_cast<int>(value * 100.0);
+  std::snprintf(display, size, "%d %%", percent);
+  return true;
+}
+bool paramsTextToValue(const clap_plugin_t*, clap_id id, const char* display, double* value) {
+  if (id != GainParam || display == nullptr || value == nullptr) return false;
+  *value = std::strtod(display, nullptr) / 100.0;
+  return true;
+}
+void paramsFlush(const clap_plugin_t* plugin, const clap_input_events_t* input,
+                 const clap_output_events_t*) {
+  for (uint32_t index = 0; index < input->size(input); ++index) {
+    const clap_event_header_t* header = input->get(input, index);
+    if (header != nullptr && header->type == CLAP_EVENT_PARAM_VALUE) {
+      const auto* event = reinterpret_cast<const clap_event_param_value_t*>(header);
+      if (event->param_id == GainParam) self(plugin).gain = event->value;
+    }
+  }
+}
+const clap_plugin_params_t Params{paramsCount,       paramsGetInfo,     paramsGetValue,
+                                  paramsValueToText, paramsTextToValue, paramsFlush};
+
+uint32_t audioCount(const clap_plugin_t*, bool input) {
+  return input ? 0U : 1U;
+}
+bool audioGet(const clap_plugin_t*, uint32_t index, bool input, clap_audio_port_info_t* info) {
+  if (input || index != 0 || info == nullptr) return false;
+  *info = {};
+  info->id = 0;
+  std::strncpy(info->name, "Main", sizeof(info->name) - 1);
+  info->flags = CLAP_AUDIO_PORT_IS_MAIN;
+  info->channel_count = 2;
+  info->port_type = CLAP_PORT_STEREO;
+  info->in_place_pair = CLAP_INVALID_ID;
+  return true;
+}
+const clap_plugin_audio_ports_t AudioPorts{audioCount, audioGet};
+
+uint32_t noteCount(const clap_plugin_t*, bool input) {
+  return input ? 1U : 0U;
+}
+bool noteGet(const clap_plugin_t*, uint32_t index, bool input, clap_note_port_info_t* info) {
+  if (!input || index != 0 || info == nullptr) return false;
+  *info = {};
+  info->id = 0;
+  info->supported_dialects = CLAP_NOTE_DIALECT_CLAP | CLAP_NOTE_DIALECT_MIDI;
+  info->preferred_dialect = CLAP_NOTE_DIALECT_CLAP;
+  std::strncpy(info->name, "Notes", sizeof(info->name) - 1);
+  return true;
+}
+const clap_plugin_note_ports_t NotePorts{noteCount, noteGet};
+
+bool stateSave(const clap_plugin_t* plugin, const clap_ostream_t* stream) {
+  const double value = self(plugin).gain;
+  return stream->write(stream, &value, sizeof(value)) == static_cast<int64_t>(sizeof(value));
+}
+bool stateLoad(const clap_plugin_t* plugin, const clap_istream_t* stream) {
+  double value = 0.0;
+  if (stream->read(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value))) {
+    return false;
+  }
+  self(plugin).gain = value;
+  return true;
+}
+const clap_plugin_state_t State{stateSave, stateLoad};
+
+uint32_t latencyGet(const clap_plugin_t*) {
+  return 32;
+}
+const clap_plugin_latency_t Latency{latencyGet};
+
+const void* pluginExtension(const clap_plugin_t*, const char* id) {
+  if (std::strcmp(id, CLAP_EXT_PARAMS) == 0) return &Params;
+  if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS) == 0) return &AudioPorts;
+  if (std::strcmp(id, CLAP_EXT_NOTE_PORTS) == 0) return &NotePorts;
+  if (std::strcmp(id, CLAP_EXT_STATE) == 0) return &State;
+  if (std::strcmp(id, CLAP_EXT_LATENCY) == 0) return &Latency;
+  return nullptr;
+}
+void pluginMainThread(const clap_plugin_t*) {}
+
+const char* Features[]{CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLUGIN_FEATURE_SYNTHESIZER,
+                       CLAP_PLUGIN_FEATURE_STEREO, nullptr};
+const clap_plugin_descriptor_t Descriptor{
+    CLAP_VERSION,
+    "dev.onebeat.test.synth",
+    "OneBeat Test Synth",
+    "OneBeat",
+    "https://github.com/spix3l/onebeat",
+    "",
+    "",
+    "1.0.0",
+    "A deterministic CLAP fixture",
+    Features,
 };
 
-}  // extern "C"
+uint32_t factoryCount(const clap_plugin_factory_t*) {
+  return 1;
+}
+const clap_plugin_descriptor_t* factoryDescriptor(const clap_plugin_factory_t*, uint32_t index) {
+  return index == 0 ? &Descriptor : nullptr;
+}
+const clap_plugin_t* factoryCreate(const clap_plugin_factory_t*, const clap_host_t*,
+                                   const char* id) {
+  if (id == nullptr || std::strcmp(id, Descriptor.id) != 0) return nullptr;
+  auto* instance = new (std::nothrow) TestPlugin;
+  if (instance == nullptr) return nullptr;
+  instance->plugin.desc = &Descriptor;
+  instance->plugin.plugin_data = instance;
+  instance->plugin.init = pluginInit;
+  instance->plugin.destroy = pluginDestroy;
+  instance->plugin.activate = pluginActivate;
+  instance->plugin.deactivate = pluginDeactivate;
+  instance->plugin.start_processing = pluginStart;
+  instance->plugin.stop_processing = pluginStop;
+  instance->plugin.reset = pluginReset;
+  instance->plugin.process = pluginProcess;
+  instance->plugin.get_extension = pluginExtension;
+  instance->plugin.on_main_thread = pluginMainThread;
+  return &instance->plugin;
+}
+const clap_plugin_factory_t Factory{factoryCount, factoryDescriptor, factoryCreate};
+
+bool entryInit(const char*) {
+  return true;
+}
+void entryDeinit() {}
+const void* entryFactory(const char* id) {
+  return id != nullptr && std::strcmp(id, CLAP_PLUGIN_FACTORY_ID) == 0 ? &Factory : nullptr;
+}
+
+}  // namespace
+
+extern "C" {
+extern __attribute__((visibility("default"))) const clap_plugin_entry_t clap_entry;
+const clap_plugin_entry_t clap_entry{CLAP_VERSION, entryInit, entryDeinit, entryFactory};
+}

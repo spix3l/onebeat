@@ -10,10 +10,14 @@ import 'package:onebeat/src/design/tokens.dart';
 /// WCAG relative luminance.
 double _luminance(Color color) {
   double channel(double value) {
-    return value <= 0.03928 ? value / 12.92 : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+    return value <= 0.03928
+        ? value / 12.92
+        : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
   }
 
-  return (0.2126 * channel(color.r)) + (0.7152 * channel(color.g)) + (0.0722 * channel(color.b));
+  return (0.2126 * channel(color.r)) +
+      (0.7152 * channel(color.g)) +
+      (0.0722 * channel(color.b));
 }
 
 double contrastRatio(Color foreground, Color background) {
@@ -92,10 +96,15 @@ void main() {
         warning: Color(0xFFB07A12),
         danger: Color(0xFFB63030),
       ),
-      type: TypeTokens(textPrimary: Color(0xFF16170F), textMuted: Color(0xFF5A5C54)),
+      type: TypeTokens(
+        textPrimary: Color(0xFF16170F),
+        textMuted: Color(0xFF5A5C54),
+      ),
     );
     expect(light.brightness, Brightness.light);
-    expect(contrastRatio(light.color.textPrimary, light.color.surfaceDeep),
-        greaterThanOrEqualTo(4.5));
+    expect(
+      contrastRatio(light.color.textPrimary, light.color.surfaceDeep),
+      greaterThanOrEqualTo(4.5),
+    );
   });
 }

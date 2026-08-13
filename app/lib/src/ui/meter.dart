@@ -16,7 +16,7 @@ class MasterMeter extends StatelessWidget {
   /// controller: the meter needs nothing else, and the narrower dependency is
   /// what lets the paint-cost benchmark drive it without an engine.
   MasterMeter.of(EngineController controller, {Key? key})
-      : this(repaint: controller, meter: controller.meter, key: key);
+    : this(repaint: controller, meter: controller.meter, key: key);
 
   final Listenable repaint;
   final MeterState meter;
@@ -46,12 +46,12 @@ class _MeterPainter extends CustomPainter {
     required Listenable repaint,
     required this.meter,
     required this.tokens,
-  })  : _track = Paint()..color = tokens.color.meterTrack,
-        _low = Paint()..color = tokens.color.meterLow,
-        _mid = Paint()..color = tokens.color.meterMid,
-        _high = Paint()..color = tokens.color.meterHigh,
-        _hold = Paint()..color = tokens.color.textPrimary,
-        super(repaint: repaint);
+  }) : _track = Paint()..color = tokens.color.meterTrack,
+       _low = Paint()..color = tokens.color.meterLow,
+       _mid = Paint()..color = tokens.color.meterMid,
+       _high = Paint()..color = tokens.color.meterHigh,
+       _hold = Paint()..color = tokens.color.textPrimary,
+       super(repaint: repaint);
 
   final MeterState meter;
   final OneBeatTokens tokens;
@@ -72,10 +72,22 @@ class _MeterPainter extends CustomPainter {
     final double channelHeight = tokens.size.meterChannelHeight;
     final double gap = tokens.size.meterGap;
     _paintChannel(canvas, size, 0, channelHeight, meter.left);
-    _paintChannel(canvas, size, channelHeight + gap, channelHeight, meter.right);
+    _paintChannel(
+      canvas,
+      size,
+      channelHeight + gap,
+      channelHeight,
+      meter.right,
+    );
   }
 
-  void _paintChannel(Canvas canvas, Size size, double top, double height, ChannelMeter channel) {
+  void _paintChannel(
+    Canvas canvas,
+    Size size,
+    double top,
+    double height,
+    ChannelMeter channel,
+  ) {
     canvas.drawRect(Rect.fromLTWH(0, top, size.width, height), _track);
 
     final double level = dbToFraction(channel.levelDb) * size.width;
@@ -83,10 +95,18 @@ class _MeterPainter extends CustomPainter {
       final double amber = dbToFraction(_amberDb) * size.width;
       final double red = dbToFraction(_redDb) * size.width;
 
-      canvas.drawRect(Rect.fromLTWH(0, top, level.clamp(0, amber), height), _low);
+      canvas.drawRect(
+        Rect.fromLTWH(0, top, level.clamp(0, amber), height),
+        _low,
+      );
       if (level > amber) {
         canvas.drawRect(
-          Rect.fromLTWH(amber, top, (level - amber).clamp(0, red - amber), height),
+          Rect.fromLTWH(
+            amber,
+            top,
+            (level - amber).clamp(0, red - amber),
+            height,
+          ),
           _mid,
         );
       }

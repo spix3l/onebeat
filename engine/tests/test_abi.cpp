@@ -5,8 +5,11 @@
 // these values deliberately, following the checklist in ADR-002 §8. Silently
 // changing a field's position is how a Dart client starts reading the tempo out
 // of the middle of a timestamp.
+#include <unistd.h>
 #include <chrono>
 #include <cstddef>
+#include <cstdlib>
+#include <filesystem>
 #include <thread>
 
 #include "abi/onebeat_abi.h"
@@ -16,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.2.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.3.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.2.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.3.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -115,10 +118,25 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_plugin_info, retry_count) == 992);
   }
 
+  TEST_CASE("ABI 1.3 hosted instance and parameter layouts are frozen") {
+    CHECK(sizeof(ob_instance_info) == 920);
+    CHECK(offsetof(ob_instance_info, instance_id) == 4);
+    CHECK(offsetof(ob_instance_info, param_count) == 16);
+    CHECK(offsetof(ob_instance_info, plugin_id) == 24);
+    CHECK(offsetof(ob_instance_info, path) == 408);
+    CHECK(sizeof(ob_param_info) == 432);
+    CHECK(offsetof(ob_param_info, param_id) == 8);
+    CHECK(offsetof(ob_param_info, min_value) == 16);
+    CHECK(offsetof(ob_param_info, value) == 40);
+    CHECK(offsetof(ob_param_info, name) == 48);
+    CHECK(offsetof(ob_param_info, display) == 304);
+  }
+
   TEST_CASE("The plugin list is reachable through the C surface") {
     ob_engine_config config{};
     config.struct_size = sizeof(config);
     config.use_null_device = 1;
+    config.block_frames = 128;
     config.log_directory = "/tmp/onebeat-tests/logs";
 
     ob_engine* engine = nullptr;
@@ -155,6 +173,74 @@ TEST_SUITE("abi") {
     CHECK(ob_engine_plugin_retry(engine, "") == OB_ERR_INVALID_ARGUMENT);
 
     ob_engine_destroy(engine);
+  }
+
+  TEST_CASE("The hosted instance and generic parameter model cross the C surface") {
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/hosted-abi";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    const std::string bundle = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE_MESSAGE(
+        ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK,
+        ob_last_error_message());
+    CHECK(ob_engine_instance_count(engine) == 1);
+    ob_instance_info instance{};
+    REQUIRE(ob_engine_instance_at(engine, 0, &instance) == OB_OK);
+    CHECK(instance.instance_id == 1);
+    CHECK(std::string(instance.name) == "OneBeat Test Synth");
+    CHECK(instance.param_count == 1);
+    ob_param_info param{};
+    REQUIRE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK);
+    CHECK(param.param_id == 17);
+    CHECK(std::string(param.name) == "Gain");
+    CHECK_FALSE(std::string(param.display).empty());
+    CHECK(ob_engine_instance_remove(engine, instance.instance_id) == OB_OK);
+    CHECK(ob_engine_instance_count(engine) == 0);
+    ob_engine_destroy(engine);
+  }
+
+  TEST_CASE("Scratch sessions preserve an opaque chunk through a missing placeholder") {
+    namespace fs = std::filesystem;
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const fs::path scratch =
+        fs::path("/tmp/onebeat-tests") / ("stage2-session-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+    const fs::path bundle = scratch / "SavedSynth.clap";
+    fs::create_directory_symlink(fs::path(OB_TEST_PLUGIN_DIR) / "ob_test_plugin_ok.clap", bundle);
+    const fs::path session = scratch / "session.obs2";
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.use_null_device = 1;
+    config.block_frames = 128;
+    config.log_directory = "/tmp/onebeat-tests/session-abi";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    REQUIRE(ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK);
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    REQUIRE_MESSAGE(ob_engine_session_save(engine, session.c_str()) == OB_OK,
+                    std::string(ob_last_error_message()));
+    const auto state_hash_before = fs::file_size(session);
+    REQUIRE(ob_engine_instance_remove(engine, 1) == OB_OK);
+    fs::remove(bundle);
+
+    REQUIRE(ob_engine_session_load(engine, session.c_str()) == OB_OK);
+    ob_instance_info missing{};
+    REQUIRE(ob_engine_instance_at(engine, 0, &missing) == OB_OK);
+    CHECK((missing.flags & OB_INSTANCE_FLAG_MISSING) != 0U);
+    CHECK(std::string(missing.name) == "OneBeat Test Synth");
+    REQUIRE(ob_engine_session_save(engine, session.c_str()) == OB_OK);
+    CHECK(fs::file_size(session) == state_hash_before);
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
   }
 
   TEST_CASE("The full lifecycle round-trips through the C surface") {

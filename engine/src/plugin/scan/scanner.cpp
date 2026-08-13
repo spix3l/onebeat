@@ -411,7 +411,11 @@ void PluginScanner::probeBundles(const std::vector<BundleRef>& bundles) {
         // The bundle has not changed, but the *probe* may have grown since the
         // row was written. A row that knows less than this probe could tell us
         // is re-probed rather than reused.
-        if ((cached.flags & wanted) != wanted) {
+        // Capability upgrades apply to healthy rows only. A failed row cannot
+        // truthfully carry introspected metadata, and reopening a quarantined
+        // binary just because the scanner learned a new capability would
+        // defeat quarantine on every application update.
+        if (!cached.quarantined() && (cached.flags & wanted) != wanted) {
           probed.clear();
           reused = false;
           break;

@@ -4,6 +4,9 @@
 #include <cstring>
 
 #include "core/wav_loader.h"
+#include "plugin/missing_plugin.h"
+#include "plugin/sandbox/sandboxed_plugin_proxy.h"
+#include "plugin/state.h"
 
 namespace onebeat::core {
 namespace {
@@ -112,7 +115,7 @@ bool Engine::initialise(std::string& error) {
   setup.sample_rate = granted.sample_rate;
   setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
   setup.is_offline = config_.use_null_device;
-  if (!instrument_.configure(setup) || !instrument_.activate()) {
+  if (!instrument_->configure(setup) || !instrument_->activate()) {
     error = "The built-in instrument could not be configured for this device format.";
     diagnostics_.log(LogLevel::Error, "plugin", error);
     return false;
@@ -175,6 +178,103 @@ std::string Engine::deviceName() const {
   return device_ != nullptr ? device_->deviceName() : std::string("No device");
 }
 
+bool Engine::installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance,
+                                     std::string& error) {
+  if (instance == nullptr) {
+    error = "The hosted plug-in instance is missing.";
+    return false;
+  }
+  plugin::ProcessSetup setup;
+  setup.sample_rate = config_.sample_rate;
+  setup.max_block_frames = static_cast<uint32_t>(config_.block_frames);
+  setup.is_offline = config_.use_null_device;
+  if (!instance->configure(setup) || !instance->activate()) {
+    error = "The hosted plug-in could not be configured for the active audio device.";
+    return false;
+  }
+
+  const bool resume = isRunning();
+  if (resume) stop();
+  if (hosted_instrument_ != nullptr) hosted_instrument_->deactivate();
+  hosted_instrument_ = std::move(instance);
+  instrument_ = hosted_instrument_.get();
+  if (resume && !start(error)) return false;
+  return true;
+}
+
+bool Engine::restoreBuiltinInstrument(std::string& error) {
+  if (hosted_instrument_ == nullptr) return true;
+  const bool resume = isRunning();
+  if (resume) stop();
+  hosted_instrument_->deactivate();
+  hosted_instrument_.reset();
+  instrument_ = &builtin_instrument_;
+  if (resume && !start(error)) return false;
+  return true;
+}
+
+bool Engine::createSandboxedInstrument(const std::string& bundle_path, const std::string& plugin_id,
+                                       const std::string& helper_path, std::string& error) {
+  auto instance = std::make_unique<plugin::sandbox::SandboxedPluginProxy>(
+      &host_bridge_, bundle_path, plugin_id, helper_path);
+  if (!installHostedInstrument(std::move(instance), error)) return false;
+  return true;
+}
+
+bool Engine::installMissingInstrument(const std::string& name, const std::vector<uint8_t>& state,
+                                      std::string& error) {
+  return installHostedInstrument(
+      std::make_unique<plugin::MissingPlugin>(&host_bridge_, name, state), error);
+}
+
+uint32_t Engine::hostedParamCount() const {
+  return hosted_instrument_ != nullptr ? hosted_instrument_->paramCount() : 0;
+}
+
+bool Engine::hostedParamInfo(uint32_t index, plugin::ParamInfo& out) const {
+  return hosted_instrument_ != nullptr && hosted_instrument_->paramInfo(index, out);
+}
+
+bool Engine::hostedParamValue(plugin::ParamId param, double& out) const {
+  return hosted_instrument_ != nullptr && hosted_instrument_->paramValue(param, out);
+}
+
+bool Engine::saveHostedState(std::vector<uint8_t>& out) const {
+  if (hosted_instrument_ == nullptr) return false;
+  plugin::MemoryStateWriter writer;
+  if (!hosted_instrument_->saveState(writer)) return false;
+  out = writer.bytes();
+  return true;
+}
+
+std::string Engine::hostedError() const {
+  const auto* proxy =
+      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  return proxy != nullptr ? proxy->lastError() : std::string();
+}
+
+bool Engine::loadHostedState(const std::vector<uint8_t>& bytes) {
+  if (hosted_instrument_ == nullptr) return false;
+  plugin::MemoryStateReader reader(bytes);
+  return hosted_instrument_->loadState(reader);
+}
+
+bool Engine::hostedHasEditor() const {
+  const auto* proxy =
+      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  return proxy != nullptr && proxy->hasEditor();
+}
+
+bool Engine::openHostedEditor() {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  return proxy != nullptr && proxy->openEditor();
+}
+
+void Engine::closeHostedEditor() {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  if (proxy != nullptr) proxy->closeEditor();
+}
+
 // --------------------------------------------------------------------------
 // Audio thread
 // --------------------------------------------------------------------------
@@ -202,7 +302,7 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   // one tick per *callback*, not per process() call — a callback split at a loop
   // seam is still one block.
   schedule_.beginBlock();
-  instrument_.beginAudioBlock();
+  instrument_->beginAudioBlock();
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
@@ -303,6 +403,14 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
           // transport advances, which is exactly where v0.1 applied it.
           transport_.setTempo(static_cast<double>(event.value));
           break;
+        case EventType::ParamValue:
+          events.push(plugin::PluginEvent::paramValue(time, event.reserved,
+                                                      static_cast<double>(event.value)));
+          break;
+        case EventType::ParamModulation:
+          events.push(plugin::PluginEvent::paramModulation(time, event.reserved,
+                                                           static_cast<double>(event.value)));
+          break;
       }
     }
   }
@@ -342,11 +450,11 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
   transport.loop_start_beats = transport_.loopStartBeats();
   transport.loop_end_beats = transport_.loopEndBeats();
 
-  const plugin::ProcessStatus status = instrument_.process(block);
+  const plugin::ProcessStatus status = instrument_->process(block);
   if (status == plugin::ProcessStatus::Error) {
     rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed, 0, 0);
   }
-  active_voices_ = instrument_.activeVoiceCount();
+  active_voices_ = instrument_->activeVoiceCount();
 }
 
 void Engine::runSchedule(const AudioBufferView& output, int block_offset, int num_frames,
@@ -440,6 +548,18 @@ void Engine::applyCommand(const ob_command& command,
       break;
     case OB_CMD_SET_MASTER_GAIN:
       master_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
+      break;
+    case OB_CMD_PLUGIN_PARAM_BEGIN:
+      block_events.push(
+          plugin::PluginEvent::paramGesture(0, static_cast<uint32_t>(command.i64_a), true));
+      break;
+    case OB_CMD_PLUGIN_PARAM_VALUE:
+      block_events.push(plugin::PluginEvent::paramValue(0, static_cast<uint32_t>(command.i64_a),
+                                                        command.f64_a, plugin::EventFlagIsLive));
+      break;
+    case OB_CMD_PLUGIN_PARAM_END:
+      block_events.push(
+          plugin::PluginEvent::paramGesture(0, static_cast<uint32_t>(command.i64_a), false));
       break;
     case OB_CMD_NONE:
       break;
@@ -568,7 +688,7 @@ bool Engine::loadSample(const std::string& path, std::string& error) {
 
   const std::string name = sample->name;
   const int64_t frames = sample->frames;
-  instrument_.sampler().setSample(std::move(sample));
+  builtin_instrument_.sampler().setSample(std::move(sample));
   diagnostics_.logf(LogLevel::Info, "sampler", "loaded '%s' (%lld frames)", name.c_str(),
                     static_cast<long long>(frames));
 
@@ -625,7 +745,7 @@ void Engine::housekeepingLoop() {
     // Free everything the audio thread provably cannot reach any more.
     const bool rt_running = running_.load(std::memory_order_acquire);
     schedule_.collect(rt_running);
-    instrument_.sampler().collectRetiredSamples(rt_running);
+    builtin_instrument_.sampler().collectRetiredSamples(rt_running);
   }
 }
 
@@ -663,8 +783,8 @@ void Engine::onDeviceNotification(audio_io::DeviceNotification notification,
       setup.sample_rate = granted.sample_rate;
       setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
       setup.is_offline = config_.use_null_device;
-      instrument_.deactivate();
-      if (!instrument_.configure(setup) || !instrument_.activate()) {
+      instrument_->deactivate();
+      if (!instrument_->configure(setup) || !instrument_->activate()) {
         diagnostics_.log(LogLevel::Error, "plugin",
                          "the built-in instrument rejected the new device format");
       }

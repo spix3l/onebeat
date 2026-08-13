@@ -34,8 +34,9 @@ const double budget120Hz = 1000 / 120;
 const double allowedFractionOfBudget = 0.1;
 
 void main() {
-  testWidgets('meter painter costs a negligible fraction of a 120 Hz frame',
-      (WidgetTester tester) async {
+  testWidgets('meter painter costs a negligible fraction of a 120 Hz frame', (
+    WidgetTester tester,
+  ) async {
     final MeterState meter = MeterState();
     final ChangeNotifier repaint = ChangeNotifier();
     addTearDown(repaint.dispose);
@@ -50,8 +51,9 @@ void main() {
       ),
     );
 
-    final RenderCustomPaint render =
-        tester.renderObject<RenderCustomPaint>(find.byType(CustomPaint).first);
+    final RenderCustomPaint render = tester.renderObject<RenderCustomPaint>(
+      find.byType(CustomPaint).first,
+    );
     final CustomPainter painter = render.painter!;
     final Size size = render.size;
 
@@ -76,23 +78,29 @@ void main() {
     }
     stopwatch.stop();
 
-    final double perPaintMillis = stopwatch.elapsedMicroseconds / 1000.0 / iterations;
+    final double perPaintMillis =
+        stopwatch.elapsedMicroseconds / 1000.0 / iterations;
     final double percentOfBudget = perPaintMillis / budget120Hz * 100;
 
     // Printed so the number is visible in CI logs and can be tracked over time,
     // not just asserted away.
-    debugPrint('meter paint: ${perPaintMillis.toStringAsFixed(4)} ms/frame '
-        '(${percentOfBudget.toStringAsFixed(2)}% of the 8.33 ms budget)');
+    debugPrint(
+      'meter paint: ${perPaintMillis.toStringAsFixed(4)} ms/frame '
+      '(${percentOfBudget.toStringAsFixed(2)}% of the 8.33 ms budget)',
+    );
 
     expect(
       perPaintMillis,
       lessThan(budget120Hz * allowedFractionOfBudget),
-      reason: 'the meter painter must stay far inside a 120 Hz frame; '
+      reason:
+          'the meter painter must stay far inside a 120 Hz frame; '
           'measured ${perPaintMillis.toStringAsFixed(4)} ms',
     );
   });
 
-  testWidgets('painting allocates no new Paint objects per frame', (WidgetTester tester) async {
+  testWidgets('painting allocates no new Paint objects per frame', (
+    WidgetTester tester,
+  ) async {
     // The structural half of the claim. A painter that fits the budget today but
     // allocates per frame will not survive contact with a real project, and the
     // cost shows up as GC pauses rather than as slow paints.
@@ -110,8 +118,9 @@ void main() {
       ),
     );
 
-    final RenderCustomPaint render =
-        tester.renderObject<RenderCustomPaint>(find.byType(CustomPaint).first);
+    final RenderCustomPaint render = tester.renderObject<RenderCustomPaint>(
+      find.byType(CustomPaint).first,
+    );
     final CustomPainter painter = render.painter!;
 
     // shouldRepaint returning false is what keeps the widget tree out of the

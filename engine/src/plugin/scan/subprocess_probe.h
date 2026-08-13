@@ -57,10 +57,9 @@ class SubprocessProbe : public ScanProbe {
   // the scanner's thread guard is what catches that.)
   void probe(const BundleRef& bundle, std::vector<PluginDescriptor>& out) override;
 
-  // Still nothing: this probe opens the bundle but does not ask the plugin who
-  // it is, because that means calling into it (OB-2-07). Rows stay honestly
-  // un-introspected, and OB-2-07's stronger probe will re-examine them.
-  uint32_t capabilities() const override { return DescriptorFlagNone; }
+  // The OB-2-07 helper walks the real factory and temporarily instantiates each
+  // entry, so IDs, features, ports and parameter counts are authoritative.
+  uint32_t capabilities() const override { return DescriptorFlagIntrospected; }
 
   // False when the helper binary is not where it should be — a broken build or
   // a bundle assembled wrongly. The library falls back to `BundleNameProbe`,

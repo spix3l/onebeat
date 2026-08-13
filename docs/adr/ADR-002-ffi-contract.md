@@ -140,6 +140,11 @@ change.
 | `ob_engine_load_sample` | main/UI (returns immediately, completes on a worker) | no |
 | `ob_engine_set_step_pattern` | main/UI | briefly |
 | `ob_engine_output_device_name` | main/UI | no |
+| `ob_engine_instance_add`, `ob_engine_instance_remove` | main/UI | yes (helper lifecycle) |
+| `ob_engine_instance_count`, `ob_engine_instance_at` | main/UI | no |
+| `ob_engine_param_at` | main/UI | briefly (helper control channel) |
+| `ob_engine_instance_editor_open`, `ob_engine_instance_editor_close` | main/UI | briefly (helper window) |
+| `ob_engine_session_save`, `ob_engine_session_load` | main/UI | yes (filesystem + state) |
 
 The engine handle is owned by the Flutter UI isolate. Debug builds assert the
 contract; the per-function documentation in the header is the authority.

@@ -73,12 +73,14 @@ class MeterState {
 
   void update(EngineSnapshot snapshot, MotionTokens motion) {
     double deltaSeconds;
-    if (_lastHostTimeNanos == 0 || snapshot.hostTimeNanos <= _lastHostTimeNanos) {
+    if (_lastHostTimeNanos == 0 ||
+        snapshot.hostTimeNanos <= _lastHostTimeNanos) {
       // First frame, or the engine has not published since the last read: use a
       // nominal 120 Hz step rather than zero so a stalled engine still decays.
       deltaSeconds = 1 / 120;
     } else {
-      deltaSeconds = (snapshot.hostTimeNanos - _lastHostTimeNanos) / 1000000000.0;
+      deltaSeconds =
+          (snapshot.hostTimeNanos - _lastHostTimeNanos) / 1000000000.0;
       // Clamp: a paused debugger or a backgrounded window must not make the
       // meter jump to silence in one frame.
       deltaSeconds = deltaSeconds.clamp(0.0, 0.25);

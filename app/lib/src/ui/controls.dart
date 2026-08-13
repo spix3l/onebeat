@@ -39,9 +39,10 @@ class _OneBeatButtonState extends State<OneBeatButton> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final Color background = widget.active
-        ? tokens.color.accent
-        : _hovered
+    final Color background =
+        widget.active
+            ? tokens.color.accent
+            : _hovered
             ? tokens.color.surfaceRaised
             : tokens.color.surfacePanel;
     final Color foreground =
@@ -72,7 +73,10 @@ class _OneBeatButtonState extends State<OneBeatButton> {
             curve: tokens.motion.standard,
             height: tokens.size.controlHeight,
             constraints: BoxConstraints(
-              minWidth: widget.wide ? tokens.size.controlMinWidth * 2 : tokens.size.controlMinWidth,
+              minWidth:
+                  widget.wide
+                      ? tokens.size.controlMinWidth * 2
+                      : tokens.size.controlMinWidth,
             ),
             padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
             decoration: BoxDecoration(
@@ -80,7 +84,10 @@ class _OneBeatButtonState extends State<OneBeatButton> {
               borderRadius: tokens.radius.controlBorder,
               border: Border.all(
                 color: _focused ? tokens.color.accent : tokens.color.line,
-                width: _focused ? tokens.size.focusRingWidth : tokens.border.hairline,
+                width:
+                    _focused
+                        ? tokens.size.focusRingWidth
+                        : tokens.border.hairline,
               ),
             ),
             alignment: Alignment.center,
@@ -108,8 +115,9 @@ class TempoField extends StatefulWidget {
 }
 
 class _TempoFieldState extends State<TempoField> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.tempo.toStringAsFixed(1));
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.tempo.toStringAsFixed(1),
+  );
   final FocusNode _focusNode = FocusNode();
   bool _editing = false;
 
@@ -133,7 +141,9 @@ class _TempoFieldState extends State<TempoField> {
   }
 
   void _commit() {
-    final double? parsed = double.tryParse(_controller.text.replaceAll(',', '.'));
+    final double? parsed = double.tryParse(
+      _controller.text.replaceAll(',', '.'),
+    );
     if (parsed == null) {
       _controller.text = widget.tempo.toStringAsFixed(1);
       return;
@@ -166,7 +176,8 @@ class _TempoFieldState extends State<TempoField> {
           borderRadius: tokens.radius.controlBorder,
           border: Border.all(
             color: _editing ? tokens.color.accent : tokens.color.line,
-            width: _editing ? tokens.size.focusRingWidth : tokens.border.hairline,
+            width:
+                _editing ? tokens.size.focusRingWidth : tokens.border.hairline,
           ),
         ),
         child: EditableText(

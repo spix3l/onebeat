@@ -32,7 +32,9 @@ void main() {
     // stdout rather than developer.log or debugPrint: this has to survive a
     // release build, because a release build is what the five second ceiling
     // is about. One line, once, at startup.
-    stdout.writeln('onebeat: first frame in ${startupStopwatch.elapsedMilliseconds} ms');
+    stdout.writeln(
+      'onebeat: first frame in ${startupStopwatch.elapsedMilliseconds} ms',
+    );
   });
   runApp(const OneBeatApp());
 }
@@ -53,7 +55,9 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     try {
-      final EngineClient client = EngineClient.start(useNullDevice: isHeadlessEnvironment);
+      final EngineClient client = EngineClient.start(
+        useNullDevice: isHeadlessEnvironment,
+      );
       client.startAudio();
       _client = client;
     } on EngineLoadException catch (error) {
@@ -96,7 +100,9 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
         builder: (BuildContext context, Widget? child) {
           final EngineClient? client = _client;
           if (client == null) {
-            return _EngineUnavailable(message: _failure ?? 'The engine could not start.');
+            return _EngineUnavailable(
+              message: _failure ?? 'The engine could not start.',
+            );
           }
           return OneBeatShell(client: client);
         },
@@ -122,7 +128,10 @@ class _EngineUnavailable extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text('OneBeat cannot reach its audio engine', style: tokens.type.title),
+          Text(
+            'OneBeat cannot reach its audio engine',
+            style: tokens.type.title,
+          ),
           SizedBox(height: tokens.spacing.md),
           SizedBox(
             width: tokens.size.dialogProseWidth,

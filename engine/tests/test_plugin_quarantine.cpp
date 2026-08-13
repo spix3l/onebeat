@@ -156,10 +156,15 @@ TEST_SUITE("unit") {
     CHECK(found[0].outcome == ScanOutcome::Ok);
     CHECK(found[0].usable());
     CHECK_FALSE(found[0].quarantined());
-    // The bundle was opened, but nothing inside it was asked anything, so the
-    // row must not claim to know more than its name (OB-2-07 fills this in).
-    CHECK_FALSE(found[0].introspected());
-    CHECK(std::string(found[0].name.text()) == "ob_test_plugin_ok");
+    // OB-2-07 upgraded the scan helper from a symbol check to a real CLAP
+    // factory walk and temporary instantiation, so browser metadata is now
+    // authoritative without loading the plugin in the app process.
+    CHECK(found[0].introspected());
+    CHECK(std::string(found[0].id.text()) == "dev.onebeat.test.synth");
+    CHECK(std::string(found[0].name.text()) == "OneBeat Test Synth");
+    CHECK(found[0].param_count == 1);
+    CHECK(found[0].audio_output_count == 1);
+    CHECK(found[0].note_input_count == 1);
   }
 
   TEST_CASE("A plugin that crashes on load is quarantined, and the scan carries on") {
