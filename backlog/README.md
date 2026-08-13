@@ -4,6 +4,17 @@ Companion to `../PLAN.md`. Stages 0–3 are fully detailed tickets; Stages 4–9
 
 **Status legend:** ⬜ todo · 🟨 in progress · 🟦 review · ✅ done
 
+**Stage 1 is code-complete and in review.** OB-1-01 … OB-1-13 are done;
+OB-1-14 (exit verification) is blocked on one item — RTSan has never been
+executed locally because Apple's Clang does not ship it. See
+[`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md) for the measurements,
+the deviations, and the debt carried forward.
+
+Stage 0 was **not** run as separate spikes: P1 and P4 were answered by the real
+implementation, P2 (tear-off windows) and P3 (Finder drag-and-drop) remain open
+and ADR-001 is unwritten. Those risks do not bite until Stages 7–8, but they are
+still open — see the closeout, item D3.
+
 ## Conventions
 
 - **IDs:** `OB-<stage>-<nn>`, stable forever; epics are `EPIC-<n>`.
@@ -45,20 +56,20 @@ Companion to `../PLAN.md`. Stages 0–3 are fully detailed tickets; Stages 4–9
 
 | Status | ID | Title | Est |
 |---|---|---|---|
-| ⬜ | [OB-1-01](stage-1-it-makes-sound/OB-1-01-repo-scaffolding-build-system.md) | Repository scaffolding & build system | M |
-| ⬜ | [OB-1-02](stage-1-it-makes-sound/OB-1-02-ci-sanitizers-license-audit.md) | CI: builds, sanitizer matrix, licence audit | M |
-| ⬜ | [OB-1-03](stage-1-it-makes-sound/OB-1-03-design-tokens-typography.md) | Design token system, typography, token lint | M |
-| ⬜ | [OB-1-04](stage-1-it-makes-sound/OB-1-04-adr-002-c-abi-ffi-contract.md) | ADR-002: the C ABI / FFI contract | M |
-| ⬜ | [OB-1-05](stage-1-it-makes-sound/OB-1-05-audio-io-abstraction-coreaudio.md) | Audio I/O abstraction + CoreAudio backend | L |
-| ⬜ | [OB-1-06](stage-1-it-makes-sound/OB-1-06-rt-callback-skeleton-rtsan.md) | RT callback skeleton with `[[clang::nonblocking]]` + RTSan | M |
-| ⬜ | [OB-1-07](stage-1-it-makes-sound/OB-1-07-flattened-schedule-atomic-swap.md) | Flattened schedule: immutable publish via atomic swap | L |
-| ⬜ | [OB-1-08](stage-1-it-makes-sound/OB-1-08-minimal-sampler.md) | Minimal built-in sampler | M |
-| ⬜ | [OB-1-09](stage-1-it-makes-sound/OB-1-09-transport.md) | Transport: play, stop, tempo, position | M |
-| ⬜ | [OB-1-10](stage-1-it-makes-sound/OB-1-10-ffi-implementation.md) | FFI implementation: command queue + frame snapshots | M |
-| ⬜ | [OB-1-11](stage-1-it-makes-sound/OB-1-11-app-shell-live-meter-120hz.md) | App shell with transport bar and live meter at 120 Hz | M |
-| ⬜ | [OB-1-12](stage-1-it-makes-sound/OB-1-12-logging-diagnostics.md) | Logging & diagnostics infrastructure | S |
-| ⬜ | [OB-1-13](stage-1-it-makes-sound/OB-1-13-engine-test-harness.md) | Engine test harness & offline-render fixtures | M |
-| ⬜ | [OB-1-14](stage-1-it-makes-sound/OB-1-14-v0-1-exit-verification.md) | v0.1 exit verification | S |
+| ✅ | [OB-1-01](stage-1-it-makes-sound/OB-1-01-repo-scaffolding-build-system.md) | Repository scaffolding & build system | M |
+| ✅ | [OB-1-02](stage-1-it-makes-sound/OB-1-02-ci-sanitizers-license-audit.md) | CI: builds, sanitizer matrix, licence audit | M |
+| ✅ | [OB-1-03](stage-1-it-makes-sound/OB-1-03-design-tokens-typography.md) | Design token system, typography, token lint | M |
+| ✅ | [OB-1-04](stage-1-it-makes-sound/OB-1-04-adr-002-c-abi-ffi-contract.md) | ADR-002: the C ABI / FFI contract | M |
+| ✅ | [OB-1-05](stage-1-it-makes-sound/OB-1-05-audio-io-abstraction-coreaudio.md) | Audio I/O abstraction + CoreAudio backend | L |
+| ✅ | [OB-1-06](stage-1-it-makes-sound/OB-1-06-rt-callback-skeleton-rtsan.md) | RT callback skeleton with `[[clang::nonblocking]]` + RTSan | M |
+| ✅ | [OB-1-07](stage-1-it-makes-sound/OB-1-07-flattened-schedule-atomic-swap.md) | Flattened schedule: immutable publish via atomic swap | L |
+| ✅ | [OB-1-08](stage-1-it-makes-sound/OB-1-08-minimal-sampler.md) | Minimal built-in sampler | M |
+| ✅ | [OB-1-09](stage-1-it-makes-sound/OB-1-09-transport.md) | Transport: play, stop, tempo, position | M |
+| ✅ | [OB-1-10](stage-1-it-makes-sound/OB-1-10-ffi-implementation.md) | FFI implementation: command queue + frame snapshots | M |
+| ✅ | [OB-1-11](stage-1-it-makes-sound/OB-1-11-app-shell-live-meter-120hz.md) | App shell with transport bar and live meter at 120 Hz | M |
+| ✅ | [OB-1-12](stage-1-it-makes-sound/OB-1-12-logging-diagnostics.md) | Logging & diagnostics infrastructure | S |
+| ✅ | [OB-1-13](stage-1-it-makes-sound/OB-1-13-engine-test-harness.md) | Engine test harness & offline-render fixtures | M |
+| 🟦 | [OB-1-14](stage-1-it-makes-sound/OB-1-14-v0-1-exit-verification.md) | v0.1 exit verification | S |
 
 ## Stage 2 — v0.2 "It hosts" (CLAP) — `stage-2-it-hosts/`
 

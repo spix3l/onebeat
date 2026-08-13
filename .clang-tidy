@@ -1,0 +1,41 @@
+# Baseline for the OneBeat engine. Kept deliberately small in Stage 1: every check
+# here must be green, so that a violation is a real signal rather than noise.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-slicing,
+  misc-*,
+  -misc-non-private-member-variables-in-classes,
+  -misc-include-cleaner,
+  -misc-use-anonymous-namespace,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-using,
+  performance-*,
+  readability-identifier-naming
+
+WarningsAsErrors: '*'
+# The public ABI header is C, not C++: it is checked by the standalone
+# `clang -x c` syntax job (OB-1-04) rather than by C++ tidy checks.
+HeaderFilterRegex: 'engine/src/(core|audio_io|testing)/.*'
+
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase

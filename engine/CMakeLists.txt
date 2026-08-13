@@ -1,0 +1,134 @@
+cmake_minimum_required(VERSION 3.28)
+project(onebeat_engine VERSION 0.1.0 LANGUAGES C CXX)
+
+# The engine builds standalone: no Flutter, no app, no network. `cmake -S engine
+# -B build && cmake --build build` is the whole story (OB-1-01).
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
+endif()
+
+option(ONEBEAT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+option(ONEBEAT_TSAN "Build with ThreadSanitizer" OFF)
+option(ONEBEAT_RTSAN "Build with RealtimeSanitizer (needs LLVM >= 20; Xcode clang has no RTSan)" OFF)
+option(ONEBEAT_WERROR "Promote warnings to errors" ON)
+
+set(ONEBEAT_THIRD_PARTY ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
+
+# ---------------------------------------------------------------------------
+# Vendored dependencies (header-only, permissive licences — see OB-1-02 audit)
+# ---------------------------------------------------------------------------
+add_library(onebeat_third_party INTERFACE)
+target_include_directories(onebeat_third_party SYSTEM INTERFACE
+  ${ONEBEAT_THIRD_PARTY}/dr_libs
+)
+
+# ---------------------------------------------------------------------------
+# Warning / sanitizer discipline (NFR-08)
+# ---------------------------------------------------------------------------
+add_library(onebeat_flags INTERFACE)
+target_compile_options(onebeat_flags INTERFACE
+  -Wall -Wextra -Wpedantic
+  -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused
+  -Woverloaded-virtual -Wconversion -Wsign-conversion -Wdouble-promotion
+  # The compile-time half of the RT contract: every [[clang::nonblocking]]
+  # function is proved allocation-, lock- and exception-free at build time.
+  -Wfunction-effects
+)
+if(ONEBEAT_WERROR)
+  target_compile_options(onebeat_flags INTERFACE -Werror)
+endif()
+
+if(ONEBEAT_ASAN)
+  target_compile_options(onebeat_flags INTERFACE -fsanitize=address,undefined -fno-omit-frame-pointer)
+  target_link_options(onebeat_flags INTERFACE -fsanitize=address,undefined)
+endif()
+if(ONEBEAT_TSAN)
+  target_compile_options(onebeat_flags INTERFACE -fsanitize=thread -fno-omit-frame-pointer)
+  target_link_options(onebeat_flags INTERFACE -fsanitize=thread)
+endif()
+if(ONEBEAT_RTSAN)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag(-fsanitize=realtime ONEBEAT_HAVE_RTSAN)
+  if(NOT ONEBEAT_HAVE_RTSAN)
+    message(FATAL_ERROR
+      "This toolchain has no RealtimeSanitizer. Xcode's clang does not ship it; "
+      "use Homebrew LLVM >= 20:\n"
+      "  brew install llvm\n"
+      "  cmake -S engine -B build-rtsan -DONEBEAT_RTSAN=ON \\\n"
+      "        -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ \\\n"
+      "        -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang")
+  endif()
+  target_compile_options(onebeat_flags INTERFACE -fsanitize=realtime)
+  target_link_options(onebeat_flags INTERFACE -fsanitize=realtime)
+endif()
+
+# ---------------------------------------------------------------------------
+# Platform sources — the only place platform code is named (NFR-11)
+# ---------------------------------------------------------------------------
+if(APPLE)
+  set(ONEBEAT_PLATFORM_SOURCES src/audio_io/coreaudio/coreaudio_device.cpp)
+  set(ONEBEAT_PLATFORM_LIBS
+    "-framework CoreAudio" "-framework AudioToolbox" "-framework CoreFoundation")
+else()
+  message(FATAL_ERROR "OneBeat v0.1 targets macOS. Windows/Linux backends are a v2 port: "
+                      "add engine/src/audio_io/<platform>/ and implement createPlatformAudioDevice().")
+endif()
+
+# ---------------------------------------------------------------------------
+# The engine core (static, so both the dylib and the tests link one copy)
+# ---------------------------------------------------------------------------
+add_library(onebeat_core STATIC
+  src/core/engine.cpp
+  src/core/schedule.cpp
+  src/core/sampler.cpp
+  src/core/wav_loader.cpp
+  src/core/diagnostics.cpp
+  src/core/rt/rt.cpp
+  src/core/rt/rt_log.cpp
+  src/audio_io/null/null_device.cpp
+  ${ONEBEAT_PLATFORM_SOURCES}
+)
+target_include_directories(onebeat_core PUBLIC src)
+target_link_libraries(onebeat_core PUBLIC onebeat_third_party onebeat_flags ${ONEBEAT_PLATFORM_LIBS})
+set_target_properties(onebeat_core PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+
+# ---------------------------------------------------------------------------
+# The shipped dylib: only the extern "C" ABI is visible (OB-1-01)
+# ---------------------------------------------------------------------------
+# An OBJECT library so both the dylib and the test binary get the same ABI
+# implementation, and so the linker cannot drop objects nothing references.
+add_library(onebeat_abi OBJECT src/abi/onebeat_abi.cpp)
+target_link_libraries(onebeat_abi PUBLIC onebeat_core)
+
+add_library(onebeat_engine SHARED $<TARGET_OBJECTS:onebeat_abi>)
+target_link_libraries(onebeat_engine PRIVATE onebeat_core)
+target_include_directories(onebeat_engine PUBLIC src)
+set_target_properties(onebeat_engine PROPERTIES
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON
+  MACOSX_RPATH ON
+  OUTPUT_NAME onebeat_engine
+)
+
+# ---------------------------------------------------------------------------
+# Test harness + tests
+# ---------------------------------------------------------------------------
+add_library(onebeat_testing STATIC testing/offline_driver.cpp)
+target_include_directories(onebeat_testing PUBLIC . src)
+target_link_libraries(onebeat_testing PUBLIC onebeat_core)
+
+# A terminal driver for the engine: hear sound, list devices, sweep formats and
+# render offline without the app (used by the stage exit checklist).
+add_executable(onebeat_devtool tools/devtool.cpp)
+target_link_libraries(onebeat_devtool PRIVATE onebeat_core onebeat_testing)
+
+enable_testing()
+add_subdirectory(tests)
