@@ -62,6 +62,20 @@ if [[ -n "$offenders" ]]; then
   echo "$offenders"
 fi
 
+# 6. The Dart loader must reject an older additive ABI before generated
+# bindings attempt to resolve a symbol that dylib does not export. Keep its
+# expected major/minor paired with the public header mechanically; a missed
+# minor bump otherwise becomes an ArgumentError during the first widget build.
+engine_major=$(awk '/^#define OB_ABI_VERSION_MAJOR / { print $3 }' engine/src/abi/onebeat_abi.h)
+engine_minor=$(awk '/^#define OB_ABI_VERSION_MINOR / { print $3 }' engine/src/abi/onebeat_abi.h)
+dart_major=$(awk '/^const int expectedAbiMajor = / { gsub(/;/, "", $5); print $5 }' \
+  app/lib/src/engine/engine_library.dart)
+dart_minor=$(awk '/^const int expectedAbiMinor = / { gsub(/;/, "", $5); print $5 }' \
+  app/lib/src/engine/engine_library.dart)
+if [[ "$engine_major.$engine_minor" != "$dart_major.$dart_minor" ]]; then
+  fail "engine ABI is $engine_major.$engine_minor but Dart expects $dart_major.$dart_minor."
+fi
+
 if [[ $status -eq 0 ]]; then
   echo "Seam check passed."
 fi
