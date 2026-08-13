@@ -125,6 +125,8 @@ class SizeTokens {
   double get parameterLabelWidth => 210;
   double get parameterValueWidth => 104;
   double get sliderHeight => 18;
+  double get stockPianoControlSize => 72;
+  double get stockPianoKeyboardHeight => 150;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW

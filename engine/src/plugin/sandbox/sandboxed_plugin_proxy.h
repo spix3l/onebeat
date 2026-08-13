@@ -81,6 +81,10 @@ class SandboxedPluginProxy final : public PluginInstance {
   uint32_t in_flight_ = 0;
   uint32_t consecutive_misses_ = 0;
   std::atomic<bool> dead_{false};
+  // Cocoa may do process-wide first-use work while a native editor opens. The
+  // audio callback emits silence during that bounded main-thread transition
+  // instead of misclassifying a healthy helper as hung after two deadlines.
+  std::atomic<bool> editor_transition_{false};
   mutable std::vector<uint8_t> checkpoint_;
   bool editor_open_ = false;
 };

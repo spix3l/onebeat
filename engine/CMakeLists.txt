@@ -150,6 +150,48 @@ set_target_properties(onebeat_engine PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
+# Stock plug-ins
+# ---------------------------------------------------------------------------
+# These are real CLAP bundles, not privileged engine classes. Keeping the stock
+# piano on the public hosting path prevents first-party-only assumptions from
+# creeping into the plug-in model and gives a clean install one playable
+# instrument without writing into the user's global CLAP directory.
+set(ONEBEAT_STOCK_PLUGIN_DIR ${CMAKE_BINARY_DIR}/stock-plugins)
+add_library(onebeat_stock_piano MODULE stock_plugins/piano/onebeat_piano.mm)
+target_include_directories(onebeat_stock_piano SYSTEM PRIVATE
+  ${ONEBEAT_THIRD_PARTY}/clap/include)
+target_link_libraries(onebeat_stock_piano PRIVATE onebeat_flags "-framework AppKit")
+set_target_properties(onebeat_stock_piano PROPERTIES
+  PREFIX ""
+  SUFFIX ".dylib"
+  OUTPUT_NAME "OneBeat Piano"
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stock-plugin-binaries
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+
+set(ONEBEAT_PIANO_BUNDLE "${ONEBEAT_STOCK_PLUGIN_DIR}/OneBeat Piano.clap")
+file(WRITE "${CMAKE_BINARY_DIR}/OneBeatPiano-Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\">
+<dict>
+  <key>CFBundleExecutable</key><string>OneBeat Piano</string>
+  <key>CFBundleIdentifier</key><string>dev.onebeat.stock.piano</string>
+  <key>CFBundleName</key><string>OneBeat Piano</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>${PROJECT_VERSION}</string>
+  <key>CFBundleVersion</key><string>${PROJECT_VERSION}</string>
+</dict>
+</plist>
+")
+add_custom_command(TARGET onebeat_stock_piano POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${ONEBEAT_PIANO_BUNDLE}/Contents/MacOS"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:onebeat_stock_piano>"
+          "${ONEBEAT_PIANO_BUNDLE}/Contents/MacOS/OneBeat Piano"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/OneBeatPiano-Info.plist"
+          "${ONEBEAT_PIANO_BUNDLE}/Contents/Info.plist"
+  VERBATIM)
+
+# ---------------------------------------------------------------------------
 # Test harness + tests
 # ---------------------------------------------------------------------------
 add_library(onebeat_testing STATIC testing/offline_driver.cpp)

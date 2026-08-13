@@ -42,12 +42,16 @@ bool ClapPluginInstance::showEditor() {
     [static_cast<EditorContext*>(editor_context_)->window makeKeyAndOrderFront:nil];
     return true;
   }
+  // A plug-in may allocate NSView subclasses in gui.create(). Cocoa requires
+  // NSApplication to exist before that first AppKit object is constructed.
+  // Generic test editors did not expose this ordering rule; a real native
+  // stock editor does.
+  [NSApplication sharedApplication];
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
   if (gui_->create == nullptr || !gui_->create(plugin_, CLAP_WINDOW_API_COCOA, false)) return false;
   uint32_t width = 640;
   uint32_t height = 480;
   if (gui_->get_size != nullptr) gui_->get_size(plugin_, &width, &height);
-  [NSApplication sharedApplication];
-  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
   const CGFloat header = 48.0;
   const NSRect frame = NSMakeRect(0, 0, static_cast<CGFloat>(width),
                                   static_cast<CGFloat>(height) + header);
@@ -96,7 +100,11 @@ bool ClapPluginInstance::showEditor() {
   if (gui_->show != nullptr) gui_->show(plugin_);
   if ([[NSUserDefaults standardUserDefaults] stringForKey:geometry_key] == nil) [window center];
   [window makeKeyAndOrderFront:nil];
-  [NSApp activateIgnoringOtherApps:YES];
+  // Do not activate the helper as an application. The executable lives inside
+  // OneBeat.app, so asking LaunchServices to activate it can classify the
+  // helper as a second launch of the app and terminate it. The parent OneBeat
+  // process is already active when this user action arrives; ordering the
+  // accessory window front is sufficient and keeps the helper alive.
   auto* context = new EditorContext{window, geometry_key};
   NSNotificationCenter* notifications = [NSNotificationCenter defaultCenter];
   context->move_observer =

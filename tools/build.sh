@@ -46,10 +46,18 @@ while IFS= read -r APP_DIR; do
   found_any=1
   mkdir -p "$APP_DIR/Contents/Frameworks"
   mkdir -p "$APP_DIR/Contents/MacOS"
+  mkdir -p "$APP_DIR/Contents/PlugIns"
+  HELPER_APP="$APP_DIR/Contents/Helpers/onebeat-plugin-host.app"
+  mkdir -p "$HELPER_APP/Contents/MacOS"
   cp "$REPO_ROOT/build/libonebeat_engine.dylib" "$APP_DIR/Contents/Frameworks/"
-  cp "$REPO_ROOT/build/onebeat-plugin-host" "$APP_DIR/Contents/MacOS/"
+  cp "$REPO_ROOT/build/onebeat-plugin-host" "$HELPER_APP/Contents/MacOS/"
+  cp "$REPO_ROOT/engine/src/host/Info.plist" "$HELPER_APP/Contents/"
+  rm -f "$APP_DIR/Contents/MacOS/onebeat-plugin-host"
+  rm -rf "$APP_DIR/Contents/PlugIns/OneBeat Piano.clap"
+  cp -R "$REPO_ROOT/build/stock-plugins/OneBeat Piano.clap" "$APP_DIR/Contents/PlugIns/"
+  codesign --force --sign - "$APP_DIR/Contents/PlugIns/OneBeat Piano.clap" 2>/dev/null || true
   codesign --force --sign - "$APP_DIR/Contents/Frameworks/libonebeat_engine.dylib" 2>/dev/null || true
-  codesign --force --sign - "$APP_DIR/Contents/MacOS/onebeat-plugin-host" 2>/dev/null || true
+  codesign --force --sign - "$HELPER_APP" 2>/dev/null || true
   # Replacing nested code invalidates the outer seal. Re-sign the development
   # bundle last, mirroring the inside-out order used by release_macos.sh.
   codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true

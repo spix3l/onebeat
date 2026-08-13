@@ -1,5 +1,7 @@
 #include "plugin/scan/scanner.h"
 
+#include <dlfcn.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -19,6 +21,26 @@ namespace fs = std::filesystem;
 // an ancestor turns "recursively" into "forever". Eight levels is deeper than
 // any real installer and shallow enough that the walk stays milliseconds.
 constexpr int MaxSearchDepth = 8;
+
+// Locate content relative to the loaded engine instead of the current working
+// directory. In development the dylib and `stock-plugins/` share `build/`; in
+// an app bundle the dylib is under Contents/Frameworks and stock content lives
+// under Contents/PlugIns.
+const char StockPathAnchor = 0;
+
+std::string bundledStockPluginPath() {
+  if (const char* override_path = std::getenv("OB_STOCK_PLUGIN_DIR");
+      override_path != nullptr && override_path[0] != '\0') {
+    return override_path;
+  }
+  Dl_info image{};
+  if (::dladdr(&StockPathAnchor, &image) == 0 || image.dli_fname == nullptr) return {};
+  const fs::path binary_directory = fs::path(image.dli_fname).parent_path();
+  if (binary_directory.filename() == "Frameworks") {
+    return (binary_directory.parent_path() / "PlugIns").string();
+  }
+  return (binary_directory / "stock-plugins").string();
+}
 
 const char* extensionFor(PluginFormat format) noexcept {
   switch (format) {
@@ -205,6 +227,9 @@ std::vector<std::string> PluginScanner::defaultSearchPaths(PluginFormat format) 
   std::vector<std::string> paths;
   switch (format) {
     case PluginFormat::Clap:
+      if (const std::string stock = bundledStockPluginPath(); !stock.empty()) {
+        paths.push_back(stock);
+      }
       paths.emplace_back("/Library/Audio/Plug-Ins/CLAP");
       if (!user.empty()) {
         paths.push_back(user + "/Library/Audio/Plug-Ins/CLAP");

@@ -8,12 +8,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 "$REPO_ROOT/tools/build.sh"
 APP="$REPO_ROOT/app/build/macos/Build/Products/Release/onebeat.app"
-HELPER="$APP/Contents/MacOS/onebeat-plugin-host"
+HELPER="$APP/Contents/Helpers/onebeat-plugin-host.app"
 ENGINE="$APP/Contents/Frameworks/libonebeat_engine.dylib"
+STOCK_PIANO="$APP/Contents/PlugIns/OneBeat Piano.clap"
 ENTITLEMENTS="$REPO_ROOT/app/macos/Runner/PluginHost.entitlements"
 OUTPUT="$REPO_ROOT/app/build/macos/OneBeat-macOS.zip"
 
 # Sign inside-out. Only the helper can load third-party signatures.
+codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$STOCK_PIANO"
 codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$ENGINE"
 codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
   --sign "$OB_SIGNING_IDENTITY" "$HELPER"

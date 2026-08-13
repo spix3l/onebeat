@@ -110,6 +110,9 @@ class PluginLibraryStore extends ChangeNotifier {
       _client.beginParameterGesture(paramId);
   void endParameterGesture(int paramId) => _client.endParameterGesture(paramId);
 
+  void auditionNoteOn(int note) => _client.noteOn(note, 0.82);
+  void auditionNoteOff(int note) => _client.noteOff(note);
+
   void refreshInstance() {
     instance = _client.readHostedInstance();
     parameters =

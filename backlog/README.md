@@ -192,6 +192,12 @@ clang-tidy, token/seam checks, and the licence audit. The signing/notarization
 script is deliberately local-only: there is no publish job while OneBeat has no
 publication plan.
 
+**OneBeat Piano now ships as the first stock instrument.** It is a public CLAP
+bundle copied into `Contents/PlugIns`, discovered automatically without a
+system-wide install, and presented through a token-native docked editor. This is
+an intentional early slice of Stage 7 furnishing work so a clean OneBeat bundle
+has a playable instrument for hosting and workflow tests.
+
 The claim in ADR-003 most worth arguing with later is that sandboxed plugins are
 called **synchronously**: no pipelining, no added latency, no PDC contribution.
 

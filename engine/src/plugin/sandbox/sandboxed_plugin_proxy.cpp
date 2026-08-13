@@ -272,6 +272,10 @@ void SandboxedPluginProxy::silence(const ProcessBlock& block) const noexcept OB_
 }
 
 ProcessStatus SandboxedPluginProxy::process(const ProcessBlock& block) noexcept OB_NONBLOCKING {
+  if (editor_transition_.load(std::memory_order_acquire)) {
+    silence(block);
+    return ProcessStatus::Continue;
+  }
   if (shared_ == nullptr || dead_.load(std::memory_order_acquire) ||
       block.frames > RuntimeMaxFrames) {
     silence(block);
@@ -513,19 +517,23 @@ bool SandboxedPluginProxy::restartHost() {
 }
 
 bool SandboxedPluginProxy::openEditor() {
+  editor_transition_.store(true, std::memory_order_release);
   ControlRequest request;
   request.command = static_cast<uint32_t>(ControlCommand::OpenEditor);
   ControlResponse response;
   editor_open_ = control(request, response) && response.ok != 0;
+  editor_transition_.store(false, std::memory_order_release);
   return editor_open_;
 }
 
 void SandboxedPluginProxy::closeEditor() {
+  editor_transition_.store(true, std::memory_order_release);
   ControlRequest request;
   request.command = static_cast<uint32_t>(ControlCommand::CloseEditor);
   ControlResponse response;
   control(request, response);
   editor_open_ = false;
+  editor_transition_.store(false, std::memory_order_release);
 }
 
 }  // namespace onebeat::plugin::sandbox

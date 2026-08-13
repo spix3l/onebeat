@@ -326,9 +326,15 @@ std::string SubprocessProbe::discoverHelperPath() {
     if (exists(sibling)) {
       return sibling;
     }
-    // 3. A shipped bundle: the dylib is in Contents/Frameworks and executables
-    //    are in Contents/MacOS. That layout is OB-2-06's to finalise; the
-    //    lookup is here so the helper is found once it does.
+    // 3. A shipped bundle. The helper owns native editor windows, so macOS
+    //    requires it to have its own application bundle and bundle identity.
+    const std::string helper_app = (directory / ".." / "Helpers" / "onebeat-plugin-host.app" /
+                                    "Contents" / "MacOS" / HelperFileName)
+                                       .string();
+    if (exists(helper_app)) {
+      return helper_app;
+    }
+    // Legacy/developer bundle layout, kept as a recovery fallback.
     const std::string bundled = (directory / ".." / "MacOS" / HelperFileName).string();
     if (exists(bundled)) {
       return bundled;

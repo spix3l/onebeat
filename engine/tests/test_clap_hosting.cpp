@@ -41,9 +41,10 @@ struct ClapRig {
   AudioBufferPool output;
   std::array<PluginEvent, 32> event_storage{};
 
-  ClapRig() {
+  explicit ClapRig(const std::string& bundle = healthyClap(),
+                   const std::string& id = "dev.onebeat.test.synth") {
     std::string error;
-    plugin = ClapPluginInstance::create(&host, healthyClap(), "dev.onebeat.test.synth", error);
+    plugin = ClapPluginInstance::create(&host, bundle, id, error);
     REQUIRE_MESSAGE(plugin != nullptr, error);
     ProcessSetup setup;
     setup.sample_rate = 48000.0;
@@ -142,6 +143,32 @@ struct SandboxRig {
 }  // namespace
 
 TEST_SUITE("engine") {
+  TEST_CASE("The shipped stock piano is a complete public CLAP instrument") {
+    ClapRig rig(OB_STOCK_PIANO, "dev.onebeat.stock.piano");
+    CHECK(std::string(rig.plugin->name().text()) == "OneBeat Piano");
+    CHECK(rig.plugin->audioPortCount(PortDirection::Input) == 0);
+    CHECK(rig.plugin->audioPortCount(PortDirection::Output) == 1);
+    CHECK(rig.plugin->notePortCount(PortDirection::Input) == 1);
+    CHECK(rig.plugin->paramCount() == 7);
+    CHECK(rig.plugin->latencyFrames() == 0);
+    CHECK(rig.plugin->guiExtension() == nullptr);
+
+    CHECK(rig.render({PluginEvent::noteOn(0, 60, 0.8)}) > 0.01F);
+    for (int block = 0; block < 8; ++block) CHECK(rig.render({}) > 0.001F);
+    CHECK(rig.render({PluginEvent::noteOff(0, 60)}) > 0.0001F);
+
+    rig.render({PluginEvent::paramValue(0, 100, 0.83), PluginEvent::paramValue(0, 104, 0.41)});
+    MemoryStateWriter saved;
+    REQUIRE(rig.plugin->saveState(saved));
+    CHECK(saved.bytes().size() > 2 * sizeof(double));
+    rig.render({PluginEvent::paramValue(0, 100, 0.12)});
+    MemoryStateReader reader(saved.bytes());
+    REQUIRE(rig.plugin->loadState(reader));
+    double restored = 0.0;
+    REQUIRE(rig.plugin->paramValue(100, restored));
+    CHECK(restored == doctest::Approx(0.83));
+  }
+
   TEST_CASE("The CLAP adapter maps identity, ports, parameters and latency") {
     ClapRig rig;
     CHECK(std::string(rig.plugin->name().text()) == "OneBeat Test Synth");
