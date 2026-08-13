@@ -114,11 +114,13 @@ add_library(onebeat_core STATIC
   src/core/rt/rt.cpp
   src/core/rt/rt_log.cpp
   src/model/ids.cpp
+  src/model/json.cpp
   src/model/project.cpp
   src/model/command.cpp
   src/model/commands.cpp
   src/model/flattener.cpp
   src/model/invariants.cpp
+  src/model/project_io.cpp
   src/plugin/plugin_types.cpp
   src/plugin/clap/clap_plugin_instance.cpp
   ${ONEBEAT_EDITOR_SOURCE}

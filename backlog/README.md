@@ -142,7 +142,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | ✅ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
 | 🟨 | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system — model layer landed; ABI/UI and re-flatten pending | M |
 | ✅ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
-| ⬜ | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load | M |
+| 🟨 | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load — format, atomicity and round-trip landed; app New/Open/Save pending | M |
 | ⬜ | [OB-3-06](stage-3-it-sequences/OB-3-06-autosave-crash-recovery.md) | Auto-save & crash recovery | M |
 | ⬜ | [OB-3-07](stage-3-it-sequences/OB-3-07-instrument-lifecycle.md) | Instrument lifecycle & management | M |
 | ⬜ | [OB-3-08](stage-3-it-sequences/OB-3-08-notesequence-model-editing.md) | NoteSequence: one representation, edit operations | M |
@@ -160,7 +160,8 @@ ULID identities, and a canonical writer whose byte-identical round-trip is what
 actually earns FR-PRJ-01. The schema is [`docs/project-format.md`](../docs/project-format.md)
 and the worked example, with the two-edit diff the ADR quotes, is
 [`docs/examples/demo.obt/`](../docs/examples/demo.obt/). Stage 2's `OBS2`
-scratch session is superseded and is deleted, not migrated, when `OB-3-05` lands.
+scratch session is superseded and is deleted, not migrated, when `OB-3-05`'s
+app integration lands.
 
 `OB-3-02` is ✅: `engine/src/model/` holds the entities, ULID identities,
 cascades with impact reports, the change bus and the referential-integrity
@@ -187,6 +188,28 @@ hashed, so golden tests compare one number. The budget is measured and
 recorded in [`docs/flattener-budget.md`](../docs/flattener-budget.md): 1,000
 clips at ordinary density flatten in 3.5 ms, against a 10 ms budget.
 
+`OB-3-05` is 🟨: the format is real. `model/project_io.h` writes the canonical
+`project.json` of ADR-004, stages the whole bundle beside its destination and
+swaps it in with a single atomic `renamex_np(RENAME_SWAP)`, so a save cannot
+destroy the save before it — there is a test that forks, `SIGKILL`s itself at
+exactly that instant, and checks the previous bundle is byte-for-byte intact.
+Loading is deliberately forgiving: a project whose clip names a missing pattern
+opens, drops the clip and says which one and why (FR-UX-12), and unknown
+fields, unknown entities, unknown top-level maps and unknown per-note
+properties are carried through a `Residue` and written back in canonical
+position, so an older build cannot silently strip what a newer one wrote.
+Round-trip is enforced both ways: byte-identity and field-by-field model
+equality, plus a test that the worked example in `docs/` is exactly what the
+writer produces — which is how the example's IDs turned out not to be legal
+ULIDs at all.
+
+What remains is the half that needs a UI: **scope §4** (New/Open/Save/Save As,
+the dirty flag, native dialogs, recent projects, `.obt` association) and the
+host half of **§3** — the file already carries everything OB-2-10's
+missing-plugin placeholder needs, and the loader hands plugin state to a sink,
+but nothing resolves an instrument against the scan cache yet. Both wait on the
+model-backed app of `OB-3-09`, the same dependency that holds `OB-3-03` open.
+
 ## Epics — `epics/` (break down at stage start)
 
 | ID | Release | Title |
@@ -204,7 +227,7 @@ Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
 Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/07/08 (implementation landed; validation remains) → OB-2-06 (deferred) → ~~OB-2-09/10/11~~ (done).
 
-Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-08 → OB-3-05 → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
+Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-05 (engine layer done) → OB-3-08 → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the

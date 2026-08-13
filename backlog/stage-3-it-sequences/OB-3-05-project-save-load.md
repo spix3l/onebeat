@@ -23,12 +23,40 @@ Implements ADR-004: the text project file + binary sidecars, with canonical form
 
 ## Acceptance criteria
 
-- [ ] Round-trip tests pass: byte-identity and model equality, including a project with unknown future fields injected.
-- [ ] Kill -9 during save: previous save intact (atomicity test).
-- [ ] A project with a missing pattern reference loads with the designed report; nothing crashes.
-- [ ] Git diff of "move one clip" and "add three notes" on a real saved project is small and readable (attached to PR, compared against ADR-004's sample).
-- [ ] Plugin state round-trips through sidecars (hash-verified per instance).
+- [x] Round-trip tests pass: byte-identity and model equality, including a project with unknown future fields injected.
+- [x] Kill -9 during save: previous save intact (atomicity test).
+- [x] A project with a missing pattern reference loads with the designed report; nothing crashes.
+- [x] Git diff of "move one clip" and "add three notes" on a real saved project is small and readable (attached to PR, compared against ADR-004's sample).
+- [x] Plugin state round-trips through sidecars (hash-verified per instance).
 
 ## Out of scope
 
 - Auto-save (OB-3-06). Consolidation, stem/asset collection (later stages).
+
+## Status — 🟨 partial (13 August 2026)
+
+Scope §1, §2 and §5 are done and green: `engine/src/model/json.{h,cpp}` (the
+canonical writer and a parser that keeps integers integral and the locale out of
+the file) and `engine/src/model/project_io.{h,cpp}` (writer, forgiving loader,
+`Residue` preservation, SHA-256 sidecars, atomic bundle swap). Every acceptance
+criterion above is covered by `engine/tests/test_project_io.cpp`.
+
+**Not done, and waiting on `OB-3-09`'s model-backed app:**
+
+- **Scope §4 in full** — New/Open/Save/Save As, the dirty flag from the command
+  bus, native dialogs, the recent-projects list and the `.obt` bundle
+  association. None of it can exist before the app can hold a project, which is
+  the ABI wiring `OB-3-09` brings. This is the same dependency that keeps
+  `OB-3-03` open.
+- **The host half of scope §3** — the format carries everything OB-2-10's
+  missing-plugin placeholder needs (`plugin.id`, `name`, `vendor`, `path_hint`)
+  and the loader reports a sidecar that is missing or fails its checksum, but
+  nothing yet resolves a loaded instrument against the scan cache to *produce*
+  the placeholder. Audio clips already keep their path and stay silent.
+
+Two things were found by implementing this and fixed here rather than deferred:
+the worked example's IDs were not legal ULIDs (24 characters, and `O` is not in
+Crockford base32), and the format under-specified five fields the model holds
+(`note_defaults`, per-instrument routing ports, lane display state, clip `muted`
+and the reserved transforms). Both `docs/project-format.md` and the example are
+now what the writer actually produces, and a test proves it on every run.

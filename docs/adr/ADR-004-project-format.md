@@ -38,7 +38,7 @@ part of this decision that actually earns FR-PRJ-01.
 | Musical time | **Integer ticks, 960 per quarter note.** No floats anywhere on the time axis |
 | Note record | Compact one-line array `[start, length, key, velocity]`, optional trailing object for per-note properties |
 | Velocity | Integer **0–16383** (14-bit; MIDI-1 velocity *v* maps exactly as *v* × 129) |
-| IDs | `<type>_<ULID>` — e.g. `pat_01K2QF8Z10CHORDS00000001`. Globally unique, never reused, no counter and no tombstones |
+| IDs | `<type>_<ULID>` — e.g. `pat_01K2QF8Z10CHRDS00000000000`. Globally unique, never reused, no counter and no tombstones |
 | Versioning | `format` string names the language, integer `version` counts additive revisions |
 | Forward compat | Unknown fields, unknown entities and unknown entity *types* are preserved verbatim on round-trip |
 | Round-trip | Load → save of a canonical file is **byte-identical**; a hand-edited file is normalised on first save |
@@ -125,23 +125,28 @@ Tests fix the clock and the random source, so fixtures stay byte-stable.
 
 [`docs/examples/demo.obt/`](../examples/demo.obt/) is a realistic
 project written to these rules: 4 instruments, 3 patterns, 16 clips across 4
-lanes, 5 mixer tracks, 447 lines. Moving one clip two bars later and editing one
+lanes, 5 mixer tracks, 565 lines. Moving one clip two bars later and editing one
 pattern (one note added, one velocity raised) produces this, verbatim from
 `git diff`:
 
 ```diff
 --- a/demo.obt/project.json
 +++ b/demo.obt/project.json
-@@ -149,7 +149,7 @@
-         "pattern_id": "pat_01K2QF8Z12LEADHOOK000003",
+@@ -187,13 +187,13 @@
+       "length": 15360,
+       "muted": false,
+       "source": {
+         "pattern_id": "pat_01K2QF8Z12H00K000000000000",
          "type": "pattern"
        },
 -      "start": 15360,
 +      "start": 23040,
        "transforms": {
          "loop": true,
-         "transpose": 0,
-@@ -426,7 +426,8 @@
+@@ -541,13 +541,14 @@
+       "name": "Lead hook",
+       "sequences": {
+         "ins_01K2QF8Z02SYNTH00000000000": [
            [0, 480, 72, 12900],
            [480, 240, 76, 11868],
            [960, 960, 79, 13932],
@@ -150,7 +155,6 @@ pattern (one note added, one velocity raised) produces this, verbatim from
 +          [2400, 480, 76, 14448],
            [3840, 480, 77, 12900],
            [4320, 240, 81, 11868],
-           [4800, 960, 84, 13932],
 ```
 
 Three changed lines for two edits, and each one says what it means. That is the
