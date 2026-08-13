@@ -28,16 +28,22 @@ Unlimited undo/redo across all operations (FR-PRJ-08); undo covers every destruc
 - [x] Drag/paint gestures coalesce to single history entries.
 - [x] Instrument delete + undo restores sequences in all affected patterns byte-identically.
 - [x] Fuzz test (≥100k ops) passes under ASan.
-- [ ] Undo of an edit audibly reverts during playback within one flatten cycle.
+- [x] Undo of an edit audibly reverts during playback within one flatten cycle.
 
-**Status (13 August 2026): model layer landed, stage-level wiring pending.**
-Scope 1–3 and 6 are implemented in `engine/src/model/command.h`,
-`commands.h/.cpp` and `engine/tests/test_model_commands.cpp`; the seam rule
-in `tools/seam_check.sh` §5 is what makes the command layer the only mutation
-path. Scope 4 (ABI + ⌘Z wiring) waits for the first model-backed UI
-(`OB-3-09`), and scope 5 with AC 5 wait for the flattener (`OB-3-04`) — there
-is nothing to re-flatten or hear yet. The fuzz run is 100,000 operations,
-86,666 applied, and takes 52 s under ASan.
+**Done (13 August 2026).** Scope 1–3 and 6 live in
+`engine/src/model/command.h`, `commands.h/.cpp` and the 100,000-operation fuzz;
+`tools/seam_check.sh` §5 keeps the command layer the only mutation path. ABI
+1.6 exposes undo/redo availability and history-top names, the shell binds
+⌘Z/⇧⌘Z app-wide, and the rack also keeps visible named controls. Every model
+command, transaction commit, undo and redo flushes the `FlattenScheduler` and
+publishes the resulting immutable schedule. The ABI test drains prior events,
+undoes a live rack sequence edit, and requires the schedule-published event
+before the call returns: one flatten cycle, not a later UI poll.
+
+The scope's suggestion to put history names in the frame snapshot was replaced
+with allocation-free ABI getters. Names are not frame-rate state, so copying
+them through the seqlock snapshot every audio callback would make the real-time
+contract worse for no benefit.
 
 ## Out of scope
 

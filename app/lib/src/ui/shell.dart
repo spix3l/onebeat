@@ -13,7 +13,7 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
-import 'instrument_strip.dart';
+import 'channel_rack.dart';
 import 'meter.dart';
 import 'performance_overlay.dart';
 import 'plugin_list_debug.dart';
@@ -44,11 +44,11 @@ class _OneBeatShellState extends State<OneBeatShell>
       vsync: this,
       motion: OneBeatTokens.dark().motion,
     );
-    widget.client.setStepPattern(EngineController.demoPattern);
     // Synchronous, and deliberately before the first frame: the cache read is
     // one file, and doing it here is what makes the list present at startup
     // rather than appearing a moment later (FR-PLG-05, OB-2-02).
     _controller.library.load();
+    _controller.rack.load();
     // NFR-04's number, printed on every launch rather than measured once and
     // written into a document that then goes stale. This is the frame the user
     // can act on: engine up, plug-in list populated from the cache.
@@ -90,6 +90,10 @@ class _OneBeatShellState extends State<OneBeatShell>
             _TogglePerformanceOverlayIntent(),
         SingleActivator(LogicalKeyboardKey.f9): _ToggleTokenGalleryIntent(),
         SingleActivator(LogicalKeyboardKey.f10): _TogglePluginListIntent(),
+        SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
+            _UndoProjectIntent(),
+        SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+            _RedoProjectIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -118,6 +122,18 @@ class _OneBeatShellState extends State<OneBeatShell>
               return null;
             },
           ),
+          _UndoProjectIntent: CallbackAction<_UndoProjectIntent>(
+            onInvoke: (_) {
+              _controller.undoProject();
+              return null;
+            },
+          ),
+          _RedoProjectIntent: CallbackAction<_RedoProjectIntent>(
+            onInvoke: (_) {
+              _controller.redoProject();
+              return null;
+            },
+          ),
         },
         child: Focus(
           focusNode: _rootFocus,
@@ -131,7 +147,6 @@ class _OneBeatShellState extends State<OneBeatShell>
                 Expanded(
                   child: Row(
                     children: <Widget>[
-                      InstrumentStrip(controller: _controller),
                       Expanded(
                         child: Stack(
                           children: <Widget>[
@@ -140,7 +155,12 @@ class _OneBeatShellState extends State<OneBeatShell>
                             else if (_showPluginList)
                               PluginListDebugPanel(controller: _controller)
                             else
-                              _EmptyStage(controller: _controller),
+                              ChannelRack(
+                                controller: _controller,
+                                onBrowsePlugins:
+                                    () =>
+                                        setState(() => _showPluginList = true),
+                              ),
                             FrameTimingOverlay(controller: _controller),
                           ],
                         ),
@@ -172,6 +192,14 @@ class _ToggleTokenGalleryIntent extends Intent {
 
 class _TogglePluginListIntent extends Intent {
   const _TogglePluginListIntent();
+}
+
+class _UndoProjectIntent extends Intent {
+  const _UndoProjectIntent();
+}
+
+class _RedoProjectIntent extends Intent {
+  const _RedoProjectIntent();
 }
 
 class _TopBar extends StatelessWidget {
@@ -242,63 +270,6 @@ class _TopBar extends StatelessWidget {
 
 /// The designed empty state. It names what is here, and offers the actions that
 /// exist — the demo pads and the transport — rather than an apology.
-class _EmptyStage extends StatelessWidget {
-  const _EmptyStage({required this.controller});
-
-  final EngineController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Text('Nothing arranged yet', style: tokens.type.title),
-          SizedBox(height: tokens.spacing.sm),
-          SizedBox(
-            width: tokens.size.proseWidth,
-            child: Text(
-              'Press Play to hear the built-in pattern, or tap a pad to trigger the '
-              'sampler. The channel rack and the arrangement arrive in v0.3.',
-              textAlign: TextAlign.center,
-              style: tokens.type.body.copyWith(color: tokens.color.textMuted),
-            ),
-          ),
-          SizedBox(height: tokens.spacing.xl),
-          const _DemoPads(),
-        ],
-      ),
-    );
-  }
-}
-
-class _DemoPads extends StatelessWidget {
-  const _DemoPads();
-
-  static const List<int> _notes = <int>[48, 52, 55, 60, 64, 67, 72, 76];
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final _OneBeatShellState state =
-        context.findAncestorStateOfType<_OneBeatShellState>()!;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        for (final int note in _notes) ...<Widget>[
-          OneBeatButton(
-            label: '$note',
-            semanticLabel: 'Trigger note $note',
-            onPressed: () => state.widget.client.noteOn(note, 0.9),
-          ),
-          SizedBox(width: tokens.spacing.sm),
-        ],
-      ],
-    );
-  }
-}
-
 class _StatusBar extends StatelessWidget {
   const _StatusBar({required this.controller});
 

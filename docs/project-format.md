@@ -164,6 +164,7 @@ Rules:
   "color": "#4FB286",
   "length": 7680,
   "name": "Bass groove",
+  "swing": 0.250000,
   "sequences": {
     "ins_01K2QF8Z01BASS000000000000": [
       [0, 720, 36, 14448],
@@ -177,6 +178,7 @@ Rules:
 |---|---|---|
 | `name`, `color` | string | |
 | `length` | integer ticks | The pattern's own length, independent of any clip that plays it |
+| `swing` | number 0–1 | Delays odd sixteenth-grid onsets by up to half a step at flatten time; off-grid notes are unchanged |
 | `sequences` | map instrument ID → note array | One `NoteSequence` per instrument (OB-3-08). The step sequencer and the piano roll write the same array (DM-Q4) |
 
 **Note record.** Four integers on one line:

@@ -145,6 +145,12 @@ change.
 | `ob_engine_param_at` | main/UI | briefly (helper control channel) |
 | `ob_engine_instance_editor_open`, `ob_engine_instance_editor_close` | main/UI | briefly (helper window) |
 | `ob_engine_session_save`, `ob_engine_session_load` | main/UI | yes (filesystem + state) |
+| `ob_engine_instrument_*`, `ob_engine_project_*` | main/UI | briefly (model edit + flatten/publish where applicable) |
+| `ob_engine_rack_pattern`, `ob_engine_rack_row_count`, `ob_engine_rack_row_at` | main/UI | no |
+| `ob_engine_rack_set_row_grid` | main/UI | no |
+| `ob_engine_rack_set_length`, `ob_engine_rack_set_swing`, `ob_engine_rack_toggle_step`, `ob_engine_rack_set_step_velocity`, `ob_engine_rack_remove_sequence` | main/UI | briefly (model edit + flatten/publish) |
+| `ob_engine_rack_gesture_begin` | main/UI | no |
+| `ob_engine_rack_gesture_commit`, `ob_engine_rack_gesture_abort` | main/UI | briefly (flatten/publish) |
 
 The engine handle is owned by the Flutter UI isolate. Debug builds assert the
 contract; the per-function documentation in the header is the authority.

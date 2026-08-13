@@ -28,6 +28,17 @@ struct ResolvedParam {
   float value = 0.0F;
 };
 
+// Swing delays odd sixteenths by up to half a step. Only notes exactly on the
+// sixteenth grid move: an off-grid piano-roll edit must not be silently
+// quantised merely because the pattern has swing.
+Ticks swungPosition(Ticks position, double swing) {
+  constexpr Ticks Grid = TicksPerQuarter / 4;
+  if (swing <= 0.0 || position < 0 || position % Grid != 0) return position;
+  const Ticks step = position / Grid;
+  if ((step & 1) == 0) return position;
+  return position + static_cast<Ticks>(swing * (static_cast<double>(Grid) / 2.0));
+}
+
 // Which lanes are allowed to fire. Lane mute is an **event gate** (D-M4): the
 // clips on it are not scheduled at all, which is a different thing from the
 // mixer's audio gate and is why the two have different names in the UI.
@@ -198,7 +209,9 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
               continue;
             }
 
-            collectOccurrences(note, *clip, pattern_length, occurrences);
+            Note swung_note = note;
+            swung_note.start = swungPosition(note.start, pattern->swing);
+            collectOccurrences(swung_note, *clip, pattern_length, occurrences);
             for (const auto& [start, end] : occurrences) {
               ResolvedNote resolved;
               resolved.start = clip->start + start;

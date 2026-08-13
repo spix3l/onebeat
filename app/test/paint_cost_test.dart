@@ -20,6 +20,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
+import 'package:onebeat/src/engine/engine_client.dart';
+import 'package:onebeat/src/ui/channel_rack.dart';
 import 'package:onebeat/src/ui/meter.dart';
 import 'package:onebeat/src/ui/meter_state.dart';
 
@@ -125,6 +127,74 @@ void main() {
 
     // shouldRepaint returning false is what keeps the widget tree out of the
     // per-frame path: repaints come from the Listenable, never from a rebuild.
+    expect(painter.shouldRepaint(painter), isFalse);
+  });
+
+  testWidgets('a dense 64-step rack stays inside the 120 Hz paint budget', (
+    WidgetTester tester,
+  ) async {
+    final List<RackRow> rows = List<RackRow>.generate(
+      8,
+      (int row) => RackRow(
+        instrumentId: 'instrument-$row',
+        gridTicks: 240,
+        hasSequence: true,
+        offGridCount: 0,
+        noteCount: 16,
+        steps: List<RackStep>.generate(
+          64,
+          (int step) => RackStep(
+            active: step % 4 == row % 4,
+            velocity: 8192 + (step * 97) % 8191,
+          ),
+        ),
+      ),
+    );
+    final ChangeNotifier repaint = ChangeNotifier();
+    addTearDown(repaint.dispose);
+
+    await tester.pumpWidget(
+      OneBeatTheme(
+        tokens: OneBeatTokens.dark(),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: SizedBox(
+              width: 2176,
+              height: 416,
+              child: RackStepGrid(
+                rows: rows,
+                pattern: const RackPattern(
+                  id: 'pattern',
+                  name: 'Pattern 1',
+                  lengthTicks: 15360,
+                  baseGridTicks: 240,
+                  swing: 0.5,
+                ),
+                positionBeats: 8,
+                playing: true,
+                repaint: repaint,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final RenderCustomPaint render = tester.renderObject<RenderCustomPaint>(
+      find.byType(CustomPaint).first,
+    );
+    final CustomPainter painter = render.painter!;
+    const int iterations = 1000;
+    final Stopwatch stopwatch = Stopwatch()..start();
+    for (int i = 0; i < iterations; i++) {
+      _paintOnce(painter, render.size);
+    }
+    stopwatch.stop();
+    final double perPaintMillis =
+        stopwatch.elapsedMicroseconds / 1000 / iterations;
+    debugPrint('rack paint: ${perPaintMillis.toStringAsFixed(4)} ms/frame');
+    expect(perPaintMillis, lessThan(budget120Hz * allowedFractionOfBudget));
     expect(painter.shouldRepaint(painter), isFalse);
   });
 }

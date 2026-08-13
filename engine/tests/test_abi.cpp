@@ -19,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.5.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.6.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.5.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.6.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -143,6 +143,18 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_instrument_info, plugin_path) == 576);
   }
 
+  TEST_CASE("ABI 1.6 channel rack layouts are frozen") {
+    CHECK(sizeof(ob_rack_pattern_info) == 192);
+    CHECK(offsetof(ob_rack_pattern_info, length_ticks) == 8);
+    CHECK(offsetof(ob_rack_pattern_info, swing) == 24);
+    CHECK(offsetof(ob_rack_pattern_info, id) == 32);
+    CHECK(sizeof(ob_rack_row_info) == 832);
+    CHECK(offsetof(ob_rack_row_info, grid_ticks) == 8);
+    CHECK(offsetof(ob_rack_row_info, instrument_id) == 28);
+    CHECK(offsetof(ob_rack_row_info, step_active) == 60);
+    CHECK(offsetof(ob_rack_row_info, step_velocity) == 316);
+  }
+
   TEST_CASE("The plugin list is reachable through the C surface") {
     ob_engine_config config{};
     config.struct_size = sizeof(config);
@@ -218,6 +230,48 @@ TEST_SUITE("abi") {
     CHECK(std::string(project_instrument.name) == "OneBeat Test Synth");
     CHECK((project_instrument.flags & 2U) != 0U);
     CHECK(std::string(project_instrument.plugin_id) == "dev.onebeat.test.synth");
+
+    ob_rack_pattern_info pattern{};
+    REQUIRE(ob_engine_rack_pattern(engine, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 3840);
+    CHECK(ob_engine_rack_row_count(engine) == 1);
+    ob_rack_row_info row{};
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.step_count == 16);
+    CHECK(row.note_count == 0);
+    REQUIRE(ob_engine_rack_gesture_begin(engine, "Paint steps") == OB_OK);
+    for (const int32_t step : {0, 4, 8, 12}) {
+      REQUIRE(ob_engine_rack_toggle_step(engine, project_instrument.id, step) == OB_OK);
+    }
+    REQUIRE(ob_engine_rack_gesture_commit(engine) == OB_OK);
+    REQUIRE(ob_engine_rack_set_step_velocity(engine, project_instrument.id, 4, 8192) == OB_OK);
+    REQUIRE(ob_engine_rack_set_swing(engine, 0.5) == OB_OK);
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.note_count == 4);
+    CHECK(row.step_active[4] == 1);
+    CHECK(row.step_velocity[4] == 8192);
+    CHECK(ob_engine_project_can_undo(engine) == 1);
+    REQUIRE(ob_engine_rack_remove_sequence(engine, project_instrument.id) == OB_OK);
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.note_count == 0);
+    CHECK_FALSE(std::string(ob_engine_project_undo_name(engine)).empty());
+    ob_event schedule_event{};
+    while (ob_engine_poll_event(engine, &schedule_event) == 1) {
+    }
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);
+    bool undo_published = false;
+    while (ob_engine_poll_event(engine, &schedule_event) == 1) {
+      undo_published = undo_published || schedule_event.type == OB_EVT_SCHEDULE_PUBLISHED;
+    }
+    CHECK(undo_published);
+    CHECK_FALSE(std::string(ob_engine_project_redo_name(engine)).empty());
+    REQUIRE(ob_engine_rack_set_row_grid(engine, project_instrument.id, 120) == OB_OK);
+    REQUIRE(ob_engine_rack_set_length(engine, 32) == OB_OK);
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.step_count == 64);
+    REQUIRE(ob_engine_rack_toggle_step(engine, project_instrument.id, 20) == OB_OK);
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.step_active[20] == 1);
     REQUIRE(ob_engine_instrument_set_muted(engine, project_instrument.id, 1) == OB_OK);
     REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
     CHECK((project_instrument.flags & 1U) != 0U);

@@ -31,3 +31,10 @@ Stage 3 multiplies UI surface. Without widget/integration tests and scripted wal
 ## Out of scope
 
 - Full E2E on real audio hardware (manual, stage exits). Accessibility audits (Stage 8).
+
+**In progress (13 August 2026).** OB-3-09 landed the first reusable slice: a
+`RackClient` seam with a scripted fake, store interaction tests proving
+one-transaction paint gestures, a per-theme rack golden, and a dense 8 × 64
+custom-painter budget test. The shared action registry, real-engine integration
+driver and profile trend lane remain to be completed as OB-3-10/12 arrive, as
+this ticket's co-development plan intended.

@@ -11,13 +11,15 @@ import '../engine/engine_client.dart';
 import 'frame_stats.dart';
 import 'meter_state.dart';
 import 'plugin_library_store.dart';
+import 'rack_store.dart';
 
 class EngineController extends ChangeNotifier {
   EngineController({
     required this.client,
     required TickerProvider vsync,
     required this.motion,
-  }) : library = PluginLibraryStore(client) {
+  }) : library = PluginLibraryStore(client),
+       rack = RackStore(client) {
     _ticker = vsync.createTicker(_onFrame)..start();
   }
 
@@ -28,6 +30,7 @@ class EngineController extends ChangeNotifier {
 
   /// Driven from this controller's frame callback rather than its own ticker.
   final PluginLibraryStore library;
+  final RackStore rack;
 
   late final Ticker _ticker;
 
@@ -80,12 +83,29 @@ class EngineController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void undoProject() {
+    if (!client.canUndoProject) return;
+    client.undoProject();
+    library.refreshInstance();
+    library.refreshInstruments();
+    rack.refresh();
+  }
+
+  void redoProject() {
+    if (!client.canRedoProject) return;
+    client.redoProject();
+    library.refreshInstance();
+    library.refreshInstruments();
+    rack.refresh();
+  }
+
   @override
   void dispose() {
     _ticker.dispose();
     frameStats.dispose();
     library.cancelScan();
     library.dispose();
+    rack.dispose();
     super.dispose();
   }
 }

@@ -285,6 +285,20 @@ TEST_SUITE("unit") {
           60);
   }
 
+  TEST_CASE("Pattern swing deterministically delays odd sixteenth steps") {
+    Scene scene;
+    scene.addNotes({note(0, 60), note(240, 60), note(480, 60), note(720, 60), note(315, 61)});
+    scene.project.updatePattern(scene.pattern, ChangeField::Transforms,
+                                [](onebeat::model::Pattern& pattern) { pattern.swing = 0.5; });
+    scene.place(0, TicksPerBarFourFour, false);
+
+    const FlattenResult first = run(scene.project);
+    const FlattenResult second = run(scene.project);
+    CHECK(ticksOfOnsets(*first.schedule) == std::vector<int64_t>{0, 300, 315, 480, 780});
+    CHECK(first.hash == second.hash);
+    CHECK(notesAreBalanced(*first.schedule));
+  }
+
   TEST_CASE("A note transposed out of MIDI range is dropped, not wrapped") {
     Scene scene;
     scene.addNotes({note(0, 120)});

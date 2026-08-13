@@ -11,6 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <new>
 #include <optional>
@@ -20,6 +21,8 @@
 #include "core/engine.h"
 #include "model/command.h"
 #include "model/commands.h"
+#include "model/flattener.h"
+#include "model/note_edit.h"
 #include "plugin/scan/plugin_library.h"
 #include "plugin/scan/subprocess_probe.h"
 
@@ -74,7 +77,12 @@ struct ob_engine {
   std::unique_ptr<onebeat::core::Engine> engine;
   onebeat::model::Project project;
   onebeat::model::CommandBus commands{project};
+  onebeat::model::FlattenScheduler flattener{project};
   std::optional<onebeat::model::InstrumentId> selected_instrument;
+  std::optional<onebeat::model::PatternId> current_pattern;
+  std::map<onebeat::model::InstrumentId, onebeat::model::Ticks> rack_grids;
+  std::string undo_name_cache;
+  std::string redo_name_cache;
   // Not part of the Engine: the plugin library is filesystem work and a
   // background thread, and nothing in it goes near the audio thread (OB-2-02).
   std::unique_ptr<onebeat::plugin::scan::PluginLibrary> library;
@@ -130,12 +138,63 @@ const onebeat::model::Instrument* orderedInstrument(const ob_engine& handle, int
   return nullptr;
 }
 
+const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
+  return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
+}
+
+void publishModel(ob_engine& handle) {
+  onebeat::model::FlattenResult flattened =
+      handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
+  if (flattened.schedule != nullptr) {
+    handle.engine->publishSchedule(std::move(flattened.schedule));
+  }
+  double loop_end_beats = 4.0;
+  const onebeat::model::Pattern* pattern = currentPattern(handle);
+  if (pattern != nullptr && pattern->length > 0) {
+    loop_end_beats =
+        static_cast<double>(pattern->length) / static_cast<double>(onebeat::model::TicksPerQuarter);
+  } else if (flattened.length_frames > 0) {
+    loop_end_beats =
+        handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames);
+  }
+  ob_command loop{};
+  loop.type = OB_CMD_SET_LOOP;
+  loop.f64_a = 0.0;
+  loop.f64_b = loop_end_beats;
+  loop.i64_a = 1;
+  handle.engine->postCommand(loop);
+}
+
 ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
   if (command == nullptr || !handle.commands.execute(std::move(command))) {
     return fail(OB_ERR_INVALID_ARGUMENT, failure);
   }
+  publishModel(handle);
   g_last_error.clear();
   return OB_OK;
+}
+
+bool initialiseRack(ob_engine& handle) {
+  if (!handle.commands.execute(onebeat::model::addPattern(handle.project, "Pattern 1",
+                                                          onebeat::model::TicksPerBarFourFour))) {
+    return false;
+  }
+  handle.current_pattern = handle.project.patterns().begin()->first;
+  if (!handle.commands.execute(onebeat::model::addLane(handle.project, "Patterns"))) return false;
+  const onebeat::model::ArrangementLaneId lane = handle.project.lanes().begin()->first;
+  if (!handle.commands.execute(onebeat::model::addClip(
+          handle.project, lane, onebeat::model::PatternSource{*handle.current_pattern}, 0,
+          onebeat::model::TicksPerBarFourFour))) {
+    return false;
+  }
+  handle.commands.clear();
+  publishModel(handle);
+  return true;
+}
+
+onebeat::model::Ticks rackGrid(const ob_engine& handle, onebeat::model::InstrumentId id) {
+  const auto found = handle.rack_grids.find(id);
+  return found == handle.rack_grids.end() ? onebeat::model::TicksPerQuarter / 4 : found->second;
 }
 
 }  // namespace
@@ -147,7 +206,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.5.0";
+  return "1.6.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -208,6 +267,9 @@ ob_status ob_engine_create(const ob_engine_config* config, ob_engine** out_engin
     if (!handle->engine->initialise(error)) {
       return fail(OB_ERR_DEVICE_UNAVAILABLE, error.c_str());
     }
+    if (!initialiseRack(*handle)) {
+      return fail(OB_ERR_INTERNAL, "The default pattern could not be created.");
+    }
     *out_engine = handle.release();
     g_last_error.clear();
     return OB_OK;
@@ -261,6 +323,14 @@ ob_status ob_engine_stop(ob_engine* engine) {
 ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
   if (engine == nullptr || command == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and command must not be null.");
+  }
+  if (command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) {
+    onebeat::model::TransportState transport = engine->project.transport();
+    if (std::abs(transport.tempo - command->f64_a) > 0.0001) {
+      transport.tempo = command->f64_a;
+      (void)engine->commands.execute(onebeat::model::setTransport(engine->project, transport));
+      publishModel(*engine);
+    }
   }
   // Allocation-free, lock-free: this is on the UI frame path.
   if (!engine->engine->postCommand(*command)) {
@@ -517,7 +587,8 @@ ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path
     plugin.name = engine->instance_name;
     plugin.vendor = engine->instance_vendor;
     plugin.path_hint = engine->instance_path;
-    if (!engine->commands.execute(onebeat::model::addInstrument(engine->project, plugin))) {
+    if (executeModel(*engine, onebeat::model::addInstrument(engine->project, plugin),
+                     "Could not add the instrument to the project.") != OB_OK) {
       return fail(OB_ERR_INTERNAL, "Could not add the instrument to the project.");
     }
     for (const auto& [id, instrument] : engine->project.instruments()) {
@@ -547,8 +618,8 @@ ob_status ob_engine_instance_remove(ob_engine* engine, uint32_t instance_id) {
     engine->instance_missing = false;
     engine->instance_state.clear();
     if (engine->selected_instrument.has_value()) {
-      if (!engine->commands.execute(
-              onebeat::model::removeInstrument(*engine->selected_instrument))) {
+      if (executeModel(*engine, onebeat::model::removeInstrument(*engine->selected_instrument),
+                       "Could not remove the instrument from the project.") != OB_OK) {
         return fail(OB_ERR_INTERNAL, "Could not remove the instrument from the project.");
       }
       engine->selected_instrument = std::nullopt;
@@ -958,6 +1029,18 @@ int32_t ob_engine_project_can_redo(ob_engine* engine) {
   return engine != nullptr && engine->commands.canRedo() ? 1 : 0;
 }
 
+const char* ob_engine_project_undo_name(ob_engine* engine) {
+  if (engine == nullptr) return "";
+  engine->undo_name_cache = engine->commands.undoName();
+  return engine->undo_name_cache.c_str();
+}
+
+const char* ob_engine_project_redo_name(ob_engine* engine) {
+  if (engine == nullptr) return "";
+  engine->redo_name_cache = engine->commands.redoName();
+  return engine->redo_name_cache.c_str();
+}
+
 ob_status ob_engine_project_undo(ob_engine* engine) {
   if (engine == nullptr || !engine->commands.undo()) {
     return fail(OB_ERR_INVALID_ARGUMENT, "There is no project edit to undo.");
@@ -969,6 +1052,7 @@ ob_status ob_engine_project_undo(ob_engine* engine) {
     engine->has_instance = false;
     engine->selected_instrument = std::nullopt;
   }
+  publishModel(*engine);
   g_last_error.clear();
   return OB_OK;
 }
@@ -984,6 +1068,219 @@ ob_status ob_engine_project_redo(ob_engine* engine) {
     engine->has_instance = false;
     engine->selected_instrument = std::nullopt;
   }
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_rack_pattern(ob_engine* engine, ob_rack_pattern_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and output pattern are required.");
+  }
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->length_ticks = pattern->length;
+  out_info->base_grid_ticks = onebeat::model::TicksPerQuarter / 4;
+  out_info->swing = pattern->swing;
+  copyText(out_info->id, sizeof(out_info->id), pattern->id.str().c_str());
+  copyText(out_info->name, sizeof(out_info->name), pattern->name.c_str());
+  g_last_error.clear();
+  return OB_OK;
+}
+
+int32_t ob_engine_rack_row_count(ob_engine* engine) {
+  return ob_engine_instrument_count(engine);
+}
+
+ob_status ob_engine_rack_row_at(ob_engine* engine, int32_t index, ob_rack_row_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and output rack row are required.");
+  }
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  const onebeat::model::Instrument* instrument = orderedInstrument(*engine, index);
+  if (pattern == nullptr || instrument == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Rack row index is out of range.");
+  }
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->grid_ticks = rackGrid(*engine, instrument->id);
+  out_info->step_count = static_cast<int32_t>(std::min<int64_t>(
+      OB_RACK_MAX_STEPS, (pattern->length + out_info->grid_ticks - 1) / out_info->grid_ticks));
+  copyText(out_info->instrument_id, sizeof(out_info->instrument_id), instrument->id.str().c_str());
+
+  const auto sequence = pattern->sequences.find(instrument->id);
+  if (sequence == pattern->sequences.end()) {
+    g_last_error.clear();
+    return OB_OK;
+  }
+  out_info->flags |= 1U;
+  out_info->note_count = static_cast<uint32_t>(sequence->second.size());
+  for (const onebeat::model::Note& note : sequence->second.notes()) {
+    const bool on_grid = note.key == 60 && note.start % out_info->grid_ticks == 0;
+    const int64_t step = on_grid ? note.start / out_info->grid_ticks : -1;
+    if (step < 0 || step >= out_info->step_count) {
+      ++out_info->off_grid_count;
+      continue;
+    }
+    out_info->step_active[step] = 1;
+    out_info->step_velocity[step] = std::max(out_info->step_velocity[step], note.velocity);
+  }
+  if (out_info->off_grid_count != 0) out_info->flags |= 2U;
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_rack_set_row_grid(ob_engine* engine, const char* utf8_instrument_id,
+                                      int64_t grid_ticks) {
+  if (engine == nullptr || (grid_ticks != 120 && grid_ticks != 240 && grid_ticks != 480)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Rack grid must be 1/8, 1/16, or 1/32.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  engine->rack_grids[*id] = grid_ticks;
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) {
+  if (engine == nullptr ||
+      (base_step_count != 16 && base_step_count != 32 && base_step_count != 64)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern length must be 16, 32, or 64 steps.");
+  }
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
+  const onebeat::model::Ticks length =
+      static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
+  const onebeat::model::Ticks old_length = pattern->length;
+  for (const auto& [clip_id, clip] : engine->project.clips()) {
+    if (const auto* src = clip.pattern()) {
+      if (src->pattern == pattern->id && clip.length == old_length) {
+        (void)engine->commands.execute(onebeat::model::editClip(
+            engine->project, clip_id, onebeat::model::ChangeField::Length,
+            [length](onebeat::model::Clip& c) { c.length = length; }, "Resize clip"));
+      }
+    }
+  }
+  return executeModel(*engine,
+                      onebeat::model::editPatternMeta(
+                          engine->project, pattern->id, onebeat::model::ChangeField::Length,
+                          [length](onebeat::model::PatternMeta& value) { value.length = length; },
+                          "Resize pattern"),
+                      "The pattern could not be resized.");
+}
+
+ob_status ob_engine_rack_set_swing(ob_engine* engine, double swing) {
+  if (engine == nullptr || swing < 0.0 || swing > 1.0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Swing must be between 0 and 1.");
+  }
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
+  return executeModel(
+      *engine,
+      onebeat::model::editPatternMeta(
+          engine->project, pattern->id, onebeat::model::ChangeField::Transforms,
+          [swing](onebeat::model::PatternMeta& value) { value.swing = swing; }, "Set swing"),
+      "Swing could not be changed.");
+}
+
+ob_status ob_engine_rack_toggle_step(ob_engine* engine, const char* utf8_instrument_id,
+                                     int32_t step_index) {
+  if (engine == nullptr || step_index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A rack step is required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  if (!id || pattern == nullptr || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The rack row does not exist.");
+  }
+  const onebeat::model::Ticks grid = rackGrid(*engine, *id);
+  if (static_cast<onebeat::model::Ticks>(step_index) * grid >= pattern->length) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Rack step is outside the pattern.");
+  }
+  return executeModel(*engine,
+                      onebeat::model::toggleStep(engine->project, pattern->id, *id, 60, step_index,
+                                                 onebeat::model::NoteGrid{grid, 0}),
+                      "The rack step could not be changed.");
+}
+
+ob_status ob_engine_rack_set_step_velocity(ob_engine* engine, const char* utf8_instrument_id,
+                                           int32_t step_index, uint16_t velocity) {
+  if (engine == nullptr || step_index < 0 || velocity > onebeat::model::MaxVelocity) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A valid rack velocity is required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  const onebeat::model::Instrument* instrument = id ? engine->project.findInstrument(*id) : nullptr;
+  if (!id || pattern == nullptr || instrument == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The rack row does not exist.");
+  }
+  const onebeat::model::Ticks grid = rackGrid(*engine, *id);
+  if (static_cast<onebeat::model::Ticks>(step_index) * grid >= pattern->length) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Rack step is outside the pattern.");
+  }
+  const auto sequence = pattern->sequences.find(*id);
+  onebeat::model::StepCell cell;
+  if (sequence != pattern->sequences.end()) {
+    cell = onebeat::model::inspectStep(sequence->second, 60, step_index,
+                                       onebeat::model::NoteGrid{grid, 0});
+  }
+  if (cell.on_grid.empty()) {
+    onebeat::model::Note note;
+    note.start = static_cast<onebeat::model::Ticks>(step_index) * grid;
+    note.length = grid;
+    note.key = 60;
+    note.velocity = velocity;
+    return executeModel(*engine, onebeat::model::insertNotes(pattern->id, *id, {note}),
+                        "The step velocity could not be changed.");
+  }
+  return executeModel(*engine,
+                      onebeat::model::setNoteVelocity(pattern->id, *id, cell.on_grid, velocity),
+                      "The step velocity could not be changed.");
+}
+
+ob_status ob_engine_rack_remove_sequence(ob_engine* engine, const char* utf8_instrument_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Pattern* pattern = currentPattern(*engine);
+  if (!id || pattern == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The rack row is invalid.");
+  const auto sequence = pattern->sequences.find(*id);
+  if (sequence == pattern->sequences.end()) return OB_OK;
+  return executeModel(*engine,
+                      onebeat::model::removeNotes(pattern->id, *id, sequence->second.notes()),
+                      "The sequence could not be removed from the pattern.");
+}
+
+ob_status ob_engine_rack_gesture_begin(ob_engine* engine, const char* utf8_name) {
+  if (engine == nullptr || engine->commands.inTransaction()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A rack gesture is already active.");
+  }
+  engine->commands.beginTransaction(utf8_name == nullptr || utf8_name[0] == '\0' ? "Paint steps"
+                                                                                 : utf8_name);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_rack_gesture_commit(ob_engine* engine) {
+  if (engine == nullptr || !engine->commands.inTransaction()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "There is no rack gesture to commit.");
+  }
+  engine->commands.commitTransaction();
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_rack_gesture_abort(ob_engine* engine) {
+  if (engine == nullptr || !engine->commands.inTransaction()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "There is no rack gesture to cancel.");
+  }
+  engine->commands.abortTransaction();
+  publishModel(*engine);
   g_last_error.clear();
   return OB_OK;
 }
