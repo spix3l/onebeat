@@ -193,12 +193,69 @@ uint32_t latencyGet(const clap_plugin_t*) {
 }
 const clap_plugin_latency_t Latency{latencyGet};
 
+#if defined(OB_TEST_PLUGIN_GUI)
+bool guiIsApiSupported(const clap_plugin_t*, const char* api, bool is_floating) {
+  return !is_floating && api != nullptr && std::strcmp(api, CLAP_WINDOW_API_COCOA) == 0;
+}
+bool guiGetPreferredApi(const clap_plugin_t*, const char** api, bool* is_floating) {
+  if (api == nullptr || is_floating == nullptr) return false;
+  *api = CLAP_WINDOW_API_COCOA;
+  *is_floating = false;
+  return true;
+}
+bool guiCreate(const clap_plugin_t*, const char* api, bool is_floating) {
+  return guiIsApiSupported(nullptr, api, is_floating);
+}
+void guiDestroy(const clap_plugin_t*) {}
+bool guiSetScale(const clap_plugin_t*, double) {
+  return false;
+}
+bool guiGetSize(const clap_plugin_t*, uint32_t* width, uint32_t* height) {
+  if (width == nullptr || height == nullptr) return false;
+  *width = 360;
+  *height = 180;
+  return true;
+}
+bool guiCanResize(const clap_plugin_t*) {
+  return true;
+}
+bool guiGetResizeHints(const clap_plugin_t*, clap_gui_resize_hints_t*) {
+  return false;
+}
+bool guiAdjustSize(const clap_plugin_t*, uint32_t*, uint32_t*) {
+  return true;
+}
+bool guiSetSize(const clap_plugin_t*, uint32_t, uint32_t) {
+  return true;
+}
+bool guiSetParent(const clap_plugin_t*, const clap_window_t* window) {
+  return window != nullptr && window->cocoa != nullptr;
+}
+bool guiSetTransient(const clap_plugin_t*, const clap_window_t*) {
+  return false;
+}
+void guiSuggestTitle(const clap_plugin_t*, const char*) {}
+bool guiShow(const clap_plugin_t*) {
+  return true;
+}
+bool guiHide(const clap_plugin_t*) {
+  return true;
+}
+const clap_plugin_gui_t Gui{
+    guiIsApiSupported, guiGetPreferredApi, guiCreate,         guiDestroy,    guiSetScale,
+    guiGetSize,        guiCanResize,       guiGetResizeHints, guiAdjustSize, guiSetSize,
+    guiSetParent,      guiSetTransient,    guiSuggestTitle,   guiShow,       guiHide};
+#endif
+
 const void* pluginExtension(const clap_plugin_t*, const char* id) {
   if (std::strcmp(id, CLAP_EXT_PARAMS) == 0) return &Params;
   if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS) == 0) return &AudioPorts;
   if (std::strcmp(id, CLAP_EXT_NOTE_PORTS) == 0) return &NotePorts;
   if (std::strcmp(id, CLAP_EXT_STATE) == 0) return &State;
   if (std::strcmp(id, CLAP_EXT_LATENCY) == 0) return &Latency;
+#if defined(OB_TEST_PLUGIN_GUI)
+  if (std::strcmp(id, CLAP_EXT_GUI) == 0) return &Gui;
+#endif
   return nullptr;
 }
 void pluginMainThread(const clap_plugin_t*) {}

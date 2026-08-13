@@ -82,6 +82,7 @@ class SandboxedPluginProxy final : public PluginInstance {
   uint32_t consecutive_misses_ = 0;
   std::atomic<bool> dead_{false};
   mutable std::vector<uint8_t> checkpoint_;
+  bool editor_open_ = false;
 };
 
 }  // namespace onebeat::plugin::sandbox

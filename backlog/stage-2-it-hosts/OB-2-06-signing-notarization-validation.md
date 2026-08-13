@@ -13,6 +13,14 @@
 
 R10: Apple platform friction between notarization and out-of-process hosting is a known risk. If Apple's rules reject the architecture, we must find out while the sandbox design is still cheap to change — that is exactly this stage.
 
+## Deferral — 13 August 2026
+
+The owner deferred Gate G-B until OneBeat has a distribution plan. Local
+development and ad-hoc signed builds do not require Apple notarization, and a
+CI publishing/release lane would be premature. The local validation script and
+entitlement rationale remain in the repository so this gate can resume without
+redesigning the helper. This ticket is intentionally ⏸, not failed.
+
 ## Scope
 
 1. **Signing pipeline:** Developer ID signing of the app bundle including the embedded helper executable; hardened runtime on both; entitlement sets per ADR-003 (notably `com.apple.security.cs.disable-library-validation` on the helper — required to load arbitrary third-party plugin binaries — plus JIT/unsigned-memory entitlements if the helper needs them).

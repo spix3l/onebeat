@@ -491,24 +491,33 @@ uint32_t SandboxedPluginProxy::latencyFrames() const {
 }
 
 bool SandboxedPluginProxy::restartHost() {
+  const bool reopen_editor = editor_open_;
   shutdown();
   if (!launch(setup())) return false;
-  if (checkpoint_.empty()) return true;
-  ControlRequest request;
-  request.command = static_cast<uint32_t>(ControlCommand::LoadState);
-  request.size = static_cast<uint32_t>(checkpoint_.size());
-  ControlResponse response;
-  if (control(request, response, checkpoint_.data()) && response.ok != 0) return true;
-  last_error_ = "The plug-in restarted, but its saved state could not be restored.";
-  shutdown();
-  return false;
+  if (!checkpoint_.empty()) {
+    ControlRequest request;
+    request.command = static_cast<uint32_t>(ControlCommand::LoadState);
+    request.size = static_cast<uint32_t>(checkpoint_.size());
+    ControlResponse response;
+    if (!control(request, response, checkpoint_.data()) || response.ok == 0) {
+      last_error_ = "The plug-in restarted, but its saved state could not be restored.";
+      shutdown();
+      return false;
+    }
+  }
+  if (reopen_editor && !openEditor()) {
+    last_error_ = "The plug-in restarted, but its editor could not be reopened.";
+    return false;
+  }
+  return true;
 }
 
 bool SandboxedPluginProxy::openEditor() {
   ControlRequest request;
   request.command = static_cast<uint32_t>(ControlCommand::OpenEditor);
   ControlResponse response;
-  return control(request, response) && response.ok != 0;
+  editor_open_ = control(request, response) && response.ok != 0;
+  return editor_open_;
 }
 
 void SandboxedPluginProxy::closeEditor() {
@@ -516,6 +525,7 @@ void SandboxedPluginProxy::closeEditor() {
   request.command = static_cast<uint32_t>(ControlCommand::CloseEditor);
   ControlResponse response;
   control(request, response);
+  editor_open_ = false;
 }
 
 }  // namespace onebeat::plugin::sandbox

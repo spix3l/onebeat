@@ -52,6 +52,7 @@ function(onebeat_add_test_plugin name behaviour)
 endfunction()
 
 onebeat_add_test_plugin(ob_test_plugin_ok "")
+onebeat_add_test_plugin(ob_test_plugin_gui OB_TEST_PLUGIN_GUI)
 onebeat_add_test_plugin(ob_test_plugin_crash OB_TEST_PLUGIN_CRASH)
 onebeat_add_test_plugin(ob_test_plugin_hang OB_TEST_PLUGIN_HANG)
 onebeat_add_test_plugin(ob_test_plugin_process_crash OB_TEST_PLUGIN_PROCESS_CRASH)
@@ -83,7 +84,7 @@ target_compile_definitions(onebeat_tests PRIVATE
   OB_TEST_HELPER="$<TARGET_FILE:onebeat_plugin_host>")
 add_dependencies(onebeat_tests
   onebeat_plugin_host ob_test_plugin_ok ob_test_plugin_crash ob_test_plugin_hang
-  ob_test_plugin_process_crash ob_test_plugin_process_hang)
+  ob_test_plugin_process_crash ob_test_plugin_process_hang ob_test_plugin_gui)
 
 # doctest test-suite names map 1:1 to labels.
 foreach(suite unit engine abi stress)

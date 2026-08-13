@@ -34,3 +34,10 @@ The first real format adapter: CLAP (MIT headers, plain C). It runs inside the h
 ## Out of scope
 
 - Editor GUI (OB-2-08). Automation recording/curves (OB-2-09 basic; full in Stage 4). VST3/AU (Stage 5).
+
+## Local compatibility note — 13 August 2026
+
+`../daw-contents` contains Keyzone Classic VST and Audio Unit installers only;
+their package manifests install `.vst` and `.component` bundles and contain no
+CLAP binary. They therefore cannot validate this CLAP ticket. Keep them for the
+Stage 5 VST/AU adapters; OB-2-07 needs an actual `.clap` bundle.

@@ -225,4 +225,19 @@ TEST_SUITE("engine") {
     REQUIRE(rig.plugin->paramValue(17, restored));
     CHECK(restored == doctest::Approx(0.73));
   }
+
+#ifndef ONEBEAT_SANITIZER_BUILD
+  TEST_CASE("An open native editor is reopened after helper recovery") {
+    SandboxRig rig("ob_test_plugin_gui");
+    REQUIRE(rig.plugin->hasEditor());
+    REQUIRE(rig.plugin->openEditor());
+    REQUIRE(::kill(rig.plugin->helperPid(), SIGKILL) == 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CHECK(rig.render() == ProcessStatus::Error);
+    CHECK(rig.render() == ProcessStatus::Error);
+    REQUIRE_MESSAGE(rig.plugin->restartHost(), rig.plugin->lastError());
+    CHECK(rig.plugin->healthy());
+    rig.plugin->closeEditor();
+  }
+#endif
 }

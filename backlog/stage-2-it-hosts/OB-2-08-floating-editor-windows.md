@@ -38,3 +38,16 @@ The plugin `NSView` must be created in the process where the plugin lives — th
 ## Out of scope
 
 - Docked built-in plugin UIs (FR-BIP-07 — built-ins are Flutter panels, Stage 7). Preset browser (Stage 7).
+
+## Implementation progress — 13 August 2026
+
+- Helper-owned Cocoa windows and CLAP parenting are implemented.
+- Window geometry is persisted by plug-in ID and restored with an off-screen
+  fallback when the saved display is unavailable.
+- A window that was open is reopened automatically after helper restart.
+- The Pen-derived generic parameter editor is implemented in the main Flutter
+  window for GUI-less plug-ins.
+
+An installed CLAP with a native GUI is still required for the final interaction
+walkthrough: mouse/keyboard input, resize negotiation across real toolkits, and
+the transport-space focus rule. VST/AU bundles cannot exercise this CLAP path.

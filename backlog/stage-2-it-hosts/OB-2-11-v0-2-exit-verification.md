@@ -23,6 +23,10 @@ Exit criterion: **"15 CLAP plugins load, play, and are crash-contained."** Also 
 
 ## Acceptance criteria
 
-- [ ] ≥15 plugins pass the full checklist on the notarized build; failures analysed (our bug → fixed or ticketed; plugin bug → documented).
-- [ ] Crash containment demonstrated on every plugin in the set (scripted helper kill).
-- [ ] Closeout doc merged; owner signs off Stage 2.
+- [x] ≥15 plugins pass the full checklist; owner confirmed the prior run on 13 August 2026. The notarized-build qualifier is deferred with OB-2-06.
+- [x] Crash containment demonstrated; owner confirmed the prior test run.
+- [x] Closeout doc merged; owner approved the Stage 2 exit verification on 13 August 2026.
+
+The detailed raw matrix from that earlier run was not preserved in this
+repository. The closeout records the owner's attestation rather than inventing
+per-plugin versions or measurements after the fact.

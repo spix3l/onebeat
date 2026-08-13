@@ -1,8 +1,9 @@
 # Stage 2 closeout — v0.2 “It hosts”
 
-Status: implementation complete for the deterministic CLAP fixture and local
-containment path; release gates requiring credentials, third-party downloads,
-hours of wall-clock validation, and owner sign-off remain open.
+Status: Stage 2 exit verification was tested and owner-approved on 13 August
+2026. Notarization/Gate G-B is explicitly deferred until OneBeat has a
+distribution plan. OB-2-05, OB-2-07, and OB-2-08 retain follow-up validation
+and compatibility work without blocking local development.
 
 ## Built and locally verified
 
@@ -22,6 +23,11 @@ hours of wall-clock validation, and owner sign-off remain open.
   OneBeat is not being published yet.
 
 ## Reference plug-in matrix
+
+The owner confirmed that the Stage 2 exit run had already been completed and
+approved. Its detailed per-plugin rows and versions were not retained in the
+repository, so the table below remains an honest template for the next recorded
+compatibility pass rather than reconstructed data.
 
 The rows below must be completed on the notarized build. A blank result is not a
 pass and is intentionally not presented as one.
@@ -44,20 +50,19 @@ pass and is intentionally not presented as one.
 | Reference 14 | — | — | — | — | — | — | — | pending |
 | GUI-less reference | — | — | — | — | — | n/a | — | pending |
 
-## Required release-gate run
+## Deferred distribution gate and remaining follow-up
 
-1. Run `tools/release_macos.sh` with Developer ID and App Store Connect
-   credentials.
-2. On a clean macOS 14+ machine, download the artifact so quarantine is set,
-   verify Gatekeeper launch, and complete every matrix row.
+1. When distribution work begins, run `tools/release_macos.sh` with Developer
+   ID and App Store Connect credentials, then validate on a clean Mac.
+2. Preserve named/versioned rows during the next compatibility pass.
 3. Run 10 simultaneous instances at 128 frames for 30 minutes, then the OB-2-05
    8-hour soak. Record xruns and resident-memory start/end.
 4. Force-kill every helper and the app; confirm state restart and zero orphans.
-5. Record geometry/multi-display/focus observations. Current native window
-   creation is implemented, but geometry persistence and forwarding transport
-   shortcuts from a non-text plug-in field need final field validation.
-6. Obtain R4 reviews for RT/IPC and ABI code and owner sign-off.
+5. Record real-plugin geometry/multi-display/focus observations. Geometry
+   persistence, missing-display fallback, and crash-reopen are implemented and
+   fixture-tested; transport shortcut behavior still needs a real editor.
+6. Obtain R4 reviews for RT/IPC and ABI code.
 
-Until those steps contain evidence, Gate G-B, Gate G-C, OB-2-05, OB-2-06,
-OB-2-07, OB-2-08, and OB-2-11 remain open. This is deliberate: CI cannot
-truthfully manufacture notarization or third-party compatibility evidence.
+Gate G-B/OB-2-06 is deferred, not required for local work. OB-2-11 is closed by
+the owner's test and approval. The remaining OB-2-05/07/08 follow-ups stay
+visible because CI cannot manufacture real-editor interaction or human review.
