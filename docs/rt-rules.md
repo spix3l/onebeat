@@ -59,6 +59,28 @@ is missing rather than skipping it quietly.
 | `sleep`, `yield`, condition variables | never wait on the audio thread |
 | `dynamic_cast`, RTTI | design it out |
 
+### …and you cannot busy-wait instead
+
+The obvious escape from "never block" is to spin. It does not work on this
+platform, and the reason is worth knowing before you reach for it.
+
+The audio thread runs under `THREAD_TIME_CONSTRAINT_POLICY`, which is a
+*contract*: it declares how much computation the thread needs per period. A
+thread that spins consumes 100 % of every period, breaks that contract, and gets
+demoted by the scheduler. Measured in `spikes/ipc_roundtrip` (OB-2-04): a
+spinning helper thread answered for 3.4 seconds and then stopped answering
+permanently. The same thread at default priority ran indefinitely.
+
+So spinning is not a trade of CPU for latency on an RT thread. It is a way to
+lose the thread.
+
+**The one sanctioned wait** is the bounded wait on a sandboxed plugin helper,
+decided in [ADR-003](adr/ADR-003-sandbox-ipc.md): a `semaphore_timedwait` with a
+deadline of a fraction of the block period, where missing the deadline produces
+silence rather than a late block. It is bounded, it is measured, and the failure
+path is demonstrated. Anything else that wants to wait needs the same standard
+of argument.
+
 ### Always on the audio thread
 
 - **One atomic load per block** for anything published from another thread, at

@@ -104,7 +104,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | 🟦 | [OB-2-01](stage-2-it-hosts/OB-2-01-format-agnostic-plugin-model.md) | Format-agnostic internal plugin model (CLAP semantics) | L |
 | ⬜ | [OB-2-02](stage-2-it-hosts/OB-2-02-plugin-scanner-cache.md) | Plugin scanner with persistent cache | M |
 | ⬜ | [OB-2-03](stage-2-it-hosts/OB-2-03-scan-crash-quarantine.md) | Scan crash quarantine & reporting | S |
-| ⬜ | [OB-2-04](stage-2-it-hosts/OB-2-04-adr-003-sandbox-ipc.md) | ADR-003: sandbox IPC mechanism | M |
+| 🟦 | [OB-2-04](stage-2-it-hosts/OB-2-04-adr-003-sandbox-ipc.md) | ADR-003: sandbox IPC mechanism | M |
 | ⬜ | [OB-2-05](stage-2-it-hosts/OB-2-05-out-of-process-host-helper.md) | Out-of-process sandboxed host helper | L |
 | ⬜ | [OB-2-06](stage-2-it-hosts/OB-2-06-signing-notarization-validation.md) | Code-signing & notarization validation (Gate G-B) | M |
 | ⬜ | [OB-2-07](stage-2-it-hosts/OB-2-07-clap-hosting.md) | CLAP hosting: instantiate, process, state | L |
@@ -148,7 +148,19 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
-Stage 2: ~~OB-0-02~~ (done) → OB-2-01 (in review) → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+Stage 2: ~~OB-0-02~~ (done) → OB-2-01 (in review) → **OB-2-04 (ADR-003, in review)** → OB-2-02/03 → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+
+**The order above was wrong until 13 August 2026** and is corrected here:
+OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the
+helper process, so OB-2-02's own Dependencies line names OB-2-04. Building the
+scanner first would have meant designing its process model twice.
+
+**OB-2-04 is 🟦 review, not ✅.** Three of its four acceptance criteria are met
+with measurements from `spikes/ipc_roundtrip`; the fourth is **human review
+(R4)**, required because this is RT-adjacent. `docs/adr/ADR-003-sandbox-ipc.md`
+is what needs reading, and the finding worth arguing with is that sandboxed
+plugins are called **synchronously** — no pipelining, no added latency, no PDC
+contribution.
 
 **OB-2-01 is 🟦 review, not ✅.** Four of its five acceptance criteria are met
 and verified; the fifth is **human review (R4)**, which is required for
