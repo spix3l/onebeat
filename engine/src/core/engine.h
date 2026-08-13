@@ -125,6 +125,8 @@ class Engine final : public audio_io::RenderCallback {
   std::string hostedError() const;
   bool loadHostedState(const std::vector<uint8_t>& bytes);
   bool hostedHasEditor() const;
+  bool hostedHealthy() const;
+  bool restartHostedInstrument();
   bool openHostedEditor();
   void closeHostedEditor();
   static constexpr uint32_t CommandQueueCapacity = 1024;

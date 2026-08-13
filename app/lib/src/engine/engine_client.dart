@@ -454,6 +454,7 @@ class EngineClient {
           )],
       missing: (value.flags & 1) != 0,
       hasEditor: (value.flags & 4) != 0,
+      needsRestart: (value.flags & 8) != 0,
       paramCount: value.param_count,
     );
   }
@@ -480,6 +481,9 @@ class EngineClient {
 
   void openPluginEditor(int instanceId) =>
       _check(_bindings.ob_engine_instance_editor_open(_engine, instanceId));
+
+  void restartPlugin(int instanceId) =>
+      _check(_bindings.ob_engine_instance_restart(_engine, instanceId));
 
   List<HostedParameter> readParameters(HostedInstance instance) {
     final List<HostedParameter> result = <HostedParameter>[];
@@ -654,6 +658,7 @@ class HostedInstance {
     required this.format,
     required this.missing,
     required this.hasEditor,
+    required this.needsRestart,
     required this.paramCount,
   });
   final int id;
@@ -664,6 +669,7 @@ class HostedInstance {
   final PluginFormat format;
   final bool missing;
   final bool hasEditor;
+  final bool needsRestart;
   final int paramCount;
 }
 

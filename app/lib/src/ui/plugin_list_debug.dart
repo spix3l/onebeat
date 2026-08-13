@@ -200,7 +200,11 @@ class _InstanceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens t = OneBeatTheme.of(context);
     final Color border =
-        instance.missing ? t.color.warning : t.color.accentMuted;
+        instance.needsRestart
+            ? t.color.danger
+            : instance.missing
+            ? t.color.warning
+            : t.color.accentMuted;
     return Container(
       padding: EdgeInsets.all(t.spacing.md),
       decoration: BoxDecoration(
@@ -223,12 +227,20 @@ class _InstanceRow extends StatelessWidget {
                         'MISSING',
                         style: t.type.label.copyWith(color: t.color.warning),
                       ),
+                    ] else if (instance.needsRestart) ...<Widget>[
+                      SizedBox(width: t.spacing.sm),
+                      Text(
+                        'STOPPED',
+                        style: t.type.label.copyWith(color: t.color.danger),
+                      ),
                     ],
                   ],
                 ),
                 SizedBox(height: t.spacing.xs),
                 Text(
-                  instance.missing
+                  instance.needsRestart
+                      ? 'Plugin stopped responding or crashed\nAudio is silenced — restart restores the last saved state'
+                      : instance.missing
                       ? 'Plugin not found on this machine\nSaved state is kept — reinstall or locate it to restore sound'
                       : '${instance.vendor} · CLAP · ${instance.paramCount} parameters',
                   style: t.type.body.copyWith(color: t.color.textMuted),
@@ -236,7 +248,13 @@ class _InstanceRow extends StatelessWidget {
               ],
             ),
           ),
-          if (instance.missing)
+          if (instance.needsRestart)
+            OneBeatButton(
+              label: 'RESTART',
+              semanticLabel: 'Restart ${instance.name}',
+              onPressed: library.restartInstance,
+            )
+          else if (instance.missing)
             OneBeatButton(
               label: 'LOCATE',
               semanticLabel: 'Locate ${instance.name}',

@@ -73,6 +73,13 @@ class PluginLibraryStore extends ChangeNotifier {
     _client.openPluginEditor(current.id);
   }
 
+  void restartInstance() {
+    final HostedInstance? current = instance;
+    if (current == null || !current.needsRestart) return;
+    _client.restartPlugin(current.id);
+    refreshInstance();
+  }
+
   void closeParameters() {
     showParameters = false;
     notifyListeners();
@@ -144,7 +151,14 @@ class PluginLibraryStore extends ChangeNotifier {
 
   /// Called once per frame while a scan is running. Cheap when nothing changed:
   /// one native call that returns a small struct, and no list copy.
-  void pump() => _refresh();
+  void pump() {
+    _refresh();
+    final HostedInstance? next = _client.readHostedInstance();
+    if (next?.needsRestart != instance?.needsRestart) {
+      instance = next;
+      notifyListeners();
+    }
+  }
 
   void _refresh({bool force = false}) {
     final PluginScanStatus next = _client.readPluginScanStatus();

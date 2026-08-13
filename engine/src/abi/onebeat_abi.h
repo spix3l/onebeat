@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 3
+#define OB_ABI_VERSION_MINOR 4
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -400,6 +400,7 @@ OB_API ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin
 #define OB_INSTANCE_FLAG_MISSING 0x1u
 #define OB_INSTANCE_FLAG_BYPASSED 0x2u
 #define OB_INSTANCE_FLAG_HAS_EDITOR 0x4u
+#define OB_INSTANCE_FLAG_NEEDS_RESTART 0x8u
 
 typedef struct ob_instance_info {
   uint32_t struct_size;
@@ -444,6 +445,8 @@ OB_API ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int
 /* Main/UI thread. May block briefly on helper window creation. */
 OB_API ob_status ob_engine_instance_editor_open(ob_engine* engine, uint32_t instance_id);
 OB_API ob_status ob_engine_instance_editor_close(ob_engine* engine, uint32_t instance_id);
+/* Main/UI thread. Replaces a failed helper and restores its last state. */
+OB_API ob_status ob_engine_instance_restart(ob_engine* engine, uint32_t instance_id);
 /* Main/UI thread. May block on filesystem and opaque plug-in state I/O. */
 OB_API ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path);
 OB_API ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path);

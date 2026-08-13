@@ -13,7 +13,8 @@ and compatibility work without blocking local development.
 - Helper-owned shared-memory audio transport with Mach semaphores, a bounded
   60%-of-block deadline, silence on the first miss, dead after the second miss,
   crash/hang containment, and checkpoint restart.
-- ABI 1.3 loaded-instance and parameter surface, live gesture commands,
+- ABI 1.3 loaded-instance and parameter surface, ABI 1.4 helper-health/restart
+  action, live gesture commands,
   sample-positioned schedule parameter events, scratch-session state chunks,
   and a silent state-preserving missing-instrument placeholder.
 - Pen-reference plug-in manager problem/missing states and the in-main generic

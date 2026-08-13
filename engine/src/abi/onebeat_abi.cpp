@@ -113,7 +113,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.3.0";
+  return "1.4.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -517,6 +517,8 @@ ob_status ob_engine_instance_at(ob_engine* engine, int32_t index, ob_instance_in
   out_info->format = engine->instance_format;
   out_info->flags = engine->instance_missing ? OB_INSTANCE_FLAG_MISSING : 0U;
   if (engine->engine->hostedHasEditor()) out_info->flags |= OB_INSTANCE_FLAG_HAS_EDITOR;
+  if (!engine->instance_missing && !engine->engine->hostedHealthy())
+    out_info->flags |= OB_INSTANCE_FLAG_NEEDS_RESTART;
   out_info->param_count = engine->engine->hostedParamCount();
   copyText(out_info->plugin_id, sizeof(out_info->plugin_id), engine->instance_plugin_id.c_str());
   copyText(out_info->name, sizeof(out_info->name), engine->instance_name.c_str());
@@ -566,6 +568,16 @@ ob_status ob_engine_instance_editor_close(ob_engine* engine, uint32_t instance_i
     return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
   engine->engine->closeHostedEditor();
   return OB_OK;
+}
+
+ob_status ob_engine_instance_restart(ob_engine* engine, uint32_t instance_id) {
+  if (engine == nullptr || !engine->has_instance || engine->instance_missing ||
+      instance_id != engine->instance_id)
+    return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance cannot be restarted.");
+  if (engine->engine->restartHostedInstrument()) return OB_OK;
+  const std::string detail = engine->engine->hostedError();
+  return fail(OB_ERR_INTERNAL,
+              detail.empty() ? "The plug-in helper could not be restarted." : detail.c_str());
 }
 
 ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path) {

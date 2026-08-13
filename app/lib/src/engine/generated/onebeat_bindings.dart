@@ -522,6 +522,24 @@ class OneBeatBindings {
       _ob_engine_instance_editor_closePtr
           .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
 
+  ob_status ob_engine_instance_restart(
+    ffi.Pointer<ob_engine> engine,
+    int instance_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instance_restart(engine, instance_id),
+    );
+  }
+
+  late final _ob_engine_instance_restartPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Uint32)
+        >
+      >('ob_engine_instance_restart');
+  late final _ob_engine_instance_restart = _ob_engine_instance_restartPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, int)>();
+
   ob_status ob_engine_session_save(
     ffi.Pointer<ob_engine> engine,
     ffi.Pointer<ffi.Char> utf8_path,
@@ -1046,11 +1064,11 @@ final class ob_param_info extends ffi.Struct {
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 3;
+const int OB_ABI_VERSION_MINOR = 4;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 66304;
+const int OB_ABI_VERSION_PACKED = 66560;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -1061,3 +1079,5 @@ const int OB_INSTANCE_FLAG_MISSING = 1;
 const int OB_INSTANCE_FLAG_BYPASSED = 2;
 
 const int OB_INSTANCE_FLAG_HAS_EDITOR = 4;
+
+const int OB_INSTANCE_FLAG_NEEDS_RESTART = 8;

@@ -265,6 +265,17 @@ bool Engine::hostedHasEditor() const {
   return proxy != nullptr && proxy->hasEditor();
 }
 
+bool Engine::hostedHealthy() const {
+  const auto* proxy =
+      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  return proxy == nullptr || proxy->healthy();
+}
+
+bool Engine::restartHostedInstrument() {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+  return proxy != nullptr && proxy->restartHost();
+}
+
 bool Engine::openHostedEditor() {
   auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
   return proxy != nullptr && proxy->openEditor();
