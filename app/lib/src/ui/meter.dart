@@ -10,9 +10,16 @@ import 'engine_controller.dart';
 import 'meter_state.dart';
 
 class MasterMeter extends StatelessWidget {
-  const MasterMeter({required this.controller, super.key});
+  const MasterMeter({required this.repaint, required this.meter, super.key});
 
-  final EngineController controller;
+  /// Takes the level source and the repaint signal rather than the whole
+  /// controller: the meter needs nothing else, and the narrower dependency is
+  /// what lets the paint-cost benchmark drive it without an engine.
+  MasterMeter.of(EngineController controller, {Key? key})
+      : this(repaint: controller, meter: controller.meter, key: key);
+
+  final Listenable repaint;
+  final MeterState meter;
 
   @override
   Widget build(BuildContext context) {
@@ -24,8 +31,8 @@ class MasterMeter extends StatelessWidget {
         height: (tokens.size.meterChannelHeight * 2) + tokens.size.meterGap,
         child: CustomPaint(
           painter: _MeterPainter(
-            repaint: controller,
-            meter: controller.meter,
+            repaint: repaint,
+            meter: meter,
             tokens: tokens,
           ),
         ),

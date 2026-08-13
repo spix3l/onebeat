@@ -64,8 +64,10 @@ Statuses reflect what the **real** implementation answered, not spike code:
 
 - **P4 ✅** — the shipped seqlock snapshot read over one C call per frame, measured
   across 3797 frames with no attributable per-frame cost (closeout §4).
-- **P1 🟨** — zero dropped frames sustained, but on a 60 Hz panel; the 120 Hz half
-  of the question needs ProMotion hardware (debt D1).
+- **P1 🟨** — zero dropped frames sustained and the painter's CPU cost bounded in
+  CI at 0.06 % of a 120 Hz frame, but on a 60 Hz panel and with a meter rather
+  than the 2,000-note piano roll the spike asks for. Needs ProMotion hardware
+  (D1a) *and* Stage 3's piano roll (D1b).
 - **P2, P3, ADR-001 ⬜** — genuinely not attempted. **OB-0-02 blocks `OB-2-01`**
   (see above); OB-0-03 is needed before Stage 7.
 

@@ -184,7 +184,7 @@ class _TopBar extends StatelessWidget {
           SizedBox(width: tokens.spacing.xl),
           TransportReadout(controller: controller),
           const Spacer(),
-          MasterMeter(controller: controller),
+          MasterMeter.of(controller),
         ],
       ),
     );

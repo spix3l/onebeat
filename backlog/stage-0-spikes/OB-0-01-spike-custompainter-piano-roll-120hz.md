@@ -11,6 +11,25 @@
 
 ## Context
 
+**Partial-answer note (added at Stage 1 closeout).** Stage 1 shipped two
+`CustomPainter` views (meter, clock) with zero dropped frames over 60 s, and
+`app/test/paint_cost_test.dart` bounds the meter painter at 0.0050 ms/frame —
+0.06 % of a 120 Hz budget. **Neither result answers this ticket.** Two gaps
+remain, and both matter:
+
+1. **The load is not comparable.** The meter is a handful of `drawRect` calls.
+   This spike asks for ~2,000 rounded, bordered, individually-coloured
+   rectangles plus grid and playhead. That is the question.
+2. **The hardware is not available.** The development machine is a MacBook Air
+   M3 (`Mac15,12`) with a 60 Hz built-in panel. This spike requires a
+   120 Hz ProMotion display, and no software workaround substitutes for it: the
+   frame budget comes from the display, and rasterization and vsync scheduling
+   are exactly what a CPU-side benchmark cannot measure.
+
+To run it: either a ProMotion Mac, or an external high-refresh display — check
+this Air's external-display refresh support against Apple's spec sheet before
+buying anything, as it is not assumed here.
+
 The entire UI stack decision (D3, Flutter) rests on whether `CustomPainter` can render the densest DAW view at ProMotion refresh rates. If this fails, Flutter is the wrong choice and everything downstream changes. PRD §15.1: answer with throwaway code, not the real UI. This is deliberately the first ticket in the project.
 
 ## Scope
