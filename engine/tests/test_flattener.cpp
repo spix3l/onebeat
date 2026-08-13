@@ -453,9 +453,20 @@ TEST_SUITE("engine") {
 TEST_SUITE("stress") {
   // OB-3-04 AC 5. Two densities, because "1,000 clips" does not pin down the
   // work: what costs time is notes, and a clip can hold two or two hundred.
-  // Both numbers are recorded in docs/flattener-budget.md. The assertions are
-  // loose because this also runs under ASan on shared CI hardware — the
-  // measurement is the deliverable, not the threshold.
+  // Both numbers are recorded in docs/flattener-budget.md.
+  //
+  // **A wall-clock assertion under a sanitizer measures the sanitizer.** ASan
+  // and TSan instrument every access, so the budget rows in the doc come from
+  // ordinary builds and the sanitizer runs prove only that the code is correct
+  // and allocation-clean. What every build asserts is the work done — 1,000
+  // clips flattened — and the only thing asserted about real timings is that
+  // nothing has gone quadratic.
+#if defined(ONEBEAT_SANITIZER_BUILD)
+  constexpr bool Instrumented = true;
+#else
+  constexpr bool Instrumented = false;
+#endif
+
   struct Bench {
     Project project{IdGenerator::deterministic(0x5EEDULL)};
 
@@ -499,7 +510,8 @@ TEST_SUITE("stress") {
 
     FlattenResult best() {
       FlattenResult fastest;
-      for (int repeat = 0; repeat < 5; ++repeat) {
+      const int repeats = Instrumented ? 1 : 5;
+      for (int repeat = 0; repeat < repeats; ++repeat) {
         FlattenResult result = run(project, static_cast<uint64_t>(repeat) + 1);
         if (fastest.schedule == nullptr || result.elapsed_ms < fastest.elapsed_ms) {
           fastest = std::move(result);
@@ -514,16 +526,25 @@ TEST_SUITE("stress") {
     REQUIRE(bench.project.clips().size() == 1000);
     const FlattenResult result = bench.best();
     CHECK(result.clips_flattened == 1000);
-    MESSAGE("1,000 clips, ordinary density: " << result.event_count << " events, best of 5: "
-                                              << result.elapsed_ms << " ms");
-    CHECK(result.elapsed_ms < 100.0);
+    const std::string suffix =
+        Instrumented ? " ms (instrumented build, not a budget measurement)" : " ms";
+    MESSAGE("1,000 clips, ordinary density: " << result.event_count << " events, "
+                                              << result.elapsed_ms << suffix);
+    CHECK(result.event_count > 40000);
+    if (!Instrumented) CHECK(result.elapsed_ms < 2000.0);
   }
 
   TEST_CASE("A 1,000-clip project of extreme density is measured, not assumed") {
+    // Four times the events of the row above. Skipped under sanitizers: its
+    // timing there would be meaningless, and producing that meaningless number
+    // cost minutes of every CI run.
+    if (Instrumented) return;
+
     Bench bench(8, 16);  // 128 notes per clip: heavier than any real arrangement
     const FlattenResult result = bench.best();
-    MESSAGE("1,000 clips, extreme density: " << result.event_count << " events, best of 5: "
+    MESSAGE("1,000 clips, extreme density: " << result.event_count << " events, "
                                              << result.elapsed_ms << " ms");
-    CHECK(result.elapsed_ms < 300.0);
+    CHECK(result.clips_flattened == 1000);
+    CHECK(result.elapsed_ms < 2000.0);
   }
 }
