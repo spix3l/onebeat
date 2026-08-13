@@ -54,6 +54,9 @@ open. It is accepted for now because Stage 2 is hosting work, which does not
 depend on it — but it must be closed in Stage 3, before the piano roll's
 architecture is settled.
 
+> **Amended 13 August 2026:** the spike itself will not be built — see
+> §Amendment. The measurement above is still owed; it is now `OB-3-10`'s.
+
 ### P2 — Panel tear-off into a second window · **yes on capability, no on availability**
 
 Pass condition: *a panel detaches, renders, receives input, and re-docks.*
@@ -122,6 +125,30 @@ per-frame attribution. This is the clearest pass of the four.
    roll. It is the only spike that can still invalidate D3.
 5. **Track the windowing API's path to stable** as a standing item — it changes
    what FR-WSP-02 and `OB-2-08` can promise.
+
+## Amendment — 13 August 2026: P1 is closed by decision
+
+The maintainer waived the P1 spike rather than leaving `OB-0-01` open: Flutter
+can render a piano roll, and a throwaway app to prove it is not worth building.
+Recorded here because it changes what this ADR rests on, and the change should
+be visible rather than inferred.
+
+**Consequence 4 above is superseded.** P1 is not "closed in Stage 3 on
+ProMotion hardware with the real piano roll" as a *spike*; the same measurement
+is now an acceptance criterion of `OB-3-10` (piano roll UI), taken against the
+real view instead of a mock of it. That is a better test of the same question
+and a worse-timed one — it lands with the feature rather than before it — which
+is the trade being accepted.
+
+**What is unchanged:** the paint-path discipline (no per-frame allocation,
+pre-allocated `Paint`s, no closures in hot loops) is a standing rule for all
+canvas work, and debt **D1a** — no 120 Hz display on the project — still has to
+be resolved before anyone can make the measurement at all.
+
+**What would still reverse D3:** the real piano roll missing 120 fps in Stage 3
+with no layering strategy that recovers it. Reversal is more expensive then
+than it would have been now. That cost is the substance of the decision, and it
+was made deliberately.
 
 ## What this ADR does not claim
 

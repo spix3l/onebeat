@@ -23,6 +23,11 @@ shippable on stable, so the generic parameter editor renders in the main window
 instead of floating. ADR-001 is written and gate G-A is closed. P3 genuinely
 does wait for Stage 7.
 
+**P1 was closed by decision on the same date** rather than by running it: the
+maintainer judged Flutter's ability to paint a piano roll not to be an open
+question. The measurement moved to `OB-3-10`. **Only Stage 0's P3 remains open**,
+so the stage is closed except for that.
+
 ## Conventions
 
 - **IDs:** `OB-<stage>-<nn>`, stable forever; epics are `EPIC-<n>`.
@@ -54,7 +59,7 @@ does wait for Stage 7.
 
 | Status | ID | Title | Est |
 |---|---|---|---|
-| 🟨 | [OB-0-01](stage-0-spikes/OB-0-01-spike-custompainter-piano-roll-120hz.md) | Spike P1: CustomPainter piano roll at 120 Hz | M |
+| ✅ | [OB-0-01](stage-0-spikes/OB-0-01-spike-custompainter-piano-roll-120hz.md) | Spike P1: CustomPainter piano roll at 120 Hz — **closed by decision** | M |
 | ✅ | [OB-0-02](stage-0-spikes/OB-0-02-spike-panel-tearoff-multiwindow.md) | Spike P2: panel tear-off into a second native window | M |
 | ⬜ | [OB-0-03](stage-0-spikes/OB-0-03-spike-finder-drag-and-drop.md) | Spike P3: Finder drag-and-drop file paths | S |
 | ✅ | [OB-0-04](stage-0-spikes/OB-0-04-spike-ffi-snapshot-roundtrip.md) | Spike P4: FFI round-trip cost for per-frame snapshots | M |
@@ -71,11 +76,16 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
   with no state serialization needed. But the API is `@internal` and
   master-channel-only, so **OneBeat cannot ship it on stable today** — which is
   why `OB-2-08`'s generic parameter editor now has an in-main-window fallback.
-- **P1 🟨** — zero dropped frames sustained and the painter's CPU cost bounded in
-  CI at 0.06 % of a 120 Hz frame, but on a 60 Hz panel and with a meter rather
-  than the 2,000-note piano roll the spike asks for. Needs ProMotion hardware
-  (D1a) *and* Stage 3's piano roll (D1b). **The only spike that can still
-  invalidate the Flutter decision.**
+- **P1 ✅ by decision, 13 August 2026** — the maintainer waived the spike:
+  Flutter can render a piano roll and throwaway code proving it is not worth
+  writing. The evidence that exists is real (zero dropped frames sustained; the
+  painter's CPU cost bounded in CI at 0.06 % of a 120 Hz frame) and is not the
+  measurement the spike asked for — that was on a 60 Hz panel with a meter
+  rather than 2,000 notes. **The measurement is not cancelled, it moved**: it is
+  now an acceptance criterion of `OB-3-10`, where the real piano roll exists,
+  and it still needs ProMotion hardware (D1a). Flutter's reversal window is
+  correspondingly narrower, which is the trade that was accepted; see
+  [ADR-001 §Amendment](../docs/adr/ADR-001-ui-toolkit.md).
 - **P3 ⬜** — not attempted; needed before Stage 7.
 
 ## Stage 1 — v0.1 "It makes sound" — `stage-1-it-makes-sound/`

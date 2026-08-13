@@ -1,5 +1,12 @@
 # OB-0-01 — Spike P1: CustomPainter piano roll at 120 Hz
 
+> **Closed by decision, 13 August 2026 — the spike will not be built.**
+> The maintainer's call: Flutter can render this, the question is not open
+> enough to be worth throwaway code, and D3 stands without it. What that
+> changes, and what it deliberately does not, is in **Resolution** at the
+> bottom of this file. The acceptance criteria below are left unticked on
+> purpose: they were waived, not met, and a ticked box would say otherwise.
+
 | | |
 |---|---|
 | **Stage** | 0 — Risk spikes |
@@ -74,3 +81,36 @@ Test at least two rendering strategies if the naive one fails:
 ## Failure escalation
 
 If no strategy sustains 120 fps: **stop the project sequence.** OB-0-05 becomes a re-evaluation of D3 (PRD §15.1: "a cheap reversal now and a catastrophic one at v0.4").
+
+## Resolution — closed by decision, 13 August 2026
+
+The maintainer waived this spike: Flutter can render a piano roll, the question
+does not warrant throwaway code, and D3 is settled. That is a decision about
+risk appetite and it is the maintainer's to make, so it is taken as made.
+
+**What was actually established** (unchanged by the decision, and the reason it
+is a defensible one): two `CustomPainter` views ran 60 s of continuous playback
+with **zero dropped frames**, and `app/test/paint_cost_test.dart` bounds the
+meter painter at **0.0050 ms/frame — 0.06 % of a 120 Hz budget**, in CI, on
+every commit. The published evidence for Flutter desktop rendering thousands of
+primitives per frame is also not thin.
+
+**What the decision does not establish**, and what therefore moves rather than
+disappears: nobody has drawn 2,000 rounded, bordered, individually-coloured
+rectangles at 8.33 ms on this project, because nobody has had a 120 Hz panel to
+draw them on (debt D1a). Two consequences:
+
+1. **The measurement moves to `OB-3-10` (piano roll UI)**, which now carries it
+   as an acceptance criterion. That is the first commit where the real load
+   exists, and it is still inside the "cheap reversal" window §15.1 is about —
+   Stage 3, not v0.4.
+2. **The paint-path discipline in *Technical notes* above is binding anyway.**
+   No per-frame allocation, pre-allocated `Paint`s, no closures in hot loops. It
+   was written as a spike constraint; it survives as a rule, because it is what
+   makes the Stage 3 measurement likely to pass rather than a coin toss.
+
+Debt **D1b** (close P1 with the real piano roll) is therefore *not* cancelled —
+it is what `OB-3-10` now owns. **D1a** (ProMotion hardware) still has to be
+resolved to satisfy it, and no software substitute exists for a display.
+
+Recorded in [ADR-001](../../docs/adr/ADR-001-ui-toolkit.md) §Amendment.

@@ -27,7 +27,7 @@
 
 - [ ] All FR-SEQ-02 capabilities present: entry/edit, velocity, length, quantise, scale highlighting.
 - [ ] Same-sequence proof: rack edits appear live in the roll and vice versa (DM-Q4, widget test).
-- [ ] 2,000-note pattern: sustained 120 Hz during scroll + playback in profile mode (the OB-0-01 measurement repeated in the real app — regression gate for R13).
+- [ ] 2,000-note pattern: sustained 120 Hz during scroll + playback in profile mode, on a 120 Hz display, with the frame-time histogram attached. **This is now the only place P1 gets answered** — `OB-0-01` was closed by decision on 13 August 2026 without building the spike, so this criterion inherited it, and failing it is the D3 reversal ADR-001 §Amendment describes rather than a UI defect. Needs debt D1a (ProMotion hardware) resolved first; if it is not, say so here rather than measuring at 60 Hz and calling it done.
 - [ ] Full walkthrough with no right-click-only actions (FR-UX-17).
 - [ ] Matches `onebeat-piano.html`; token lint clean.
 

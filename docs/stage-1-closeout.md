@@ -162,7 +162,7 @@ Each of these should become a ticket before Stage 2 feature work starts.
 | # | Item | Why it was deferred | Lands in |
 |---|---|---|---|
 | D1a | End-to-end 120 Hz frame measurement outstanding | The dev machine is a 60 Hz MacBook Air M3; paint cost is now bounded in CI (§2) but rasterization and vsync are not | A ProMotion Mac, or a verified high-refresh external display |
-| D1b | P1 as written — a **piano roll** at 120 Hz — is not answered by the meter | The piano roll does not exist until Stage 3; the Stage 1 meter is a handful of `drawRect` calls and is not a proxy for it | Stage 3, alongside `OB-3-05` |
+| D1b | P1 as written — a **piano roll** at 120 Hz — is not answered by the meter | The piano roll does not exist until Stage 3; the Stage 1 meter is a handful of `drawRect` calls and is not a proxy for it | **`OB-3-10`**, as an acceptance criterion — `OB-0-01` was closed by decision on 13 August 2026 without building the spike, so this is now where P1 gets answered (ADR-001 §Amendment) |
 | D2a | Spike P2 (multi-window) unanswered — **blocking** | Stage 1 was built directly, and a single-window app never exercised it | **OB-0-02, before `OB-2-01`** — `OB-2-08` needs a Flutter panel in a floating window |
 | D2b | ADR-001 (Flutter go/no-go) unwritten; spike P3 unanswered | Same; P3's risk genuinely does not bite until the browser | OB-0-03 + OB-0-05, before Stage 7 |
 | D3 | The engine dylib is copied into the bundle by a build script, not embedded by Xcode, and is ad-hoc signed | Proper embedding, signing and notarization is Stage 2 (OB-2-06) | OB-2-06 |
