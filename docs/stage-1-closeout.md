@@ -120,13 +120,14 @@ worth recording:
 | Spike | Question | Answer from the real code |
 |---|---|---|
 | P1 | CustomPainter at 120 Hz | Not yet answered at 120 Hz. Zero dropped frames at 60 Hz with a CustomPainter meter and a CustomPainter clock; needs a ProMotion display to close. |
-| P2 | Panel tear-off into a second window | **Not answered.** No multi-window work exists yet; the first ticket that needs it is Stage 8's workspace. Risk carried. |
+| P2 | Panel tear-off into a second window | **Not answered, and needed sooner than this document first claimed.** `OB-2-08` scope item 5 puts a Flutter generic parameter editor in a floating window — that is the P2 question, in Stage 2, not Stage 8. Run OB-0-02 before `OB-2-01`. |
 | P3 | Finder drag-and-drop | **Not answered.** First needed by the browser (Stage 7). Risk carried. |
 | P4 | FFI snapshot cost | Answered: a seqlock read through one C call per frame, into a struct allocated once. 3797 frames with a 2.20 ms average build time including the snapshot read; no measurable per-frame cost. |
 
-ADR-001 has not been written. The Flutter decision is *de facto* confirmed by
-the working app, but P2 and P3 remain genuinely open, and pretending otherwise
-would be dishonest. Carried forward as D2.
+ADR-001 has not been written, so **gate G-A has never formally run**. The
+Flutter decision is *de facto* confirmed by the working app for everything
+Stage 1 touches, but a single-window app exercises none of P2, and pretending
+otherwise would be dishonest. Carried forward as D2.
 
 ## 5. Clone to build
 
@@ -145,7 +146,8 @@ Each of these should become a ticket before Stage 2 feature work starts.
 | # | Item | Why it was deferred | Lands in |
 |---|---|---|---|
 | D1 | 120 Hz measurement outstanding | No ProMotion display available | Whenever the measurement can be made on suitable hardware |
-| D2 | ADR-001 (Flutter go/no-go) unwritten; spikes P2 and P3 unanswered | Stage 1 was built directly; the risks they cover do not bite until Stages 7–8 | Before Stage 7 |
+| D2a | Spike P2 (multi-window) unanswered — **blocking** | Stage 1 was built directly, and a single-window app never exercised it | **OB-0-02, before `OB-2-01`** — `OB-2-08` needs a Flutter panel in a floating window |
+| D2b | ADR-001 (Flutter go/no-go) unwritten; spike P3 unanswered | Same; P3's risk genuinely does not bite until the browser | OB-0-03 + OB-0-05, before Stage 7 |
 | D3 | The engine dylib is copied into the bundle by a build script, not embedded by Xcode, and is ad-hoc signed | Proper embedding, signing and notarization is Stage 2 (OB-2-06) | OB-2-06 |
 | D4 | No `flutter_test` widget tests for the shell — only token, contrast and ballistics unit tests, plus the headless FFI smoke test | Widget/interaction test infrastructure is scheduled for OB-3-14 | OB-3-14 |
 | D5 | Sample loading is WAV-only, and only via the fallback path in the UI (no file picker) | Browser and multi-format decode are Stage 7 | Stage 7 |
@@ -158,6 +160,11 @@ Each of these should become a ticket before Stage 2 feature work starts.
 - [x] Full CI matrix green, including RTSan
       ([run 31679995637](https://github.com/spix3l/onebeat/actions/runs/31679995637))
 - [x] Closeout merged, listing measurements and accepted debt with landing stages
-- [ ] Project owner signs off Stage 1 as closed
+- [x] Project owner signs off Stage 1 as closed — PR #1 merged, 13 August 2026
 
-Stage 2 feature work starts once the owner signs off (PLAN.md gate G-C).
+Gate G-C is satisfied and **Stage 1 is closed**.
+
+Gate **G-A is not**: it was never run, and ADR-001 does not exist (D2a/D2b).
+Stage 2 therefore starts with **OB-0-02**, not `OB-2-01` — the multi-window
+answer has to arrive before the hosting architecture is built on top of the
+assumption that it works.

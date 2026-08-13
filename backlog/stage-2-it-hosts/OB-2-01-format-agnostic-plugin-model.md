@@ -5,7 +5,7 @@
 | **Stage** | 2 — v0.2 "It hosts" |
 | **Type** | Feature (engine) — architecture-critical |
 | **Priority** | Blocker for all hosting work |
-| **Dependencies** | OB-1-14 |
+| **Dependencies** | OB-1-14, **OB-0-02** (spike P2 — `OB-2-08` builds on multi-window; answer it before hosting work stacks on the assumption) |
 | **References** | D5, FR-PLG-04, FR-PLG-12 (structural), DM-Q5 |
 | **Estimate** | L |
 

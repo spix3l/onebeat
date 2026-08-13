@@ -8,8 +8,16 @@
 | **Dependencies** | None (parallel with OB-0-01) |
 | **References** | PRD §15.1 P2, FR-WSP-02, D9, R12 |
 | **Estimate** | M |
+| **Blocks** | `OB-2-01` — run this before Stage 2 feature work begins |
 
 ## Context
+
+**Scheduling note (added at Stage 1 closeout).** This spike was originally read
+as a Stage 8 risk, on the grounds that the workspace is the first thing to tear
+a panel off. That is wrong: `OB-2-08` scope item 5 requires a **Flutter**
+generic parameter editor in a floating window for plugins without a GUI, which
+is the same question, two tickets after CLAP hosting lands. Answer it before
+`OB-2-01` so that a failure is a re-plan rather than a rewrite.
 
 The rearrangeable workspace is the signature element (D9); tearing a panel off into a separate window — including onto another display — is FR-WSP-02, a Must. Multi-window is Flutter desktop's weakest area (R12). The design file shows this flow (`onebeat-ws-drag.html`, `onebeat-ws-window.html`).
 

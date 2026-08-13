@@ -5,7 +5,7 @@
 | **Stage** | 2 — v0.2 "It hosts" |
 | **Type** | Feature (UI/platform) |
 | **Priority** | High |
-| **Dependencies** | OB-2-07 |
+| **Dependencies** | OB-2-07, **OB-0-02** (scope item 5 is a Flutter surface in a second window — that is spike P2) |
 | **References** | D3.2, FR-PLG-11; design screens `onebeat-plugin-float.html`, `onebeat-plugin-params.html` |
 | **Estimate** | L |
 

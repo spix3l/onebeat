@@ -4,16 +4,24 @@ Companion to `../PLAN.md`. Stages 0–3 are fully detailed tickets; Stages 4–9
 
 **Status legend:** ⬜ todo · 🟨 in progress · 🟦 review · ✅ done
 
-**Stage 1 is complete and awaiting owner sign-off.** OB-1-01 … OB-1-13 are done
-and all three v0.1 exit criteria are demonstrated, with the full CI matrix green
-including RTSan. See [`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md)
-for the measurements, the deviations, and the seven items of debt carried
-forward with their landing stages.
+**Stage 1 is closed.** OB-1-01 … OB-1-14 are done, all three v0.1 exit criteria
+are demonstrated, the full CI matrix including RTSan is green, and the closeout
+is merged. See [`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md) for the
+measurements, the deviations, and the seven items of debt carried forward with
+their landing stages.
 
-Stage 0 was **not** run as separate spikes: P1 and P4 were answered by the real
-implementation, P2 (tear-off windows) and P3 (Finder drag-and-drop) remain open
-and ADR-001 is unwritten. Those risks do not bite until Stages 7–8, but they are
-still open — see the closeout, item D3.
+**Stage 0 is not closed, and gate G-A has never been run.** It was not executed
+as separate spikes: P4 was answered by the shipped FFI and P1 only at 60 Hz,
+while **P2 (tear-off windows) and P3 (Finder drag-and-drop) were never
+attempted** and ADR-001 is unwritten. Stage 1 proceeded as though the Flutter
+go/no-go had been decided; in truth it was decided implicitly, by the app
+working.
+
+P2 is the one that is now urgent. It does **not** wait for the Stage 8
+workspace: `OB-2-08` scope item 5 puts a Flutter generic parameter editor in a
+floating window, two tickets after CLAP hosting lands. Run **OB-0-02 before
+`OB-2-01`**, so that a bad answer arrives before the hosting architecture is
+built on top of it rather than after. P3 genuinely does wait for Stage 7.
 
 ## Conventions
 
@@ -46,11 +54,20 @@ still open — see the closeout, item D3.
 
 | Status | ID | Title | Est |
 |---|---|---|---|
-| ⬜ | [OB-0-01](stage-0-spikes/OB-0-01-spike-custompainter-piano-roll-120hz.md) | Spike P1: CustomPainter piano roll at 120 Hz | M |
+| 🟨 | [OB-0-01](stage-0-spikes/OB-0-01-spike-custompainter-piano-roll-120hz.md) | Spike P1: CustomPainter piano roll at 120 Hz | M |
 | ⬜ | [OB-0-02](stage-0-spikes/OB-0-02-spike-panel-tearoff-multiwindow.md) | Spike P2: panel tear-off into a second native window | M |
 | ⬜ | [OB-0-03](stage-0-spikes/OB-0-03-spike-finder-drag-and-drop.md) | Spike P3: Finder drag-and-drop file paths | S |
-| ⬜ | [OB-0-04](stage-0-spikes/OB-0-04-spike-ffi-snapshot-roundtrip.md) | Spike P4: FFI round-trip cost for per-frame snapshots | M |
+| ✅ | [OB-0-04](stage-0-spikes/OB-0-04-spike-ffi-snapshot-roundtrip.md) | Spike P4: FFI round-trip cost for per-frame snapshots | M |
 | ⬜ | [OB-0-05](stage-0-spikes/OB-0-05-decision-gate-adr-001.md) | Decision gate: ADR-001, Flutter go/no-go | S |
+
+Statuses reflect what the **real** implementation answered, not spike code:
+
+- **P4 ✅** — the shipped seqlock snapshot read over one C call per frame, measured
+  across 3797 frames with no attributable per-frame cost (closeout §4).
+- **P1 🟨** — zero dropped frames sustained, but on a 60 Hz panel; the 120 Hz half
+  of the question needs ProMotion hardware (debt D1).
+- **P2, P3, ADR-001 ⬜** — genuinely not attempted. **OB-0-02 blocks `OB-2-01`**
+  (see above); OB-0-03 is needed before Stage 7.
 
 ## Stage 1 — v0.1 "It makes sound" — `stage-1-it-makes-sound/`
 
@@ -121,4 +138,5 @@ still open — see the closeout, item D3.
 ## Suggested execution order (first two stages)
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
-Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14.
+Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
+Stage 2: **OB-0-02 first** (spike P2, unpaid Stage 0 debt — `OB-2-08` needs it) → OB-2-01 → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
