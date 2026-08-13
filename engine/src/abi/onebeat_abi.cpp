@@ -138,21 +138,40 @@ const onebeat::model::Instrument* orderedInstrument(const ob_engine& handle, int
   return nullptr;
 }
 
-ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
-  if (command == nullptr || !handle.commands.execute(std::move(command))) {
-    return fail(OB_ERR_INVALID_ARGUMENT, failure);
-  }
-  onebeat::model::FlattenResult flattened =
-      handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
-  if (flattened.schedule != nullptr) handle.engine->publishSchedule(std::move(flattened.schedule));
-  g_last_error.clear();
-  return OB_OK;
+const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
+  return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
 }
 
 void publishModel(ob_engine& handle) {
   onebeat::model::FlattenResult flattened =
       handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
-  if (flattened.schedule != nullptr) handle.engine->publishSchedule(std::move(flattened.schedule));
+  if (flattened.schedule != nullptr) {
+    handle.engine->publishSchedule(std::move(flattened.schedule));
+  }
+  double loop_end_beats = 4.0;
+  const onebeat::model::Pattern* pattern = currentPattern(handle);
+  if (pattern != nullptr && pattern->length > 0) {
+    loop_end_beats =
+        static_cast<double>(pattern->length) / static_cast<double>(onebeat::model::TicksPerQuarter);
+  } else if (flattened.length_frames > 0) {
+    loop_end_beats =
+        handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames);
+  }
+  ob_command loop{};
+  loop.type = OB_CMD_SET_LOOP;
+  loop.f64_a = 0.0;
+  loop.f64_b = loop_end_beats;
+  loop.i64_a = 1;
+  handle.engine->postCommand(loop);
+}
+
+ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
+  if (command == nullptr || !handle.commands.execute(std::move(command))) {
+    return fail(OB_ERR_INVALID_ARGUMENT, failure);
+  }
+  publishModel(handle);
+  g_last_error.clear();
+  return OB_OK;
 }
 
 bool initialiseRack(ob_engine& handle) {
@@ -171,10 +190,6 @@ bool initialiseRack(ob_engine& handle) {
   handle.commands.clear();
   publishModel(handle);
   return true;
-}
-
-const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
-  return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
 }
 
 onebeat::model::Ticks rackGrid(const ob_engine& handle, onebeat::model::InstrumentId id) {
@@ -308,6 +323,14 @@ ob_status ob_engine_stop(ob_engine* engine) {
 ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
   if (engine == nullptr || command == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and command must not be null.");
+  }
+  if (command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) {
+    onebeat::model::TransportState transport = engine->project.transport();
+    if (std::abs(transport.tempo - command->f64_a) > 0.0001) {
+      transport.tempo = command->f64_a;
+      (void)engine->commands.execute(onebeat::model::setTransport(engine->project, transport));
+      publishModel(*engine);
+    }
   }
   // Allocation-free, lock-free: this is on the UI frame path.
   if (!engine->engine->postCommand(*command)) {
@@ -1133,6 +1156,16 @@ ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) 
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
   const onebeat::model::Ticks length =
       static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
+  const onebeat::model::Ticks old_length = pattern->length;
+  for (const auto& [clip_id, clip] : engine->project.clips()) {
+    if (const auto* src = clip.pattern()) {
+      if (src->pattern == pattern->id && clip.length == old_length) {
+        (void)engine->commands.execute(onebeat::model::editClip(
+            engine->project, clip_id, onebeat::model::ChangeField::Length,
+            [length](onebeat::model::Clip& c) { c.length = length; }, "Resize clip"));
+      }
+    }
+  }
   return executeModel(*engine,
                       onebeat::model::editPatternMeta(
                           engine->project, pattern->id, onebeat::model::ChangeField::Length,

@@ -269,6 +269,9 @@ TEST_SUITE("abi") {
     REQUIRE(ob_engine_rack_set_length(engine, 32) == OB_OK);
     REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
     CHECK(row.step_count == 64);
+    REQUIRE(ob_engine_rack_toggle_step(engine, project_instrument.id, 20) == OB_OK);
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
+    CHECK(row.step_active[20] == 1);
     REQUIRE(ob_engine_instrument_set_muted(engine, project_instrument.id, 1) == OB_OK);
     REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
     CHECK((project_instrument.flags & 1U) != 0U);
