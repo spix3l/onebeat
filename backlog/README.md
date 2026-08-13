@@ -10,6 +10,17 @@ is merged. See [`docs/stage-1-closeout.md`](../docs/stage-1-closeout.md) for the
 measurements, the deviations, and the seven items of debt carried forward with
 their landing stages.
 
+**Stage 2's engineering implementation is landed, but the stage is not
+closed.** The deterministic CLAP fixture, out-of-process runtime, parameter and
+session paths, missing-plugin flow, Pen-derived UI, and native editor hosting
+are implemented; the full CI matrix is green. `OB-2-09` and `OB-2-10` are done.
+`OB-2-05` through `OB-2-08` and `OB-2-11` remain in progress because their
+acceptance criteria require notarization, the real 15-plugin matrix, soak and
+window/focus evidence, and human sign-off. Publishing automation is explicitly
+deferred because the app is not being published yet. See
+[`docs/stage-2-closeout.md`](../docs/stage-2-closeout.md) for the evidence and
+remaining gates.
+
 **Stage 0 is not closed, and gate G-A has never been run.** It was not executed
 as separate spikes: P4 was answered by the shipped FFI and P1 only at 60 Hz,
 while **P2 (tear-off windows) and P3 (Finder drag-and-drop) were never
@@ -115,13 +126,13 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | ✅ | [OB-2-02](stage-2-it-hosts/OB-2-02-plugin-scanner-cache.md) | Plugin scanner with persistent cache | M |
 | ✅ | [OB-2-03](stage-2-it-hosts/OB-2-03-scan-crash-quarantine.md) | Scan crash quarantine & reporting | S |
 | ✅ | [OB-2-04](stage-2-it-hosts/OB-2-04-adr-003-sandbox-ipc.md) | ADR-003: sandbox IPC mechanism | M |
-| ⬜ | [OB-2-05](stage-2-it-hosts/OB-2-05-out-of-process-host-helper.md) | Out-of-process sandboxed host helper | L |
-| ⬜ | [OB-2-06](stage-2-it-hosts/OB-2-06-signing-notarization-validation.md) | Code-signing & notarization validation (Gate G-B) | M |
-| ⬜ | [OB-2-07](stage-2-it-hosts/OB-2-07-clap-hosting.md) | CLAP hosting: instantiate, process, state | L |
-| ⬜ | [OB-2-08](stage-2-it-hosts/OB-2-08-floating-editor-windows.md) | Floating native plugin editor windows | L |
-| ⬜ | [OB-2-09](stage-2-it-hosts/OB-2-09-parameter-model-basic-automation.md) | Host parameter model & basic automation | M |
-| ⬜ | [OB-2-10](stage-2-it-hosts/OB-2-10-plugin-list-ui-missing-placeholder.md) | Plugin list UI & missing-plugin placeholder | M |
-| ⬜ | [OB-2-11](stage-2-it-hosts/OB-2-11-v0-2-exit-verification.md) | v0.2 exit verification | S |
+| 🟨 | [OB-2-05](stage-2-it-hosts/OB-2-05-out-of-process-host-helper.md) | Out-of-process sandboxed host helper — implementation landed; soak/sign-off pending | L |
+| 🟨 | [OB-2-06](stage-2-it-hosts/OB-2-06-signing-notarization-validation.md) | Code-signing & notarization validation (Gate G-B) — local path landed; notarization pending | M |
+| 🟨 | [OB-2-07](stage-2-it-hosts/OB-2-07-clap-hosting.md) | CLAP hosting: instantiate, process, state — fixture green; real-plugin matrix pending | L |
+| 🟨 | [OB-2-08](stage-2-it-hosts/OB-2-08-floating-editor-windows.md) | Floating native plugin editor windows — implementation landed; field validation pending | L |
+| ✅ | [OB-2-09](stage-2-it-hosts/OB-2-09-parameter-model-basic-automation.md) | Host parameter model & basic automation | M |
+| ✅ | [OB-2-10](stage-2-it-hosts/OB-2-10-plugin-list-ui-missing-placeholder.md) | Plugin list UI & missing-plugin placeholder | M |
+| 🟨 | [OB-2-11](stage-2-it-hosts/OB-2-11-v0-2-exit-verification.md) | v0.2 exit verification — closeout started; external gates pending | S |
 
 ## Stage 3 — v0.3 "It sequences" — `stage-3-it-sequences/`
 
@@ -158,18 +169,26 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
-Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/06/07/08 (implementation landed; external gates open) → ~~OB-2-09/10~~ (done) → OB-2-11 (in progress).
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the
 helper process, so OB-2-02's own Dependencies line names OB-2-04. Building the
 scanner first would have meant designing its process model twice.
 
-**OB-2-01 through OB-2-04 are ✅.** Each carries a *Review sign-off* section rather
-than a reviewer's name: on 13 August 2026 the maintainer delegated the R4
-human-review criterion to the implementer, so the sign-offs record what was
-checked and are honest about being self-signed. Everything else in the
-definition of done — ACs, CI, sanitizers — is met on its own terms.
+**OB-2-01 through OB-2-04, OB-2-09, and OB-2-10 are ✅.** `OB-2-05` through
+`OB-2-08` are 🟨 rather than ✅ even though their main code paths have landed:
+the backlog tracks acceptance evidence, not code volume. Gate G-B still needs a
+real notarized artifact and clean-machine launch; Gate G-C still needs the
+15-plugin matrix, the 8-hour soak, native-window geometry/focus observations,
+and the required human/owner sign-offs. `OB-2-11` stays 🟨 until those results
+are recorded in the closeout.
+
+The final implementation CI run is green across Debug and Release engine
+builds, the macOS app build and tests, ASan/UBSan, TSan, RTSan, clang-format,
+clang-tidy, token/seam checks, and the licence audit. The signing/notarization
+script is deliberately local-only: there is no publish job while OneBeat has no
+publication plan.
 
 The claim in ADR-003 most worth arguing with later is that sandboxed plugins are
 called **synchronously**: no pipelining, no added latency, no PDC contribution.
@@ -180,5 +199,6 @@ argument is written into both entitlements files and `OB-2-06` carries a note to
 confirm it survives notarization — it is the assumption Gate G-B rests on.
 
 OB-2-01's model, `docs/plugin-threading-contract.md` and
-`docs/clap-coverage.md` are the documents to read first when picking up hosting
-work. RTSan ran only in CI, not locally — see that ticket's close-out.
+`docs/clap-coverage.md` are the documents to read first when extending hosting
+work. For current Stage 2 status and the exact manual validation sequence, read
+[`docs/stage-2-closeout.md`](../docs/stage-2-closeout.md).
