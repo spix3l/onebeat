@@ -306,6 +306,27 @@ class OneBeatBindings {
   late final _ob_engine_plugin_scan_cancel = _ob_engine_plugin_scan_cancelPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>)>();
 
+  ob_status ob_engine_plugin_retry(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_path,
+  ) {
+    return ob_status.fromValue(_ob_engine_plugin_retry(engine, utf8_path));
+  }
+
+  late final _ob_engine_plugin_retryPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_plugin_retry');
+  late final _ob_engine_plugin_retry = _ob_engine_plugin_retryPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
   ob_status ob_engine_plugin_scan_status(
     ffi.Pointer<ob_engine> engine,
     ffi.Pointer<ob_plugin_scan_status> out_status,
@@ -643,6 +664,28 @@ enum ob_scan_outcome {
   };
 }
 
+enum ob_scan_phase {
+  OB_SCAN_PHASE_NONE(0),
+  OB_SCAN_PHASE_SPAWN(1),
+  OB_SCAN_PHASE_LOAD(2),
+  OB_SCAN_PHASE_ENUMERATE(3),
+  OB_SCAN_PHASE_INSTANTIATE(4),
+  OB_SCAN_PHASE_DONE(5);
+
+  final int value;
+  const ob_scan_phase(this.value);
+
+  static ob_scan_phase fromValue(int value) => switch (value) {
+    0 => OB_SCAN_PHASE_NONE,
+    1 => OB_SCAN_PHASE_SPAWN,
+    2 => OB_SCAN_PHASE_LOAD,
+    3 => OB_SCAN_PHASE_ENUMERATE,
+    4 => OB_SCAN_PHASE_INSTANTIATE,
+    5 => OB_SCAN_PHASE_DONE,
+    _ => throw ArgumentError('Unknown value for ob_scan_phase: $value'),
+  };
+}
+
 final class ob_plugin_scan_status extends ffi.Struct {
   @ffi.Uint32()
   external int struct_size;
@@ -726,15 +769,24 @@ final class ob_plugin_info extends ffi.Struct {
 
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Char> path;
+
+  @ffi.Uint32()
+  external int failure_phase;
+
+  @ffi.Uint32()
+  external int failure_signal;
+
+  @ffi.Uint32()
+  external int retry_count;
 }
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 1;
+const int OB_ABI_VERSION_MINOR = 2;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 65792;
+const int OB_ABI_VERSION_PACKED = 66048;
 
 const int OB_SNAPSHOT_VERSION = 1;
 

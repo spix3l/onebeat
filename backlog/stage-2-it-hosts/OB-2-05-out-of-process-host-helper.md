@@ -22,6 +22,11 @@ G3: a plugin crash never destroys user work. The helper process is the containme
 5. **Supervision:** helper lifecycle owned by a non-RT supervisor thread/service in the app process; clean shutdown on app exit; orphan reaping (no zombie helpers after a hard app kill).
 6. Scan mode: the same helper binary runs OB-2-02's enumeration (`--scan` mode).
 
+> **Already delivered by OB-2-03:** `onebeat-plugin-host` exists, is embedded
+> beside the app executable, and implements the per-bundle `--scan` mode with a
+> watchdog and crash reporting. This ticket still owns the runtime host loop,
+> proxy, supervision and processing-crash recovery in scope items 1–5.
+
 ## Acceptance criteria
 
 - [ ] A test plugin that crashes during `process()`: audio continues (silence from that plugin only), no xrun, no app crash, notification shown, *Restart* recovers it with state intact (G3 demonstrated end-to-end).

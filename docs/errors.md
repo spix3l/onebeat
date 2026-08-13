@@ -21,6 +21,19 @@ Status codes are defined in `engine/src/abi/onebeat_abi.h` (`ob_status`).
 | `OB_ERR_FILE_UNSUPPORTED` | The file is not a format we can decode. | "'<name>' contains no audio." | Convert it to WAV (more formats arrive in v0.7). |
 | `OB_ERR_INTERNAL` | Anything unexpected, including a caught exception. | "Something went wrong inside OneBeat's audio engine." | The session log path is shown; attach it to a report. |
 
+Plug-in quarantine is descriptor state rather than an `ob_status`: the scan
+continues successfully after one bundle fails. The UI composes the sentence
+from the outcome and last announced phase so the engine can keep stable log
+identifiers while the person gets specific copy.
+
+| Outcome / phase | What the user is told | What they can do |
+|---|---|---|
+| Crashed / load | “&lt;name&gt;” crashed while OneBeat was opening it. It remains disabled so the rest of your plug-ins can load. | Retry after updating or removing it, or keep it quarantined. |
+| Crashed / enumerate | “&lt;name&gt;” crashed while OneBeat was reading its plug-in list. It remains disabled so the rest of your plug-ins can load. | Same actions. |
+| Crashed / instantiate | “&lt;name&gt;” crashed while OneBeat was checking its audio and parameter setup. It remains disabled so the rest of your plug-ins can load. | Same actions. |
+| Timed out / any phase | Uses the matching phase sentence above with “stopped responding” in place of “crashed”. | Same actions. |
+| Spawn / unknown | Says the failure happened before OneBeat could open it, or during its scan when no phase was available. | Same actions. |
+
 ## Rules
 
 1. **Never show a status code to a user.** The code is for the log; the copy is
@@ -35,6 +48,9 @@ Status codes are defined in `engine/src/abi/onebeat_abi.h` (`ob_status`).
 
 - **Status bar** — device changes, recoverable problems, the last message from
   the engine event queue. Non-modal, does not steal focus.
+- **Plug-in library quarantine section** — one row per crashed or timed-out
+  bundle, with *Retry scan* and *Keep quarantined*. Keeping it quarantined only
+  dismisses the row for the current app session; it does not change the cache.
 - **Full-window failure state** — only when the app cannot function at all, e.g.
   the engine dylib is missing (`_EngineUnavailable` in `app/lib/main.dart`).
 - **Session log** — everything, always:

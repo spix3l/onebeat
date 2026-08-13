@@ -3,8 +3,10 @@
 #include <strings.h>
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
 
 #include "core/diagnostics.h"
+#include "plugin/scan/subprocess_probe.h"
 
 namespace onebeat::plugin::scan {
 namespace {
@@ -28,10 +30,37 @@ bool byDisplayName(const PluginDescriptor& a, const PluginDescriptor& b) {
 
 }  // namespace
 
+namespace {
+
+// The probe a shipped build uses, with the fallback that keeps a broken
+// installation working rather than silent.
+std::unique_ptr<ScanProbe> defaultProbe(const std::string& cache_path,
+                                        core::Diagnostics* diagnostics) {
+  SubprocessProbeOptions options;
+  options.crash_log_directory = std::filesystem::path(cache_path).parent_path().string();
+  auto probe = std::make_unique<SubprocessProbe>(options, diagnostics);
+  if (probe->available()) {
+    return probe;
+  }
+  // No helper binary: a build that did not produce one, or a bundle assembled
+  // without it. Falling back to `BundleNameProbe` costs the crash containment
+  // this ticket is about, but it cannot itself crash — it never opens a
+  // bundle — so the app still starts and still lists the user's plugins. The
+  // log line is how anyone finds out; it is a build defect, not a user error.
+  if (diagnostics != nullptr) {
+    diagnostics->logf(core::LogLevel::Warn, "plugin-scan",
+                      "no %s helper found; scanning without crash containment",
+                      "onebeat-plugin-host");
+  }
+  return std::make_unique<BundleNameProbe>();
+}
+
+}  // namespace
+
 PluginLibrary::PluginLibrary(std::string cache_path, core::Diagnostics* diagnostics,
                              std::unique_ptr<ScanProbe> probe)
     : cache_(cache_path.empty() ? PluginCache::defaultPath() : std::move(cache_path)),
-      probe_(probe != nullptr ? std::move(probe) : std::make_unique<BundleNameProbe>()),
+      probe_(probe != nullptr ? std::move(probe) : defaultProbe(cache_.path(), diagnostics)),
       diagnostics_(diagnostics) {
   scanner_ = std::make_unique<PluginScanner>(cache_, *probe_, diagnostics);
 }
@@ -61,6 +90,14 @@ bool PluginLibrary::startScan() {
   // The list is *not* cleared here. Clearing it would empty the browser for the
   // duration of the scan, which is the exact failure FR-PLG-05 is about: the
   // cached list stays on screen and is replaced row by row as the scan settles.
+  return true;
+}
+
+bool PluginLibrary::retryPlugin(const std::string& bundle_path) {
+  if (!scanner_->startRetry(bundle_path)) {
+    return false;
+  }
+  committed_ = false;
   return true;
 }
 

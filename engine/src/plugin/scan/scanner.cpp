@@ -247,6 +247,8 @@ bool PluginScanner::start() {
   }
   join();  // reap a finished previous thread before replacing it
   cancel_requested_.store(false, std::memory_order_release);
+  prune_on_commit_ = true;
+  retry_seed_ = 0;
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -277,6 +279,60 @@ bool PluginScanner::start() {
     // means "do not commit this".
     try {
       run(directories);
+    } catch (...) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      progress_.state = ScanState::Cancelled;
+      running_.store(false, std::memory_order_release);
+    }
+  });
+  return true;
+}
+
+bool PluginScanner::startRetry(const std::string& bundle_path) {
+  if (running_.exchange(true, std::memory_order_acq_rel)) {
+    return false;
+  }
+  join();
+  cancel_requested_.store(false, std::memory_order_release);
+  prune_on_commit_ = false;
+
+  BundleRef bundle;
+  bundle.path = bundle_path;
+  bundle.format = PluginFormat::Clap;
+  bundle.fingerprint = fingerprintBundle(bundle_path);
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    progress_ = ScanProgress{};
+    progress_.state = ScanState::Probing;
+    progress_.bundles_discovered = 1;
+    pending_.clear();
+    settled_.clear();
+    live_paths_.clear();
+    baseline_ = cache_.entries();
+
+    // Everything this bundle already has in the cache is dropped from the
+    // baseline, which is what forces a re-probe: the reuse rule in
+    // `probeBundles` keys off finding a matching row, and there will not be
+    // one. The retry count is carried over first, so a second failure reads as
+    // "tried twice" rather than as a fresh problem.
+    uint8_t previous = 0;
+    for (const PluginDescriptor& row : baseline_) {
+      if (row.path.text() == bundle_path) {
+        previous = std::max(previous, row.retry_count);
+      }
+    }
+    retry_seed_ = previous < 255 ? static_cast<uint8_t>(previous + 1) : previous;
+    baseline_.erase(std::remove_if(baseline_.begin(), baseline_.end(),
+                                   [&bundle_path](const PluginDescriptor& row) {
+                                     return row.path.text() == bundle_path;
+                                   }),
+                    baseline_.end());
+  }
+
+  thread_ = std::thread([this, bundle] {
+    try {
+      probeBundles({bundle});
     } catch (...) {
       std::lock_guard<std::mutex> lock(mutex_);
       progress_.state = ScanState::Cancelled;
@@ -318,6 +374,13 @@ void PluginScanner::run(const std::vector<std::string>& directories) {
     progress_.state = ScanState::Probing;
   }
 
+  probeBundles(bundles);
+}
+
+// The body of a scan, shared by the full walk and by a one-bundle retry. Both
+// need identical reuse, streaming, cancellation and completion behaviour, and
+// the surest way to get that is for there to be one copy of it.
+void PluginScanner::probeBundles(const std::vector<BundleRef>& bundles) {
   std::vector<PluginDescriptor> probed;
   for (const BundleRef& bundle : bundles) {
     if (cancel_requested_.load(std::memory_order_acquire)) {
@@ -365,6 +428,11 @@ void PluginScanner::run(const std::vector<std::string>& directories) {
         descriptor.format = bundle.format;
         descriptor.fingerprint = bundle.fingerprint;
         descriptor.scanned_at_nanos = nowUnixNanos();
+        // Zero for a full scan, and the carried-over count for a retry. A
+        // bundle whose fingerprint changed is a new version, and starting its
+        // count again is the right answer there: the user has not yet tried
+        // *this* build of it.
+        descriptor.retry_count = retry_seed_;
       }
       // A bundle that yielded nothing is remembered as such, so the next launch
       // skips it instead of paying for the same disappointment.
@@ -428,7 +496,9 @@ bool PluginScanner::commit() {
     live = live_paths_;
   }
 
-  const size_t removed = cache_.retainOnly(live);
+  // A retry has seen one bundle, so it is in no position to conclude that every
+  // other plugin has been uninstalled.
+  const size_t removed = prune_on_commit_ ? cache_.retainOnly(live) : 0;
   for (const PluginDescriptor& descriptor : settled) {
     cache_.upsert(descriptor);
   }

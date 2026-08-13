@@ -49,6 +49,7 @@ void sanitize(PluginDescriptor& descriptor) noexcept {
   terminate(descriptor.feature_text);
   clampEnum(descriptor.format, PluginFormat::AudioUnit);
   clampEnum(descriptor.outcome, ScanOutcome::TimedOut);
+  clampEnum(descriptor.failure_phase, ScanPhase::Done);
 }
 
 // Small RAII wrapper so the several early returns below cannot leak a FILE*.

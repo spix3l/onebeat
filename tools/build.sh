@@ -29,9 +29,9 @@ cd app
 $FLUTTER pub get
 $FLUTTER build macos $FLUTTER_MODE
 
-# Place the engine next to the app binary so the built bundle is self-contained.
-# Proper embedding, code-signing and notarization of the dylib is Stage 2 work
-# (OB-2-06); until then the copy plus an ad-hoc signature is enough to run.
+# Place the engine and scan helper next to the app binary so the built bundle is
+# self-contained. Proper signing and notarization is Stage 2 work (OB-2-06);
+# until then an ad-hoc signature is enough to run.
 #
 # *Every* product bundle is refreshed, not just the one this invocation built.
 # The loader prefers a dylib inside the bundle over the repository build output
@@ -45,9 +45,12 @@ while IFS= read -r APP_DIR; do
   [[ -z "$APP_DIR" ]] && continue
   found_any=1
   mkdir -p "$APP_DIR/Contents/Frameworks"
+  mkdir -p "$APP_DIR/Contents/MacOS"
   cp "$REPO_ROOT/build/libonebeat_engine.dylib" "$APP_DIR/Contents/Frameworks/"
+  cp "$REPO_ROOT/build/onebeat-plugin-host" "$APP_DIR/Contents/MacOS/"
   codesign --force --sign - "$APP_DIR/Contents/Frameworks/libonebeat_engine.dylib" 2>/dev/null || true
-  echo "==> Engine refreshed in $APP_DIR"
+  codesign --force --sign - "$APP_DIR/Contents/MacOS/onebeat-plugin-host" 2>/dev/null || true
+  echo "==> Engine and plug-in scan helper refreshed in $APP_DIR"
 done < <(find build/macos/Build/Products -maxdepth 2 -name 'onebeat.app' 2>/dev/null)
 
 if [[ $found_any -eq 0 ]]; then

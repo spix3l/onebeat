@@ -67,27 +67,27 @@ class EngineSnapshot {
   });
 
   const EngineSnapshot.empty()
-      : playing = false,
-        loopEnabled = false,
-        positionFrames = 0,
-        positionBeats = 0,
-        positionSeconds = 0,
-        hostTimeNanos = 0,
-        tempoBpm = 120,
-        bar = 1,
-        beat = 1,
-        tick = 0,
-        sampleRate = 48000,
-        blockFrames = 0,
-        activeVoices = 0,
-        peakLeft = 0,
-        peakRight = 0,
-        rmsLeft = 0,
-        rmsRight = 0,
-        cpuLoad = 0,
-        xrunCount = 0,
-        latencyFramesRoundTrip = 0,
-        scheduleEventCount = 0;
+    : playing = false,
+      loopEnabled = false,
+      positionFrames = 0,
+      positionBeats = 0,
+      positionSeconds = 0,
+      hostTimeNanos = 0,
+      tempoBpm = 120,
+      bar = 1,
+      beat = 1,
+      tick = 0,
+      sampleRate = 48000,
+      blockFrames = 0,
+      activeVoices = 0,
+      peakLeft = 0,
+      peakRight = 0,
+      rmsLeft = 0,
+      rmsRight = 0,
+      cpuLoad = 0,
+      xrunCount = 0,
+      latencyFramesRoundTrip = 0,
+      scheduleEventCount = 0;
 
   final bool playing;
   final bool loopEnabled;
@@ -117,7 +117,13 @@ class EngineSnapshot {
 
 /// One notification from the engine (device change, error, sample loaded).
 class EngineEvent {
-  const EngineEvent(this.type, this.code, this.intValue, this.doubleValue, this.text);
+  const EngineEvent(
+    this.type,
+    this.code,
+    this.intValue,
+    this.doubleValue,
+    this.text,
+  );
 
   final int type;
   final int code;
@@ -137,11 +143,11 @@ class EngineException implements Exception {
 
 class EngineClient {
   EngineClient._(this._bindings, this._engine)
-      : _snapshot = calloc<ob_snapshot>(),
-        _command = calloc<ob_command>(),
-        _event = calloc<ob_event>(),
-        _scanStatus = calloc<ob_plugin_scan_status>(),
-        _pluginInfo = calloc<ob_plugin_info>();
+    : _snapshot = calloc<ob_snapshot>(),
+      _command = calloc<ob_command>(),
+      _event = calloc<ob_event>(),
+      _scanStatus = calloc<ob_plugin_scan_status>(),
+      _pluginInfo = calloc<ob_plugin_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
   /// is how widget tests and CI drive the UI without audio hardware.
@@ -162,7 +168,9 @@ class EngineClient {
 
       final ob_status status = bindings.ob_engine_create(config, out);
       if (status != ob_status.OB_OK) {
-        throw EngineException(bindings.ob_last_error_message().cast<Utf8>().toDartString());
+        throw EngineException(
+          bindings.ob_last_error_message().cast<Utf8>().toDartString(),
+        );
       }
       return EngineClient._(bindings, out.value);
     } finally {
@@ -190,12 +198,17 @@ class EngineClient {
   bool get isDisposed => _disposed;
 
   String get deviceName =>
-      _bindings.ob_engine_output_device_name(_engine).cast<Utf8>().toDartString();
+      _bindings
+          .ob_engine_output_device_name(_engine)
+          .cast<Utf8>()
+          .toDartString();
 
   void startAudio() {
     final ob_status status = _bindings.ob_engine_start(_engine);
     if (status != ob_status.OB_OK) {
-      throw EngineException(_bindings.ob_last_error_message().cast<Utf8>().toDartString());
+      throw EngineException(
+        _bindings.ob_last_error_message().cast<Utf8>().toDartString(),
+      );
     }
   }
 
@@ -222,20 +235,31 @@ class EngineClient {
   void setTempo(double bpm) => _post(cmdSetTempo, f64a: bpm);
   void setLoop(double startBeats, double endBeats, {required bool enabled}) =>
       _post(cmdSetLoop, i64: enabled ? 1 : 0, f64a: startBeats, f64b: endBeats);
-  void noteOn(int note, double velocity) => _post(cmdNoteOn, i64: note, f64a: velocity);
+  void noteOn(int note, double velocity) =>
+      _post(cmdNoteOn, i64: note, f64a: velocity);
   void noteOff(int note) => _post(cmdNoteOff, i64: note);
   void allNotesOff() => _post(cmdAllNotesOff);
   void setMasterGain(double gain) => _post(cmdSetMasterGain, f64a: gain);
 
   /// v0.1 content stand-in: a step pattern, flattened and published by the
   /// engine. Stage 3 replaces this with real model edits.
-  void setStepPattern(List<int> steps, {int midiNote = 60, double stepBeats = 0.25}) {
+  void setStepPattern(
+    List<int> steps, {
+    int midiNote = 60,
+    double stepBeats = 0.25,
+  }) {
     final Pointer<Uint8> buffer = calloc<Uint8>(steps.length);
     try {
       for (int index = 0; index < steps.length; index++) {
         buffer[index] = steps[index];
       }
-      _bindings.ob_engine_set_step_pattern(_engine, buffer, steps.length, midiNote, stepBeats);
+      _bindings.ob_engine_set_step_pattern(
+        _engine,
+        buffer,
+        steps.length,
+        midiNote,
+        stepBeats,
+      );
     } finally {
       calloc.free(buffer);
     }
@@ -280,8 +304,15 @@ class EngineClient {
     List<EngineEvent>? events;
     while (_bindings.ob_engine_poll_event(_engine, _event) == 1) {
       final ob_event e = _event.ref;
-      (events ??= <EngineEvent>[])
-          .add(EngineEvent(e.type, e.code, e.i64_a, e.f64_a, _readFixedUtf8(e.text, 96)));
+      (events ??= <EngineEvent>[]).add(
+        EngineEvent(
+          e.type,
+          e.code,
+          e.i64_a,
+          e.f64_a,
+          _readFixedUtf8(e.text, 96),
+        ),
+      );
     }
     return events ?? const <EngineEvent>[];
   }
@@ -297,18 +328,25 @@ class EngineClient {
   /// Returns false if a scan is already running.
   bool startPluginScan({List<String> directories = const <String>[]}) {
     if (directories.isEmpty) {
-      return _bindings.ob_engine_plugin_scan_start(_engine, nullptr) == ob_status.OB_OK;
+      return _bindings.ob_engine_plugin_scan_start(_engine, nullptr) ==
+          ob_status.OB_OK;
     }
     // NUL-separated and double-NUL-terminated, which is what the ABI takes so
     // that neither side has to own an array of string pointers.
     final Uint8List encoded = Uint8List.fromList(<int>[
-      for (final String directory in directories) ...<int>[...utf8.encode(directory), 0],
+      for (final String directory in directories) ...<int>[
+        ...utf8.encode(directory),
+        0,
+      ],
       0,
     ]);
     final Pointer<Uint8> buffer = calloc<Uint8>(encoded.length);
     try {
       buffer.asTypedList(encoded.length).setAll(0, encoded);
-      return _bindings.ob_engine_plugin_scan_start(_engine, buffer.cast<Char>()) ==
+      return _bindings.ob_engine_plugin_scan_start(
+            _engine,
+            buffer.cast<Char>(),
+          ) ==
           ob_status.OB_OK;
     } finally {
       calloc.free(buffer);
@@ -316,6 +354,18 @@ class EngineClient {
   }
 
   void cancelPluginScan() => _bindings.ob_engine_plugin_scan_cancel(_engine);
+
+  /// Re-scans one quarantined bundle in the same background worker used by a
+  /// full scan. Returns false when another scan is already in flight.
+  bool retryPluginScan(String path) {
+    final Pointer<Utf8> encoded = path.toNativeUtf8();
+    try {
+      return _bindings.ob_engine_plugin_retry(_engine, encoded.cast<Char>()) ==
+          ob_status.OB_OK;
+    } finally {
+      calloc.free(encoded);
+    }
+  }
 
   /// Reads scan progress. Also the call that folds streamed results into the
   /// list, so it must be made regularly while a scan is running.
@@ -339,8 +389,9 @@ class EngineClient {
   List<PluginListing> readPluginList(int count) {
     final List<PluginListing> plugins = <PluginListing>[];
     for (int index = 0; index < count; index++) {
-      if (_bindings.ob_engine_plugin_at(_engine, index, _pluginInfo) != ob_status.OB_OK) {
-        break;  // the list changed under us; the next generation will re-read it
+      if (_bindings.ob_engine_plugin_at(_engine, index, _pluginInfo) !=
+          ob_status.OB_OK) {
+        break; // the list changed under us; the next generation will re-read it
       }
       final ob_plugin_info p = _pluginInfo.ref;
       plugins.add(
@@ -350,8 +401,23 @@ class EngineClient {
           vendor: _readFixedUtf8(p.vendor, 128),
           version: _readFixedUtf8(p.version, 32),
           path: _readFixedUtf8(p.path, 512),
-          format: PluginFormat.values[p.format.clamp(0, PluginFormat.values.length - 1)],
-          outcome: ScanOutcome.values[p.outcome.clamp(0, ScanOutcome.values.length - 1)],
+          format:
+              PluginFormat.values[p.format.clamp(
+                0,
+                PluginFormat.values.length - 1,
+              )],
+          outcome:
+              ScanOutcome.values[p.outcome.clamp(
+                0,
+                ScanOutcome.values.length - 1,
+              )],
+          failurePhase:
+              ScanPhase.values[p.failure_phase.clamp(
+                0,
+                ScanPhase.values.length - 1,
+              )],
+          failureSignal: p.failure_signal,
+          retryCount: p.retry_count,
           introspected: (p.flags & obPluginFlagIntrospected) != 0,
           paramCount: p.param_count,
           audioInputCount: p.audio_input_count,
@@ -390,6 +456,9 @@ enum PluginFormat { unknown, builtin, clap, vst3, audioUnit }
 /// collapsed into a single "failed".
 enum ScanOutcome { ok, notAPlugin, crashed, timedOut }
 
+/// Mirrors `ob_scan_phase`.
+enum ScanPhase { none, spawn, load, enumerate, instantiate, done }
+
 const int obPluginFlagIntrospected = 0x1;
 
 class PluginScanStatus {
@@ -405,14 +474,14 @@ class PluginScanStatus {
   });
 
   const PluginScanStatus.idle()
-      : state = ScanState.idle,
-        bundlesDiscovered = 0,
-        bundlesReused = 0,
-        bundlesProbed = 0,
-        pluginsFound = 0,
-        pluginCount = 0,
-        listGeneration = 0,
-        current = '';
+    : state = ScanState.idle,
+      bundlesDiscovered = 0,
+      bundlesReused = 0,
+      bundlesProbed = 0,
+      pluginsFound = 0,
+      pluginCount = 0,
+      listGeneration = 0,
+      current = '';
 
   final ScanState state;
   final int bundlesDiscovered;
@@ -440,6 +509,9 @@ class PluginListing {
     required this.path,
     required this.format,
     required this.outcome,
+    required this.failurePhase,
+    required this.failureSignal,
+    required this.retryCount,
     required this.introspected,
     required this.paramCount,
     required this.audioInputCount,
@@ -455,6 +527,9 @@ class PluginListing {
   final String path;
   final PluginFormat format;
   final ScanOutcome outcome;
+  final ScanPhase failurePhase;
+  final int failureSignal;
+  final int retryCount;
 
   /// False until something has actually opened the plug-in. While it is false,
   /// [vendor], [version], [paramCount] and the port counts are placeholders and
@@ -468,6 +543,8 @@ class PluginListing {
   final int noteOutputCount;
 
   bool get isUsable => outcome == ScanOutcome.ok;
+  bool get isQuarantined =>
+      outcome == ScanOutcome.crashed || outcome == ScanOutcome.timedOut;
 }
 
 /// Command type constants, mirroring ob_command_type. ffigen renders the C enum

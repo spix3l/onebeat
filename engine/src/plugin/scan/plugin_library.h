@@ -27,7 +27,12 @@ namespace onebeat::plugin::scan {
 class PluginLibrary {
  public:
   // `cache_path` empty => PluginCache::defaultPath(). `probe` null => the
-  // shipping `BundleNameProbe`; OB-2-05 passes the out-of-process one here.
+  // out-of-process `SubprocessProbe`, or `BundleNameProbe` if the helper
+  // binary cannot be found; tests inject their own.
+  //
+  // The crash-context file (OB-2-03 §4) goes next to the cache, which is the
+  // session log directory — the ABI derives both from the same config field,
+  // so everything the engine writes for a session stays in one place.
   explicit PluginLibrary(std::string cache_path = std::string(),
                          core::Diagnostics* diagnostics = nullptr,
                          std::unique_ptr<ScanProbe> probe = nullptr);
@@ -45,6 +50,12 @@ class PluginLibrary {
   void setSearchPaths(std::vector<std::string> directories);
 
   bool startScan();
+
+  // The *Retry* action on a quarantined plugin (OB-2-03 §3): re-probe this one
+  // bundle, leaving every other row alone. Same streaming and commit path as a
+  // scan, so the UI needs no second code path — it pumps and the row changes.
+  bool retryPlugin(const std::string& bundle_path);
+
   void cancelScan() noexcept;
   bool scanning() const noexcept;
 

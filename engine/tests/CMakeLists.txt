@@ -8,6 +8,51 @@ add_library(onebeat_doctest INTERFACE)
 target_include_directories(onebeat_doctest SYSTEM INTERFACE
   ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/doctest)
 
+# ---------------------------------------------------------------------------
+# Plugin fixtures for OB-2-03: real bundles the real helper really dlopens
+# ---------------------------------------------------------------------------
+# Deliberately *not* linked against onebeat_flags: these are stand-ins for
+# third-party code, and third-party code is not built with our warnings, our
+# sanitizers or our visibility rules. Building them like our own code would make
+# them a friendlier target than the thing they represent.
+set(OB_TEST_PLUGIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/test-plugins)
+
+function(onebeat_add_test_plugin name behaviour)
+  add_library(${name} MODULE fixtures/test_plugins.cpp)
+  if(NOT behaviour STREQUAL "")
+    target_compile_definitions(${name} PRIVATE ${behaviour})
+  endif()
+  set_target_properties(${name} PROPERTIES
+    PREFIX "" SUFFIX ".dylib"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/test-plugin-binaries)
+
+  # A bundle, not a bare dylib, because that is what a scan walks: Contents/
+  # MacOS/<binary> plus an Info.plist, which is also what fingerprintBundle
+  # reads to decide whether a plugin has changed.
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${name}-Info.plist
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\">
+<dict>
+  <key>CFBundleExecutable</key><string>${name}</string>
+  <key>CFBundleIdentifier</key><string>dev.onebeat.test.${name}</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+</dict>
+</plist>
+")
+  set(bundle ${OB_TEST_PLUGIN_DIR}/${name}.clap)
+  add_custom_command(TARGET ${name} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${bundle}/Contents/MacOS
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${name}> ${bundle}/Contents/MacOS/${name}
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/${name}-Info.plist
+            ${bundle}/Contents/Info.plist
+    VERBATIM)
+endfunction()
+
+onebeat_add_test_plugin(ob_test_plugin_ok "")
+onebeat_add_test_plugin(ob_test_plugin_crash OB_TEST_PLUGIN_CRASH)
+onebeat_add_test_plugin(ob_test_plugin_hang OB_TEST_PLUGIN_HANG)
+
 add_executable(onebeat_tests
   test_main.cpp
   test_time_map.cpp
@@ -20,10 +65,19 @@ add_executable(onebeat_tests
   test_plugin_events.cpp
   test_plugin_model.cpp
   test_plugin_scan.cpp
+  test_plugin_quarantine.cpp
   test_stress_publish.cpp
 )
 target_link_libraries(onebeat_tests PRIVATE onebeat_abi onebeat_core onebeat_testing onebeat_doctest)
 target_include_directories(onebeat_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
+# Paths rather than a search: the tests must exercise *this* build's helper and
+# *this* build's fixtures, not whatever happens to be installed.
+target_compile_definitions(onebeat_tests PRIVATE
+  OB_TEST_PLUGIN_DIR="${OB_TEST_PLUGIN_DIR}"
+  OB_TEST_HELPER="$<TARGET_FILE:onebeat_plugin_host>")
+add_dependencies(onebeat_tests
+  onebeat_plugin_host ob_test_plugin_ok ob_test_plugin_crash ob_test_plugin_hang)
 
 # doctest test-suite names map 1:1 to labels.
 foreach(suite unit engine abi stress)

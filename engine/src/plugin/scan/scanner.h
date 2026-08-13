@@ -129,6 +129,20 @@ class PluginScanner {
   // thread is launched.
   bool start();
 
+  // Re-probe exactly one bundle (OB-2-03 §3, the *Retry* action).
+  //
+  // Runs through the same machinery as a full scan — same thread, same probe,
+  // same streaming — with two differences that matter:
+  //
+  //   * the bundle is probed even though its fingerprint is unchanged, because
+  //     "unchanged" is precisely the state a retry exists to override;
+  //   * `commit()` does not prune, since a scan of one bundle has seen one
+  //     bundle and knows nothing about whether the rest still exist. Without
+  //     that, retrying one plugin would delete the user's entire library.
+  //
+  // False if a scan is already running.
+  bool startRetry(const std::string& bundle_path);
+
   // Asks the running scan to stop at the next bundle boundary. Does not join.
   void cancel() noexcept;
 
@@ -152,6 +166,7 @@ class PluginScanner {
 
  private:
   void run(const std::vector<std::string>& directories);
+  void probeBundles(const std::vector<BundleRef>& bundles);
 
   PluginCache& cache_;
   ScanProbe& probe_;
@@ -170,6 +185,13 @@ class PluginScanner {
   std::vector<std::string> live_paths_;    // for pruning deleted bundles
   // A snapshot of the cache taken at start(), so the diff needs no lock.
   std::vector<PluginDescriptor> baseline_;
+  // A full scan sees everything, so it may delete rows for bundles it did not
+  // find. A retry sees one bundle and may not.
+  bool prune_on_commit_ = true;
+  // Carried across a retry: how many times the user has already tried this
+  // plugin. Read from the cache before the row is dropped from the baseline,
+  // so a retry that fails again counts up rather than resetting to one.
+  uint8_t retry_seed_ = 0;
 };
 
 // Exposed for tests and for OB-2-05's helper, which fingerprints the same way.

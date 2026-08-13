@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 1
+#define OB_ABI_VERSION_MINOR 2
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -291,6 +291,16 @@ typedef enum ob_scan_outcome {
   OB_SCAN_TIMED_OUT = 3
 } ob_scan_outcome;
 
+/* The last phase announced by the scan helper before a quarantine failure. */
+typedef enum ob_scan_phase {
+  OB_SCAN_PHASE_NONE = 0,
+  OB_SCAN_PHASE_SPAWN = 1,
+  OB_SCAN_PHASE_LOAD = 2,
+  OB_SCAN_PHASE_ENUMERATE = 3,
+  OB_SCAN_PHASE_INSTANTIATE = 4,
+  OB_SCAN_PHASE_DONE = 5
+} ob_scan_phase;
+
 /* Bit flags describing how much of an ob_plugin_info is actually known. */
 #define OB_PLUGIN_FLAG_INTROSPECTED                 \
   0x1u /* the plugin was opened and asked; without  \
@@ -342,6 +352,11 @@ typedef struct ob_plugin_info {
   char vendor[128];
   char version[32];
   char path[512];
+
+  /* Added in ABI 1.2. Appended so every ABI 1.1 field keeps its offset. */
+  uint32_t failure_phase;  /* ob_scan_phase; meaningful when quarantined */
+  uint32_t failure_signal; /* signal that killed the helper, or 0 */
+  uint32_t retry_count;    /* manual retries since this quarantine began */
 } ob_plugin_info;
 
 /* Main/UI thread. May block briefly: reads the scan cache from disk. Call once
@@ -359,6 +374,11 @@ OB_API ob_status ob_engine_plugin_scan_start(ob_engine* engine, const char* utf8
 /* Main/UI thread. Never blocks. Asks the scan to stop at the next bundle; a
  * cancelled scan does not update the cache. */
 OB_API ob_status ob_engine_plugin_scan_cancel(ob_engine* engine);
+
+/* Main/UI thread. Never blocks: launches a background re-scan of exactly one
+ * quarantined bundle. `utf8_path` is copied. Returns OB_ERR_ALREADY_RUNNING if
+ * another scan is in flight. */
+OB_API ob_status ob_engine_plugin_retry(ob_engine* engine, const char* utf8_path);
 
 /* Main/UI thread. Never blocks. Also the point at which streamed results are
  * folded into the list, so call it once per frame while a scan is running. */

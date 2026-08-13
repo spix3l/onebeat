@@ -25,9 +25,10 @@ class EngineLoadException implements Exception {
   // version mismatch already names the file it found, so appending an empty
   // "Looked in:" heading to that message is noise in a string a user reads.
   @override
-  String toString() => searchedPaths.isEmpty
-      ? message
-      : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
+  String toString() =>
+      searchedPaths.isEmpty
+          ? message
+          : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
 }
 
 const String _libraryFileName = 'libonebeat_engine.dylib';
@@ -109,4 +110,4 @@ void _checkAbiVersion(OneBeatBindings bindings, String path) {
 /// Bump the minor here in the same change that bumps it there — that pairing is
 /// what makes a stale dylib a clear message instead of a missing symbol.
 const int expectedAbiMajor = 1;
-const int expectedAbiMinor = 1;
+const int expectedAbiMinor = 2;

@@ -100,7 +100,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.1.0";
+  return "1.2.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -353,6 +353,23 @@ ob_status ob_engine_plugin_scan_cancel(ob_engine* engine) {
   }
 }
 
+ob_status ob_engine_plugin_retry(ob_engine* engine, const char* utf8_path) {
+  if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine and plugin path must not be null or empty.");
+  }
+  try {
+    if (!pluginLibrary(*engine).retryPlugin(utf8_path)) {
+      return fail(OB_ERR_ALREADY_RUNNING, "A plugin scan is already running.");
+    }
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::bad_alloc&) {
+    return fail(OB_ERR_OUT_OF_MEMORY, "Out of memory while retrying the plugin scan.");
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
 ob_status ob_engine_plugin_scan_status(ob_engine* engine, ob_plugin_scan_status* out_status) {
   if (engine == nullptr || out_status == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and out_status must not be null.");
@@ -410,6 +427,9 @@ ob_status ob_engine_plugin_at(ob_engine* engine, int32_t index, ob_plugin_info* 
     copyText(out_info->vendor, sizeof(out_info->vendor), descriptor.vendor.text());
     copyText(out_info->version, sizeof(out_info->version), descriptor.version.text());
     copyText(out_info->path, sizeof(out_info->path), descriptor.path.text());
+    out_info->failure_phase = static_cast<uint32_t>(descriptor.failure_phase);
+    out_info->failure_signal = descriptor.failure_signal;
+    out_info->retry_count = descriptor.retry_count;
     g_last_error.clear();
     return OB_OK;
   } catch (const std::exception& exception) {

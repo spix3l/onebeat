@@ -90,6 +90,40 @@ enum class ScanOutcome : uint8_t {
 
 const char* outcomeName(ScanOutcome outcome) noexcept;
 
+// How far the probe got before it died (OB-2-03 scope §1).
+//
+// The phase is what makes the user-facing sentence specific: "Diva stopped
+// responding while OneBeat was opening it" is actionable in a way that "the
+// scan failed" is not, and the phase is also the first thing a vendor asks for
+// in a bug report. It is recorded by the *parent*, from the last phase the
+// helper announced before it went away — a process that just took SIGSEGV
+// cannot be relied on to report anything.
+enum class ScanPhase : uint8_t {
+  // Never probed out of process — an in-process probe, or a row that predates
+  // the helper. Not a failure.
+  None = 0,
+  // The helper was being started. A failure here is ours, not the plugin's:
+  // a missing or unrunnable helper binary.
+  Spawn = 1,
+  // `dlopen`. Where the overwhelming majority of scan crashes happen, because
+  // this is where a plugin's static initialisers and its licence check run.
+  Load = 2,
+  // Asking the entry point what the bundle contains.
+  Enumerate = 3,
+  // Creating an instance to read its ports and parameters. Not reached until
+  // OB-2-07; the enumerator exists now so the copy table is written once.
+  Instantiate = 4,
+  // Finished cleanly. Recorded so "died after reporting everything" is
+  // distinguishable from "died silently".
+  Done = 5,
+};
+
+// Log and crash-report wording only. The *user-facing* sentence is composed in
+// the UI from (outcome, phase), because `docs/errors.md` rule 1 puts the copy
+// with the person and the code with the log — and because a phase name that has
+// to satisfy both ends up serving neither.
+const char* scanPhaseName(ScanPhase phase) noexcept;
+
 // What makes a bundle "unchanged" for incremental scanning (scope §2).
 //
 // Content hashing a 200 MB bundle to decide whether to skip a 20 ms probe is
@@ -162,12 +196,39 @@ struct PluginDescriptor {
   PluginFormat format = PluginFormat::Unknown;
   ScanOutcome outcome = ScanOutcome::Ok;
 
-  // `DescriptorFlags`. Sits last because it is also the growth point: a future
-  // field goes here, where adding it moves nothing and reintroduces no padding.
+  // `DescriptorFlags`. Sits before the failure block because it is 4-byte
+  // aligned and the block below is byte-aligned filler: together they make a
+  // clean 8, which is what keeps the struct free of trailing padding.
   uint32_t flags = DescriptorFlagNone;
+
+  // --- why it failed (OB-2-03), meaningful only when `quarantined()` ---
+  ScanPhase failure_phase = ScanPhase::None;
+  // The signal that killed the helper, or 0. Not always available: under a
+  // sanitizer the runtime intercepts the fault and exits, so a real crash can
+  // arrive as a non-zero exit code with no signal. Both are recorded; neither
+  // alone is sufficient evidence.
+  uint8_t failure_signal = 0;
+  uint8_t failure_exit_code = 0;
+  // Manual retries the user has spent on this row since it was quarantined.
+  // Persisted so that "I already tried this three times" survives a restart,
+  // and so a future version can stop offering *Retry* on a hopeless plugin.
+  // The *automatic* retry needs no counter: it is triggered by the fingerprint
+  // changing, which by definition happens once per new version.
+  uint8_t retry_count = 0;
+  // The growth point. Adding a field here moves nothing and reintroduces no
+  // padding — unlike reordering, which invalidates every cache on disk.
+  uint32_t reserved_ = 0;
 
   bool usable() const noexcept { return outcome == ScanOutcome::Ok; }
   bool introspected() const noexcept { return (flags & DescriptorFlagIntrospected) != 0; }
+
+  // Crashed or hung: the plugin is not offered, is not re-probed on the next
+  // launch, and is shown in the quarantined section with a *Retry* action.
+  // `NotAPlugin` is deliberately *not* quarantine — a bundle for another
+  // architecture is not a fault the user needs to be told about repeatedly.
+  bool quarantined() const noexcept {
+    return outcome == ScanOutcome::Crashed || outcome == ScanOutcome::TimedOut;
+  }
 };
 
 static_assert(std::is_trivially_copyable_v<PluginDescriptor>,

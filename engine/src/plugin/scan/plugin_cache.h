@@ -36,7 +36,13 @@ namespace onebeat::plugin::scan {
 // Bumped whenever `PluginDescriptor`'s layout changes. An older or newer file
 // is not migrated — it is dropped and rescanned, which costs one scan and
 // removes every migration bug that would otherwise live here forever.
-inline constexpr uint32_t CacheSchemaVersion = 1;
+//
+//   1 — OB-2-02, the original layout.
+//   2 — OB-2-03 added the failure block (phase, signal, exit code, retries).
+//       Every v1 cache is discarded on first launch after the upgrade. That is
+//       the right trade at this size: one rescan, once, against a migration
+//       path that would have to be maintained forever.
+inline constexpr uint32_t CacheSchemaVersion = 2;
 
 enum class CacheLoadResult : uint8_t {
   Ok = 0,

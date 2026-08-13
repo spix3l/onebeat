@@ -29,50 +29,158 @@ class PluginListDebugPanel extends StatelessWidget {
       padding: EdgeInsets.all(tokens.spacing.xl),
       child: AnimatedBuilder(
         animation: library,
-        builder: (BuildContext context, Widget? child) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('PLUG-INS  (F10 to close)', style: tokens.type.label),
-            SizedBox(height: tokens.spacing.lg),
-            Row(
+        builder:
+            (BuildContext context, Widget? child) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                OneBeatButton(
-                  label: library.status.isScanning ? 'STOP SCAN' : 'SCAN',
-                  semanticLabel: library.status.isScanning
-                      ? 'Stop scanning for plug-ins'
-                      : 'Scan for plug-ins',
-                  active: library.status.isScanning,
-                  onPressed: () {
-                    if (library.status.isScanning) {
-                      library.cancelScan();
-                    } else {
-                      library.startScan();
-                    }
-                  },
+                Text('PLUG-INS  (F10 to close)', style: tokens.type.label),
+                SizedBox(height: tokens.spacing.lg),
+                Row(
+                  children: <Widget>[
+                    OneBeatButton(
+                      label: library.status.isScanning ? 'STOP SCAN' : 'SCAN',
+                      semanticLabel:
+                          library.status.isScanning
+                              ? 'Stop scanning for plug-ins'
+                              : 'Scan for plug-ins',
+                      active: library.status.isScanning,
+                      onPressed: () {
+                        if (library.status.isScanning) {
+                          library.cancelScan();
+                        } else {
+                          library.startScan();
+                        }
+                      },
+                    ),
+                    SizedBox(width: tokens.spacing.md),
+                    Expanded(
+                      child: Text(library.summary, style: tokens.type.body),
+                    ),
+                  ],
                 ),
-                SizedBox(width: tokens.spacing.md),
-                Expanded(child: Text(library.summary, style: tokens.type.body)),
+                if (library.status.current.isNotEmpty) ...<Widget>[
+                  SizedBox(height: tokens.spacing.xs),
+                  Text(library.status.current, style: tokens.type.numericSmall),
+                ],
+                SizedBox(height: tokens.spacing.lg),
+                Expanded(
+                  child:
+                      library.plugins.isEmpty
+                          ? _EmptyLibrary(scanning: library.status.isScanning)
+                          : ListView(
+                            children: <Widget>[
+                              if (library
+                                  .quarantinedPlugins
+                                  .isNotEmpty) ...<Widget>[
+                                Text('QUARANTINED', style: tokens.type.label),
+                                SizedBox(height: tokens.spacing.sm),
+                                for (final PluginListing listing
+                                    in library.quarantinedPlugins)
+                                  _QuarantinedPluginRow(
+                                    listing: listing,
+                                    onRetry: () => library.retry(listing),
+                                    onKeep:
+                                        () => library.keepQuarantined(listing),
+                                  ),
+                                SizedBox(height: tokens.spacing.xl),
+                              ],
+                              Text('AVAILABLE', style: tokens.type.label),
+                              SizedBox(height: tokens.spacing.sm),
+                              if (library.availablePlugins.isEmpty)
+                                Text(
+                                  'No available plug-ins. Quarantined plug-ins stay disabled until '
+                                  'a retry completes successfully.',
+                                  style: tokens.type.body,
+                                )
+                              else
+                                for (final PluginListing listing
+                                    in library.availablePlugins)
+                                  _PluginRow(listing: listing),
+                            ],
+                          ),
+                ),
               ],
             ),
-            if (library.status.current.isNotEmpty) ...<Widget>[
-              SizedBox(height: tokens.spacing.xs),
-              Text(library.status.current, style: tokens.type.numericSmall),
-            ],
-            SizedBox(height: tokens.spacing.lg),
-            Expanded(
-              child: library.plugins.isEmpty
-                  ? _EmptyLibrary(scanning: library.status.isScanning)
-                  : ListView.builder(
-                      itemCount: library.plugins.length,
-                      itemBuilder: (BuildContext context, int index) =>
-                          _PluginRow(listing: library.plugins[index]),
-                    ),
-            ),
-          ],
-        ),
       ),
     );
   }
+}
+
+class _QuarantinedPluginRow extends StatelessWidget {
+  const _QuarantinedPluginRow({
+    required this.listing,
+    required this.onRetry,
+    required this.onKeep,
+  });
+
+  final PluginListing listing;
+  final VoidCallback onRetry;
+  final VoidCallback onKeep;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      margin: EdgeInsets.only(bottom: tokens.spacing.md),
+      padding: EdgeInsets.all(tokens.spacing.lg),
+      decoration: BoxDecoration(
+        color: tokens.color.surfacePanel,
+        borderRadius: tokens.radius.panelBorder,
+        border: Border.all(
+          color: tokens.color.warning,
+          width: tokens.border.hairline,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(listing.name, style: tokens.type.title),
+          SizedBox(height: tokens.spacing.xs),
+          SizedBox(
+            width: tokens.size.dialogProseWidth,
+            child: Text(
+              pluginQuarantineMessage(listing),
+              style: tokens.type.body,
+            ),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          Row(
+            children: <Widget>[
+              OneBeatButton(
+                label: 'Retry scan',
+                semanticLabel: 'Retry scan for ${listing.name}',
+                onPressed: onRetry,
+              ),
+              SizedBox(width: tokens.spacing.sm),
+              OneBeatButton(
+                label: 'Keep quarantined',
+                semanticLabel: 'Keep ${listing.name} quarantined',
+                onPressed: onKeep,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String pluginQuarantineMessage(PluginListing listing) {
+  final String event =
+      listing.outcome == ScanOutcome.timedOut
+          ? 'stopped responding'
+          : 'crashed';
+  final String phase = switch (listing.failurePhase) {
+    ScanPhase.spawn => 'before OneBeat could open it',
+    ScanPhase.load => 'while OneBeat was opening it',
+    ScanPhase.enumerate => 'while OneBeat was reading its plug-in list',
+    ScanPhase.instantiate =>
+      'while OneBeat was checking its audio and parameter setup',
+    ScanPhase.done => 'after its scan completed',
+    ScanPhase.none => 'during its scan',
+  };
+  return '“${listing.name}” $event $phase. It remains disabled so the rest of your '
+      'plug-ins can load. Retry after updating or removing it, or keep it quarantined.';
 }
 
 /// The empty state, designed rather than deferred (FR-UX-13): it says what is
@@ -120,9 +228,12 @@ class _PluginRow extends StatelessWidget {
             width: tokens.size.proseWidth,
             child: Text(
               listing.name,
-              style: listing.isUsable
-                  ? tokens.type.body
-                  : tokens.type.body.copyWith(color: tokens.color.textMuted),
+              style:
+                  listing.isUsable
+                      ? tokens.type.body
+                      : tokens.type.body.copyWith(
+                        color: tokens.color.textMuted,
+                      ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -149,7 +260,8 @@ class _PluginRow extends StatelessWidget {
         if (!listing.introspected) {
           return 'found, not yet inspected';
         }
-        final String vendor = listing.vendor.isEmpty ? '' : '${listing.vendor} · ';
+        final String vendor =
+            listing.vendor.isEmpty ? '' : '${listing.vendor} · ';
         return '$vendor${listing.audioOutputCount} out · '
             '${listing.paramCount} parameters';
     }

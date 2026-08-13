@@ -16,10 +16,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.1.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.2.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.1.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.2.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -92,7 +92,7 @@ TEST_SUITE("abi") {
   }
 
   TEST_CASE("ob_plugin_info layout is frozen") {
-    CHECK(sizeof(ob_plugin_info) == 984);
+    CHECK(sizeof(ob_plugin_info) == 1000);
     CHECK(offsetof(ob_plugin_info, struct_size) == 0);
     CHECK(offsetof(ob_plugin_info, format) == 4);
     CHECK(offsetof(ob_plugin_info, outcome) == 8);
@@ -110,6 +110,9 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_plugin_info, vendor) == 312);
     CHECK(offsetof(ob_plugin_info, version) == 440);
     CHECK(offsetof(ob_plugin_info, path) == 472);
+    CHECK(offsetof(ob_plugin_info, failure_phase) == 984);
+    CHECK(offsetof(ob_plugin_info, failure_signal) == 988);
+    CHECK(offsetof(ob_plugin_info, retry_count) == 992);
   }
 
   TEST_CASE("The plugin list is reachable through the C surface") {
@@ -148,6 +151,8 @@ TEST_SUITE("abi") {
     ob_plugin_info info{};
     CHECK(ob_engine_plugin_at(engine, 0, &info) == OB_ERR_INVALID_ARGUMENT);
     CHECK(ob_engine_plugin_at(engine, -1, &info) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_plugin_retry(engine, nullptr) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_plugin_retry(engine, "") == OB_ERR_INVALID_ARGUMENT);
 
     ob_engine_destroy(engine);
   }

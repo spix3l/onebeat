@@ -106,6 +106,7 @@ add_library(onebeat_core STATIC
   src/plugin/scan/plugin_cache.cpp
   src/plugin/scan/plugin_library.cpp
   src/plugin/scan/scanner.cpp
+  src/plugin/scan/subprocess_probe.cpp
   src/audio_io/null/null_device.cpp
   ${ONEBEAT_PLATFORM_SOURCES}
 )
@@ -142,6 +143,18 @@ target_link_libraries(onebeat_testing PUBLIC onebeat_core)
 # render offline without the app (used by the stage exit checklist).
 add_executable(onebeat_devtool tools/devtool.cpp)
 target_link_libraries(onebeat_devtool PRIVATE onebeat_core onebeat_testing)
+
+# ---------------------------------------------------------------------------
+# The helper process (OB-2-03; OB-2-05 §1 and §6)
+# ---------------------------------------------------------------------------
+# The only executable in the project allowed to load third-party code. It ships
+# beside the dylib, which is how `SubprocessProbe::discoverHelperPath()` finds
+# it — keep them together in every bundle layout (`tools/build.sh`, OB-2-06).
+add_executable(onebeat_plugin_host src/host/host_main.cpp)
+target_link_libraries(onebeat_plugin_host PRIVATE onebeat_core)
+set_target_properties(onebeat_plugin_host PROPERTIES
+  OUTPUT_NAME onebeat-plugin-host
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 enable_testing()
 add_subdirectory(tests)

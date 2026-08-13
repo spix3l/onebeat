@@ -32,4 +32,22 @@ const char* outcomeName(ScanOutcome outcome) noexcept {
   return "unknown";
 }
 
+const char* scanPhaseName(ScanPhase phase) noexcept {
+  switch (phase) {
+    case ScanPhase::None:
+      return "none";
+    case ScanPhase::Spawn:
+      return "spawn";
+    case ScanPhase::Load:
+      return "load";
+    case ScanPhase::Enumerate:
+      return "enumerate";
+    case ScanPhase::Instantiate:
+      return "instantiate";
+    case ScanPhase::Done:
+      return "done";
+  }
+  return "unknown";
+}
+
 }  // namespace onebeat::plugin::scan

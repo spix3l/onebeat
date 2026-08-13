@@ -19,6 +19,16 @@ class PluginLibraryStore extends ChangeNotifier {
 
   PluginScanStatus status = const PluginScanStatus.idle();
   List<PluginListing> plugins = const <PluginListing>[];
+  final Set<String> _dismissedQuarantinePaths = <String>{};
+
+  Iterable<PluginListing> get availablePlugins =>
+      plugins.where((PluginListing plugin) => !plugin.isQuarantined);
+
+  Iterable<PluginListing> get quarantinedPlugins => plugins.where(
+    (PluginListing plugin) =>
+        plugin.isQuarantined &&
+        !_dismissedQuarantinePaths.contains(plugin.path),
+  );
 
   // The list is copied out of the engine only when this moves, so an idle app
   // and a scanning app cost the same per frame.
@@ -43,6 +53,23 @@ class PluginLibraryStore extends ChangeNotifier {
     _refresh(force: true);
   }
 
+  bool retry(PluginListing plugin) {
+    final bool started = _client.retryPluginScan(plugin.path);
+    if (started) {
+      _dismissedQuarantinePaths.remove(plugin.path);
+      _refresh(force: true);
+    }
+    return started;
+  }
+
+  /// Acknowledges the warning for this app session. The engine cache remains
+  /// quarantined, so the bundle is still skipped on the next scan and launch.
+  void keepQuarantined(PluginListing plugin) {
+    if (_dismissedQuarantinePaths.add(plugin.path)) {
+      notifyListeners();
+    }
+  }
+
   /// Called once per frame while a scan is running. Cheap when nothing changed:
   /// one native call that returns a small struct, and no list copy.
   void pump() => _refresh();
@@ -54,7 +81,8 @@ class PluginLibraryStore extends ChangeNotifier {
       _seenGeneration = next.listGeneration;
       plugins = _client.readPluginList(next.pluginCount);
     }
-    final bool statusChanged = next.state != status.state ||
+    final bool statusChanged =
+        next.state != status.state ||
         next.bundlesProbed != status.bundlesProbed ||
         next.bundlesDiscovered != status.bundlesDiscovered ||
         next.current != status.current;

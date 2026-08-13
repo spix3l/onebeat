@@ -29,6 +29,10 @@ so at startup by name and version rather than dying later on a missing symbol โ€
 that check lives in `engine_library.dart` and depends on `expectedAbiMinor`
 being bumped in the same change that bumps `OB_ABI_VERSION_MINOR`.
 
+The script also embeds and ad-hoc signs `onebeat-plugin-host` in each product
+bundle's `Contents/MacOS/`. Keep the helper beside the app executable: shipped
+plug-in scans depend on it for crash and hang containment.
+
 ## Definition of done
 
 From `PLAN.md` ยง5.2, on every ticket:
