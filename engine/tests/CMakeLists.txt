@@ -69,6 +69,7 @@ add_executable(onebeat_tests
   test_abi.cpp
   test_model.cpp
   test_model_commands.cpp
+  test_note_edit.cpp
   test_flattener.cpp
   test_project_io.cpp
   test_plugin_events.cpp

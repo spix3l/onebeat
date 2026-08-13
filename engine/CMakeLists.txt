@@ -118,6 +118,7 @@ add_library(onebeat_core STATIC
   src/model/project.cpp
   src/model/command.cpp
   src/model/commands.cpp
+  src/model/note_edit.cpp
   src/model/flattener.cpp
   src/model/invariants.cpp
   src/model/project_io.cpp

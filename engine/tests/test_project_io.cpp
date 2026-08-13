@@ -754,7 +754,7 @@ TEST_SUITE("unit") {
     CHECK(sequence.notes()[0].velocity == onebeat::model::MaxVelocity);
   }
 
-  TEST_CASE("Overlapping notes of the same pitch are shortened, not left to hang") {
+  TEST_CASE("Overlapping notes of the same pitch survive load unchanged") {
     const std::string text =
         R"({"format": "onebeat.project", "version": 1,)"
         R"("instruments": {"ins_01K2QF8Z00KEYS000000000100": {"name": "Piano"}},)"
@@ -765,10 +765,10 @@ TEST_SUITE("unit") {
     Residue residue;
     const LoadReport report = loadProjectJson(text, project, residue);
     REQUIRE(report.ok);
-    CHECK(reported(report, "overlapping note(s) of the same pitch"));
     const NoteSequence& sequence = project.patterns().begin()->second.sequences.begin()->second;
     REQUIRE(sequence.size() == 2);
-    CHECK(sequence.notes()[0].length == 480);  // cut where the second begins
+    CHECK(sequence.notes()[0].length == 960);
+    CHECK(sequence.notes()[1].length == 960);
     CHECK(sequence.isSorted());
   }
 

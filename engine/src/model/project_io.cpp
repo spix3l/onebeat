@@ -910,28 +910,6 @@ class Loader {
            " unusable note record(s) — dropped.");
     }
 
-    // §5.2: two notes may share a start and a key only if they do not overlap.
-    // No synthesiser agrees on what an overlapping identical pitch means, so
-    // the earlier note is shortened to where the later one begins.
-    std::stable_sort(notes.begin(), notes.end(), noteOrderBefore);
-    size_t merged = 0;
-    for (size_t i = 0; i + 1 < notes.size(); ++i) {
-      for (size_t j = i + 1; j < notes.size(); ++j) {
-        if (notes[j].start >= notes[i].start + notes[i].length) break;
-        if (notes[j].key != notes[i].key) continue;
-        notes[i].length = notes[j].start - notes[i].start;
-        ++merged;
-        break;
-      }
-    }
-    notes.erase(std::remove_if(notes.begin(), notes.end(),
-                               [](const Note& note) { return note.length <= 0; }),
-                notes.end());
-    if (merged > 0) {
-      warn("Pattern '" + pattern_name + "' had " + std::to_string(merged) +
-           " overlapping note(s) of the same pitch — shortened.");
-    }
-
     NoteSequence sequence;
     sequence.assignSorted(std::move(notes));
     return sequence;

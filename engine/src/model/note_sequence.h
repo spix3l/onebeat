@@ -4,14 +4,15 @@
 // the same array — a step *is* a quantised note — because two representations
 // would need permanent reconciliation and would eventually disagree.
 //
-// Edit operations (insert/delete/move/resize/quantise/legato…) belong to
-// OB-3-08. This header defines the storage, its ordering invariant, and the
-// minimum needed to hold notes; nothing more, so that OB-3-08 can build the
-// editing vocabulary without unpicking a guess made here.
+// Editor-facing operations live in note_edit.h. Keeping them out of this type
+// leaves NoteSequence as the one small, serialisable representation shared by
+// the piano roll, step rack and flattener.
 #pragma once
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
+#include <span>
 #include <vector>
 
 namespace onebeat::model {
@@ -44,6 +45,12 @@ struct Note {
 
   friend constexpr bool operator==(const Note&, const Note&) = default;
 };
+
+constexpr bool isValidNote(const Note& note) {
+  return note.start >= 0 && note.length > 0 && note.key >= 0 && note.key <= 127 &&
+         note.velocity <= MaxVelocity &&
+         note.length <= std::numeric_limits<Ticks>::max() - note.start;
+}
 
 // The canonical order of docs/project-format.md §6: start, then key, then
 // length. Sorting on write would be enough for the file, but keeping the vector
@@ -93,11 +100,27 @@ class NoteSequence {
   // invariant. Sorting here rather than trusting the file means a hand-edited
   // project cannot poison the binary searches downstream.
   void assignSorted(std::vector<Note> notes) {
-    std::stable_sort(notes.begin(), notes.end(), noteOrderBefore);
+    if (!std::is_sorted(notes.begin(), notes.end(), noteOrderBefore)) {
+      std::stable_sort(notes.begin(), notes.end(), noteOrderBefore);
+    }
     notes_ = std::move(notes);
   }
 
   bool isSorted() const { return std::is_sorted(notes_.begin(), notes_.end(), noteOrderBefore); }
+
+  // Notes whose onset lies in [start, end). This is the hot painting query:
+  // the canonical start ordering makes it two binary searches and a borrowed,
+  // allocation-free view. Callers that need sounding overlap (a long note
+  // beginning before `start`) use selectNotesInRange from note_edit.h.
+  std::span<const Note> startingIn(Ticks start, Ticks end) const {
+    if (end <= start) return {};
+    const auto first =
+        std::lower_bound(notes_.begin(), notes_.end(), start,
+                         [](const Note& note, Ticks tick) { return note.start < tick; });
+    const auto last = std::lower_bound(
+        first, notes_.end(), end, [](const Note& note, Ticks tick) { return note.start < tick; });
+    return {first, last};
+  }
 
   // The end of the last note, which is what "how long is this pattern really?"
   // means when a note runs past the pattern's declared length.

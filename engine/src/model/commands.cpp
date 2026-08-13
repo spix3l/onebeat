@@ -358,26 +358,82 @@ struct PatternMetaTraits {
 class NoteCommand : public Command {
  public:
   NoteCommand(PatternId pattern, InstrumentId instrument, std::vector<Note> removed,
-              std::vector<Note> added, std::string name)
+              std::vector<Note> added, std::string name, bool coalescable = false)
       : pattern_(pattern),
         instrument_(instrument),
         removed_(std::move(removed)),
         added_(std::move(added)),
-        name_(std::move(name)) {}
+        name_(std::move(name)),
+        coalescable_(coalescable) {}
 
   bool apply(Project& project) override { return edit(project, removed_, added_); }
   bool revert(Project& project) override { return edit(project, added_, removed_); }
   std::string name() const override { return name_; }
 
+  bool coalesceWith(const Command& next) override {
+    const auto* other = dynamic_cast<const NoteCommand*>(&next);
+    if (!coalescable_ || other == nullptr || !other->coalescable_ || other->pattern_ != pattern_ ||
+        other->instrument_ != instrument_ || added_ != other->removed_) {
+      return false;
+    }
+    // A -> B followed by B -> C becomes A -> C. The second command has already
+    // applied; only history is folded, exactly like EditCommand above.
+    added_ = other->added_;
+    return true;
+  }
+
  private:
   // One pass: take out what this direction removes, put in what it adds. A
   // move is expressed as both, which is why dragging notes does not have to
-  // copy the sequence.
+  // snapshot the project. Removal counts are indexed so a 10k-note selection
+  // stays O(n log n), rather than erasing 10k vector elements one at a time.
   bool edit(Project& project, const std::vector<Note>& take, const std::vector<Note>& give) {
-    return project.updateSequence(pattern_, instrument_, [&take, &give](NoteSequence& sequence) {
-      for (const Note& note : take) sequence.erase(note);
-      for (const Note& note : give) sequence.insert(note);
-    });
+    const Pattern* pattern = project.findPattern(pattern_);
+    if (pattern == nullptr || project.findInstrument(instrument_) == nullptr) return false;
+
+    const auto existing = pattern->sequences.find(instrument_);
+    const std::vector<Note> empty;
+    const std::vector<Note>& current =
+        existing == pattern->sequences.end() ? empty : existing->second.notes();
+
+    // Piano-roll "select all" operations are a common 10k-note path. When the
+    // command replaces the entire canonical sequence, no removal index or
+    // merge is needed: validate once and adopt the already ordered result.
+    if (take == current) {
+      if (!std::all_of(give.begin(), give.end(), isValidNote)) return false;
+      NoteSequence edited;
+      edited.assignSorted(give);
+      return project.restoreSequence(pattern_, instrument_, std::move(edited));
+    }
+
+    const auto fullOrder = [](const Note& left, const Note& right) {
+      if (noteOrderBefore(left, right)) return true;
+      if (noteOrderBefore(right, left)) return false;
+      return left.velocity < right.velocity;
+    };
+    std::map<Note, size_t, decltype(fullOrder)> removals(fullOrder);
+    for (const Note& note : take) ++removals[note];
+
+    std::vector<Note> result;
+    result.reserve(current.size() - std::min(current.size(), take.size()) + give.size());
+    for (const Note& note : current) {
+      auto removal = removals.find(note);
+      if (removal == removals.end() || removal->second == 0) {
+        result.push_back(note);
+      } else {
+        --removal->second;
+      }
+    }
+    for (const auto& [note, count] : removals) {
+      if (count != 0) return false;
+    }
+    for (const Note& note : give) {
+      if (!isValidNote(note)) return false;
+      result.push_back(note);
+    }
+    NoteSequence edited;
+    edited.assignSorted(std::move(result));
+    return project.restoreSequence(pattern_, instrument_, std::move(edited));
   }
 
   PatternId pattern_;
@@ -385,6 +441,7 @@ class NoteCommand : public Command {
   std::vector<Note> removed_;
   std::vector<Note> added_;
   std::string name_;
+  bool coalescable_ = false;
 };
 
 class TransportCommand : public Command {
@@ -584,10 +641,12 @@ CommandPtr removeNotes(PatternId pattern, InstrumentId instrument, std::vector<N
 CommandPtr replaceNotes(PatternId pattern, InstrumentId instrument, std::vector<Note> before,
                         std::vector<Note> after) {
   if (before.size() != after.size()) return nullptr;
+  std::stable_sort(before.begin(), before.end(), noteOrderBefore);
+  std::stable_sort(after.begin(), after.end(), noteOrderBefore);
   const std::string name =
       "Edit " + std::to_string(before.size()) + (before.size() == 1 ? " note" : " notes");
   return std::make_unique<NoteCommand>(pattern, instrument, std::move(before), std::move(after),
-                                       name);
+                                       name, true);
 }
 
 CommandPtr setTransport(const Project& project, const TransportState& transport) {

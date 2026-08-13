@@ -190,15 +190,18 @@ fifth element, an object of per-note properties:
 [1920, 480, 77, 11868, {"pan": -0.250000}]
 ```
 
-v1 defines no property keys; the slot exists so per-note expression (CLAP note
-expression, MPE) is an additive change. **Unknown property keys are preserved**,
+The reserved keys are `pan`, `pitch_offset`, and `mod`; v0.3 preserves them but
+does not interpret them. The slot makes per-note expression (CLAP note
+expression, MPE) an additive behaviour change. **Unknown property keys are preserved**,
 attached to the note by its four values rather than by its position: a note that
 has been edited is no longer the note those properties described, so they are
 dropped with it rather than landing on whatever now sits at that index.
 
-Notes sort by `start`, then `key`, then `length`. Two notes may share a start
-and a key only if they do not overlap; overlapping identical pitches are merged
-at load with a warning, because no synthesiser agrees on what they mean.
+Notes sort by `start`, then `key`, then `length`. Overlaps are preserved,
+including notes of the same pitch: loading a project must not rewrite an edit.
+During playback, the later same-pitch note-on cuts the earlier voice as specified
+by the flattener contract, so the representation remains unambiguous without
+destroying note data.
 
 ### 5.3 `lanes`
 
