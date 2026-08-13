@@ -138,7 +138,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 
 | Status | ID | Title | Est |
 |---|---|---|---|
-| ⬜ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
+| ✅ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
 | ⬜ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
 | ⬜ | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system | M |
 | ⬜ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
@@ -154,6 +154,14 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | ⬜ | [OB-3-14](stage-3-it-sequences/OB-3-14-ui-test-infrastructure.md) | UI test & interaction-walkthrough infrastructure | M |
 | ⬜ | [OB-3-15](stage-3-it-sequences/OB-3-15-v0-3-exit-verification.md) | v0.3 exit verification | S |
 
+**Stage 3 has started.** `OB-3-01` is ✅: [ADR-004](../docs/adr/ADR-004-project-format.md)
+closes **OQ-2** — JSON in a `.obt` directory bundle, integer ticks at 960 PPQ,
+ULID identities, and a canonical writer whose byte-identical round-trip is what
+actually earns FR-PRJ-01. The schema is [`docs/project-format.md`](../docs/project-format.md)
+and the worked example, with the two-edit diff the ADR quotes, is
+[`docs/examples/demo.obt/`](../docs/examples/demo.obt/). Stage 2's `OBS2`
+scratch session is superseded and is deleted, not migrated, when `OB-3-05` lands.
+
 ## Epics — `epics/` (break down at stage start)
 
 | ID | Release | Title |
@@ -165,11 +173,13 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | [EPIC-8](epics/EPIC-8-beautiful-and-learnable.md) | v0.8 | It's beautiful and learnable (workspace, onboarding) |
 | [EPIC-9](epics/EPIC-9-usable-by-someone-else.md) | v1.0 | Usable by someone else |
 
-## Suggested execution order (first two stages)
+## Suggested execution order
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
 Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/07/08 (implementation landed; validation remains) → OB-2-06 (deferred) → ~~OB-2-09/10/11~~ (done).
+
+Stage 3: ~~OB-3-01~~ (ADR-004, done) → OB-3-02 → OB-3-03 → OB-3-08/OB-3-04 (parallel) → OB-3-05 → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the

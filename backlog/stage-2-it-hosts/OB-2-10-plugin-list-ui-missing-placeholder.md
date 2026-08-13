@@ -21,10 +21,10 @@ A working (if minimal) way to see scanned plugins, add an instance, and open its
 
 ## Acceptance criteria
 
-- [ ] Scan → list → add instance → hear it → open editor → remove: full flow works.
-- [ ] Save session with plugin X; uninstall X; reopen — session loads, placeholder present with state; reinstall X; rescan — placeholder upgrades and sounds identical (chunk hash verified).
-- [ ] Quarantined and missing states use the designed error/empty patterns; copy reviewed against FR-UX-12/13.
-- [ ] Token lint clean.
+- [x] Scan → list → add instance → hear it → open editor → remove: full flow works.
+- [x] Save session with plugin X; uninstall X; reopen — session loads, placeholder present with state; reinstall X; rescan — placeholder upgrades and sounds identical (chunk hash verified).
+- [x] Quarantined and missing states use the designed error/empty patterns; copy reviewed against FR-UX-12/13.
+- [x] Token lint clean.
 
 ## Out of scope
 

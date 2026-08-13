@@ -25,10 +25,10 @@ Write `docs/adr/ADR-004-project-format.md` deciding:
 
 ## Acceptance criteria
 
-- [ ] ADR-004 merged: syntax, layout, ID scheme, versioning and forward-compat rules decided with rationale.
-- [ ] A realistic sample project (3 patterns × 4 instruments, 16 clips) written by hand in the format; a simulated "move one clip + edit one pattern" produces a git diff a human can read (attached to the ADR).
-- [ ] Round-trip rule specified: load → save is byte-identical; unknown-field preservation specified.
-- [ ] `docs/project-format.md` v1 drafted.
+- [x] ADR-004 merged: syntax, layout, ID scheme, versioning and forward-compat rules decided with rationale.
+- [x] A realistic sample project (3 patterns × 4 instruments, 16 clips) written by hand in the format; a simulated "move one clip + edit one pattern" produces a git diff a human can read (attached to the ADR).
+- [x] Round-trip rule specified: load → save is byte-identical; unknown-field preservation specified.
+- [x] `docs/project-format.md` v1 drafted.
 
 ## Out of scope
 
