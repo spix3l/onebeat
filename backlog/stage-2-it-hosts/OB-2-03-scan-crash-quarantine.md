@@ -41,6 +41,7 @@ Plugins crash during scan; the scan must survive, mark the offender, and tell th
 | Reporting | The crash-context test checks plugin path, phase, signal/exit status and stack context; the helper-missing test verifies the fallback is logged rather than silent. |
 | UI and copy | `plugin_quarantine_copy_test.dart` pins plugin name, crash vs timeout, phase wording, consequence and next actions, and rejects apologies/exclamation marks. Token lint is clean. |
 | Build product | `tools/build.sh` embeds and ad-hoc signs `onebeat-plugin-host` in every product bundle's `Contents/MacOS/`, where helper discovery looks for it. |
+| Full CI | [GitHub Actions run 31713136840](https://github.com/spix3l/onebeat/actions/runs/31713136840) passed Debug, Release, ASan/UBSan, TSan, RTSan, clang-format, clang-tidy, seams, token lint, licence audit, regenerated-bindings check, Flutter tests, headless FFI smoke test and macOS app build. |
 
 The referenced `onebeat-fail-plugin.html` is not present in this repository, so
 pixel matching it was not possible and is not claimed. This ticket implements
@@ -100,3 +101,5 @@ second person read the change.
 - **Hostile plugins:** protocol framing is bounded and validated; stdout cannot
   corrupt it; fatal signals produce best-effort context then re-raise; plugin
   exit handlers never run in the helper.
+- **CI:** the complete sanitizer, lint, audit and app matrix is green in GitHub
+  Actions run 31713136840.
