@@ -55,8 +55,7 @@ std::vector<Violation> checkReferentialIntegrity(const Project& project) {
              describe(EntityKind::Instrument, instrument_id.raw()));
       }
       for (const Note& note : sequence.notes()) {
-        if (note.length <= 0 || note.start < 0 || note.key < 0 || note.key > 127 ||
-            note.velocity > MaxVelocity) {
+        if (!isValidNote(note)) {
           fail(describe(EntityKind::Pattern, pattern_id.raw()) + " has an out-of-range note");
           break;
         }

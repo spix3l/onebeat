@@ -53,9 +53,12 @@ if [[ -n "$LLVM_PREFIX" && -x "$LLVM_PREFIX/bin/clang++" ]]; then
     -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang"
   if [[ "$ONLY" == "all" ]]; then
     run "clang-tidy" bash -c "
-      cmake -S engine -B build-ci-tidy -DCMAKE_BUILD_TYPE=Debug >/dev/null &&
-      find engine/src/core engine/src/audio_io engine/src/plugin -name '*.cpp' |
-        xargs '$LLVM_PREFIX/bin/clang-tidy' -p build-ci-tidy --quiet"
+      cmake -S engine -B build-ci-tidy -DCMAKE_BUILD_TYPE=Debug \
+        -DCMAKE_CXX_COMPILER='$LLVM_PREFIX/bin/clang++' \
+        -DCMAKE_C_COMPILER='$LLVM_PREFIX/bin/clang' >/dev/null &&
+      find engine/src/core engine/src/audio_io engine/src/plugin engine/src/model \
+        -name '*.cpp' -print0 |
+        xargs -0 '$LLVM_PREFIX/bin/clang-tidy' -p build-ci-tidy --quiet"
   fi
 else
   echo ""
