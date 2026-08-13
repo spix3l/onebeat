@@ -5,7 +5,9 @@
 // these values deliberately, following the checklist in ADR-002 §8. Silently
 // changing a field's position is how a Dart client starts reading the tempo out
 // of the middle of a timestamp.
+#include <chrono>
 #include <cstddef>
+#include <thread>
 
 #include "abi/onebeat_abi.h"
 #include "doctest.h"
@@ -121,12 +123,22 @@ TEST_SUITE("abi") {
 
     // Scans a directory that does not exist, so the test is hermetic: it must
     // not depend on what the machine running it happens to have installed.
+    //
+    // Deliberately *not* asserting that a second start returns
+    // OB_ERR_ALREADY_RUNNING here. A scan with nothing to find finishes in
+    // microseconds, so "is it still running?" is a race — one this test lost on
+    // CI's TSan runner. Contention is tested deterministically in
+    // test_plugin_scan.cpp, with a probe that blocks until the test says so.
     REQUIRE(ob_engine_plugin_scan_start(engine, "/nonexistent/onebeat-test-plugins\0\0") == OB_OK);
-    CHECK(ob_engine_plugin_scan_start(engine, nullptr) == OB_ERR_ALREADY_RUNNING);
 
+    // A wall-clock deadline with a yield rather than a fixed poll count: 2000
+    // tight polls is a few milliseconds, which is not a safe margin on a loaded
+    // sanitizer runner where the scan thread may simply not be scheduled yet.
     ob_plugin_scan_status status{};
-    for (int i = 0; i < 2000 && status.state != OB_SCAN_COMPLETE; ++i) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (status.state != OB_SCAN_COMPLETE && std::chrono::steady_clock::now() < deadline) {
       REQUIRE(ob_engine_plugin_scan_status(engine, &status) == OB_OK);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     CHECK(status.state == OB_SCAN_COMPLETE);
     CHECK(status.struct_size == sizeof(ob_plugin_scan_status));
