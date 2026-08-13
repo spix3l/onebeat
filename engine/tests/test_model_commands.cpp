@@ -32,6 +32,7 @@ using onebeat::model::Clip;
 using onebeat::model::ClipId;
 using onebeat::model::CommandBus;
 using onebeat::model::CommandPtr;
+using onebeat::model::duplicateInstrument;
 using onebeat::model::editClip;
 using onebeat::model::editInstrument;
 using onebeat::model::editLane;
@@ -56,6 +57,8 @@ using onebeat::model::removeLane;
 using onebeat::model::removeMixerTrack;
 using onebeat::model::removeNotes;
 using onebeat::model::removePattern;
+using onebeat::model::reorderInstrument;
+using onebeat::model::replaceInstrument;
 using onebeat::model::replaceNotes;
 using onebeat::model::setProjectMeta;
 using onebeat::model::setTransport;
@@ -129,6 +132,7 @@ uint64_t digest(const Project& project) {
     out.id(id);
     out.text(instrument.name);
     out.text(instrument.color);
+    out.number(instrument.order);
     out.text(instrument.plugin.id);
     out.number(instrument.muted ? 1 : 0);
     for (const auto& route : instrument.routing) {
@@ -461,6 +465,97 @@ TEST_SUITE("unit") {
       f.bus.commitTransaction();
       CHECK(f.bus.undoDepth() == depth);
     }
+  }
+
+  TEST_CASE("Instrument lifecycle commands preserve identity, state, routing and notes") {
+    Fixture f;
+    PluginRef piano = claps("com.onebeat.piano");
+    piano.name = "OneBeat Piano";
+    piano.state_ref = "state/piano.bin";
+    piano.state_sha256 = "abc123";
+
+    // The descriptor-facing overload derives unique names and palette colours.
+    REQUIRE(f.bus.execute(addInstrument(f.project, piano)));
+    REQUIRE(f.bus.execute(addInstrument(f.project, piano)));
+    REQUIRE(f.project.instruments().size() == 2);
+    auto entry = f.project.instruments().begin();
+    const InstrumentId original = entry->first;
+    CHECK(entry->second.name == "OneBeat Piano");
+    CHECK(entry->second.order == 0);
+    const auto second = std::next(entry);
+    CHECK(second->second.name == "OneBeat Piano 2");
+    CHECK(second->second.order == 1);
+    CHECK(second->second.color != entry->second.color);
+
+    const MixerTrackId original_track = entry->second.routing.at(0).track;
+    REQUIRE(original_track != f.project.masterTrack());
+    CHECK(f.project.findMixerTrack(original_track)->name == "OneBeat Piano");
+
+    REQUIRE(f.bus.execute(addPattern(f.project, "A")));
+    REQUIRE(f.bus.execute(addPattern(f.project, "B")));
+    for (const auto& [pattern_id, pattern] : f.project.patterns()) {
+      (void)pattern;
+      REQUIRE(f.bus.execute(insertNotes(pattern_id, original, {note(0, 60)})));
+    }
+
+    REQUIRE(f.bus.execute(editInstrument(
+        f.project, original, ChangeField::Name,
+        [](Instrument& instrument) { instrument.name = "Soft Piano"; }, "Rename instrument")));
+    REQUIRE(f.bus.execute(editInstrument(
+        f.project, original, ChangeField::Color,
+        [](Instrument& instrument) { instrument.color = "#EF6F91"; }, "Recolour instrument")));
+
+    REQUIRE(f.bus.execute(duplicateInstrument(f.project, original)));
+    REQUIRE(f.project.instruments().size() == 3);
+    const Instrument& copy = f.project.instruments().rbegin()->second;
+    CHECK(copy.id != original);
+    CHECK(copy.name == "Soft Piano 2");
+    CHECK(copy.plugin.state_ref == "state/piano.bin");
+    CHECK(copy.plugin.state_sha256 == "abc123");
+    REQUIRE(copy.routing.size() == 1);
+    CHECK(copy.routing[0].track != original_track);
+    CHECK(f.project.findMixerTrack(copy.routing[0].track)->name == copy.name);
+
+    PluginRef replacement = claps("org.example.synth");
+    replacement.name = "Example Synth";
+    replacement.state_ref = "state/replacement.bin";
+    REQUIRE(f.bus.execute(replaceInstrument(f.project, original, replacement)));
+    CHECK(f.project.findInstrument(original)->plugin.id == "org.example.synth");
+    for (const auto& [pattern_id, pattern] : f.project.patterns()) {
+      (void)pattern_id;
+      CHECK(pattern.sequences.at(original).size() == 1);
+    }
+    REQUIRE(f.bus.undo());
+    CHECK(f.project.findInstrument(original)->plugin.id == "com.onebeat.piano");
+
+    REQUIRE(f.bus.execute(reorderInstrument(f.project, original, 2)));
+    CHECK(f.project.findInstrument(original)->order == 2);
+    REQUIRE(f.bus.undo());
+    CHECK(f.project.findInstrument(original)->order == 0);
+  }
+
+  TEST_CASE("Instrument deletion impact counts affected patterns and their placements") {
+    Fixture f;
+    REQUIRE(f.bus.execute(addInstrument(f.project, "Kick", claps("test.kick"))));
+    const InstrumentId kick = f.project.instruments().begin()->first;
+    REQUIRE(f.bus.execute(addLane(f.project, "Song")));
+    const ArrangementLaneId lane = f.project.lanes().begin()->first;
+
+    for (int index = 0; index < 5; ++index) {
+      REQUIRE(f.bus.execute(addPattern(f.project, "Pattern " + std::to_string(index))));
+      const PatternId pattern = f.project.patterns().rbegin()->first;
+      REQUIRE(f.bus.execute(insertNotes(pattern, kick, {note(index * 240, 36)})));
+      REQUIRE(f.bus.execute(addClip(f.project, lane, PatternSource{pattern}, index * 3840, 3840)));
+    }
+
+    const auto impact = f.project.instrumentImpact(kick);
+    CHECK(impact.patterns.size() == 5);
+    CHECK(impact.note_count == 5);
+    CHECK(impact.pattern_clips.size() == 5);
+    const uint64_t before = digest(f.project);
+    REQUIRE(f.bus.execute(removeInstrument(kick)));
+    REQUIRE(f.bus.undo());
+    CHECK(digest(f.project) == before);
   }
 
   TEST_CASE("A new edit discards the redo branch") {

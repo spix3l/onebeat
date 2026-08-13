@@ -119,6 +119,7 @@ Rules:
   "color": "#4FB286",
   "muted": false,
   "name": "Bass",
+  "order": 1,
   "note_defaults": {
     "pan": 0.000000,
     "pitch_offset": 0,
@@ -145,6 +146,7 @@ Rules:
 | Field | Type | Notes |
 |---|---|---|
 | `name`, `color` | string | User-facing |
+| `order` | integer | Channel-rack presentation order; identity and pattern references never depend on it |
 | `muted` | bool | |
 | `note_defaults` | object | `velocity` (0–16383), `pan`, `pitch_offset`. Applied to notes that do not override them — stored once per instrument, which is why a note record is four integers |
 | `plugin.format` | string | `clap` in v0.3; `vst3`, `au`, `wasm`, `builtin` reserved. **Absent when the writer has no name for it**: a reader that could not model the format it read leaves the file's own word in place rather than replacing it with a guess |

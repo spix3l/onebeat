@@ -32,10 +32,11 @@ namespace onebeat::model {
 // correct and deeply surprising (ARCHITECTURE.md §3.1) — so the confirmation
 // has to state the damage rather than discover it afterwards.
 struct InstrumentImpact {
-  std::vector<PatternId> patterns;   // patterns holding a sequence for it
-  size_t note_count = 0;             // notes that would be deleted
-  std::vector<ClipId> clips;         // automation clips targeting it
-  std::vector<MixerTrackId> tracks;  // tracks it currently routes into
+  std::vector<PatternId> patterns;    // patterns holding a sequence for it
+  size_t note_count = 0;              // notes that would be deleted
+  std::vector<ClipId> pattern_clips;  // placements of the affected patterns
+  std::vector<ClipId> clips;          // automation clips targeting it (deleted)
+  std::vector<MixerTrackId> tracks;   // tracks it currently routes into
 };
 
 struct PatternImpact {

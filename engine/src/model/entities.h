@@ -72,6 +72,9 @@ struct Instrument {
   InstrumentId id;
   std::string name;
   ColorHex color = "#6C8CFF";
+  // Presentation order is data, never map/creation order. Reordering the
+  // channel rack therefore changes no identity and no pattern reference.
+  int32_t order = 0;
   PluginRef plugin;
   NoteDefaults note_defaults;
   std::vector<OutputRoute> routing;

@@ -144,7 +144,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | ✅ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
 | 🟨 | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load — format, atomicity and round-trip landed; app New/Open/Save pending | M |
 | ⬜ | [OB-3-06](stage-3-it-sequences/OB-3-06-autosave-crash-recovery.md) | Auto-save & crash recovery | M |
-| ⬜ | [OB-3-07](stage-3-it-sequences/OB-3-07-instrument-lifecycle.md) | Instrument lifecycle & management | M |
+| ✅ | [OB-3-07](stage-3-it-sequences/OB-3-07-instrument-lifecycle.md) | Instrument lifecycle & management | M |
 | ✅ | [OB-3-08](stage-3-it-sequences/OB-3-08-notesequence-model-editing.md) | NoteSequence: one representation, edit operations | M |
 | ⬜ | [OB-3-09](stage-3-it-sequences/OB-3-09-channel-rack-ui.md) | Channel rack UI (step sequencer) | L |
 | ⬜ | [OB-3-10](stage-3-it-sequences/OB-3-10-piano-roll-ui.md) | Piano roll UI | L |
@@ -221,6 +221,16 @@ a 1.11 ms full edit in Debug against the 16.667 ms frame budget. The behavior
 contract and benchmark method are in
 [`docs/note-sequence-editing.md`](../docs/note-sequence-editing.md).
 
+`OB-3-07` is ✅: project instruments now have a stable persisted presentation
+order and a complete command vocabulary for generated creation, rename,
+recolour, mute, reorder, plug-in replacement, duplication and impact-aware
+deletion. ABI 1.5 carries that registry into Flutter; the permanent rack-header
+strip exposes selection and every operation, including preview and a two-step
+delete that names the exact affected pattern/placement counts. The five-pattern
+delete matrix, public-ABI lifecycle test and save/load order checks are green;
+the contract and evidence map are in
+[`docs/instrument-lifecycle.md`](../docs/instrument-lifecycle.md).
+
 ## Epics — `epics/` (break down at stage start)
 
 | ID | Release | Title |
@@ -238,7 +248,7 @@ Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
 Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/07/08 (implementation landed; validation remains) → OB-2-06 (deferred) → ~~OB-2-09/10/11~~ (done).
 
-Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-05 (engine layer done) → ~~OB-3-08~~ → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
+Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-05 (engine layer done) → ~~OB-3-08~~ → ~~OB-3-07~~ → **OB-3-09 next** → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the

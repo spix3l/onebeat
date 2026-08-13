@@ -301,6 +301,7 @@
         "pitch_offset": 0,
         "velocity": 12900
       },
+      "order": 0,
       "plugin": {
         "format": "clap",
         "id": "com.onebeat.piano",
@@ -326,6 +327,7 @@
         "pitch_offset": 0,
         "velocity": 12900
       },
+      "order": 1,
       "plugin": {
         "format": "clap",
         "id": "org.surge-synth-team.surge-xt",
@@ -351,6 +353,7 @@
         "pitch_offset": 0,
         "velocity": 12900
       },
+      "order": 2,
       "plugin": {
         "format": "clap",
         "id": "audio.vital.synth",
@@ -376,6 +379,7 @@
         "pitch_offset": 0,
         "velocity": 12900
       },
+      "order": 3,
       "plugin": {
         "format": "clap",
         "id": "com.thewavewarden.odin2",

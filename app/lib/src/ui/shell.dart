@@ -13,6 +13,7 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'instrument_strip.dart';
 import 'meter.dart';
 import 'performance_overlay.dart';
 import 'plugin_list_debug.dart';
@@ -128,15 +129,22 @@ class _OneBeatShellState extends State<OneBeatShell>
               children: <Widget>[
                 _TopBar(controller: _controller),
                 Expanded(
-                  child: Stack(
+                  child: Row(
                     children: <Widget>[
-                      if (_showTokenGallery)
-                        const TokenGallery()
-                      else if (_showPluginList)
-                        PluginListDebugPanel(controller: _controller)
-                      else
-                        _EmptyStage(controller: _controller),
-                      FrameTimingOverlay(controller: _controller),
+                      InstrumentStrip(controller: _controller),
+                      Expanded(
+                        child: Stack(
+                          children: <Widget>[
+                            if (_showTokenGallery)
+                              const TokenGallery()
+                            else if (_showPluginList)
+                              PluginListDebugPanel(controller: _controller)
+                            else
+                              _EmptyStage(controller: _controller),
+                            FrameTimingOverlay(controller: _controller),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),

@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 4
+#define OB_ABI_VERSION_MINOR 5
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -450,6 +450,49 @@ OB_API ob_status ob_engine_instance_restart(ob_engine* engine, uint32_t instance
 /* Main/UI thread. May block on filesystem and opaque plug-in state I/O. */
 OB_API ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path);
 OB_API ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path);
+
+/* ------------------------------------------------------------------------- */
+/* Project instruments (added in ABI 1.5, OB-3-07)                           */
+/* ------------------------------------------------------------------------- */
+
+typedef struct ob_instrument_info {
+  uint32_t struct_size;
+  int32_t order;
+  uint32_t flags; /* bit 0: muted; bit 1: selected */
+  uint32_t affected_pattern_count;
+  uint32_t affected_clip_count;
+  uint32_t affected_note_count;
+  char id[32];
+  char name[128];
+  char color[8];
+  char plugin_id[128];
+  char plugin_name[128];
+  char plugin_vendor[128];
+  char plugin_path[512];
+} ob_instrument_info;
+
+/* Main/UI thread. The rows are project-global and ordered by `order`. */
+OB_API int32_t ob_engine_instrument_count(ob_engine* engine);
+OB_API ob_status ob_engine_instrument_at(ob_engine* engine, int32_t index,
+                                         ob_instrument_info* out_info);
+OB_API ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instrument_id);
+OB_API ob_status ob_engine_instrument_rename(ob_engine* engine, const char* utf8_instrument_id,
+                                             const char* utf8_name);
+OB_API ob_status ob_engine_instrument_recolor(ob_engine* engine, const char* utf8_instrument_id,
+                                              const char* utf8_color);
+OB_API ob_status ob_engine_instrument_set_muted(ob_engine* engine, const char* utf8_instrument_id,
+                                                int32_t muted);
+OB_API ob_status ob_engine_instrument_reorder(ob_engine* engine, const char* utf8_instrument_id,
+                                              int32_t order);
+OB_API ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instrument_id,
+                                              const char* utf8_bundle_path,
+                                              const char* utf8_plugin_id);
+OB_API ob_status ob_engine_instrument_duplicate(ob_engine* engine, const char* utf8_instrument_id);
+OB_API ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instrument_id);
+OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
+OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);
+OB_API ob_status ob_engine_project_undo(ob_engine* engine);
+OB_API ob_status ob_engine_project_redo(ob_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -91,6 +91,12 @@ InstrumentId Project::createInstrument(const std::string& name, const PluginRef&
   Instrument instrument;
   instrument.id = generator_.next<EntityKind::Instrument>();
   instrument.name = name;
+  int32_t highest = -1;
+  for (const auto& [instrument_id, existing] : instruments_) {
+    (void)instrument_id;
+    highest = std::max(highest, existing.order);
+  }
+  instrument.order = highest + 1;
   instrument.plugin = plugin;
 
   // D-M2. The instrument's own track, or Master when the user has opted out.
@@ -199,6 +205,11 @@ InstrumentImpact Project::instrumentImpact(InstrumentId id) const {
     impact.note_count += sequence->second.size();
   }
   for (const auto& [clip_id, clip] : clips_) {
+    const PatternSource* pattern = clip.pattern();
+    if (pattern != nullptr && std::find(impact.patterns.begin(), impact.patterns.end(),
+                                        pattern->pattern) != impact.patterns.end()) {
+      impact.pattern_clips.push_back(clip_id);
+    }
     const AutomationSource* automation = clip.automation();
     if (automation != nullptr &&
         automation->target_kind == AutomationSource::TargetKind::Instrument &&
