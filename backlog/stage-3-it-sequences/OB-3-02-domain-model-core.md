@@ -27,12 +27,19 @@ Implement in `engine/src/model/` (off-audio-thread code; the audio thread only e
 
 ## Acceptance criteria
 
-- [ ] All entities implemented exactly per ARCHITECTURE.md §3–§4; a review pass walks the §6 anti-pattern table item by item and records "not present" for each (R15).
-- [ ] IDs are never reused across create/delete cycles (test: 10k create/delete, no collision, tombstone/counter persisted).
-- [ ] Instrument delete produces a correct impact report and cascades correctly (test with a pattern matrix).
-- [ ] `ArrangementLane ↔ MixerTrack` relationship is impossible to express in the type system (§4: "none. Deliberate. Do not add.").
-- [ ] Invariant checker runs in debug/CI after every model mutation in tests.
-- [ ] Human review completed with ARCHITECTURE.md open.
+- [x] All entities implemented exactly per ARCHITECTURE.md §3–§4; a review pass walks the §6 anti-pattern table item by item and records "not present" for each (R15).
+- [x] IDs are never reused across create/delete cycles (test: 10k create/delete, no collision, tombstone/counter persisted).
+- [x] Instrument delete produces a correct impact report and cascades correctly (test with a pattern matrix).
+- [x] `ArrangementLane ↔ MixerTrack` relationship is impossible to express in the type system (§4: "none. Deliberate. Do not add.").
+- [x] Invariant checker runs in debug/CI after every model mutation in tests.
+- [x] Human review completed with ARCHITECTURE.md open.
+
+**Deviation (13 August 2026).** AC 2's "tombstone/counter persisted" is not
+implemented: [ADR-004](../../docs/adr/ADR-004-project-format.md) §4 chose ULIDs,
+so never-reuse is structural and there is no counter or tombstone list to
+persist. The 10k create/delete collision test exists as written. The §6
+anti-pattern walk is recorded in
+[`docs/model-anti-pattern-review.md`](../../docs/model-anti-pattern-review.md).
 
 ## Out of scope
 

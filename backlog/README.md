@@ -139,7 +139,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | Status | ID | Title | Est |
 |---|---|---|---|
 | ✅ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
-| ⬜ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
+| ✅ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
 | ⬜ | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system | M |
 | ⬜ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
 | ⬜ | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load | M |
@@ -161,6 +161,14 @@ actually earns FR-PRJ-01. The schema is [`docs/project-format.md`](../docs/proje
 and the worked example, with the two-edit diff the ADR quotes, is
 [`docs/examples/demo.obt/`](../docs/examples/demo.obt/). Stage 2's `OBS2`
 scratch session is superseded and is deleted, not migrated, when `OB-3-05` lands.
+
+`OB-3-02` is ✅: `engine/src/model/` holds the entities, ULID identities,
+cascades with impact reports, the change bus and the referential-integrity
+checker that runs after every mutation in debug and sanitizer builds. The
+ARCHITECTURE.md §6 walk required by R15 is
+[`docs/model-anti-pattern-review.md`](../docs/model-anti-pattern-review.md),
+which also records the one deliberate hole (`Project::adopt`, for the loader)
+and the ticket deviation on ID tombstones.
 
 ## Epics — `epics/` (break down at stage start)
 
