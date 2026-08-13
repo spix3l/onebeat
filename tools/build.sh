@@ -32,10 +32,24 @@ $FLUTTER build macos $FLUTTER_MODE
 # Place the engine next to the app binary so the built bundle is self-contained.
 # Proper embedding, code-signing and notarization of the dylib is Stage 2 work
 # (OB-2-06); until then the copy plus an ad-hoc signature is enough to run.
-APP_DIR=$(find build/macos/Build/Products -maxdepth 2 -name 'onebeat.app' | head -1)
-if [[ -n "$APP_DIR" ]]; then
+#
+# *Every* product bundle is refreshed, not just the one this invocation built.
+# The loader prefers a dylib inside the bundle over the repository build output
+# (engine_library.dart), and `flutter run` produces a Debug bundle without ever
+# coming through this script — so a Debug bundle left over from an earlier day
+# will happily be loaded in preference to the engine you just compiled. That
+# actually happened: a Debug bundle four hours stale shadowed a fresh Release
+# build and the app died on a missing symbol.
+found_any=0
+while IFS= read -r APP_DIR; do
+  [[ -z "$APP_DIR" ]] && continue
+  found_any=1
   mkdir -p "$APP_DIR/Contents/Frameworks"
   cp "$REPO_ROOT/build/libonebeat_engine.dylib" "$APP_DIR/Contents/Frameworks/"
   codesign --force --sign - "$APP_DIR/Contents/Frameworks/libonebeat_engine.dylib" 2>/dev/null || true
-  echo "==> Built $APP_DIR"
+  echo "==> Engine refreshed in $APP_DIR"
+done < <(find build/macos/Build/Products -maxdepth 2 -name 'onebeat.app' 2>/dev/null)
+
+if [[ $found_any -eq 0 ]]; then
+  echo "==> No app bundle found to place the engine in."
 fi

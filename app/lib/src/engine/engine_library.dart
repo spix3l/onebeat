@@ -21,9 +21,13 @@ class EngineLoadException implements Exception {
   final String message;
   final List<String> searchedPaths;
 
+  // The path list is only meaningful for "could not find it anywhere". A
+  // version mismatch already names the file it found, so appending an empty
+  // "Looked in:" heading to that message is noise in a string a user reads.
   @override
-  String toString() =>
-      '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
+  String toString() => searchedPaths.isEmpty
+      ? message
+      : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
 }
 
 const String _libraryFileName = 'libonebeat_engine.dylib';
@@ -58,7 +62,7 @@ OneBeatBindings openEngineLibrary() {
       continue;
     }
     final OneBeatBindings bindings = OneBeatBindings(DynamicLibrary.open(path));
-    _checkAbiVersion(bindings);
+    _checkAbiVersion(bindings, path);
     return bindings;
   }
   throw EngineLoadException(
@@ -68,21 +72,41 @@ OneBeatBindings openEngineLibrary() {
   );
 }
 
-/// The client refuses to run against a different ABI major version, with a
-/// clear message rather than a crash three calls later (ADR-002 §1).
-void _checkAbiVersion(OneBeatBindings bindings) {
+/// The client refuses to run against an ABI it cannot use, with a clear message
+/// rather than a crash three calls later (ADR-002 §1).
+void _checkAbiVersion(OneBeatBindings bindings, String path) {
   final int packed = bindings.ob_abi_version();
   final int major = (packed >> 16) & 0xFF;
   final int minor = (packed >> 8) & 0xFF;
   final int patch = packed & 0xFF;
+
   if (major != expectedAbiMajor) {
     throw EngineLoadException(
       'This build of OneBeat needs engine ABI $expectedAbiMajor.x but found '
-      '$major.$minor.$patch. Rebuild the engine with `tools/build.sh`.',
+      '$major.$minor.$patch at $path. Rebuild the engine with `tools/build.sh`.',
+      const <String>[],
+    );
+  }
+
+  // The minor check is what catches a *stale* engine, and it is worth having
+  // because the symptom without it is terrible: the app loads, runs, and then
+  // dies on the first call to a function the old dylib does not export —
+  // "Failed to lookup symbol 'ob_engine_plugin_cache_load'", from inside a
+  // widget build, with nothing pointing at the real cause. Minor versions are
+  // additive (ADR-002 §8), so a *newer* engine is fine; an older one is not.
+  if (minor < expectedAbiMinor) {
+    throw EngineLoadException(
+      'The engine at $path is ABI $major.$minor.$patch, but this build of the '
+      'app was generated against $expectedAbiMajor.$expectedAbiMinor and calls '
+      'functions that version does not have. It is a stale build rather than a '
+      'broken one: rebuild with `tools/build.sh`.',
       const <String>[],
     );
   }
 }
 
-/// Kept in step with OB_ABI_VERSION_MAJOR in engine/src/abi/onebeat_abi.h.
+/// Kept in step with OB_ABI_VERSION_MAJOR/MINOR in engine/src/abi/onebeat_abi.h.
+/// Bump the minor here in the same change that bumps it there — that pairing is
+/// what makes a stale dylib a clear message instead of a missing symbol.
 const int expectedAbiMajor = 1;
+const int expectedAbiMinor = 1;

@@ -58,8 +58,14 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
       _client = client;
     } on EngineLoadException catch (error) {
       _failure = error.message;
+      // Also to stdout: the on-screen failure state is for a user, but a
+      // developer runs this from a terminal, and "the window says something is
+      // wrong" is a slow way to find out what. `toString()` rather than
+      // `message` because it appends the paths that were searched.
+      stdout.writeln('onebeat: engine unavailable — $error');
     } on EngineException catch (error) {
       _failure = error.message;
+      stdout.writeln('onebeat: engine unavailable — ${error.message}');
     }
   }
 

@@ -15,6 +15,20 @@ brew install llvm           # RealtimeSanitizer (Xcode's clang has no RTSan)
 tools/ci_local.sh           # the full CI matrix, locally
 ```
 
+### After changing the engine, rebuild through `tools/build.sh`
+
+The app loads `libonebeat_engine.dylib` from inside its own bundle in
+preference to the repository's `build/` output, because that is how a shipped
+build has to work. `flutter run` does not update that copy — so a
+`cmake --build build` followed by `flutter run` leaves the app running an
+engine from whenever you last ran `tools/build.sh`.
+
+`tools/build.sh` now refreshes the dylib in *every* product bundle it finds,
+Debug and Release, which is the fix. If one slips through anyway, the app says
+so at startup by name and version rather than dying later on a missing symbol —
+that check lives in `engine_library.dart` and depends on `expectedAbiMinor`
+being bumped in the same change that bumps `OB_ABI_VERSION_MINOR`.
+
 ## Definition of done
 
 From `PLAN.md` §5.2, on every ticket:
