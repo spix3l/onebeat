@@ -344,7 +344,7 @@ SubprocessProbe::SubprocessProbe(SubprocessProbeOptions options, core::Diagnosti
   }
 }
 
-bool SubprocessProbe::available() const noexcept {
+bool SubprocessProbe::available() const {
   return exists(options_.helper_path);
 }
 

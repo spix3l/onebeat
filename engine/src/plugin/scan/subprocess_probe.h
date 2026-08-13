@@ -65,7 +65,7 @@ class SubprocessProbe : public ScanProbe {
   // False when the helper binary is not where it should be — a broken build or
   // a bundle assembled wrongly. The library falls back to `BundleNameProbe`,
   // which cannot crash because it never opens anything.
-  bool available() const noexcept;
+  bool available() const;
 
   const std::string& helperPath() const noexcept { return options_.helper_path; }
 
