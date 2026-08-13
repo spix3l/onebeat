@@ -10,6 +10,10 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.1.3
+  # `@immutable` on the boundary value types. Declared explicitly rather than
+  # leaned on transitively: engine_client.dart deliberately imports no Flutter
+  # library, so it cannot reach the annotation through foundation.dart.
+  meta: ^1.15.0
 
 dev_dependencies:
   flutter_test:

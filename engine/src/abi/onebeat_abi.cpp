@@ -7,6 +7,7 @@
 //   - every entry point validates its handle and returns a status code.
 #include "abi/onebeat_abi.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -23,6 +24,7 @@
 #include "model/commands.h"
 #include "model/flattener.h"
 #include "model/note_edit.h"
+#include "model/project_io.h"
 #include "plugin/scan/plugin_library.h"
 #include "plugin/scan/subprocess_probe.h"
 
@@ -83,6 +85,13 @@ struct ob_engine {
   std::map<onebeat::model::InstrumentId, onebeat::model::Ticks> rack_grids;
   std::string undo_name_cache;
   std::string redo_name_cache;
+  // Where the project last came from or went to. Kept so that a save can carry
+  // existing plug-in sidecars across rather than dropping them (OB-3-05).
+  std::string project_path;
+  // Parsed-but-unmodelled fields from a project written by a newer version.
+  // Round-tripped verbatim so opening and saving never silently deletes them.
+  onebeat::model::Residue residue;
+  std::string project_json_cache;
   // Not part of the Engine: the plugin library is filesystem work and a
   // background thread, and nothing in it goes near the audio thread (OB-2-02).
   std::unique_ptr<onebeat::plugin::scan::PluginLibrary> library;
@@ -197,6 +206,195 @@ onebeat::model::Ticks rackGrid(const ob_engine& handle, onebeat::model::Instrume
   return found == handle.rack_grids.end() ? onebeat::model::TicksPerQuarter / 4 : found->second;
 }
 
+// --------------------------------------------------------------------------
+// ABI 1.7 helpers: notes, patterns, lanes and clips
+// --------------------------------------------------------------------------
+
+std::optional<onebeat::model::PatternId> patternId(const char* text) {
+  if (text == nullptr || text[0] == '\0') return std::nullopt;
+  return onebeat::model::PatternId::parse(text);
+}
+
+std::optional<onebeat::model::ArrangementLaneId> laneId(const char* text) {
+  if (text == nullptr || text[0] == '\0') return std::nullopt;
+  return onebeat::model::ArrangementLaneId::parse(text);
+}
+
+std::optional<onebeat::model::ClipId> clipId(const char* text) {
+  if (text == nullptr || text[0] == '\0') return std::nullopt;
+  return onebeat::model::ClipId::parse(text);
+}
+
+const onebeat::model::NoteSequence* sequenceFor(const ob_engine& handle,
+                                                onebeat::model::InstrumentId id) {
+  const onebeat::model::Pattern* pattern = currentPattern(handle);
+  if (pattern == nullptr) return nullptr;
+  const auto found = pattern->sequences.find(id);
+  return found == pattern->sequences.end() ? nullptr : &found->second;
+}
+
+// The boundary's ob_note is int32 where the model is int16/uint16, because a
+// C ABI struct with narrow fields invites padding surprises. Narrowing here is
+// safe: every value is validated against the model's own range first.
+std::vector<onebeat::model::Note> toModelNotes(const ob_note* notes, int32_t count) {
+  std::vector<onebeat::model::Note> result;
+  if (notes == nullptr || count <= 0) return result;
+  result.reserve(static_cast<size_t>(count));
+  for (int32_t index = 0; index < count; ++index) {
+    onebeat::model::Note note;
+    note.start = notes[index].start;
+    note.length = notes[index].length;
+    note.key = static_cast<int16_t>(notes[index].key);
+    note.velocity = static_cast<onebeat::model::Velocity>(notes[index].velocity);
+    if (!onebeat::model::isValidNote(note)) return {};
+    result.push_back(note);
+  }
+  return result;
+}
+
+// Resolves the (current pattern, instrument) pair every note edit is addressed
+// by. Returns false and leaves the outputs untouched when either is missing.
+bool resolveNoteTarget(ob_engine& handle, const char* utf8_instrument_id,
+                       onebeat::model::PatternId& out_pattern,
+                       onebeat::model::InstrumentId& out_instrument) {
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Pattern* pattern = currentPattern(handle);
+  if (!id || pattern == nullptr || handle.project.findInstrument(*id) == nullptr) return false;
+  out_pattern = pattern->id;
+  out_instrument = *id;
+  return true;
+}
+
+std::optional<onebeat::model::NoteGrid> optionalGrid(int64_t snap_ticks) {
+  if (snap_ticks <= 0) return std::nullopt;
+  return onebeat::model::NoteGrid{snap_ticks, 0};
+}
+
+size_t patternNoteCount(const onebeat::model::Pattern& pattern) {
+  size_t total = 0;
+  for (const auto& [instrument, sequence] : pattern.sequences) {
+    (void)instrument;
+    total += sequence.size();
+  }
+  return total;
+}
+
+// Lanes are drawn in `order`, which is a field rather than the map's position
+// (FR-PRJ-02), so every read path sorts by it before indexing.
+std::vector<const onebeat::model::ArrangementLane*> orderedLanes(const ob_engine& handle) {
+  std::vector<const onebeat::model::ArrangementLane*> lanes;
+  lanes.reserve(handle.project.lanes().size());
+  for (const auto& [id, lane] : handle.project.lanes()) {
+    (void)id;
+    lanes.push_back(&lane);
+  }
+  std::sort(lanes.begin(), lanes.end(),
+            [](const onebeat::model::ArrangementLane* a, const onebeat::model::ArrangementLane* b) {
+              if (a->order != b->order) return a->order < b->order;
+              return a->id.raw() < b->id.raw();
+            });
+  return lanes;
+}
+
+// Clips in painting order: lane by lane, left to right. Stable, so a repaint
+// cannot reshuffle overlapping clips under the cursor.
+std::vector<const onebeat::model::Clip*> orderedClips(const ob_engine& handle) {
+  std::map<onebeat::model::ArrangementLaneId, int32_t> lane_order;
+  for (const auto& [id, lane] : handle.project.lanes()) lane_order[id] = lane.order;
+
+  std::vector<const onebeat::model::Clip*> clips;
+  clips.reserve(handle.project.clips().size());
+  for (const auto& [id, clip] : handle.project.clips()) {
+    (void)id;
+    clips.push_back(&clip);
+  }
+  std::sort(clips.begin(), clips.end(),
+            [&lane_order](const onebeat::model::Clip* a, const onebeat::model::Clip* b) {
+              const int32_t lane_a = lane_order.count(a->lane) != 0 ? lane_order[a->lane] : 0;
+              const int32_t lane_b = lane_order.count(b->lane) != 0 ? lane_order[b->lane] : 0;
+              if (lane_a != lane_b) return lane_a < lane_b;
+              if (a->start != b->start) return a->start < b->start;
+              return a->id.raw() < b->id.raw();
+            });
+  return clips;
+}
+
+// "Verse Drums" -> "Verse Drums 2", then 3, and so on. The derived name is what
+// makes a cloned pattern recognisable in the selector without the user having
+// to rename it first (OB-3-11 §4).
+std::string derivedPatternName(const ob_engine& handle, const std::string& base) {
+  for (int suffix = 2; suffix < 1000; ++suffix) {
+    const std::string candidate = base + " " + std::to_string(suffix);
+    bool taken = false;
+    for (const auto& [id, pattern] : handle.project.patterns()) {
+      (void)id;
+      if (pattern.name == candidate) {
+        taken = true;
+        break;
+      }
+    }
+    if (!taken) return candidate;
+  }
+  return base + " copy";
+}
+
+// Executes a create command and reports the ID it minted, by diffing the map.
+// The command layer mints IDs internally and does not surface them, and diffing
+// is both cheap at this scale and immune to assumptions about map ordering.
+template <typename Id, typename Map>
+std::optional<Id> executeAndFindNew(ob_engine& handle, const Map& map,
+                                    onebeat::model::CommandPtr command) {
+  std::vector<Id> before;
+  before.reserve(map.size());
+  for (const auto& [id, entity] : map) {
+    (void)entity;
+    before.push_back(id);
+  }
+  if (command == nullptr || !handle.commands.execute(std::move(command))) return std::nullopt;
+  for (const auto& [id, entity] : map) {
+    (void)entity;
+    if (std::find(before.begin(), before.end(), id) == before.end()) return id;
+  }
+  return std::nullopt;
+}
+
+// Copies a pattern's meta and every sequence into a fresh pattern. Used by both
+// `Duplicate pattern` (which repoints nothing) and `Make unique` (which
+// repoints the selected clips) — the difference between the two is entirely in
+// what the caller does next, which is why the clone itself is shared code.
+//
+// Assumes an open transaction: the clone is several commands and must undo as
+// one entry.
+std::optional<onebeat::model::PatternId> clonePattern(ob_engine& handle,
+                                                      const onebeat::model::Pattern& source,
+                                                      const std::string& name) {
+  const auto created = executeAndFindNew<onebeat::model::PatternId>(
+      handle, handle.project.patterns(),
+      onebeat::model::addPattern(handle.project, name, source.length));
+  if (!created) return std::nullopt;
+
+  const onebeat::model::ColorHex color = source.color;
+  const double swing = source.swing;
+  if (!handle.commands.execute(onebeat::model::editPatternMeta(
+          handle.project, *created, onebeat::model::ChangeField::Color,
+          [&color, swing](onebeat::model::PatternMeta& meta) {
+            meta.color = color;
+            meta.swing = swing;
+          },
+          "Copy pattern settings"))) {
+    return std::nullopt;
+  }
+
+  for (const auto& [instrument, sequence] : source.sequences) {
+    if (sequence.empty()) continue;
+    if (!handle.commands.execute(
+            onebeat::model::insertNotes(*created, instrument, sequence.notes()))) {
+      return std::nullopt;
+    }
+  }
+  return created;
+}
+
 }  // namespace
 
 extern "C" {
@@ -206,7 +404,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.6.0";
+  return "1.7.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -1283,6 +1481,805 @@ ob_status ob_engine_rack_gesture_abort(ob_engine* engine) {
   publishModel(*engine);
   g_last_error.clear();
   return OB_OK;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Notes: the piano roll (ABI 1.7, OB-3-10)                                   */
+/* ------------------------------------------------------------------------- */
+
+int32_t ob_engine_note_count(ob_engine* engine, const char* utf8_instrument_id) {
+  if (engine == nullptr) return 0;
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return 0;
+  const onebeat::model::NoteSequence* sequence = sequenceFor(*engine, *id);
+  return sequence == nullptr ? 0 : static_cast<int32_t>(sequence->size());
+}
+
+ob_status ob_engine_notes_read(ob_engine* engine, const char* utf8_instrument_id,
+                               ob_note* out_notes, int32_t capacity, int32_t* out_count) {
+  if (engine == nullptr || out_count == nullptr || capacity < 0 ||
+      (capacity > 0 && out_notes == nullptr)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and note output buffer are required.");
+  }
+  *out_count = 0;
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument id is invalid.");
+
+  const onebeat::model::NoteSequence* sequence = sequenceFor(*engine, *id);
+  if (sequence == nullptr) {
+    g_last_error.clear();
+    return OB_OK;
+  }
+  int32_t written = 0;
+  for (const onebeat::model::Note& note : sequence->notes()) {
+    if (written >= capacity) break;
+    out_notes[written].start = note.start;
+    out_notes[written].length = note.length;
+    out_notes[written].key = note.key;
+    out_notes[written].velocity = note.velocity;
+    ++written;
+  }
+  *out_count = written;
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_note_add(ob_engine* engine, const char* utf8_instrument_id, int64_t start,
+                             int64_t length, int32_t key, int32_t velocity) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  if (start < 0 || length <= 0 || key < 0 || key > 127 ||
+      velocity > static_cast<int32_t>(onebeat::model::MaxVelocity)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The note is out of range.");
+  }
+  // A velocity of 0 means "use the instrument's default", which is what the
+  // pencil tool wants; anything else is an explicit value from the UI.
+  if (velocity <= 0) {
+    return executeModel(*engine,
+                        onebeat::model::addNote(engine->project, pattern, instrument, start, length,
+                                                static_cast<int16_t>(key)),
+                        "The note could not be added.");
+  }
+  onebeat::model::Note note;
+  note.start = start;
+  note.length = length;
+  note.key = static_cast<int16_t>(key);
+  note.velocity = static_cast<onebeat::model::Velocity>(velocity);
+  return executeModel(*engine, onebeat::model::insertNotes(pattern, instrument, {note}),
+                      "The note could not be added.");
+}
+
+ob_status ob_engine_notes_remove(ob_engine* engine, const char* utf8_instrument_id,
+                                 const ob_note* notes, int32_t count) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(*engine,
+                      onebeat::model::removeNotes(pattern, instrument, std::move(selection)),
+                      "The notes could not be removed.");
+}
+
+ob_status ob_engine_notes_move(ob_engine* engine, const char* utf8_instrument_id,
+                               const ob_note* notes, int32_t count, int64_t delta_ticks,
+                               int32_t semitones, int64_t snap_ticks) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(
+      *engine,
+      onebeat::model::moveNotes(pattern, instrument, std::move(selection), delta_ticks,
+                                static_cast<int16_t>(semitones), optionalGrid(snap_ticks)),
+      "The notes could not be moved.");
+}
+
+ob_status ob_engine_notes_resize(ob_engine* engine, const char* utf8_instrument_id,
+                                 const ob_note* notes, int32_t count, int64_t length_delta,
+                                 int64_t snap_ticks) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(*engine,
+                      onebeat::model::resizeNotes(pattern, instrument, std::move(selection),
+                                                  length_delta, optionalGrid(snap_ticks)),
+                      "The notes could not be resized.");
+}
+
+ob_status ob_engine_notes_set_velocity(ob_engine* engine, const char* utf8_instrument_id,
+                                       const ob_note* notes, int32_t count, int32_t velocity) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  if (velocity < 1 || velocity > static_cast<int32_t>(onebeat::model::MaxVelocity)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Velocity must be between 1 and 16383.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(
+      *engine,
+      onebeat::model::setNoteVelocity(pattern, instrument, std::move(selection),
+                                      static_cast<onebeat::model::Velocity>(velocity)),
+      "The note velocity could not be changed.");
+}
+
+ob_status ob_engine_notes_quantise(ob_engine* engine, const char* utf8_instrument_id,
+                                   const ob_note* notes, int32_t count, int64_t grid_ticks,
+                                   double strength) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  if (grid_ticks <= 0 || strength < 0.0 || strength > 1.0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Quantise needs a positive grid and 0..1 strength.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(
+      *engine,
+      onebeat::model::quantiseNotes(pattern, instrument, std::move(selection),
+                                    onebeat::model::NoteGrid{grid_ticks, 0}, strength),
+      "The notes could not be quantised.");
+}
+
+ob_status ob_engine_notes_duplicate(ob_engine* engine, const char* utf8_instrument_id,
+                                    const ob_note* notes, int32_t count, int64_t delta_ticks) {
+  onebeat::model::PatternId pattern;
+  onebeat::model::InstrumentId instrument;
+  if (engine == nullptr || !resolveNoteTarget(*engine, utf8_instrument_id, pattern, instrument)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist in this pattern.");
+  }
+  std::vector<onebeat::model::Note> selection = toModelNotes(notes, count);
+  if (selection.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No valid notes were given.");
+  return executeModel(*engine,
+                      onebeat::model::duplicateNotes(pattern, instrument, std::move(selection),
+                                                     delta_ticks, std::nullopt),
+                      "The notes could not be duplicated.");
+}
+
+/* ------------------------------------------------------------------------- */
+/* Patterns (ABI 1.7, OB-3-11)                                                */
+/* ------------------------------------------------------------------------- */
+
+int32_t ob_engine_pattern_count(ob_engine* engine) {
+  return engine == nullptr ? 0 : static_cast<int32_t>(engine->project.patterns().size());
+}
+
+ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0 ||
+      static_cast<size_t>(index) >= engine->project.patterns().size()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern index is out of range.");
+  }
+  auto entry = engine->project.patterns().begin();
+  std::advance(entry, index);
+  const onebeat::model::Pattern& pattern = entry->second;
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->flags = (engine->current_pattern.has_value() && *engine->current_pattern == pattern.id)
+                        ? OB_PATTERN_FLAG_CURRENT
+                        : 0U;
+  out_info->length_ticks = pattern.length;
+  out_info->swing = pattern.swing;
+  out_info->usage_count = static_cast<uint32_t>(engine->project.patternUsageCount(pattern.id));
+  out_info->note_count = static_cast<uint32_t>(patternNoteCount(pattern));
+  copyText(out_info->id, sizeof(out_info->id), pattern.id.str().c_str());
+  copyText(out_info->name, sizeof(out_info->name), pattern.name.c_str());
+  copyText(out_info->color, sizeof(out_info->color), pattern.color.c_str());
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_select(ob_engine* engine, const char* utf8_pattern_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  engine->current_pattern = *id;
+  // Selection is not an edit, so nothing is recorded — but the loop length the
+  // transport uses follows the current pattern, so the schedule is republished.
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_create(ob_engine* engine, const char* utf8_name) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const std::string name = (utf8_name == nullptr || utf8_name[0] == '\0')
+                               ? derivedPatternName(*engine, "Pattern")
+                               : std::string(utf8_name);
+  const auto created = executeAndFindNew<onebeat::model::PatternId>(
+      *engine, engine->project.patterns(),
+      onebeat::model::addPattern(engine->project, name, onebeat::model::TicksPerBarFourFour));
+  if (!created) return fail(OB_ERR_INTERNAL, "The pattern could not be created.");
+  engine->current_pattern = *created;
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_rename(ob_engine* engine, const char* utf8_pattern_id,
+                                   const char* utf8_name) {
+  if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A pattern name is required.");
+  }
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  const std::string name = utf8_name;
+  return executeModel(
+      *engine,
+      onebeat::model::editPatternMeta(
+          engine->project, *id, onebeat::model::ChangeField::Name,
+          [&name](onebeat::model::PatternMeta& meta) { meta.name = name; }, "Rename pattern"),
+      "The pattern could not be renamed.");
+}
+
+ob_status ob_engine_pattern_recolor(ob_engine* engine, const char* utf8_pattern_id,
+                                    const char* utf8_color) {
+  if (engine == nullptr || utf8_color == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A pattern colour is required.");
+  }
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  const std::string color = utf8_color;
+  return executeModel(
+      *engine,
+      onebeat::model::editPatternMeta(
+          engine->project, *id, onebeat::model::ChangeField::Color,
+          [&color](onebeat::model::PatternMeta& meta) { meta.color = color; }, "Recolour pattern"),
+      "The pattern could not be recoloured.");
+}
+
+ob_status ob_engine_pattern_duplicate(ob_engine* engine, const char* utf8_pattern_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = patternId(utf8_pattern_id);
+  const onebeat::model::Pattern* source = id ? engine->project.findPattern(*id) : nullptr;
+  if (source == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+
+  engine->commands.beginTransaction("Duplicate pattern");
+  const auto clone = clonePattern(*engine, *source, derivedPatternName(*engine, source->name));
+  if (!clone) {
+    engine->commands.abortTransaction();
+    return fail(OB_ERR_INTERNAL, "The pattern could not be duplicated.");
+  }
+  engine->commands.commitTransaction();
+  engine->current_pattern = *clone;
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pattern_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  if (engine->project.patterns().size() <= 1) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The last pattern cannot be deleted.");
+  }
+  const ob_status status = executeModel(*engine, onebeat::model::removePattern(*id),
+                                        "The pattern could not be deleted.");
+  if (status != OB_OK) return status;
+  // The selection has to land somewhere real, or every subsequent read fails.
+  if (engine->current_pattern.has_value() && *engine->current_pattern == *id) {
+    engine->current_pattern = engine->project.patterns().begin()->first;
+    publishModel(*engine);
+  }
+  return OB_OK;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Arrangement lanes (ABI 1.7, OB-3-12)                                       */
+/* ------------------------------------------------------------------------- */
+
+int32_t ob_engine_lane_count(ob_engine* engine) {
+  return engine == nullptr ? 0 : static_cast<int32_t>(engine->project.lanes().size());
+}
+
+ob_status ob_engine_lane_at(ob_engine* engine, int32_t index, ob_lane_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and output lane are required.");
+  }
+  const std::vector<const onebeat::model::ArrangementLane*> lanes = orderedLanes(*engine);
+  if (static_cast<size_t>(index) >= lanes.size()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Lane index is out of range.");
+  }
+  const onebeat::model::ArrangementLane& lane = *lanes[static_cast<size_t>(index)];
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->flags = (lane.muted ? OB_LANE_FLAG_MUTED : 0U) |
+                    (lane.soloed ? OB_LANE_FLAG_SOLOED : 0U) |
+                    (lane.collapsed ? OB_LANE_FLAG_COLLAPSED : 0U);
+  out_info->order = lane.order;
+  out_info->height = lane.height;
+  out_info->clip_count = static_cast<uint32_t>(engine->project.clipsOnLane(lane.id).size());
+  copyText(out_info->id, sizeof(out_info->id), lane.id.str().c_str());
+  copyText(out_info->name, sizeof(out_info->name), lane.name.c_str());
+  copyText(out_info->color, sizeof(out_info->color), lane.color.c_str());
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_lane_create(ob_engine* engine, const char* utf8_name) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const std::string name = (utf8_name == nullptr || utf8_name[0] == '\0')
+                               ? "Lane " + std::to_string(engine->project.lanes().size() + 1)
+                               : std::string(utf8_name);
+  return executeModel(*engine, onebeat::model::addLane(engine->project, name),
+                      "The lane could not be created.");
+}
+
+// Every lane field below is one editLane command, which is what makes each of
+// them undoable on its own and coalescable inside a drag.
+namespace {
+
+ob_status editLaneField(ob_engine* engine, const char* utf8_lane_id,
+                        onebeat::model::ChangeField field,
+                        const std::function<void(onebeat::model::ArrangementLane&)>& mutator,
+                        const char* name, const char* failure) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = laneId(utf8_lane_id);
+  if (!id || engine->project.findLane(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::editLane(engine->project, *id, field, mutator, name),
+                      failure);
+}
+
+}  // namespace
+
+ob_status ob_engine_lane_rename(ob_engine* engine, const char* utf8_lane_id,
+                                const char* utf8_name) {
+  if (utf8_name == nullptr || utf8_name[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A lane name is required.");
+  }
+  const std::string name = utf8_name;
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Name,
+      [&name](onebeat::model::ArrangementLane& lane) { lane.name = name; }, "Rename lane",
+      "The lane could not be renamed.");
+}
+
+ob_status ob_engine_lane_recolor(ob_engine* engine, const char* utf8_lane_id,
+                                 const char* utf8_color) {
+  if (utf8_color == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "A lane colour is required.");
+  const std::string color = utf8_color;
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Color,
+      [&color](onebeat::model::ArrangementLane& lane) { lane.color = color; }, "Recolour lane",
+      "The lane could not be recoloured.");
+}
+
+ob_status ob_engine_lane_reorder(ob_engine* engine, const char* utf8_lane_id, int32_t order) {
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Order,
+      [order](onebeat::model::ArrangementLane& lane) { lane.order = order; }, "Reorder lane",
+      "The lane could not be reordered.");
+}
+
+ob_status ob_engine_lane_set_height(ob_engine* engine, const char* utf8_lane_id, int32_t height) {
+  if (height < 24 || height > 400) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Lane height must be between 24 and 400.");
+  }
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Height,
+      [height](onebeat::model::ArrangementLane& lane) { lane.height = height; }, "Resize lane",
+      "The lane could not be resized.");
+}
+
+ob_status ob_engine_lane_set_muted(ob_engine* engine, const char* utf8_lane_id, int32_t muted) {
+  const bool value = muted != 0;
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Muted,
+      [value](onebeat::model::ArrangementLane& lane) { lane.muted = value; },
+      value ? "Mute lane events" : "Unmute lane events", "The lane could not be muted.");
+}
+
+ob_status ob_engine_lane_set_soloed(ob_engine* engine, const char* utf8_lane_id, int32_t soloed) {
+  const bool value = soloed != 0;
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Soloed,
+      [value](onebeat::model::ArrangementLane& lane) { lane.soloed = value; },
+      value ? "Solo lane" : "Unsolo lane", "The lane could not be soloed.");
+}
+
+ob_status ob_engine_lane_set_collapsed(ob_engine* engine, const char* utf8_lane_id,
+                                       int32_t collapsed) {
+  const bool value = collapsed != 0;
+  return editLaneField(
+      engine, utf8_lane_id, onebeat::model::ChangeField::Collapsed,
+      [value](onebeat::model::ArrangementLane& lane) { lane.collapsed = value; },
+      value ? "Collapse lane" : "Expand lane", "The lane could not be collapsed.");
+}
+
+ob_status ob_engine_lane_remove(ob_engine* engine, const char* utf8_lane_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = laneId(utf8_lane_id);
+  if (!id || engine->project.findLane(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::removeLane(*id), "The lane could not be deleted.");
+}
+
+/* ------------------------------------------------------------------------- */
+/* Clips (ABI 1.7, OB-3-12/13)                                                */
+/* ------------------------------------------------------------------------- */
+
+int32_t ob_engine_clip_count(ob_engine* engine) {
+  return engine == nullptr ? 0 : static_cast<int32_t>(engine->project.clips().size());
+}
+
+ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and output clip are required.");
+  }
+  const std::vector<const onebeat::model::Clip*> clips = orderedClips(*engine);
+  if (static_cast<size_t>(index) >= clips.size()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Clip index is out of range.");
+  }
+  const onebeat::model::Clip& clip = *clips[static_cast<size_t>(index)];
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->flags =
+      (clip.muted ? OB_CLIP_FLAG_MUTED : 0U) | (clip.transforms.loop ? OB_CLIP_FLAG_LOOP : 0U);
+  out_info->start_ticks = clip.start;
+  out_info->length_ticks = clip.length;
+  out_info->window_start_ticks = clip.transforms.window_start;
+  out_info->transpose = clip.transforms.transpose;
+  copyText(out_info->id, sizeof(out_info->id), clip.id.str().c_str());
+  copyText(out_info->lane_id, sizeof(out_info->lane_id), clip.lane.str().c_str());
+
+  // v0.3 draws pattern clips only; audio and automation clips exist in the
+  // model (D-M7) and arrive with Stages 4 and 9. Reporting them with an empty
+  // pattern id is how the view knows to skip rather than mis-draw them.
+  const onebeat::model::PatternSource* source = clip.pattern();
+  if (source == nullptr) {
+    g_last_error.clear();
+    return OB_OK;
+  }
+  copyText(out_info->pattern_id, sizeof(out_info->pattern_id), source->pattern.str().c_str());
+  const onebeat::model::Pattern* pattern = engine->project.findPattern(source->pattern);
+  if (pattern != nullptr) {
+    out_info->pattern_length_ticks = pattern->length;
+    out_info->note_count = static_cast<uint32_t>(patternNoteCount(*pattern));
+    out_info->usage_count = static_cast<uint32_t>(engine->project.patternUsageCount(pattern->id));
+    copyText(out_info->name, sizeof(out_info->name), pattern->name.c_str());
+    copyText(out_info->color, sizeof(out_info->color), pattern->color.c_str());
+  }
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_clip_add(ob_engine* engine, const char* utf8_lane_id,
+                             const char* utf8_pattern_id, int64_t start_ticks,
+                             int64_t length_ticks) {
+  if (engine == nullptr || start_ticks < 0 || length_ticks <= 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT,
+                "A clip needs a non-negative start and a positive length.");
+  }
+  const auto lane = laneId(utf8_lane_id);
+  if (!lane || engine->project.findLane(*lane) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+  const auto requested = patternId(utf8_pattern_id);
+  const std::optional<onebeat::model::PatternId> target =
+      requested.has_value() ? requested : engine->current_pattern;
+  if (!target || engine->project.findPattern(*target) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  return executeModel(
+      *engine,
+      onebeat::model::addClip(engine->project, *lane, onebeat::model::PatternSource{*target},
+                              start_ticks, length_ticks),
+      "The clip could not be placed.");
+}
+
+ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id, const char* utf8_lane_id,
+                              int64_t start_ticks) {
+  if (engine == nullptr || start_ticks < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip start must not be negative.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  // An empty lane id means "same lane": the common case is a horizontal drag,
+  // and making the caller echo the current lane back invites it getting it
+  // wrong during a multi-clip move.
+  std::optional<onebeat::model::ArrangementLaneId> lane = laneId(utf8_lane_id);
+  if (lane && engine->project.findLane(*lane) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+  return executeModel(*engine,
+                      onebeat::model::editClip(
+                          engine->project, *id, onebeat::model::ChangeField::Start,
+                          [lane, start_ticks](onebeat::model::Clip& clip) {
+                            clip.start = start_ticks;
+                            if (lane) clip.lane = *lane;
+                          },
+                          "Move clip"),
+                      "The clip could not be moved.");
+}
+
+ob_status ob_engine_clip_resize(ob_engine* engine, const char* utf8_clip_id, int64_t length_ticks) {
+  if (engine == nullptr || length_ticks <= 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip length must be positive.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  return executeModel(
+      *engine,
+      onebeat::model::editClip(
+          engine->project, *id, onebeat::model::ChangeField::Length,
+          [length_ticks](onebeat::model::Clip& clip) { clip.length = length_ticks; },
+          "Resize clip"),
+      "The clip could not be resized.");
+}
+
+ob_status ob_engine_clip_duplicate(ob_engine* engine, const char* utf8_clip_id,
+                                   const char* utf8_lane_id, int64_t start_ticks) {
+  if (engine == nullptr || start_ticks < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip start must not be negative.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* source = id ? engine->project.findClip(*id) : nullptr;
+  if (source == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+
+  const std::optional<onebeat::model::ArrangementLaneId> requested = laneId(utf8_lane_id);
+  const onebeat::model::ArrangementLaneId lane = requested.value_or(source->lane);
+  if (engine->project.findLane(lane) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+  // Copy-drag duplicates the transforms too: a transposed clip that loses its
+  // transpose when ⌥-dragged would be a silent data loss the user only hears.
+  const onebeat::model::ClipSource clip_source = source->source;
+  const onebeat::model::ClipTransforms transforms = source->transforms;
+  const bool muted = source->muted;
+  const onebeat::model::Ticks length = source->length;
+
+  engine->commands.beginTransaction("Duplicate clip");
+  const auto created = executeAndFindNew<onebeat::model::ClipId>(
+      *engine, engine->project.clips(),
+      onebeat::model::addClip(engine->project, lane, clip_source, start_ticks, length));
+  if (!created || !engine->commands.execute(onebeat::model::editClip(
+                      engine->project, *created, onebeat::model::ChangeField::Transforms,
+                      [transforms, muted](onebeat::model::Clip& clip) {
+                        clip.transforms = transforms;
+                        clip.muted = muted;
+                      },
+                      "Copy clip settings"))) {
+    engine->commands.abortTransaction();
+    return fail(OB_ERR_INTERNAL, "The clip could not be duplicated.");
+  }
+  engine->commands.commitTransaction();
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_clip_remove(ob_engine* engine, const char* utf8_clip_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::removeClip(*id), "The clip could not be deleted.");
+}
+
+namespace {
+
+ob_status editClipField(ob_engine* engine, const char* utf8_clip_id,
+                        onebeat::model::ChangeField field,
+                        const std::function<void(onebeat::model::Clip&)>& mutator, const char* name,
+                        const char* failure) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::editClip(engine->project, *id, field, mutator, name),
+                      failure);
+}
+
+}  // namespace
+
+ob_status ob_engine_clip_set_muted(ob_engine* engine, const char* utf8_clip_id, int32_t muted) {
+  const bool value = muted != 0;
+  return editClipField(
+      engine, utf8_clip_id, onebeat::model::ChangeField::Muted,
+      [value](onebeat::model::Clip& clip) { clip.muted = value; },
+      value ? "Mute clip" : "Unmute clip", "The clip could not be muted.");
+}
+
+ob_status ob_engine_clip_set_loop(ob_engine* engine, const char* utf8_clip_id, int32_t loop) {
+  const bool value = loop != 0;
+  return editClipField(
+      engine, utf8_clip_id, onebeat::model::ChangeField::Transforms,
+      [value](onebeat::model::Clip& clip) { clip.transforms.loop = value; },
+      value ? "Loop clip" : "Stop clip at its end", "The clip loop mode could not be changed.");
+}
+
+ob_status ob_engine_clip_set_window_start(ob_engine* engine, const char* utf8_clip_id,
+                                          int64_t window_start_ticks) {
+  if (window_start_ticks < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip window start must not be negative.");
+  }
+  return editClipField(
+      engine, utf8_clip_id, onebeat::model::ChangeField::Transforms,
+      [window_start_ticks](onebeat::model::Clip& clip) {
+        clip.transforms.window_start = window_start_ticks;
+      },
+      "Set clip offset", "The clip offset could not be changed.");
+}
+
+ob_status ob_engine_clip_set_transpose(ob_engine* engine, const char* utf8_clip_id,
+                                       int32_t semitones) {
+  if (semitones < -48 || semitones > 48) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Transpose must be between -48 and 48 semitones.");
+  }
+  const int16_t value = static_cast<int16_t>(semitones);
+  return editClipField(
+      engine, utf8_clip_id, onebeat::model::ChangeField::Transforms,
+      [value](onebeat::model::Clip& clip) { clip.transforms.transpose = value; }, "Transpose clip",
+      "The clip could not be transposed.");
+}
+
+ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8_clip_ids) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const std::vector<std::string> raw_ids = splitDirectories(utf8_clip_ids);
+  if (raw_ids.empty()) return fail(OB_ERR_INVALID_ARGUMENT, "No clips were given.");
+
+  std::vector<onebeat::model::ClipId> targets;
+  targets.reserve(raw_ids.size());
+  const onebeat::model::Pattern* source = nullptr;
+  for (const std::string& text : raw_ids) {
+    const auto id = clipId(text.c_str());
+    const onebeat::model::Clip* clip = id ? engine->project.findClip(*id) : nullptr;
+    const onebeat::model::PatternSource* pattern_source =
+        clip == nullptr ? nullptr : clip->pattern();
+    if (pattern_source == nullptr) {
+      return fail(OB_ERR_INVALID_ARGUMENT, "Make unique needs existing pattern clips.");
+    }
+    const onebeat::model::Pattern* pattern = engine->project.findPattern(pattern_source->pattern);
+    if (pattern == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip's pattern is missing.");
+    // One clone for the whole selection, so the clips stay linked to each other
+    // while being cut loose from everything outside it (OB-3-11 §4).
+    if (source == nullptr) {
+      source = pattern;
+    } else if (source->id != pattern->id) {
+      return fail(OB_ERR_INVALID_ARGUMENT, "The selected clips use different patterns.");
+    }
+    targets.push_back(*id);
+  }
+
+  engine->commands.beginTransaction("Make unique");
+  const auto clone = clonePattern(*engine, *source, derivedPatternName(*engine, source->name));
+  if (!clone) {
+    engine->commands.abortTransaction();
+    return fail(OB_ERR_INTERNAL, "The pattern could not be cloned.");
+  }
+  const onebeat::model::PatternId clone_id = *clone;
+  for (const onebeat::model::ClipId& target : targets) {
+    if (!engine->commands.execute(onebeat::model::editClip(
+            engine->project, target, onebeat::model::ChangeField::Source,
+            [clone_id](onebeat::model::Clip& clip) {
+              clip.source = onebeat::model::PatternSource{clone_id};
+            },
+            "Repoint clip"))) {
+      engine->commands.abortTransaction();
+      return fail(OB_ERR_INTERNAL, "The clip could not be repointed.");
+    }
+  }
+  engine->commands.commitTransaction();
+  engine->current_pattern = clone_id;
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path) {
+  if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A project path is required.");
+  }
+  try {
+    onebeat::model::SaveOptions options;
+    options.created_with = std::string("OneBeat ") + ob_abi_version_string();
+    // Carry existing sidecars across: this engine does not yet route per
+    // instrument plug-in state through the project writer (that lands with the
+    // Stage 4 mixer), and dropping them on save would be data loss.
+    options.copy_state_from = engine->project_path;
+
+    const onebeat::model::SaveReport report =
+        onebeat::model::saveProject(utf8_path, engine->project, engine->residue, options);
+    if (!report.ok) {
+      return fail(OB_ERR_INTERNAL,
+                  report.error.empty() ? "The project could not be saved." : report.error.c_str());
+    }
+    engine->project_path = utf8_path;
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  } catch (...) {
+    return fail(OB_ERR_INTERNAL, "Unknown failure while saving the project.");
+  }
+}
+
+ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path) {
+  if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A project path is required.");
+  }
+  try {
+    if (!std::filesystem::exists(utf8_path)) {
+      return fail(OB_ERR_FILE_NOT_FOUND, "The project does not exist.");
+    }
+    onebeat::model::Residue residue;
+    const onebeat::model::LoadReport report =
+        onebeat::model::loadProject(utf8_path, engine->project, residue, {});
+    if (!report.ok) {
+      // loadProject leaves the project untouched on failure, so the session the
+      // user already had open survives an unreadable file.
+      const std::string detail = report.describe();
+      return fail(OB_ERR_FILE_UNSUPPORTED,
+                  detail.empty() ? "The project could not be opened." : detail.c_str());
+    }
+    engine->residue = std::move(residue);
+    engine->project_path = utf8_path;
+
+    // The history belongs to the session that made it: an opened file has no
+    // edits to undo, and keeping the old stack would let undo reach back into a
+    // project that is no longer loaded.
+    engine->commands.clear();
+    engine->rack_grids.clear();
+    engine->selected_instrument = std::nullopt;
+    engine->current_pattern = engine->project.patterns().empty()
+                                  ? std::optional<onebeat::model::PatternId>{}
+                                  : engine->project.patterns().begin()->first;
+    engine->flattener.markDirty();
+    publishModel(*engine);
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  } catch (...) {
+    return fail(OB_ERR_INTERNAL, "Unknown failure while opening the project.");
+  }
+}
+
+const char* ob_engine_project_json(ob_engine* engine) {
+  if (engine == nullptr) return "";
+  try {
+    engine->project_json_cache = onebeat::model::writeProjectJson(engine->project, engine->residue);
+    return engine->project_json_cache.c_str();
+  } catch (...) {
+    return "";
+  }
 }
 
 }  // extern "C"

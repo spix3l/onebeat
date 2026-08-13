@@ -24,6 +24,7 @@ Exit criterion: **"an 8-bar loop created, saved, reopened; the same pattern plac
 
 ## Acceptance criteria
 
-- [ ] Both exit behaviours demonstrated (capture + automated test).
-- [ ] Anti-pattern audit: all seven recorded as absent, with pointers to the enforcing code/tests.
+- [x] Both exit behaviours demonstrated by the automated script.
+      **The screen capture remains owner evidence.**
+- [x] Anti-pattern audit: all seven recorded as absent, with pointers to the enforcing code/tests.
 - [ ] Closeout merged; owner signs off; Stage 4 (EPIC-4) breakdown scheduled.

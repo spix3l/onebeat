@@ -11,11 +11,14 @@ import 'package:flutter/widgets.dart';
 import '../../main.dart' show startupStopwatch;
 import '../design/tokens.dart';
 import '../engine/engine_client.dart';
+import 'arrangement.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
 import 'channel_rack.dart';
 import 'meter.dart';
+import 'pattern_selector.dart';
 import 'performance_overlay.dart';
+import 'piano_roll.dart';
 import 'plugin_list_debug.dart';
 import 'token_gallery.dart';
 import 'transport_readout.dart';
@@ -49,6 +52,8 @@ class _OneBeatShellState extends State<OneBeatShell>
     // rather than appearing a moment later (FR-PLG-05, OB-2-02).
     _controller.library.load();
     _controller.rack.load();
+    _controller.patterns.load();
+    _controller.arrangement.load();
     // NFR-04's number, printed on every launch rather than measured once and
     // written into a document that then goes stale. This is the frame the user
     // can act on: engine up, plug-in list populated from the cache.
@@ -144,9 +149,25 @@ class _OneBeatShellState extends State<OneBeatShell>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 _TopBar(controller: _controller),
+                // D-M6's notice sits directly under the chrome and above every
+                // editor: the warning belongs to the pattern being edited, not
+                // to whichever view happens to be open.
+                SharedPatternNoticeBar(
+                  store: _controller.patterns,
+                  onMakeUnique: (String clipId) {
+                    _controller.patterns.makeUnique(<String>[clipId]);
+                    _controller.refreshAll();
+                  },
+                ),
                 Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
+                      if (!_showTokenGallery && !_showPluginList)
+                        PatternSelector(
+                          store: _controller.patterns,
+                          onOpenPattern: _controller.openPattern,
+                        ),
                       Expanded(
                         child: Stack(
                           children: <Widget>[
@@ -155,12 +176,7 @@ class _OneBeatShellState extends State<OneBeatShell>
                             else if (_showPluginList)
                               PluginListDebugPanel(controller: _controller)
                             else
-                              ChannelRack(
-                                controller: _controller,
-                                onBrowsePlugins:
-                                    () =>
-                                        setState(() => _showPluginList = true),
-                              ),
+                              _buildWorkspace(),
                             FrameTimingOverlay(controller: _controller),
                           ],
                         ),
@@ -176,6 +192,28 @@ class _OneBeatShellState extends State<OneBeatShell>
       ),
     );
   }
+
+  /// The three Stage 3 editors. All of them edit the same project through the
+  /// same command bus, so switching between them is presentation only — no
+  /// state is handed over and nothing is saved on the way out.
+  Widget _buildWorkspace() => switch (_controller.view) {
+    WorkspaceView.rack => ChannelRack(
+      controller: _controller,
+      onBrowsePlugins: () => setState(() => _showPluginList = true),
+    ),
+    WorkspaceView.pianoRoll => PianoRoll(
+      controller: _controller,
+      store: _controller.pianoRoll,
+      patterns: _controller.patterns,
+    ),
+    WorkspaceView.arrangement => ArrangementView(
+      controller: _controller,
+      store: _controller.arrangement,
+      patterns: _controller.patterns,
+      onOpenPattern: (String patternId, String clipId) =>
+          _controller.openPattern(patternId, fromClipId: clipId),
+    ),
+  };
 }
 
 class _TogglePlayIntent extends Intent {
@@ -260,8 +298,46 @@ class _TopBar extends StatelessWidget {
           Text('BPM', style: tokens.type.label),
           SizedBox(width: tokens.spacing.xl),
           TransportReadout(controller: controller),
+          SizedBox(width: tokens.spacing.xl),
+          _ViewSwitcher(controller: controller),
           const Spacer(),
           MasterMeter.of(controller),
+        ],
+      ),
+    );
+  }
+}
+
+/// The design's view switcher: Playlist · Channels · Piano roll. Always shows
+/// all three, so the app's shape is legible before anything has been built.
+class _ViewSwitcher extends StatelessWidget {
+  const _ViewSwitcher({required this.controller});
+
+  final EngineController controller;
+
+  static const Map<WorkspaceView, String> _labels = <WorkspaceView, String>{
+    WorkspaceView.arrangement: 'PLAYLIST',
+    WorkspaceView.rack: 'CHANNELS',
+    WorkspaceView.pianoRoll: 'PIANO ROLL',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext context, Widget? child) => Row(
+        children: <Widget>[
+          for (final MapEntry<WorkspaceView, String> entry in _labels.entries)
+            Padding(
+              padding: EdgeInsets.only(right: tokens.spacing.xs),
+              child: OneBeatButton(
+                label: entry.value,
+                semanticLabel: 'Show the ${entry.value.toLowerCase()} view',
+                active: controller.view == entry.key,
+                onPressed: () => controller.setView(entry.key),
+              ),
+            ),
         ],
       ),
     );

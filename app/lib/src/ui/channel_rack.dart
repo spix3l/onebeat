@@ -300,6 +300,8 @@ class _ChannelRackState extends State<ChannelRack> {
                                       row: row,
                                       library: library,
                                       rack: rack,
+                                      onEditNotes: () => controller
+                                          .editInPianoRoll(row.instrumentId),
                                     ),
                           ),
                       ],
@@ -490,12 +492,18 @@ class _RackHeader extends StatelessWidget {
     required this.row,
     required this.library,
     required this.rack,
+    required this.onEditNotes,
   });
 
   final ProjectInstrument instrument;
   final RackRow row;
   final PluginLibraryStore library;
   final RackStore rack;
+
+  /// Opens this instrument's sequence in the piano roll. The two editors write
+  /// the same `NoteSequence` (DM-Q4) — a step *is* a quantised note — so this
+  /// is a change of view, not a conversion.
+  final VoidCallback onEditNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -570,6 +578,13 @@ class _RackHeader extends StatelessWidget {
               semanticLabel: 'Change ${instrument.name} step resolution',
               onPressed:
                   () => rack.setGrid(instrument.id, _nextGrid(row.gridTicks)),
+            ),
+            SizedBox(width: t.spacing.xs),
+            OneBeatButton(
+              label: '♪',
+              semanticLabel:
+                  'Edit ${instrument.name} notes in the piano roll',
+              onPressed: onEditNotes,
             ),
             SizedBox(width: t.spacing.xs),
             OneBeatButton(

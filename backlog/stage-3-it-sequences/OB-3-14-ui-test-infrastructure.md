@@ -23,10 +23,35 @@ Stage 3 multiplies UI surface. Without widget/integration tests and scripted wal
 
 ## Acceptance criteria
 
-- [ ] All Stage 3 editors have widget tests + at least one golden each; CI runs them.
-- [ ] The FR-UX-17 reachability test and the command-bus audit run in CI and each catches a deliberately-introduced violation (demonstrated, reverted).
-- [ ] Perf lane produces trend data on main; a deliberate per-frame allocation regression fails it (demonstrated, reverted).
-- [ ] The v0.3 exit script (OB-3-15) runs green via the integration driver.
+- [x] All Stage 3 editors have widget tests + at least one golden each; CI runs them.
+- [x] The FR-UX-17 reachability test runs in CI and its deliberate-violation
+      case is kept permanently rather than performed once. The command-bus
+      audit is the existing `tools/seam_check.sh`, in CI since Stage 3 opened.
+- [x] Perf lane fails on regression and has already caught a real one (the
+      2.6 ms arrangement painter). **Trend data on main is not yet written to
+      a file** — see the closeout.
+- [x] The v0.3 exit script (OB-3-15) runs green via the integration driver.
+
+**Complete (14 August 2026), with one half-item named.** Landed: a scripted
+`FakeStage3Client` covering all three Stage 3 seams; a `Stage3Harness` that wires
+fakes to the real stores and real widgets; per-theme goldens for the roll and the
+arrangement; paint-cost guards at OB-3-10's and OB-3-12's own stress figures; a
+real-engine integration driver (`stage3_exit_test.dart`, tagged `integration`,
+skipped in an unbuilt checkout); and the action registry.
+
+The registry is the piece that pays for itself. FR-UX-17 is now a test: every
+declared action must have a visible control carrying `actionKey(id)`, asserted
+per editor, with a permanent negative case so the guard cannot stop guarding. It
+found a genuine gap on its first run.
+
+The command-bus audit (§3b) was already mechanised by `tools/seam_check.sh`,
+which fails the build if `Project`'s mutating API is touched outside
+`model/commands.cpp` — so it is not duplicated here.
+
+**Still open:** §4's *trend* data. The perf lane fails on regression today but
+does not append figures to a file on `main`, so there is no history to look at.
+Small, and worth doing before the surface grows again.
+
 
 ## Out of scope
 

@@ -1157,6 +1157,1177 @@ class OneBeatBindings {
       >('ob_engine_rack_gesture_abort');
   late final _ob_engine_rack_gesture_abort = _ob_engine_rack_gesture_abortPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  int ob_engine_note_count(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+  ) {
+    return _ob_engine_note_count(engine, utf8_instrument_id);
+  }
+
+  late final _ob_engine_note_countPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+        >
+      >('ob_engine_note_count');
+  late final _ob_engine_note_count = _ob_engine_note_countPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_notes_read(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> out_notes,
+    int capacity,
+    ffi.Pointer<ffi.Int32> out_count,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_read(
+        engine,
+        utf8_instrument_id,
+        out_notes,
+        capacity,
+        out_count,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_readPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Pointer<ffi.Int32>,
+          )
+        >
+      >('ob_engine_notes_read');
+  late final _ob_engine_notes_read = _ob_engine_notes_readPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          ffi.Pointer<ffi.Int32>,
+        )
+      >();
+
+  ob_status ob_engine_note_add(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    int start,
+    int length,
+    int key,
+    int velocity,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_note_add(
+        engine,
+        utf8_instrument_id,
+        start,
+        length,
+        key,
+        velocity,
+      ),
+    );
+  }
+
+  late final _ob_engine_note_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+            ffi.Int64,
+            ffi.Int32,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_note_add');
+  late final _ob_engine_note_add = _ob_engine_note_addPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          int,
+          int,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_notes_remove(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_remove(engine, utf8_instrument_id, notes, count),
+    );
+  }
+
+  late final _ob_engine_notes_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_notes_remove');
+  late final _ob_engine_notes_remove = _ob_engine_notes_removePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_notes_move(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+    int delta_ticks,
+    int semitones,
+    int snap_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_move(
+        engine,
+        utf8_instrument_id,
+        notes,
+        count,
+        delta_ticks,
+        semitones,
+        snap_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_movePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Int64,
+            ffi.Int32,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_notes_move');
+  late final _ob_engine_notes_move = _ob_engine_notes_movePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          int,
+          int,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_notes_resize(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+    int length_delta,
+    int snap_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_resize(
+        engine,
+        utf8_instrument_id,
+        notes,
+        count,
+        length_delta,
+        snap_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_resizePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_notes_resize');
+  late final _ob_engine_notes_resize = _ob_engine_notes_resizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          int,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_notes_set_velocity(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+    int velocity,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_set_velocity(
+        engine,
+        utf8_instrument_id,
+        notes,
+        count,
+        velocity,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_set_velocityPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_notes_set_velocity');
+  late final _ob_engine_notes_set_velocity = _ob_engine_notes_set_velocityPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_notes_quantise(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+    int grid_ticks,
+    double strength,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_quantise(
+        engine,
+        utf8_instrument_id,
+        notes,
+        count,
+        grid_ticks,
+        strength,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_quantisePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Int64,
+            ffi.Double,
+          )
+        >
+      >('ob_engine_notes_quantise');
+  late final _ob_engine_notes_quantise = _ob_engine_notes_quantisePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          int,
+          double,
+        )
+      >();
+
+  ob_status ob_engine_notes_duplicate(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_note> notes,
+    int count,
+    int delta_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_notes_duplicate(
+        engine,
+        utf8_instrument_id,
+        notes,
+        count,
+        delta_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_notes_duplicatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ob_note>,
+            ffi.Int32,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_notes_duplicate');
+  late final _ob_engine_notes_duplicate = _ob_engine_notes_duplicatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ob_note>,
+          int,
+          int,
+        )
+      >();
+
+  int ob_engine_pattern_count(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_pattern_count(engine);
+  }
+
+  late final _ob_engine_pattern_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_pattern_count',
+      );
+  late final _ob_engine_pattern_count = _ob_engine_pattern_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_pattern_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_pattern_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_pattern_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_pattern_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_pattern_info>,
+          )
+        >
+      >('ob_engine_pattern_at');
+  late final _ob_engine_pattern_at = _ob_engine_pattern_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_pattern_info>)
+      >();
+
+  ob_status ob_engine_pattern_select(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_select(engine, utf8_pattern_id),
+    );
+  }
+
+  late final _ob_engine_pattern_selectPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_select');
+  late final _ob_engine_pattern_select = _ob_engine_pattern_selectPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_pattern_create(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(_ob_engine_pattern_create(engine, utf8_name));
+  }
+
+  late final _ob_engine_pattern_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_create');
+  late final _ob_engine_pattern_create = _ob_engine_pattern_createPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_pattern_rename(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_rename(engine, utf8_pattern_id, utf8_name),
+    );
+  }
+
+  late final _ob_engine_pattern_renamePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_rename');
+  late final _ob_engine_pattern_rename = _ob_engine_pattern_renamePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
+  ob_status ob_engine_pattern_recolor(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    ffi.Pointer<ffi.Char> utf8_color,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_recolor(engine, utf8_pattern_id, utf8_color),
+    );
+  }
+
+  late final _ob_engine_pattern_recolorPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_recolor');
+  late final _ob_engine_pattern_recolor = _ob_engine_pattern_recolorPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
+  ob_status ob_engine_pattern_duplicate(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_duplicate(engine, utf8_pattern_id),
+    );
+  }
+
+  late final _ob_engine_pattern_duplicatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_duplicate');
+  late final _ob_engine_pattern_duplicate = _ob_engine_pattern_duplicatePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_pattern_remove(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_remove(engine, utf8_pattern_id),
+    );
+  }
+
+  late final _ob_engine_pattern_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_pattern_remove');
+  late final _ob_engine_pattern_remove = _ob_engine_pattern_removePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  int ob_engine_lane_count(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_lane_count(engine);
+  }
+
+  late final _ob_engine_lane_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_lane_count',
+      );
+  late final _ob_engine_lane_count = _ob_engine_lane_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_lane_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_lane_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_lane_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_lane_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_lane_info>,
+          )
+        >
+      >('ob_engine_lane_at');
+  late final _ob_engine_lane_at = _ob_engine_lane_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_lane_info>)
+      >();
+
+  ob_status ob_engine_lane_create(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(_ob_engine_lane_create(engine, utf8_name));
+  }
+
+  late final _ob_engine_lane_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_lane_create');
+  late final _ob_engine_lane_create = _ob_engine_lane_createPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_lane_rename(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_rename(engine, utf8_lane_id, utf8_name),
+    );
+  }
+
+  late final _ob_engine_lane_renamePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_lane_rename');
+  late final _ob_engine_lane_rename = _ob_engine_lane_renamePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
+  ob_status ob_engine_lane_recolor(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    ffi.Pointer<ffi.Char> utf8_color,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_recolor(engine, utf8_lane_id, utf8_color),
+    );
+  }
+
+  late final _ob_engine_lane_recolorPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_lane_recolor');
+  late final _ob_engine_lane_recolor = _ob_engine_lane_recolorPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
+  ob_status ob_engine_lane_reorder(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int order,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_reorder(engine, utf8_lane_id, order),
+    );
+  }
+
+  late final _ob_engine_lane_reorderPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_lane_reorder');
+  late final _ob_engine_lane_reorder = _ob_engine_lane_reorderPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_lane_set_height(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int height,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_set_height(engine, utf8_lane_id, height),
+    );
+  }
+
+  late final _ob_engine_lane_set_heightPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_lane_set_height');
+  late final _ob_engine_lane_set_height = _ob_engine_lane_set_heightPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_lane_set_muted(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int muted,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_set_muted(engine, utf8_lane_id, muted),
+    );
+  }
+
+  late final _ob_engine_lane_set_mutedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_lane_set_muted');
+  late final _ob_engine_lane_set_muted = _ob_engine_lane_set_mutedPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_lane_set_soloed(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int soloed,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_set_soloed(engine, utf8_lane_id, soloed),
+    );
+  }
+
+  late final _ob_engine_lane_set_soloedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_lane_set_soloed');
+  late final _ob_engine_lane_set_soloed = _ob_engine_lane_set_soloedPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_lane_set_collapsed(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int collapsed,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_lane_set_collapsed(engine, utf8_lane_id, collapsed),
+    );
+  }
+
+  late final _ob_engine_lane_set_collapsedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_lane_set_collapsed');
+  late final _ob_engine_lane_set_collapsed = _ob_engine_lane_set_collapsedPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_lane_remove(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+  ) {
+    return ob_status.fromValue(_ob_engine_lane_remove(engine, utf8_lane_id));
+  }
+
+  late final _ob_engine_lane_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_lane_remove');
+  late final _ob_engine_lane_remove = _ob_engine_lane_removePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  int ob_engine_clip_count(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_clip_count(engine);
+  }
+
+  late final _ob_engine_clip_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_clip_count',
+      );
+  late final _ob_engine_clip_count = _ob_engine_clip_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_clip_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_clip_info> out_info,
+  ) {
+    return ob_status.fromValue(_ob_engine_clip_at(engine, index, out_info));
+  }
+
+  late final _ob_engine_clip_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Int32,
+            ffi.Pointer<ob_clip_info>,
+          )
+        >
+      >('ob_engine_clip_at');
+  late final _ob_engine_clip_at = _ob_engine_clip_atPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_clip_info>)
+      >();
+
+  ob_status ob_engine_clip_add(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    int start_ticks,
+    int length_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_add(
+        engine,
+        utf8_lane_id,
+        utf8_pattern_id,
+        start_ticks,
+        length_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_clip_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_clip_add');
+  late final _ob_engine_clip_add = _ob_engine_clip_addPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_clip_move(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int start_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_move(engine, utf8_clip_id, utf8_lane_id, start_ticks),
+    );
+  }
+
+  late final _ob_engine_clip_movePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_clip_move');
+  late final _ob_engine_clip_move = _ob_engine_clip_movePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_clip_resize(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int length_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_resize(engine, utf8_clip_id, length_ticks),
+    );
+  }
+
+  late final _ob_engine_clip_resizePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_clip_resize');
+  late final _ob_engine_clip_resize = _ob_engine_clip_resizePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_clip_duplicate(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    int start_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_duplicate(
+        engine,
+        utf8_clip_id,
+        utf8_lane_id,
+        start_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_clip_duplicatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_clip_duplicate');
+  late final _ob_engine_clip_duplicate = _ob_engine_clip_duplicatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
+  ob_status ob_engine_clip_remove(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+  ) {
+    return ob_status.fromValue(_ob_engine_clip_remove(engine, utf8_clip_id));
+  }
+
+  late final _ob_engine_clip_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_clip_remove');
+  late final _ob_engine_clip_remove = _ob_engine_clip_removePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_clip_set_muted(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int muted,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_set_muted(engine, utf8_clip_id, muted),
+    );
+  }
+
+  late final _ob_engine_clip_set_mutedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_clip_set_muted');
+  late final _ob_engine_clip_set_muted = _ob_engine_clip_set_mutedPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_clip_set_loop(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int loop,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_set_loop(engine, utf8_clip_id, loop),
+    );
+  }
+
+  late final _ob_engine_clip_set_loopPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_clip_set_loop');
+  late final _ob_engine_clip_set_loop = _ob_engine_clip_set_loopPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_clip_set_window_start(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int window_start_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_set_window_start(
+        engine,
+        utf8_clip_id,
+        window_start_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_clip_set_window_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_clip_set_window_start');
+  late final _ob_engine_clip_set_window_start =
+      _ob_engine_clip_set_window_startPtr
+          .asFunction<
+            int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+          >();
+
+  ob_status ob_engine_clip_set_transpose(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int semitones,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_set_transpose(engine, utf8_clip_id, semitones),
+    );
+  }
+
+  late final _ob_engine_clip_set_transposePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+          )
+        >
+      >('ob_engine_clip_set_transpose');
+  late final _ob_engine_clip_set_transpose = _ob_engine_clip_set_transposePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)
+      >();
+
+  ob_status ob_engine_clips_make_unique(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_ids,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clips_make_unique(engine, utf8_clip_ids),
+    );
+  }
+
+  late final _ob_engine_clips_make_uniquePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_clips_make_unique');
+  late final _ob_engine_clips_make_unique = _ob_engine_clips_make_uniquePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_project_save(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_path,
+  ) {
+    return ob_status.fromValue(_ob_engine_project_save(engine, utf8_path));
+  }
+
+  late final _ob_engine_project_savePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_project_save');
+  late final _ob_engine_project_save = _ob_engine_project_savePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_project_open(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_path,
+  ) {
+    return ob_status.fromValue(_ob_engine_project_open(engine, utf8_path));
+  }
+
+  late final _ob_engine_project_openPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_project_open');
+  late final _ob_engine_project_open = _ob_engine_project_openPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ffi.Pointer<ffi.Char> ob_engine_project_json(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_project_json(engine);
+  }
+
+  late final _ob_engine_project_jsonPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)
+        >
+      >('ob_engine_project_json');
+  late final _ob_engine_project_json = _ob_engine_project_jsonPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
 }
 
 enum ob_status {
@@ -1728,13 +2899,132 @@ final class ob_rack_row_info extends ffi.Struct {
   external ffi.Array<ffi.Uint16> step_velocity;
 }
 
+final class ob_note extends ffi.Struct {
+  @ffi.Int64()
+  external int start;
+
+  @ffi.Int64()
+  external int length;
+
+  @ffi.Int32()
+  external int key;
+
+  @ffi.Int32()
+  external int velocity;
+}
+
+final class ob_pattern_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Int64()
+  external int length_ticks;
+
+  @ffi.Double()
+  external double swing;
+
+  @ffi.Uint32()
+  external int usage_count;
+
+  @ffi.Uint32()
+  external int note_count;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> color;
+}
+
+final class ob_lane_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Int32()
+  external int order;
+
+  @ffi.Int32()
+  external int height;
+
+  @ffi.Uint32()
+  external int clip_count;
+
+  @ffi.Uint32()
+  external int reserved_;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> color;
+}
+
+final class ob_clip_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Int64()
+  external int start_ticks;
+
+  @ffi.Int64()
+  external int length_ticks;
+
+  @ffi.Int64()
+  external int window_start_ticks;
+
+  @ffi.Int64()
+  external int pattern_length_ticks;
+
+  @ffi.Int32()
+  external int transpose;
+
+  @ffi.Uint32()
+  external int note_count;
+
+  @ffi.Uint32()
+  external int usage_count;
+
+  @ffi.Uint32()
+  external int reserved_;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> lane_id;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> pattern_id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([8])
+  external ffi.Array<ffi.Char> color;
+}
+
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 6;
+const int OB_ABI_VERSION_MINOR = 7;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 67072;
+const int OB_ABI_VERSION_PACKED = 67328;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -1749,3 +3039,15 @@ const int OB_INSTANCE_FLAG_HAS_EDITOR = 4;
 const int OB_INSTANCE_FLAG_NEEDS_RESTART = 8;
 
 const int OB_RACK_MAX_STEPS = 256;
+
+const int OB_PATTERN_FLAG_CURRENT = 1;
+
+const int OB_LANE_FLAG_MUTED = 1;
+
+const int OB_LANE_FLAG_SOLOED = 2;
+
+const int OB_LANE_FLAG_COLLAPSED = 4;
+
+const int OB_CLIP_FLAG_MUTED = 1;
+
+const int OB_CLIP_FLAG_LOOP = 2;

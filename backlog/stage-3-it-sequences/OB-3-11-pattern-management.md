@@ -23,11 +23,31 @@ Reference semantics are absolute (ARCHITECTURE.md §3.3) — and therefore the U
 
 ## Acceptance criteria
 
-- [ ] Usage counts correct and live (derived, tested against a fixture arrangement).
-- [ ] Selecting a pattern highlights exactly its instances.
-- [ ] Make unique: edited clone diverges; other clips unaffected; undo restores the shared reference (offline-render verified).
-- [ ] The multi-use warning appears per spec, once per pattern/session, never blocks.
-- [ ] All actions discoverable without right-click (FR-UX-17) and undoable.
+- [x] Usage counts correct and live (derived, tested against a fixture arrangement).
+- [x] Selecting a pattern highlights exactly its instances.
+- [x] Make unique: edited clone diverges; other clips unaffected; undo restores the shared reference (offline-render verified).
+- [x] The multi-use warning appears per spec, once per pattern/session, never blocks.
+- [x] All actions discoverable without right-click (FR-UX-17) and undoable.
+
+**Complete (14 August 2026).** The selector lists patterns with a live usage
+badge derived natively on every read — never cached, so it cannot go stale.
+Create, rename, recolour, duplicate and delete are all present, with the clip
+count in the delete label rather than behind a confirmation the user reaches
+after the fact.
+
+`Duplicate pattern` (unreferenced clone) and `Make unique` (clone plus repoint
+exactly the selected clips, one undo entry) are separate, differently named
+actions per FR-UX-11. The D-M6 notice is non-blocking, fires once per pattern per
+session, and offers *Make unique for this clip* when the edit context came from a
+clip. Undo restores the shared reference — asserted natively in `test_abi.cpp`
+and end to end in `stage3_exit_test.dart`.
+
+One specified interaction is documented rather than smoothed over: the
+once-per-session set is keyed by pattern alone, so reaching an
+already-warned-about pattern via a clip does not re-raise the notice. `Make
+unique` stays permanently available in the clip inspector, which is where D-M3
+wants it anyway.
+
 
 ## Out of scope
 

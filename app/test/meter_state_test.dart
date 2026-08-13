@@ -8,6 +8,8 @@ import 'package:onebeat/src/ui/meter_state.dart';
 EngineSnapshot snapshotAt(int nanos, double peak) => EngineSnapshot(
   playing: true,
   loopEnabled: true,
+  loopStartBeats: 0,
+  loopEndBeats: 4,
   positionFrames: 0,
   positionBeats: 0,
   positionSeconds: 0,

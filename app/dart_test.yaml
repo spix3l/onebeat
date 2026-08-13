@@ -1,0 +1,7 @@
+# Test tags (OB-3-14).
+tags:
+  # Drives the real engine dylib through the real FFI client. Skipped
+  # automatically in a checkout that has not been built yet; run explicitly
+  # with `flutter test --tags integration`.
+  integration:
+    description: End-to-end scripts against the built engine.

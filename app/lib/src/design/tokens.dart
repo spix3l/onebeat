@@ -29,6 +29,17 @@ class ColorTokens {
     required this.meterTrack,
     required this.warning,
     required this.danger,
+    required this.gridLine,
+    required this.gridLineStrong,
+    required this.rowShade,
+    required this.rowShadeInScale,
+    required this.noteFill,
+    required this.noteSelected,
+    required this.noteGhost,
+    required this.playhead,
+    required this.canvasScrim,
+    required this.marqueeFill,
+    required this.clipSelectedOutline,
   });
 
   /// Deepest background: the window itself.
@@ -60,6 +71,46 @@ class ColorTokens {
 
   final Color warning;
   final Color danger;
+
+  /// Canvas chrome for the piano roll and the arrangement. Beat lines and bar
+  /// lines are two different weights of the same idea, which is why they are
+  /// two tokens rather than one with an opacity applied at the call site.
+  final Color gridLine;
+  final Color gridLineStrong;
+
+  /// Alternating pitch-row shading, and the lighter shade for rows that are in
+  /// the selected scale (OB-3-10 §1).
+  final Color rowShade;
+  final Color rowShadeInScale;
+
+  /// Notes. `noteGhost` draws the other instruments' notes behind the edited
+  /// sequence — context without competing for attention.
+  final Color noteFill;
+  final Color noteSelected;
+  final Color noteGhost;
+
+  final Color playhead;
+
+  /// Dims the canvas past the end of the pattern or the arrangement: the region
+  /// stays visible (so the user sees where content stops) without reading as
+  /// editable space.
+  final Color canvasScrim;
+
+  /// Lasso fill. Translucent by construction, resolved here rather than at the
+  /// call site so no widget derives its own opacity (FR-UX-02).
+  final Color marqueeFill;
+
+  /// The accent outline on a selected clip, and on every clip of the selected
+  /// pattern (D-M6 instance highlighting).
+  final Color clipSelectedOutline;
+
+  /// Velocity reads as opacity on a note. The ramp lives here because "how
+  /// loud looks how solid" is a design decision, not a painter detail; `unit`
+  /// is 0..1.
+  Color noteAtVelocity(double unit) {
+    final double clamped = unit.clamp(0.0, 1.0);
+    return noteFill.withValues(alpha: 0.45 + 0.55 * clamped);
+  }
 }
 
 /// Spacing scale. Every gap in the app is one of these.
@@ -135,6 +186,35 @@ class SizeTokens {
   double get rackStepInset => 3;
   double get rackVelocityHeight => 4;
   double get rackCursorWidth => 2;
+
+  /// Piano roll (OB-3-10). Row height and key width are the two numbers the
+  /// whole canvas is derived from, so zoom is a multiplier on these rather than
+  /// a second set of constants.
+  double get pianoRowHeight => 14;
+  double get pianoKeyboardWidth => 76;
+  double get pianoRulerHeight => 24;
+  double get pianoVelocityStripHeight => 96;
+  double get pianoNoteInset => 1;
+  double get pianoNoteRadius => 2;
+  double get pianoToolbarHeight => 44;
+  double get pianoResizeHandleWidth => 6;
+
+  /// Arrangement (OB-3-12).
+  double get laneHeaderWidth => 208;
+  double get laneDefaultHeight => 72;
+  double get laneCollapsedHeight => 26;
+  double get arrangementRulerHeight => 28;
+  double get clipRadius => 4;
+  double get clipInspectorWidth => 268;
+  double get clipBadgeHeight => 16;
+
+  /// Shared editor chrome.
+  double get playheadWidth => 2;
+  double get patternSelectorWidth => 236;
+  double get patternRowHeight => 30;
+  double get viewSwitcherHeight => 34;
+  double get noticeHeight => 34;
+  double get swatchSize => 18;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW
@@ -249,6 +329,21 @@ class OneBeatTokens {
       meterTrack: Color(0xFF15170F),
       warning: Color(0xFFE0A83C),
       danger: Color(0xFFE05252),
+      // Canvas chrome (OB-3-10/12). Kept inside PRD §8.1.1's warm-neutral
+      // family: the design screens render a cooler black, but §8.1.1 is
+      // normative and retinting the whole app is an owner decision, not a
+      // side effect of building the piano roll.
+      gridLine: Color(0xFF232520),
+      gridLineStrong: Color(0xFF34372F),
+      rowShade: Color(0xFF191B17),
+      rowShadeInScale: Color(0xFF1F221B),
+      noteFill: Color(0xFF50B8C6),
+      noteSelected: Color(0xFFEDEEE8),
+      noteGhost: Color(0xFF2E3128),
+      playhead: Color(0xFF8E7DFF),
+      canvasScrim: Color(0x8C131412),
+      marqueeFill: Color(0x247C6CF0),
+      clipSelectedOutline: Color(0xFFB9AEFF),
     ),
     type: TypeTokens(textPrimary: _textPrimaryDark, textMuted: _textMutedDark),
   );

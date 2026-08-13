@@ -8,10 +8,19 @@ import 'package:flutter/scheduler.dart';
 
 import '../design/tokens.dart';
 import '../engine/engine_client.dart';
+import 'arrangement_store.dart';
 import 'frame_stats.dart';
 import 'meter_state.dart';
+import 'pattern_store.dart';
+import 'piano_roll_store.dart';
 import 'plugin_library_store.dart';
 import 'rack_store.dart';
+
+/// Which editor the centre of the shell is showing. Mirrors the design's view
+/// switcher (`onebeat-shell.html`): the three Stage 3 surfaces edit the same
+/// project through the same command bus, so switching between them is pure
+/// presentation and costs nothing.
+enum WorkspaceView { arrangement, rack, pianoRoll }
 
 class EngineController extends ChangeNotifier {
   EngineController({
@@ -19,7 +28,14 @@ class EngineController extends ChangeNotifier {
     required TickerProvider vsync,
     required this.motion,
   }) : library = PluginLibraryStore(client),
-       rack = RackStore(client) {
+       rack = RackStore(client),
+       patterns = PatternStore(client) {
+    // One PatternStore, shared by the selector, the roll and the arrangement.
+    // Not three: D-M6's "warned once this session" set lives in it, and a copy
+    // per editor would show the notice once per view instead of once per
+    // pattern — which is the nagging the rule exists to prevent.
+    arrangement = ArrangementStore(client, patterns);
+    pianoRoll = PianoRollStore(client, patterns);
     _ticker = vsync.createTicker(_onFrame)..start();
   }
 
@@ -31,6 +47,12 @@ class EngineController extends ChangeNotifier {
   /// Driven from this controller's frame callback rather than its own ticker.
   final PluginLibraryStore library;
   final RackStore rack;
+  final PatternStore patterns;
+  late final ArrangementStore arrangement;
+  late final PianoRollStore pianoRoll;
+
+  /// Which editor the shell's centre shows.
+  WorkspaceView view = WorkspaceView.rack;
 
   late final Ticker _ticker;
 
@@ -83,20 +105,73 @@ class EngineController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void undoProject() {
-    if (!client.canUndoProject) return;
-    client.undoProject();
+  void setView(WorkspaceView value) {
+    if (view == value) return;
+    view = value;
+    // Each editor re-reads on entry rather than staying live: an edit made in
+    // another view has already changed the model underneath it.
+    switch (value) {
+      case WorkspaceView.rack:
+        rack.refresh();
+      case WorkspaceView.pianoRoll:
+        pianoRoll.refresh();
+      case WorkspaceView.arrangement:
+        arrangement.refresh();
+    }
+    notifyListeners();
+  }
+
+  /// Points every editor at one pattern. The clip id travels with it so the
+  /// D-M6 notice can offer "Make unique for this clip" when the edit that
+  /// follows turns out to touch a shared pattern.
+  void openPattern(String patternId, {String fromClipId = ''}) {
+    patterns.select(patternId, fromClipId: fromClipId);
+    rack.refresh();
+    pianoRoll.refresh();
+    arrangement.refresh();
+    notifyListeners();
+  }
+
+  /// Points the piano roll at one instrument's sequence in the current pattern,
+  /// and loads the other instruments' notes as the ghost layer.
+  void editInPianoRoll(String instrumentId, {String fromClipId = ''}) {
+    pianoRoll.load(instrumentId, fromClipId: fromClipId);
+    pianoRoll.setGhostNotes(_ghostNotesFor(instrumentId));
+    setView(WorkspaceView.pianoRoll);
+  }
+
+  List<SequenceNote> _ghostNotesFor(String instrumentId) {
+    final List<SequenceNote> ghosts = <SequenceNote>[];
+    for (final ProjectInstrument instrument in library.instruments) {
+      if (instrument.id == instrumentId) continue;
+      ghosts.addAll(client.readNotes(instrument.id));
+    }
+    return ghosts;
+  }
+
+  /// One refresh path for every store, used after undo, redo and any edit that
+  /// can reach across editors. Cheap: these are native reads of small lists,
+  /// and none of it happens per frame.
+  void refreshAll() {
     library.refreshInstance();
     library.refreshInstruments();
     rack.refresh();
+    patterns.refresh();
+    arrangement.refresh();
+    pianoRoll.refresh();
+    notifyListeners();
+  }
+
+  void undoProject() {
+    if (!client.canUndoProject) return;
+    client.undoProject();
+    refreshAll();
   }
 
   void redoProject() {
     if (!client.canRedoProject) return;
     client.redoProject();
-    library.refreshInstance();
-    library.refreshInstruments();
-    rack.refresh();
+    refreshAll();
   }
 
   @override
@@ -106,6 +181,9 @@ class EngineController extends ChangeNotifier {
     library.cancelScan();
     library.dispose();
     rack.dispose();
+    patterns.dispose();
+    arrangement.dispose();
+    pianoRoll.dispose();
     super.dispose();
   }
 }

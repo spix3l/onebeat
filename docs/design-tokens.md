@@ -44,6 +44,36 @@ The chrome is chromatically quiet on purpose: user clip colours are the only
 saturated thing on screen, and every screen is tested against saturated clip
 colours (PRD §15.3).
 
+### Canvas roles (OB-3-10, OB-3-12)
+
+The piano roll and the arrangement need roles the chrome does not. They stay
+inside §8.1.1's warm-neutral family; the design screens render a cooler black,
+and reconciling the two is an open owner decision recorded in the Stage 3
+closeout.
+
+| Role | Value | Job |
+|---|---|---|
+| `gridLine` | `#232520` | beat lines, row separators |
+| `gridLineStrong` | `#34372F` | bar lines |
+| `rowShade` | `#191B17` | accidental pitch rows, alternating lanes |
+| `rowShadeInScale` | `#1F221B` | rows in the selected scale |
+| `noteFill` | `#50B8C6` | a note |
+| `noteSelected` | `#EDEEE8` | a selected note |
+| `noteGhost` | `#2E3128` | other instruments' notes, for context |
+| `playhead` | `#8E7DFF` | the transport cursor |
+| `canvasScrim` | `#131412` @ 55% | past the end of the pattern or arrangement |
+| `marqueeFill` | `#7C6CF0` @ 14% | lasso selection |
+| `clipSelectedOutline` | `#B9AEFF` | instance highlighting (D-M6) |
+
+Two of these are derived rather than picked, and both live in `ColorTokens` so
+that no widget derives its own opacity:
+
+- `canvasScrim` and `marqueeFill` are pre-multiplied constants, not
+  `.withValues()` calls at the call site — `tools/token_lint.py` rejects those.
+- `ColorTokens.noteAtVelocity(unit)` ramps `noteFill`'s alpha from 0.45 to 1.0
+  across the velocity range. "How loud looks how solid" is a design decision, so
+  it belongs here and not in a painter.
+
 ### Meters are special
 
 `meterLow` / `meterMid` / `meterHigh` are green, amber and red, and they are

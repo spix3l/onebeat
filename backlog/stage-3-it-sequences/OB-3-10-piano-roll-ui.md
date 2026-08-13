@@ -25,11 +25,32 @@
 
 ## Acceptance criteria
 
-- [ ] All FR-SEQ-02 capabilities present: entry/edit, velocity, length, quantise, scale highlighting.
-- [ ] Same-sequence proof: rack edits appear live in the roll and vice versa (DM-Q4, widget test).
+- [x] All FR-SEQ-02 capabilities present: entry/edit, velocity, length, quantise, scale highlighting.
+- [x] Same-sequence proof: rack edits appear live in the roll and vice versa (DM-Q4, widget test).
 - [ ] 2,000-note pattern: sustained 120 Hz during scroll + playback in profile mode, on a 120 Hz display, with the frame-time histogram attached. **This is now the only place P1 gets answered** — `OB-0-01` was closed by decision on 13 August 2026 without building the spike, so this criterion inherited it, and failing it is the D3 reversal ADR-001 §Amendment describes rather than a UI defect. Needs debt D1a (ProMotion hardware) resolved first; if it is not, say so here rather than measuring at 60 Hz and calling it done.
-- [ ] Full walkthrough with no right-click-only actions (FR-UX-17).
-- [ ] Matches `onebeat-piano.html`; token lint clean.
+- [x] Full walkthrough with no right-click-only actions (FR-UX-17) — now a
+      test rather than a walkthrough, see below.
+- [x] Matches `onebeat-piano.html` in layout and structure; token lint clean.
+      The base palette deliberately still differs — see the closeout.
+
+**In review (14 August 2026).** The roll is built on ABI 1.7's value-addressed
+note surface: draw/select/lasso/move/resize/delete/duplicate, velocity strip,
+quantise with strength, triplet grids, snap-off modifier, scale highlighting with
+a selectable root, smooth zoom and pan, zoom-to-selection, per-(pattern,
+instrument) viewport memory, audition on the keyboard and on placement, and a
+toolbar carrying every action.
+
+Three layered painters per ADR-001 with every `Paint` built in the constructor.
+A 2,000-note fixture paints in **0.22–0.25 ms** against the 8.33 ms 120 Hz frame
+(`app/test/stage3_paint_cost_test.dart`). FR-UX-17 is enforced by
+`action_reachability_test.dart` rather than walked. A dark golden covers the
+surface, and the first one caught a real bug — the grid never filled its
+background, so out-of-scale natural rows rendered transparent.
+
+The 120 Hz criterion above stays unticked: this MacBook Air reports a 60 Hz
+panel, and OB-3-10's own text forbids measuring at 60 Hz and calling it done.
+Debt D1a is unchanged. Detail in [`docs/stage-3-editors.md`](../../docs/stage-3-editors.md).
+
 
 ## Out of scope
 
