@@ -1,0 +1,24 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - lib/src/engine/generated/**
+  errors:
+    # The token rule is not advisory. A literal colour or size in widget code is
+    # a build failure, here and in CI (tools/token_lint.py, FR-UX-02).
+    avoid_print: error
+    unawaited_futures: error
+  language:
+    strict-casts: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - prefer_const_constructors
+    - prefer_const_declarations
+    - prefer_final_locals
+    - require_trailing_commas
+    - unnecessary_parenthesis
+    - use_super_parameters

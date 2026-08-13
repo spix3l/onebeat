@@ -1,0 +1,21 @@
+build/
+build-*/
+.DS_Store
+*.o
+*.dylib
+compile_commands.json
+.cache/
+
+# Flutter / Dart
+app/.dart_tool/
+app/.flutter-plugins*
+app/build/
+app/macos/Flutter/ephemeral/
+app/macos/Pods/
+# app/pubspec.lock is deliberately NOT ignored: this is an application, so the
+# resolved dependency set is part of what we ship, and the licence audit reads it.
+.fvm/
+
+# Test + capture artefacts
+artifacts/
+*.wav.actual
