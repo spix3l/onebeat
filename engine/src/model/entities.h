@@ -150,6 +150,15 @@ struct AudioSource {
   MixerTrackId destination;  // routes to a track directly — no instrument (D-M7)
 };
 
+// One point on an automation curve: a value at a position, clip-relative.
+// Stage 4 owns curve *shapes* (the interpolation between points, tension,
+// stepped vs smooth). v0.3 stores the points and flattens each one to a
+// parameter event, which is enough to prove the path end to end.
+struct AutomationPoint {
+  Ticks position = 0;
+  float value = 0.0F;
+};
+
 // Stage 4 owns curves. The target is an entity plus a parameter, by ID.
 struct AutomationSource {
   enum class TargetKind : uint8_t { Instrument, MixerTrack };
@@ -157,6 +166,7 @@ struct AutomationSource {
   InstrumentId instrument;   // valid when target_kind == Instrument
   MixerTrackId mixer_track;  // valid when target_kind == MixerTrack
   plugin::ParamId parameter = plugin::InvalidParamId;
+  std::vector<AutomationPoint> points;
 };
 
 using ClipSource = std::variant<PatternSource, AudioSource, AutomationSource>;

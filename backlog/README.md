@@ -141,7 +141,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 | ✅ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
 | ✅ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
 | 🟨 | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system — model layer landed; ABI/UI and re-flatten pending | M |
-| ⬜ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
+| ✅ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
 | ⬜ | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load | M |
 | ⬜ | [OB-3-06](stage-3-it-sequences/OB-3-06-autosave-crash-recovery.md) | Auto-save & crash recovery | M |
 | ⬜ | [OB-3-07](stage-3-it-sequences/OB-3-07-instrument-lifecycle.md) | Instrument lifecycle & management | M |
@@ -176,7 +176,16 @@ and `tools/seam_check.sh` §5 now fails the build if anything outside
 `model/` mutates the model directly. What remains is the wiring the model
 cannot have yet — ⌘Z through the ABI to a model-backed UI (`OB-3-09`) and the
 re-flatten-per-command path with its "undo is audible within one flatten
-cycle" criterion (`OB-3-04`).
+cycle" criterion, which needs the ABI publish wiring of `OB-3-09`.
+
+`OB-3-04` is ✅: `model/flattener.h` resolves clips through patterns into an
+absolutely-positioned `core::Schedule`, with clip windowing and looping,
+non-destructive transpose, lane/clip/instrument event gating, boundary
+note-offs in every windowing case, and a documented rule for stacked identical
+notes (the later note-on cuts the earlier). Output is deterministic and
+hashed, so golden tests compare one number. The budget is measured and
+recorded in [`docs/flattener-budget.md`](../docs/flattener-budget.md): 1,000
+clips at ordinary density flatten in 3.5 ms, against a 10 ms budget.
 
 ## Epics — `epics/` (break down at stage start)
 
@@ -195,7 +204,7 @@ Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
 Stage 2: ~~OB-0-02~~ (done) → ~~OB-2-01~~ (done) → ~~OB-2-04~~ (ADR-003, done) → ~~OB-2-02~~ (done) → ~~OB-2-03~~ (done) → OB-2-05/07/08 (implementation landed; validation remains) → OB-2-06 (deferred) → ~~OB-2-09/10/11~~ (done).
 
-Stage 3: ~~OB-3-01~~ (ADR-004, done) → OB-3-02 → OB-3-03 → OB-3-08/OB-3-04 (parallel) → OB-3-05 → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
+Stage 3: ~~OB-3-01~~ → ~~OB-3-02~~ → OB-3-03 (model layer done) → ~~OB-3-04~~ → OB-3-08 → OB-3-05 → OB-3-07 → OB-3-09 → OB-3-11 → OB-3-10 → OB-3-12 → OB-3-13 → OB-3-06 → OB-3-15. OB-3-14 is co-developed with the first of OB-3-09/10/12 rather than scheduled as a block.
 
 **The order above was wrong until 13 August 2026** and is corrected here:
 OB-2-02 was listed before OB-2-04, but the scanner runs plugin-by-plugin in the

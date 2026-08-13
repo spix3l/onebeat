@@ -94,6 +94,14 @@ class ScheduleBuilder {
     return *this;
   }
 
+  // The flattener knows how many events it is about to add; a 200,000-event
+  // schedule that grows from nothing reallocates a multi-megabyte buffer twenty
+  // times on the way (OB-3-04 budget work).
+  ScheduleBuilder& reserve(size_t events) {
+    events_.reserve(events);
+    return *this;
+  }
+
   ScheduleBuilder& addEvent(const ScheduleEvent& event) {
     events_.push_back(event);
     return *this;
