@@ -46,6 +46,22 @@ if [[ -n "$raw" ]]; then
   echo "$raw"
 fi
 
+# 5. Every model mutation goes through the command layer (OB-3-03 §1), so that
+#    undo cannot be forgotten by a caller in a hurry. `model/` may call its own
+#    mutators; nothing else may. The door for everyone else is
+#    `model/commands.h` plus `CommandBus::execute`.
+mutators='create(Instrument|Pattern|Lane|MixerTrack|Clip)'
+mutators+='|delete(Instrument|Pattern|Lane|Clip|MixerTrack)'
+mutators+='|update(Instrument|Pattern|Lane|Clip|MixerTrack|Sequence)'
+mutators+='|restore(Instrument|Pattern|Lane|Clip|MixerTrack|Sequence)'
+mutators+='|adopt|mintId'
+offenders=$(grep -rlE "\.(${mutators})\(" engine/src engine/tools engine/testing 2>/dev/null \
+  | grep -v '^engine/src/model/' || true)
+if [[ -n "$offenders" ]]; then
+  fail "model mutated outside the command layer; use model/commands.h + CommandBus:"
+  echo "$offenders"
+fi
+
 if [[ $status -eq 0 ]]; then
   echo "Seam check passed."
 fi

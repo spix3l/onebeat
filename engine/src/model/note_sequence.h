@@ -73,6 +73,20 @@ class NoteSequence {
     if (index < notes_.size()) notes_.erase(notes_.begin() + static_cast<ptrdiff_t>(index));
   }
 
+  // Removes one note equal to `note`. Undo needs this: a command that inserted
+  // a note reverts by removing that exact note, not "a note near there".
+  bool erase(const Note& note) {
+    auto position = std::lower_bound(notes_.begin(), notes_.end(), note, noteOrderBefore);
+    while (position != notes_.end() && !noteOrderBefore(note, *position)) {
+      if (*position == note) {
+        notes_.erase(position);
+        return true;
+      }
+      ++position;
+    }
+    return false;
+  }
+
   void clear() { notes_.clear(); }
 
   // Adopts an arbitrary vector — the load path, which then owes the ordering

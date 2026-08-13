@@ -382,6 +382,67 @@ void Project::setMeta(const ProjectMeta& meta) {
   emit(ChangeType::Modified, EntityKind::Project, RawId{}, ChangeField::Meta, RawId{});
 }
 
+// --------------------------------------------------------------------------
+// Restore — undo's half of creation
+// --------------------------------------------------------------------------
+
+bool Project::restoreInstrument(const Instrument& instrument) {
+  if (!instrument.id.valid() || instruments_.count(instrument.id) > 0) return false;
+  instruments_.emplace(instrument.id, instrument);
+  emit(ChangeType::Added, EntityKind::Instrument, instrument.id.raw(), ChangeField::All, RawId{});
+  checkInvariants();
+  return true;
+}
+
+bool Project::restorePattern(const Pattern& pattern) {
+  if (!pattern.id.valid() || patterns_.count(pattern.id) > 0) return false;
+  patterns_.emplace(pattern.id, pattern);
+  emit(ChangeType::Added, EntityKind::Pattern, pattern.id.raw(), ChangeField::All, RawId{});
+  checkInvariants();
+  return true;
+}
+
+bool Project::restoreLane(const ArrangementLane& lane) {
+  if (!lane.id.valid() || lanes_.count(lane.id) > 0) return false;
+  lanes_.emplace(lane.id, lane);
+  emit(ChangeType::Added, EntityKind::ArrangementLane, lane.id.raw(), ChangeField::All, RawId{});
+  checkInvariants();
+  return true;
+}
+
+bool Project::restoreClip(const Clip& clip) {
+  if (!clip.id.valid() || clips_.count(clip.id) > 0) return false;
+  clips_.emplace(clip.id, clip);
+  emit(ChangeType::Added, EntityKind::Clip, clip.id.raw(), ChangeField::All, clip.lane.raw());
+  checkInvariants();
+  return true;
+}
+
+bool Project::restoreMixerTrack(const MixerTrack& track) {
+  if (!track.id.valid() || mixer_tracks_.count(track.id) > 0) return false;
+  mixer_tracks_.emplace(track.id, track);
+  emit(ChangeType::Added, EntityKind::MixerTrack, track.id.raw(), ChangeField::All, RawId{});
+  checkInvariants();
+  return true;
+}
+
+bool Project::restoreSequence(PatternId pattern_id, InstrumentId instrument_id,
+                              NoteSequence sequence) {
+  auto pattern = patterns_.find(pattern_id);
+  if (pattern == patterns_.end()) return false;
+  if (instruments_.find(instrument_id) == instruments_.end()) return false;
+
+  if (sequence.empty()) {
+    pattern->second.sequences.erase(instrument_id);
+  } else {
+    pattern->second.sequences[instrument_id] = std::move(sequence);
+  }
+  emit(ChangeType::Modified, EntityKind::Pattern, pattern_id.raw(), ChangeField::Notes,
+       instrument_id.raw());
+  checkInvariants();
+  return true;
+}
+
 void Project::adopt(Tables tables) {
   instruments_ = std::move(tables.instruments);
   patterns_ = std::move(tables.patterns);
@@ -419,6 +480,7 @@ void Project::emit(ChangeType type, EntityKind kind, RawId id, ChangeField field
 
 void Project::checkInvariants() const {
   if constexpr (!CheckInvariantsEnabled) return;
+  if (!debug_checks_) return;
 
   const std::vector<Violation> violations = checkReferentialIntegrity(*this);
   if (violations.empty()) return;

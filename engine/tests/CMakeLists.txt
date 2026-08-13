@@ -68,6 +68,7 @@ add_executable(onebeat_tests
   test_engine_render.cpp
   test_abi.cpp
   test_model.cpp
+  test_model_commands.cpp
   test_plugin_events.cpp
   test_plugin_model.cpp
   test_clap_hosting.cpp

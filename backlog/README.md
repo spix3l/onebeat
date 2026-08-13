@@ -140,7 +140,7 @@ Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
 |---|---|---|---|
 | ✅ | [OB-3-01](stage-3-it-sequences/OB-3-01-adr-004-project-file-format.md) | ADR-004: project file format | M |
 | ✅ | [OB-3-02](stage-3-it-sequences/OB-3-02-domain-model-core.md) | Domain model core: entities and identities | L |
-| ⬜ | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system | M |
+| 🟨 | [OB-3-03](stage-3-it-sequences/OB-3-03-undo-redo-command-system.md) | Undo/redo command system — model layer landed; ABI/UI and re-flatten pending | M |
 | ⬜ | [OB-3-04](stage-3-it-sequences/OB-3-04-flattener.md) | The flattener: model → schedule | L |
 | ⬜ | [OB-3-05](stage-3-it-sequences/OB-3-05-project-save-load.md) | Project save/load | M |
 | ⬜ | [OB-3-06](stage-3-it-sequences/OB-3-06-autosave-crash-recovery.md) | Auto-save & crash recovery | M |
@@ -169,6 +169,14 @@ ARCHITECTURE.md §6 walk required by R15 is
 [`docs/model-anti-pattern-review.md`](../docs/model-anti-pattern-review.md),
 which also records the one deliberate hole (`Project::adopt`, for the loader)
 and the ticket deviation on ID tombstones.
+
+`OB-3-03` is 🟨: the command system, unbounded history, gesture transactions,
+coalescing and the 100k-operation undo fuzz are landed and green under ASan,
+and `tools/seam_check.sh` §5 now fails the build if anything outside
+`model/` mutates the model directly. What remains is the wiring the model
+cannot have yet — ⌘Z through the ABI to a model-backed UI (`OB-3-09`) and the
+re-flatten-per-command path with its "undo is audible within one flatten
+cycle" criterion (`OB-3-04`).
 
 ## Epics — `epics/` (break down at stage start)
 

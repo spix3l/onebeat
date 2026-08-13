@@ -115,6 +115,8 @@ add_library(onebeat_core STATIC
   src/core/rt/rt_log.cpp
   src/model/ids.cpp
   src/model/project.cpp
+  src/model/command.cpp
+  src/model/commands.cpp
   src/model/invariants.cpp
   src/plugin/plugin_types.cpp
   src/plugin/clap/clap_plugin_instance.cpp

@@ -170,6 +170,31 @@ class Project {
   void setTransport(const TransportState& transport);
   void setMeta(const ProjectMeta& meta);
 
+  // ----- restore: the undo path -------------------------------------------
+  // Re-inserts an entity with **the ID it had**, which is the whole reason IDs
+  // are never reused: undoing a delete has to make every reference that
+  // survived in other commands valid again, and a fresh ID would not.
+  //
+  // These are the command layer's half of the mutation API (OB-3-03) — nothing
+  // outside `model/commands.cpp` and tests may call them, which
+  // `tools/seam_check.sh` enforces. Each returns false when the ID is already
+  // present, because silently overwriting a live entity is how undo turns into
+  // data loss.
+  bool restoreInstrument(const Instrument& instrument);
+  bool restorePattern(const Pattern& pattern);
+  bool restoreLane(const ArrangementLane& lane);
+  bool restoreClip(const Clip& clip);
+  bool restoreMixerTrack(const MixerTrack& track);
+  // Replaces (or, when empty, erases) one instrument's sequence in a pattern.
+  bool restoreSequence(PatternId pattern_id, InstrumentId instrument_id, NoteSequence sequence);
+
+  // Commands mint their IDs up front so that apply/revert/re-apply all use the
+  // same one and the history stays referentially stable.
+  template <EntityKind K>
+  TypedId<K> mintId() {
+    return generator_.next<K>();
+  }
+
   // ----- bulk load / save seam --------------------------------------------
   // Everything above maintains its own invariants. This pair does not, on
   // purpose: the load path (OB-3-05) parses a file that may be hand-edited or
@@ -195,6 +220,15 @@ class Project {
   // in debug because a dangling reference is a data-loss bug, not a warning.
   void checkInvariants() const;
 
+  // Turns the per-mutation check off for bulk work that validates itself.
+  // It is an O(model) walk on every single mutation, which is the right trade
+  // for interactive editing and the wrong one for a 100,000-command fuzz run or
+  // a large load: both check the result themselves, and leaving it on made the
+  // undo fuzz 30x slower. Off is a deliberate, local decision — never a global
+  // default. No effect in release builds, where the check is compiled out.
+  void setDebugChecks(bool enabled) { debug_checks_ = enabled; }
+  bool debugChecks() const { return debug_checks_; }
+
  private:
   template <typename Map, typename Id, typename Mutator>
   bool update(Map& map, Id id, EntityKind kind, ChangeField field, Mutator& mutator) {
@@ -218,6 +252,7 @@ class Project {
   std::map<ClipId, Clip> clips_;
   std::map<MixerTrackId, MixerTrack> mixer_tracks_;
 
+  bool debug_checks_ = true;
   MixerTrackId master_;
   TransportState transport_;
   ProjectMeta meta_;
