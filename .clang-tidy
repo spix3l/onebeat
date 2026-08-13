@@ -11,6 +11,12 @@
 #   misc-const-correctness — it flags every RAII lock guard as "can be const".
 #     Nobody writes `const std::lock_guard`, and the check has no way to exclude
 #     a type, so the noise buries the occasional real finding.
+#
+#   misc-no-recursion — it objects to recursion as such, not to unbounded
+#     recursion. The JSON parser and canonical writer (model/json.cpp) are
+#     recursive descent over a recursive grammar, with an explicit depth limit;
+#     rewriting them around an explicit stack would be worse code to satisfy a
+#     check that cannot tell the difference.
 Checks: >
   -*,
   bugprone-*,
@@ -20,6 +26,7 @@ Checks: >
   cppcoreguidelines-slicing,
   misc-*,
   -misc-const-correctness,
+  -misc-no-recursion,
   -misc-non-private-member-variables-in-classes,
   -misc-include-cleaner,
   -misc-use-anonymous-namespace,

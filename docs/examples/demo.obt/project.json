@@ -2,236 +2,305 @@
   "format": "onebeat.project",
   "version": 1,
   "clips": {
-    "clp_01K2QF8Z40000000000000001": {
-      "lane_id": "lan_01K2QF8Z20KEYS0000000001",
+    "clp_01K2QF8Z400000000000000010": {
+      "lane_id": "lan_01K2QF8Z20KEYS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 0,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z40000000000000002": {
-      "lane_id": "lan_01K2QF8Z20KEYS0000000001",
+    "clp_01K2QF8Z400000000000000020": {
+      "lane_id": "lan_01K2QF8Z20KEYS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 15360,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z40000000000000003": {
-      "lane_id": "lan_01K2QF8Z20KEYS0000000001",
+    "clp_01K2QF8Z400000000000000030": {
+      "lane_id": "lan_01K2QF8Z20KEYS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 30720,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z40000000000000004": {
-      "lane_id": "lan_01K2QF8Z20KEYS0000000001",
+    "clp_01K2QF8Z400000000000000040": {
+      "lane_id": "lan_01K2QF8Z20KEYS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 46080,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 5,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000005": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000050": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 7680,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 0,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000006": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000060": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 7680,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 7680,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000007": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000070": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 7680,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 15360,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000008": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000080": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 7680,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 23040,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000009": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000090": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 30720,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z41000000000000010": {
-      "lane_id": "lan_01K2QF8Z21BASS0000000002",
+    "clp_01K2QF8Z410000000000000100": {
+      "lane_id": "lan_01K2QF8Z21BASS000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z11BASSGROOVE0002",
+        "pattern_id": "pat_01K2QF8Z11GR00VE0000000000",
         "type": "pattern"
       },
       "start": 46080,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 5,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z42000000000000011": {
-      "lane_id": "lan_01K2QF8Z22LEAD0000000003",
+    "clp_01K2QF8Z420000000000000110": {
+      "lane_id": "lan_01K2QF8Z22SYNTH00000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z12LEADHOOK000003",
+        "pattern_id": "pat_01K2QF8Z12H00K000000000000",
         "type": "pattern"
       },
       "start": 15360,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z42000000000000012": {
-      "lane_id": "lan_01K2QF8Z22LEAD0000000003",
+    "clp_01K2QF8Z420000000000000120": {
+      "lane_id": "lan_01K2QF8Z22SYNTH00000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z12LEADHOOK000003",
+        "pattern_id": "pat_01K2QF8Z12H00K000000000000",
         "type": "pattern"
       },
       "start": 30720,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z42000000000000013": {
-      "lane_id": "lan_01K2QF8Z22LEAD0000000003",
+    "clp_01K2QF8Z420000000000000130": {
+      "lane_id": "lan_01K2QF8Z22SYNTH00000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z12LEADHOOK000003",
+        "pattern_id": "pat_01K2QF8Z12H00K000000000000",
         "type": "pattern"
       },
       "start": 46080,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 12,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z43000000000000014": {
-      "lane_id": "lan_01K2QF8Z23PAD00000000004",
+    "clp_01K2QF8Z430000000000000140": {
+      "lane_id": "lan_01K2QF8Z23PAD0000000000000",
       "length": 30720,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 0,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z43000000000000015": {
-      "lane_id": "lan_01K2QF8Z23PAD00000000004",
+    "clp_01K2QF8Z430000000000000150": {
+      "lane_id": "lan_01K2QF8Z23PAD0000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 30720,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": 0,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     },
-    "clp_01K2QF8Z43000000000000016": {
-      "lane_id": "lan_01K2QF8Z23PAD00000000004",
+    "clp_01K2QF8Z430000000000000160": {
+      "lane_id": "lan_01K2QF8Z23PAD0000000000000",
       "length": 15360,
+      "muted": false,
       "source": {
-        "pattern_id": "pat_01K2QF8Z10CHORDS00000001",
+        "pattern_id": "pat_01K2QF8Z10CHRDS00000000000",
         "type": "pattern"
       },
       "start": 46080,
       "transforms": {
         "loop": true,
+        "probability": 1.000000,
+        "time_nudge": 0,
         "transpose": -12,
+        "velocity_scale": 1.000000,
         "window_start": 0
       }
     }
   },
   "instruments": {
-    "ins_01K2QF8Z00PIANO0000000001": {
+    "ins_01K2QF8Z00KEYS000000000000": {
       "color": "#6C8CFF",
       "muted": false,
       "name": "Piano",
+      "note_defaults": {
+        "pan": 0.000000,
+        "pitch_offset": 0,
+        "velocity": 12900
+      },
       "plugin": {
         "format": "clap",
         "id": "com.onebeat.piano",
@@ -240,15 +309,23 @@
         "vendor": "OneBeat"
       },
       "routing": [
-        "mix_01K2QF8Z30KEYS0000000001"
+        {
+          "port": 0,
+          "track_id": "mix_01K2QF8Z30KEYS000000000000"
+        }
       ],
       "state_ref": "state/piano.bin",
       "state_sha256": "3d2f0c9a1b7e4c58a0d6f31b8c2e5a7419fbb0c3d84e6f21a95c7b30de81f462"
     },
-    "ins_01K2QF8Z01BASS00000000002": {
+    "ins_01K2QF8Z01BASS000000000000": {
       "color": "#4FB286",
       "muted": false,
       "name": "Bass",
+      "note_defaults": {
+        "pan": 0.000000,
+        "pitch_offset": 0,
+        "velocity": 12900
+      },
       "plugin": {
         "format": "clap",
         "id": "org.surge-synth-team.surge-xt",
@@ -257,15 +334,23 @@
         "vendor": "Surge Synth Team"
       },
       "routing": [
-        "mix_01K2QF8Z31BASS0000000002"
+        {
+          "port": 0,
+          "track_id": "mix_01K2QF8Z31BASS000000000000"
+        }
       ],
       "state_ref": "state/bass.bin",
       "state_sha256": "b71c4e0a9d35f682c1470ab3e59d8f26c04b71ea3f9d582c6b0e147a83df295c"
     },
-    "ins_01K2QF8Z02LEAD00000000003": {
+    "ins_01K2QF8Z02SYNTH00000000000": {
       "color": "#E2A33C",
       "muted": false,
       "name": "Lead",
+      "note_defaults": {
+        "pan": 0.000000,
+        "pitch_offset": 0,
+        "velocity": 12900
+      },
       "plugin": {
         "format": "clap",
         "id": "audio.vital.synth",
@@ -274,15 +359,23 @@
         "vendor": "Vital Audio"
       },
       "routing": [
-        "mix_01K2QF8Z32LEAD0000000003"
+        {
+          "port": 0,
+          "track_id": "mix_01K2QF8Z32SYNTH00000000000"
+        }
       ],
       "state_ref": "state/lead.bin",
       "state_sha256": "0af35e91c2d764b8035ea1c7f429db6081e3c5a7492fb0d63c8a15e7b04f92d1"
     },
-    "ins_01K2QF8Z03PAD000000000004": {
+    "ins_01K2QF8Z03PAD0000000000000": {
       "color": "#B36CE0",
       "muted": false,
       "name": "Pad",
+      "note_defaults": {
+        "pan": 0.000000,
+        "pitch_offset": 0,
+        "velocity": 12900
+      },
       "plugin": {
         "format": "clap",
         "id": "com.thewavewarden.odin2",
@@ -291,40 +384,55 @@
         "vendor": "TheWaveWarden"
       },
       "routing": [
-        "mix_01K2QF8Z33PAD00000000004"
+        {
+          "port": 0,
+          "track_id": "mix_01K2QF8Z33PAD0000000000000"
+        }
       ],
       "state_ref": "state/pad.bin",
       "state_sha256": "5c1e08b47a2f96d3e0b85c14fa7290d6318be0f5c92a4d71e6035b8c2fa14e79"
     }
   },
   "lanes": {
-    "lan_01K2QF8Z20KEYS0000000001": {
+    "lan_01K2QF8Z20KEYS000000000000": {
+      "collapsed": false,
       "color": "#6C8CFF",
       "group_id": null,
       "height": 88,
+      "muted": false,
       "name": "Keys",
-      "order": 0
+      "order": 0,
+      "soloed": false
     },
-    "lan_01K2QF8Z21BASS0000000002": {
+    "lan_01K2QF8Z21BASS000000000000": {
+      "collapsed": false,
       "color": "#4FB286",
       "group_id": null,
       "height": 88,
+      "muted": false,
       "name": "Bass",
-      "order": 1
+      "order": 1,
+      "soloed": false
     },
-    "lan_01K2QF8Z22LEAD0000000003": {
+    "lan_01K2QF8Z22SYNTH00000000000": {
+      "collapsed": false,
       "color": "#E2A33C",
       "group_id": null,
       "height": 88,
+      "muted": false,
       "name": "Lead",
-      "order": 2
+      "order": 2,
+      "soloed": false
     },
-    "lan_01K2QF8Z23PAD00000000004": {
+    "lan_01K2QF8Z23PAD0000000000000": {
+      "collapsed": false,
       "color": "#B36CE0",
       "group_id": null,
       "height": 88,
+      "muted": false,
       "name": "Pad",
-      "order": 3
+      "order": 3,
+      "soloed": false
     }
   },
   "meta": {
@@ -333,54 +441,64 @@
     "ticks_per_quarter": 960
   },
   "mixer_tracks": {
-    "mix_01K2QF8Z30KEYS0000000001": {
+    "mix_01K2QF8Z30KEYS000000000000": {
       "chain": [],
       "gain": 0.794328,
+      "muted": false,
       "name": "Keys",
-      "output_id": "mix_01K2QF8Z34MAIN000000005",
+      "output_id": "mix_01K2QF8Z34MASTER0000000000",
       "pan": -0.150000,
-      "sends": []
+      "sends": [],
+      "soloed": false
     },
-    "mix_01K2QF8Z31BASS0000000002": {
+    "mix_01K2QF8Z31BASS000000000000": {
       "chain": [],
       "gain": 0.891251,
+      "muted": false,
       "name": "Bass",
-      "output_id": "mix_01K2QF8Z34MAIN000000005",
+      "output_id": "mix_01K2QF8Z34MASTER0000000000",
       "pan": 0.000000,
-      "sends": []
+      "sends": [],
+      "soloed": false
     },
-    "mix_01K2QF8Z32LEAD0000000003": {
+    "mix_01K2QF8Z32SYNTH00000000000": {
       "chain": [],
       "gain": 0.707946,
+      "muted": false,
       "name": "Lead",
-      "output_id": "mix_01K2QF8Z34MAIN000000005",
+      "output_id": "mix_01K2QF8Z34MASTER0000000000",
       "pan": 0.200000,
-      "sends": []
+      "sends": [],
+      "soloed": false
     },
-    "mix_01K2QF8Z33PAD00000000004": {
+    "mix_01K2QF8Z33PAD0000000000000": {
       "chain": [],
       "gain": 0.630957,
+      "muted": false,
       "name": "Pad",
-      "output_id": "mix_01K2QF8Z34MAIN000000005",
+      "output_id": "mix_01K2QF8Z34MASTER0000000000",
       "pan": 0.000000,
-      "sends": []
+      "sends": [],
+      "soloed": false
     },
-    "mix_01K2QF8Z34MAIN000000005": {
+    "mix_01K2QF8Z34MASTER0000000000": {
       "chain": [],
       "gain": 1.000000,
+      "muted": false,
       "name": "Main",
       "output_id": null,
       "pan": 0.000000,
-      "sends": []
+      "sends": [],
+      "soloed": false
     }
   },
   "patterns": {
-    "pat_01K2QF8Z10CHORDS00000001": {
+    "pat_01K2QF8Z10CHRDS00000000000": {
       "color": "#6C8CFF",
       "length": 15360,
       "name": "Verse chords",
       "sequences": {
-        "ins_01K2QF8Z00PIANO0000000001": [
+        "ins_01K2QF8Z00KEYS000000000000": [
           [0, 1920, 60, 12384],
           [0, 1920, 64, 11352],
           [0, 1920, 67, 11352],
@@ -394,18 +512,18 @@
           [11520, 1920, 59, 11352],
           [11520, 1920, 62, 11352]
         ],
-        "ins_01K2QF8Z03PAD000000000004": [
+        "ins_01K2QF8Z03PAD0000000000000": [
           [0, 7680, 48, 8256],
           [7680, 7680, 53, 8256]
         ]
       }
     },
-    "pat_01K2QF8Z11BASSGROOVE0002": {
+    "pat_01K2QF8Z11GR00VE0000000000": {
       "color": "#4FB286",
       "length": 7680,
       "name": "Bass groove",
       "sequences": {
-        "ins_01K2QF8Z01BASS00000000002": [
+        "ins_01K2QF8Z01BASS000000000000": [
           [0, 720, 36, 14448],
           [960, 240, 36, 10836],
           [1920, 720, 43, 13416],
@@ -417,12 +535,12 @@
         ]
       }
     },
-    "pat_01K2QF8Z12LEADHOOK000003": {
+    "pat_01K2QF8Z12H00K000000000000": {
       "color": "#E2A33C",
       "length": 15360,
       "name": "Lead hook",
       "sequences": {
-        "ins_01K2QF8Z02LEAD00000000003": [
+        "ins_01K2QF8Z02SYNTH00000000000": [
           [0, 480, 72, 12900],
           [480, 240, 76, 11868],
           [960, 960, 79, 13932],

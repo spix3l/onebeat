@@ -9,7 +9,7 @@ writer that disagrees with this document is wrong. The rationale lives in
 |---|---|
 | `format` | `onebeat.project` |
 | `version` | `1` |
-| Status | v1 draft — implemented by OB-3-05 |
+| Status | v1 — implemented by OB-3-05 (`engine/src/model/project_io.cpp`) |
 | Requirements | FR-PRJ-01, FR-PRJ-02, FR-PRJ-03 |
 
 ---
@@ -20,8 +20,8 @@ writer that disagrees with this document is wrong. The rationale lives in
 MyTrack.obt/                directory, exported UTI, LSTypeIsPackage
 ├── project.json            the whole model, text, diffable
 ├── state/                  opaque plugin chunks, one file per instrument
-│   ├── piano.bin
-│   └── bass.bin
+│   ├── ins_01K2QF8Z00KEYS000000000000.bin
+│   └── ins_01K2QF8Z01BASS000000000000.bin
 └── assets/                 consolidated samples (FR-PRJ-05, not yet written)
 ```
 
@@ -87,7 +87,7 @@ An ID is a type prefix, an underscore, and a 26-character Crockford base32
 ULID:
 
 ```
-ins_01K2QF8Z01BASS00000000002
+ins_01K2QF8Z01BASS000000000000
 ```
 
 | Prefix | Entity |
@@ -115,10 +115,15 @@ Rules:
 ### 5.1 `instruments`
 
 ```json
-"ins_01K2QF8Z01BASS00000000002": {
+"ins_01K2QF8Z01BASS000000000000": {
   "color": "#4FB286",
   "muted": false,
   "name": "Bass",
+  "note_defaults": {
+    "pan": 0.000000,
+    "pitch_offset": 0,
+    "velocity": 12900
+  },
   "plugin": {
     "format": "clap",
     "id": "org.surge-synth-team.surge-xt",
@@ -126,7 +131,12 @@ Rules:
     "path_hint": "/Library/Audio/Plug-Ins/CLAP/Surge XT.clap",
     "vendor": "Surge Synth Team"
   },
-  "routing": ["mix_01K2QF8Z31BASS0000000002"],
+  "routing": [
+    {
+      "port": 0,
+      "track_id": "mix_01K2QF8Z31BASS000000000000"
+    }
+  ],
   "state_ref": "state/bass.bin",
   "state_sha256": "b71c4e0a…"
 }
@@ -136,23 +146,24 @@ Rules:
 |---|---|---|
 | `name`, `color` | string | User-facing |
 | `muted` | bool | |
-| `plugin.format` | string | `clap` in v0.3; `vst3`, `au`, `wasm`, `builtin` reserved |
+| `note_defaults` | object | `velocity` (0–16383), `pan`, `pitch_offset`. Applied to notes that do not override them — stored once per instrument, which is why a note record is four integers |
+| `plugin.format` | string | `clap` in v0.3; `vst3`, `au`, `wasm`, `builtin` reserved. **Absent when the writer has no name for it**: a reader that could not model the format it read leaves the file's own word in place rather than replacing it with a guess |
 | `plugin.id` | string | The format's stable plugin identifier — this, not the path, is what identity means |
 | `plugin.name`, `plugin.vendor` | string | Cached for the missing-plugin placeholder, which must name the plugin it cannot find |
 | `plugin.path_hint` | string | Last known path, or `@bundled/<name>` for a stock plugin inside the app. A hint only: a plugin that has moved is still found by `id` |
-| `routing` | array of `mix_` IDs | Output destinations. One entry in v0.3 |
-| `state_ref` | string or `null` | Bundle-relative path to the opaque chunk |
+| `routing` | array of objects | `{"port": <int>, "track_id": "mix_…"}`, one per output port. **The port is written, never implied by array position** — position *is* an index, and routing by index is what D-M1 forbids. A bare `"mix_…"` string is accepted on read, with the port taken from its position, so hand-written files stay easy to write |
+| `state_ref` | string or `null` | Bundle-relative path to the opaque chunk. Written as `state/<instrument id>.bin`: two instruments may share a name, and a filename collision would have one silently loading the other's settings |
 | `state_sha256` | string or `null` | Hex digest of the chunk. Mismatch is reported and the chunk is not applied |
 
 ### 5.2 `patterns`
 
 ```json
-"pat_01K2QF8Z11BASSGROOVE0002": {
+"pat_01K2QF8Z11GR00VE0000000000": {
   "color": "#4FB286",
   "length": 7680,
   "name": "Bass groove",
   "sequences": {
-    "ins_01K2QF8Z01BASS00000000002": [
+    "ins_01K2QF8Z01BASS000000000000": [
       [0, 720, 36, 14448],
       [960, 240, 36, 10836]
     ]
@@ -180,7 +191,10 @@ fifth element, an object of per-note properties:
 ```
 
 v1 defines no property keys; the slot exists so per-note expression (CLAP note
-expression, MPE) is an additive change. **Unknown property keys are preserved.**
+expression, MPE) is an additive change. **Unknown property keys are preserved**,
+attached to the note by its four values rather than by its position: a note that
+has been edited is no longer the note those properties described, so they are
+dropped with it rather than landing on whatever now sits at that index.
 
 Notes sort by `start`, then `key`, then `length`. Two notes may share a start
 and a key only if they do not overlap; overlapping identical pitches are merged
@@ -189,19 +203,24 @@ at load with a warning, because no synthesiser agrees on what they mean.
 ### 5.3 `lanes`
 
 ```json
-"lan_01K2QF8Z21BASS0000000002": {
+"lan_01K2QF8Z21BASS000000000000": {
+  "collapsed": false,
   "color": "#4FB286",
   "group_id": null,
   "height": 88,
+  "muted": false,
   "name": "Bass",
-  "order": 1
+  "order": 1,
+  "soloed": false
 }
 ```
 
 | Field | Type | Notes |
 |---|---|---|
-| `order` | integer | **Display order is this field, never array position** (FR-PRJ-02). Reordering four lanes rewrites four integers and touches no clip |
+| `order` | integer | **Display order is this field, never array position** (FR-PRJ-02). Reordering four lanes rewrites four integers and touches no clip. Two lanes claiming one position is repaired at load, in the order the file listed them |
 | `height` | integer | Lane height in logical pixels |
+| `collapsed` | bool | Display state, saved so a project opens as it was left |
+| `muted`, `soloed` | bool | An **event** gate: the clips on this lane are not scheduled at all. Not the mixer's audio gate (D-M4) |
 | `group_id` | `lan_` ID or `null` | **Reserved for DM-Q1** (folder lanes). v1 always writes `null`; a reader that does not understand a non-null value preserves it |
 
 Lanes do not list their clips. See §5.4.
@@ -209,45 +228,70 @@ Lanes do not list their clips. See §5.4.
 ### 5.4 `clips`
 
 ```json
-"clp_01K2QF8Z42000000000000011": {
-  "lane_id": "lan_01K2QF8Z22LEAD0000000003",
+"clp_01K2QF8Z420000000000000110": {
+  "lane_id": "lan_01K2QF8Z22SYNTH00000000000",
   "length": 15360,
-  "source": {"pattern_id": "pat_01K2QF8Z12LEADHOOK000003", "type": "pattern"},
+  "muted": false,
+  "source": {
+    "pattern_id": "pat_01K2QF8Z12H00K000000000000",
+    "type": "pattern"
+  },
   "start": 23040,
-  "transforms": {"loop": true, "transpose": 0, "window_start": 0}
+  "transforms": {
+    "loop": true,
+    "probability": 1.000000,
+    "time_nudge": 0,
+    "transpose": 0,
+    "velocity_scale": 1.000000,
+    "window_start": 0
+  }
 }
 ```
 
 | Field | Type | Notes |
 |---|---|---|
 | `lane_id` | `lan_` ID | **Clips reference lanes; lanes do not list clips** (FR-PRJ-02). Moving a clip between lanes rewrites one line |
-| `start`, `length` | integer ticks | Position and extent on the timeline |
-| `source.type` | string | `pattern` in v0.3. `audio` and `automation` are reserved and carry `audio_ref` / `automation_target` instead of `pattern_id` |
+| `start`, `length` | integer ticks | Position and extent on the timeline. A clip with no length is dropped at load |
+| `muted` | bool | This placement is silent; the pattern and its other placements are unaffected |
+| `source.type` | string | `pattern`, `audio` or `automation` (below). A type this version cannot model does not fail the load: the clip stays in the file untouched and out of the session, and the next save writes it back as it was |
 | `transforms.window_start` | integer ticks | Offset into the source at which playback begins (DM-Q2) |
 | `transforms.loop` | bool | Whether the source repeats to fill `length` or plays once and stops |
 | `transforms.transpose` | integer semitones | Non-destructive (DM-Q3) |
+| `transforms.velocity_scale`, `time_nudge`, `probability` | float, ticks, float | **Stored and round-tripped, not yet honoured**: OB-3-13 gives them semantics. Writing them from the start means turning them on is a behaviour change and not a schema change |
 
 `transforms` semantics are pinned down by OB-3-13; this document defines only
 their storage.
 
+**Source shapes.** One key of `source` is `type`; the rest depend on it.
+
+| `type` | Fields |
+|---|---|
+| `pattern` | `pattern_id` — a `pat_` ID, and nothing else. A clip holds no note data (D-M3) |
+| `audio` | `path` (bundle-relative once consolidated), `source_offset` ticks, `gain`, `reversed`, `destination_id` — a `mix_` ID, because an audio clip routes to a track directly and has no instrument (D-M7). Stage 9 owns the behaviour; v0.3 stores it and plays nothing |
+| `automation` | `target_kind` (`instrument` or `mixer_track`), `target_id`, `parameter` (the format's parameter id), and `points`: an array of `[position, value]`, position in ticks and value 0–1. Stage 4 owns curve shape; v0.3 flattens each point to one parameter event |
+
 ### 5.5 `mixer_tracks`
 
 ```json
-"mix_01K2QF8Z31BASS0000000002": {
+"mix_01K2QF8Z31BASS000000000000": {
   "chain": [],
   "gain": 0.891251,
+  "muted": false,
   "name": "Bass",
-  "output_id": "mix_01K2QF8Z34MAIN000000005",
+  "output_id": "mix_01K2QF8Z34MASTER0000000000",
   "pan": 0.000000,
-  "sends": []
+  "sends": [],
+  "soloed": false
 }
 ```
 
 | Field | Type | Notes |
 |---|---|---|
+| `gain`, `pan` | float | Linear gain, pan −1…1 |
+| `muted`, `soloed` | bool | An **audio** gate, unlike a lane's event gate (D-M4) |
 | `chain` | array | Effect instances, in order. Empty until Stage 4 |
 | `sends` | array | Send descriptors. Empty until Stage 4 |
-| `output_id` | `mix_` ID or `null` | `null` marks the master track. Exactly one track has it |
+| `output_id` | `mix_` ID or `null` | `null` marks the master track. **Exactly one track has it**, and a file with none, with several, or with a routing loop is repaired at load and reported — an unroutable mixer is silence at best and a stack overflow at worst |
 
 ## 6. Canonical writer rules (normative)
 
@@ -259,9 +303,16 @@ Two saves of the same model are byte-identical, on any machine, in any locale.
    the top level — is sorted ascending by Unicode code point.
 3. Entity maps are keyed by ID, so they sort by ID, so they read in creation
    order.
-4. An array whose elements are all numbers is written on one line, elements
-   separated by `", "`. Every other non-empty array is one element per line. An
+4. An array of numbers — optionally with a single object as its last element —
+   is written on one line, elements separated by `", "`, the object inline with
+   its own keys sorted. Every other non-empty array is one element per line. An
    empty array is `[]`; an empty object is `{}`.
+
+   This is the note record and nothing else: four integers, plus the properties
+   of §5.2 when there are any. It is what makes "three notes added" three added
+   lines. The leading number is required so that an array *of* objects never
+   collapses — one entry inline and two entries expanded would change the shape
+   of the file as it grows, which is the opposite of the point.
 5. Notes sort as §5.2.
 6. Integers are written bare, no `+`, no leading zeros. Non-integers are written
    with exactly six decimal places, never in exponent notation. `-0` is written
