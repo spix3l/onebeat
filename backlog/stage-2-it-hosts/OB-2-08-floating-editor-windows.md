@@ -23,7 +23,9 @@ The plugin `NSView` must be created in the process where the plugin lives — th
 2. **Lifecycle:** open/close from the plugin list UI; reopen restores geometry; window survives plugin crash-restart (reopens after restart); closes cleanly on instance removal.
 3. **Persistence:** per-project record of open state, position, size, display (multi-monitor: falls back gracefully when the display is gone).
 4. **Focus & keyboard:** typing in plugin text fields works (the reason for D3.2); spacebar-for-transport does not fire while a plugin field has focus, but transport shortcuts work when the editor window merely has focus without an active text field (define and test the rule).
-5. **Fallback:** plugins without a GUI get a **generic parameter editor** window (Flutter, tokens, per design `onebeat-plugin-params.html`): parameter list with sliders/steppers, search, Martian Mono values.
+5. **Fallback:** plugins without a GUI get a **generic parameter editor** (Flutter, tokens, per design `onebeat-plugin-params.html`): parameter list with sliders/steppers, search, Martian Mono values.
+
+   **Constraint added by ADR-001 (spike P2):** this must render **inside the main window** — a panel or sheet — not in a floating window. Flutter's multi-window API works but is `@internal`, master-channel-only, and breaks between patch versions; OneBeat ships on stable. A floating generic editor is an enhancement for whenever that API reaches stable, not a Stage 2 deliverable. Third-party plugin GUIs are unaffected: those are native `NSView`s in the helper process, not Flutter surfaces.
 
 ## Acceptance criteria
 

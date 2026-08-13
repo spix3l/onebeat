@@ -17,11 +17,11 @@ attempted** and ADR-001 is unwritten. Stage 1 proceeded as though the Flutter
 go/no-go had been decided; in truth it was decided implicitly, by the app
 working.
 
-P2 is the one that is now urgent. It does **not** wait for the Stage 8
-workspace: `OB-2-08` scope item 5 puts a Flutter generic parameter editor in a
-floating window, two tickets after CLAP hosting lands. Run **OB-0-02 before
-`OB-2-01`**, so that a bad answer arrives before the hosting architecture is
-built on top of it rather than after. P3 genuinely does wait for Stage 7.
+**P2 has since been run** (13 August 2026) and it was worth running early: the
+answer changed `OB-2-08`. Flutter's multi-window support works well but is not
+shippable on stable, so the generic parameter editor renders in the main window
+instead of floating. ADR-001 is written and gate G-A is closed. P3 genuinely
+does wait for Stage 7.
 
 ## Conventions
 
@@ -55,21 +55,28 @@ built on top of it rather than after. P3 genuinely does wait for Stage 7.
 | Status | ID | Title | Est |
 |---|---|---|---|
 | 🟨 | [OB-0-01](stage-0-spikes/OB-0-01-spike-custompainter-piano-roll-120hz.md) | Spike P1: CustomPainter piano roll at 120 Hz | M |
-| ⬜ | [OB-0-02](stage-0-spikes/OB-0-02-spike-panel-tearoff-multiwindow.md) | Spike P2: panel tear-off into a second native window | M |
+| ✅ | [OB-0-02](stage-0-spikes/OB-0-02-spike-panel-tearoff-multiwindow.md) | Spike P2: panel tear-off into a second native window | M |
 | ⬜ | [OB-0-03](stage-0-spikes/OB-0-03-spike-finder-drag-and-drop.md) | Spike P3: Finder drag-and-drop file paths | S |
 | ✅ | [OB-0-04](stage-0-spikes/OB-0-04-spike-ffi-snapshot-roundtrip.md) | Spike P4: FFI round-trip cost for per-frame snapshots | M |
-| ⬜ | [OB-0-05](stage-0-spikes/OB-0-05-decision-gate-adr-001.md) | Decision gate: ADR-001, Flutter go/no-go | S |
+| ✅ | [OB-0-05](stage-0-spikes/OB-0-05-decision-gate-adr-001.md) | Decision gate: ADR-001, Flutter go/no-go | S |
 
-Statuses reflect what the **real** implementation answered, not spike code:
+Gate **G-A is closed**: [ADR-001](../docs/adr/ADR-001-ui-toolkit.md) confirms
+Flutter, with FR-WSP-02 accepted as *conditional*. Statuses reflect what the
+**real** implementation answered, not spike code:
 
 - **P4 ✅** — the shipped seqlock snapshot read over one C call per frame, measured
   across 3797 frames with no attributable per-frame cost (closeout §4).
+- **P2 ✅** — answered by [`spikes/p2_multiwindow/`](../spikes/p2_multiwindow/FINDINGS.md).
+  Tear-off, live render and re-dock all work, on **one engine and one isolate**,
+  with no state serialization needed. But the API is `@internal` and
+  master-channel-only, so **OneBeat cannot ship it on stable today** — which is
+  why `OB-2-08`'s generic parameter editor now has an in-main-window fallback.
 - **P1 🟨** — zero dropped frames sustained and the painter's CPU cost bounded in
   CI at 0.06 % of a 120 Hz frame, but on a 60 Hz panel and with a meter rather
   than the 2,000-note piano roll the spike asks for. Needs ProMotion hardware
-  (D1a) *and* Stage 3's piano roll (D1b).
-- **P2, P3, ADR-001 ⬜** — genuinely not attempted. **OB-0-02 blocks `OB-2-01`**
-  (see above); OB-0-03 is needed before Stage 7.
+  (D1a) *and* Stage 3's piano roll (D1b). **The only spike that can still
+  invalidate the Flutter decision.**
+- **P3 ⬜** — not attempted; needed before Stage 7.
 
 ## Stage 1 — v0.1 "It makes sound" — `stage-1-it-makes-sound/`
 
@@ -141,4 +148,4 @@ Statuses reflect what the **real** implementation answered, not spike code:
 
 Stage 0: OB-0-01 → -04 in parallel where practical; OB-0-05 last (gate G-A).
 Stage 1: OB-1-01 → OB-1-02/03/04 (parallel) → OB-1-05 → OB-1-06 → OB-1-07 → OB-1-08/09/12/13 (parallel) → OB-1-10 → OB-1-11 → OB-1-14. **Done.**
-Stage 2: **OB-0-02 first** (spike P2, unpaid Stage 0 debt — `OB-2-08` needs it) → OB-2-01 → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
+Stage 2: ~~OB-0-02~~ (done) → OB-2-01 → OB-2-02/03 → OB-2-04 (ADR-003) → OB-2-05 → OB-2-06 (gate G-B, validate early) → OB-2-07 → OB-2-08/09/10 → OB-2-11.
