@@ -1,5 +1,16 @@
 # Baseline for the OneBeat engine. Kept deliberately small in Stage 1: every check
 # here must be green, so that a violation is a real signal rather than noise.
+#
+# Two checks are switched off deliberately (comments cannot live inside the
+# block scalar below, so the reasoning is here):
+#
+#   performance-enum-size — the enum widths it objects to are layout decisions,
+#     not oversights. RtMessage sits in a frozen 32-byte log record and
+#     EventType in a frozen 24-byte schedule event; both are pinned by tests.
+#
+#   misc-const-correctness — it flags every RAII lock guard as "can be const".
+#     Nobody writes `const std::lock_guard`, and the check has no way to exclude
+#     a type, so the noise buries the occasional real finding.
 Checks: >
   -*,
   bugprone-*,
@@ -8,6 +19,7 @@ Checks: >
   cppcoreguidelines-pro-type-cstyle-cast,
   cppcoreguidelines-slicing,
   misc-*,
+  -misc-const-correctness,
   -misc-non-private-member-variables-in-classes,
   -misc-include-cleaner,
   -misc-use-anonymous-namespace,
@@ -15,9 +27,6 @@ Checks: >
   modernize-use-nullptr,
   modernize-use-using,
   performance-*,
-  # Enum base types here are ABI and POD-layout decisions: RtMessage sits in a
-  # frozen 32-byte log record and EventType in a frozen 24-byte schedule event.
-  # Shrinking them to uint8_t would change layouts the freeze tests pin.
   -performance-enum-size,
   readability-identifier-naming
 

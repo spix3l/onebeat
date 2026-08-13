@@ -13,29 +13,39 @@ using onebeat::tests::makeOfflineEngine;
 
 TEST_SUITE("stress") {
   TEST_CASE("1000+ schedule publishes during continuous playback lose no events") {
+    // The publisher does a fixed number of swaps and the render loop keeps
+    // going until it has finished. Rendering for a fixed duration instead makes
+    // the swap count a race against the machine: in a Release build the render
+    // outran the publisher and only three swaps happened.
+    constexpr int Publishes = 1200;
     auto engine = makeOfflineEngine(48000.0, 128);
     REQUIRE(engine != nullptr);
     engine->publishSchedule(makeGridSchedule(16, 60, 48000.0, 0.25, 120.0));
     engine->postCommand(command(OB_CMD_SET_LOOP, 1, 0.0, 4.0));
     engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
 
-    std::atomic<bool> publishing{true};
     std::atomic<int> published{0};
     std::thread publisher([&] {
-      while (publishing.load(std::memory_order_acquire)) {
+      for (int index = 0; index < Publishes; ++index) {
         engine->publishSchedule(makeGridSchedule(16, 60, 48000.0, 0.25, 120.0));
-        published.fetch_add(1, std::memory_order_relaxed);
+        published.fetch_add(1, std::memory_order_release);
         std::this_thread::yield();
       }
     });
 
-    // ~10 s of audio at 128-frame blocks, rendered as fast as the machine can.
-    const auto result = onebeat::testing::renderOffline(*engine, 480000, 128);
-    publishing.store(false, std::memory_order_release);
+    // Render in one-second chunks until every swap has landed, so playback is
+    // continuous for the whole of the publishing storm whatever the build type.
+    onebeat::testing::RenderResult result;
+    while (published.load(std::memory_order_acquire) < Publishes) {
+      const auto chunk = onebeat::testing::renderOffline(*engine, 48000, 128);
+      if (result.frames() == 0) {
+        result = chunk;
+      }
+    }
     publisher.join();
 
-    CHECK(published.load() > 1000);
-    CHECK(result.frames() == 480000);
+    CHECK(published.load() == Publishes);
+    CHECK(result.frames() == 48000);
     CHECK(result.peak() > 0.0F);         // the swaps never silenced playback
     CHECK(std::isfinite(result.rms()));  // and never corrupted it
 

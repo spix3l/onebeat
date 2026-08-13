@@ -38,9 +38,12 @@ std::string cfStringToUtf8(CFStringRef string) {
 
 std::string deviceNameFor(AudioObjectID device) {
   CFStringRef name = nullptr;
-  UInt32 size = sizeof(name);
+  // The property is a CFStringRef, so the buffer we hand over is one pointer
+  // wide; spell that out rather than taking sizeof an expression.
+  UInt32 size = sizeof(CFStringRef);
   auto address = addressOf(kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal);
-  if (AudioObjectGetPropertyData(device, &address, 0, nullptr, &size, &name) != noErr) {
+  if (AudioObjectGetPropertyData(device, &address, 0, nullptr, &size, static_cast<void*>(&name)) !=
+      noErr) {
     return "Unknown device";
   }
   std::string result = cfStringToUtf8(name);
