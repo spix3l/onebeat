@@ -12,8 +12,12 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- The name macOS shows in the menu bar, the About box and the Dock. Set
+	     independently of PRODUCT_NAME so the bundle stays `onebeat.app` (the
+	     release and build scripts look for that path) while the user-facing
+	     name is the design's wordmark. -->
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>OneBeat</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

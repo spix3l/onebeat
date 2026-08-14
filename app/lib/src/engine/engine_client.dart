@@ -13,6 +13,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+import 'package:meta/meta.dart';
 
 import 'engine_library.dart';
 import 'generated/onebeat_bindings.dart';
@@ -45,6 +46,8 @@ class EngineSnapshot {
   const EngineSnapshot({
     required this.playing,
     required this.loopEnabled,
+    required this.loopStartBeats,
+    required this.loopEndBeats,
     required this.positionFrames,
     required this.positionBeats,
     required this.positionSeconds,
@@ -69,6 +72,8 @@ class EngineSnapshot {
   const EngineSnapshot.empty()
     : playing = false,
       loopEnabled = false,
+      loopStartBeats = 0,
+      loopEndBeats = 0,
       positionFrames = 0,
       positionBeats = 0,
       positionSeconds = 0,
@@ -91,6 +96,12 @@ class EngineSnapshot {
 
   final bool playing;
   final bool loopEnabled;
+
+  /// The loop region, in beats. Drawn on the arrangement ruler, and dragged
+  /// there (OB-3-12 §4).
+  final double loopStartBeats;
+  final double loopEndBeats;
+
   final int positionFrames;
   final double positionBeats;
   final double positionSeconds;
@@ -161,7 +172,124 @@ abstract interface class RackClient {
   void redoProject();
 }
 
-class EngineClient implements RackClient {
+/// Gesture bracketing, shared by every editor that drags.
+///
+/// A drag emits many small edits and must land in the history as one entry. All
+/// three editors use the *same* native transaction — the rack's — so this is
+/// one interface rather than three copies, and [RackClient]'s longer-named
+/// members remain for the rack's existing call sites.
+abstract interface class EditGestureClient {
+  void beginGesture(String name);
+  void commitGesture();
+  void abortGesture();
+}
+
+/// The piano roll's seam (OB-3-10). Notes are addressed by value rather than by
+/// index or ID, exactly as the native side does: an index would go stale the
+/// moment another edit re-sorted the sequence, so the editor holds the notes it
+/// selected and hands the same values back.
+abstract interface class NoteClient implements EditGestureClient {
+  List<SequenceNote> readNotes(String instrumentId);
+  void addNote(
+    String instrumentId,
+    int startTicks,
+    int lengthTicks,
+    int key, {
+    int velocity = 0,
+  });
+  void removeNotes(String instrumentId, List<SequenceNote> notes);
+  void moveNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    int deltaTicks = 0,
+    int semitones = 0,
+    int snapTicks = 0,
+  });
+  void resizeNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int lengthDelta,
+    int snapTicks = 0,
+  });
+  void setNoteVelocity(
+    String instrumentId,
+    List<SequenceNote> notes,
+    int velocity,
+  );
+  void quantiseNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int gridTicks,
+    required double strength,
+  });
+  void duplicateNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int deltaTicks,
+  });
+
+  /// Audition (OB-3-10 §5): the preview path through the selected instrument.
+  void auditionNoteOn(int key, double velocity);
+  void auditionNoteOff(int key);
+}
+
+/// Pattern management (OB-3-11). `usageCount` is derived natively on every read
+/// rather than cached, so the badge cannot go stale.
+abstract interface class PatternClient {
+  List<PatternSummary> readPatterns();
+  void selectPattern(String patternId);
+  void createPattern(String name);
+  void renamePattern(String patternId, String name);
+  void recolorPattern(String patternId, String color);
+
+  /// An unreferenced clone. Distinct from [makeClipsUnique], which repoints the
+  /// clips it is given — both exist because they are different intentions
+  /// (FR-UX-11's consistent action vocabulary).
+  void duplicatePattern(String patternId);
+  void removePattern(String patternId);
+
+  /// FR-SEQ-04: one clone, every listed clip repointed at it, one undo entry.
+  void makeClipsUnique(List<String> clipIds);
+}
+
+/// The arrangement's seam (OB-3-12, OB-3-13). Note what is absent: nothing here
+/// carries signal. A lane has no instrument, no gain and no meter, and there is
+/// deliberately no call that would give it one (ARCHITECTURE.md §6 #2).
+abstract interface class ArrangementClient implements EditGestureClient {
+  List<ArrangementLane> readLanes();
+  void createLane(String name);
+  void renameLane(String laneId, String name);
+  void recolorLane(String laneId, String color);
+  void reorderLane(String laneId, int order);
+  void setLaneHeight(String laneId, int height);
+  void setLaneMuted(String laneId, {required bool muted});
+  void setLaneSoloed(String laneId, {required bool soloed});
+  void setLaneCollapsed(String laneId, {required bool collapsed});
+  void removeLane(String laneId);
+
+  List<ArrangementClip> readClips();
+  void addClip(
+    String laneId, {
+    String patternId = '',
+    required int startTicks,
+    required int lengthTicks,
+  });
+  void moveClip(String clipId, {String laneId = '', required int startTicks});
+  void resizeClip(String clipId, int lengthTicks);
+  void duplicateClip(
+    String clipId, {
+    String laneId = '',
+    required int startTicks,
+  });
+  void removeClip(String clipId);
+  void setClipMuted(String clipId, {required bool muted});
+  void setClipLoop(String clipId, {required bool loop});
+  void setClipWindowStart(String clipId, int windowStartTicks);
+  void setClipTranspose(String clipId, int semitones);
+}
+
+class EngineClient
+    implements RackClient, NoteClient, PatternClient, ArrangementClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -172,6 +300,10 @@ class EngineClient implements RackClient {
       _instrumentInfo = calloc<ob_instrument_info>(),
       _rackPatternInfo = calloc<ob_rack_pattern_info>(),
       _rackRowInfo = calloc<ob_rack_row_info>(),
+      _patternInfo = calloc<ob_pattern_info>(),
+      _laneInfo = calloc<ob_lane_info>(),
+      _clipInfo = calloc<ob_clip_info>(),
+      _noteCount = calloc<Int32>(),
       _paramInfo = calloc<ob_param_info>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
@@ -220,7 +352,27 @@ class EngineClient implements RackClient {
   final Pointer<ob_instrument_info> _instrumentInfo;
   final Pointer<ob_rack_pattern_info> _rackPatternInfo;
   final Pointer<ob_rack_row_info> _rackRowInfo;
+  final Pointer<ob_pattern_info> _patternInfo;
+  final Pointer<ob_lane_info> _laneInfo;
+  final Pointer<ob_clip_info> _clipInfo;
+  final Pointer<Int32> _noteCount;
   final Pointer<ob_param_info> _paramInfo;
+
+  // The note buffer is the one output that is not a single fixed struct, so it
+  // grows on demand and is then reused. Reading a 2,000-note pattern must not
+  // allocate 2,000 times, and the roll re-reads on every sequence change.
+  Pointer<ob_note> _noteBuffer = nullptr;
+  int _noteCapacity = 0;
+
+  Pointer<ob_note> _ensureNoteCapacity(int needed) {
+    if (needed <= _noteCapacity) return _noteBuffer;
+    if (_noteBuffer != nullptr) calloc.free(_noteBuffer);
+    // Round up so a sequence that grows a note at a time does not reallocate on
+    // every single edit.
+    _noteCapacity = needed < 128 ? 128 : needed * 2;
+    _noteBuffer = calloc<ob_note>(_noteCapacity);
+    return _noteBuffer;
+  }
 
   int _generation = 0;
   bool _disposed = false;
@@ -306,6 +458,8 @@ class EngineClient implements RackClient {
     return EngineSnapshot(
       playing: s.playing != 0,
       loopEnabled: s.loop_enabled != 0,
+      loopStartBeats: s.loop_start_beats,
+      loopEndBeats: s.loop_end_beats,
       positionFrames: s.position_frames,
       positionBeats: s.position_beats,
       positionSeconds: s.position_seconds,
@@ -485,9 +639,16 @@ class EngineClient implements RackClient {
     );
   }
 
-  void addPlugin(PluginListing plugin) {
-    final Pointer<Utf8> path = plugin.path.toNativeUtf8();
-    final Pointer<Utf8> id = plugin.id.toNativeUtf8();
+  void addPlugin(PluginListing plugin) =>
+      addPluginByPath(plugin.path, plugin.id);
+
+  /// The same thing addressed by bundle path and plug-in id rather than by a
+  /// scanned listing. The browser always has a listing; the integration driver
+  /// does not — it points straight at the stock bundle in the build tree so it
+  /// does not have to wait on a scan (OB-3-14 §2).
+  void addPluginByPath(String bundlePath, String pluginId) {
+    final Pointer<Utf8> path = bundlePath.toNativeUtf8();
+    final Pointer<Utf8> id = pluginId.toNativeUtf8();
     try {
       _check(
         _bindings.ob_engine_instance_add(
@@ -718,6 +879,516 @@ class EngineClient implements RackClient {
   void abortRackGesture() =>
       _check(_bindings.ob_engine_rack_gesture_abort(_engine));
 
+  // --- notes: the piano roll (OB-3-10) --------------------------------------
+
+  @override
+  List<SequenceNote> readNotes(String instrumentId) {
+    final Pointer<Utf8> native = instrumentId.toNativeUtf8();
+    try {
+      final Pointer<Char> id = native.cast<Char>();
+      final int count = _bindings.ob_engine_note_count(_engine, id);
+      if (count <= 0) return const <SequenceNote>[];
+      final Pointer<ob_note> buffer = _ensureNoteCapacity(count);
+      _check(
+        _bindings.ob_engine_notes_read(
+          _engine,
+          id,
+          buffer,
+          _noteCapacity,
+          _noteCount,
+        ),
+      );
+      final int written = _noteCount.value;
+      return List<SequenceNote>.generate(written, (int index) {
+        final ob_note note = buffer[index];
+        return SequenceNote(
+          startTicks: note.start,
+          lengthTicks: note.length,
+          key: note.key,
+          velocity: note.velocity,
+        );
+      }, growable: false);
+    } finally {
+      calloc.free(native);
+    }
+  }
+
+  /// Writes `notes` into the shared buffer and runs `call` against it. Every
+  /// note mutation has the same shape — an instrument, an array, a count — so
+  /// the marshalling lives here once.
+  void _withNotes(
+    String instrumentId,
+    List<SequenceNote> notes,
+    ob_status Function(Pointer<Char>, Pointer<ob_note>, int) call,
+  ) {
+    if (notes.isEmpty) return;
+    final Pointer<ob_note> buffer = _ensureNoteCapacity(notes.length);
+    for (int index = 0; index < notes.length; index++) {
+      final SequenceNote note = notes[index];
+      buffer[index].start = note.startTicks;
+      buffer[index].length = note.lengthTicks;
+      buffer[index].key = note.key;
+      buffer[index].velocity = note.velocity;
+    }
+    _withNativeString(
+      instrumentId,
+      (Pointer<Char> native) => call(native, buffer, notes.length),
+    );
+  }
+
+  @override
+  void addNote(
+    String instrumentId,
+    int startTicks,
+    int lengthTicks,
+    int key, {
+    int velocity = 0,
+  }) => _withNativeString(
+    instrumentId,
+    (Pointer<Char> native) => _bindings.ob_engine_note_add(
+      _engine,
+      native,
+      startTicks,
+      lengthTicks,
+      key,
+      velocity,
+    ),
+  );
+
+  @override
+  void removeNotes(String instrumentId, List<SequenceNote> notes) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_remove(_engine, id, buffer, count),
+  );
+
+  @override
+  void moveNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    int deltaTicks = 0,
+    int semitones = 0,
+    int snapTicks = 0,
+  }) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_move(
+          _engine,
+          id,
+          buffer,
+          count,
+          deltaTicks,
+          semitones,
+          snapTicks,
+        ),
+  );
+
+  @override
+  void resizeNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int lengthDelta,
+    int snapTicks = 0,
+  }) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_resize(
+          _engine,
+          id,
+          buffer,
+          count,
+          lengthDelta,
+          snapTicks,
+        ),
+  );
+
+  @override
+  void setNoteVelocity(
+    String instrumentId,
+    List<SequenceNote> notes,
+    int velocity,
+  ) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_set_velocity(
+          _engine,
+          id,
+          buffer,
+          count,
+          velocity,
+        ),
+  );
+
+  @override
+  void quantiseNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int gridTicks,
+    required double strength,
+  }) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_quantise(
+          _engine,
+          id,
+          buffer,
+          count,
+          gridTicks,
+          strength,
+        ),
+  );
+
+  @override
+  void duplicateNotes(
+    String instrumentId,
+    List<SequenceNote> notes, {
+    required int deltaTicks,
+  }) => _withNotes(
+    instrumentId,
+    notes,
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_duplicate(
+          _engine,
+          id,
+          buffer,
+          count,
+          deltaTicks,
+        ),
+  );
+
+  @override
+  void auditionNoteOn(int key, double velocity) =>
+      noteOn(key, velocity.clamp(0.0, 1.0));
+
+  @override
+  void auditionNoteOff(int key) => noteOff(key);
+
+  // The rack's transaction calls under their general name: natively there is
+  // one gesture mechanism and both editors use it.
+  @override
+  void beginGesture(String name) => beginRackGesture(name);
+
+  @override
+  void commitGesture() => commitRackGesture();
+
+  @override
+  void abortGesture() => abortRackGesture();
+
+  // --- patterns (OB-3-11) ----------------------------------------------------
+
+  @override
+  List<PatternSummary> readPatterns() {
+    final int count = _bindings.ob_engine_pattern_count(_engine);
+    final List<PatternSummary> patterns = <PatternSummary>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_pattern_at(_engine, index, _patternInfo));
+      final ob_pattern_info value = _patternInfo.ref;
+      patterns.add(
+        PatternSummary(
+          id: _readFixedUtf8(value.id, 32),
+          name: _readFixedUtf8(value.name, 128),
+          color: _readFixedUtf8(value.color, 8),
+          lengthTicks: value.length_ticks,
+          swing: value.swing,
+          usageCount: value.usage_count,
+          noteCount: value.note_count,
+          isCurrent: (value.flags & patternFlagCurrent) != 0,
+        ),
+      );
+    }
+    return patterns;
+  }
+
+  @override
+  void selectPattern(String patternId) => _withNativeString(
+    patternId,
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_select(_engine, native),
+  );
+
+  @override
+  void createPattern(String name) => _withNativeString(
+    name,
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_create(_engine, native),
+  );
+
+  @override
+  void renamePattern(String patternId, String name) => _withTwoNativeStrings(
+    patternId,
+    name,
+    (Pointer<Char> id, Pointer<Char> value) =>
+        _bindings.ob_engine_pattern_rename(_engine, id, value),
+  );
+
+  @override
+  void recolorPattern(String patternId, String color) => _withTwoNativeStrings(
+    patternId,
+    color,
+    (Pointer<Char> id, Pointer<Char> value) =>
+        _bindings.ob_engine_pattern_recolor(_engine, id, value),
+  );
+
+  @override
+  void duplicatePattern(String patternId) => _withNativeString(
+    patternId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_pattern_duplicate(_engine, native),
+  );
+
+  @override
+  void removePattern(String patternId) => _withNativeString(
+    patternId,
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_remove(_engine, native),
+  );
+
+  @override
+  void makeClipsUnique(List<String> clipIds) {
+    if (clipIds.isEmpty) return;
+    // NUL-separated, double-NUL-terminated: the shape the ABI takes so that a
+    // multi-selection crosses the boundary as one string rather than an array
+    // of pointers whose lifetimes Dart would have to own.
+    // Dart source cannot carry a raw NUL, so the separator is escaped.
+    const String nul = '\u0000';
+    final String packed = '${clipIds.join(nul)}$nul$nul';
+    _withNativeString(
+      packed,
+      (Pointer<Char> native) =>
+          _bindings.ob_engine_clips_make_unique(_engine, native),
+    );
+  }
+
+  // --- arrangement (OB-3-12, OB-3-13) ---------------------------------------
+
+  @override
+  List<ArrangementLane> readLanes() {
+    final int count = _bindings.ob_engine_lane_count(_engine);
+    final List<ArrangementLane> lanes = <ArrangementLane>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_lane_at(_engine, index, _laneInfo));
+      final ob_lane_info value = _laneInfo.ref;
+      lanes.add(
+        ArrangementLane(
+          id: _readFixedUtf8(value.id, 32),
+          name: _readFixedUtf8(value.name, 128),
+          color: _readFixedUtf8(value.color, 8),
+          order: value.order,
+          height: value.height,
+          clipCount: value.clip_count,
+          muted: (value.flags & laneFlagMuted) != 0,
+          soloed: (value.flags & laneFlagSoloed) != 0,
+          collapsed: (value.flags & laneFlagCollapsed) != 0,
+        ),
+      );
+    }
+    return lanes;
+  }
+
+  @override
+  void createLane(String name) => _withNativeString(
+    name,
+    (Pointer<Char> native) => _bindings.ob_engine_lane_create(_engine, native),
+  );
+
+  @override
+  void renameLane(String laneId, String name) => _withTwoNativeStrings(
+    laneId,
+    name,
+    (Pointer<Char> id, Pointer<Char> value) =>
+        _bindings.ob_engine_lane_rename(_engine, id, value),
+  );
+
+  @override
+  void recolorLane(String laneId, String color) => _withTwoNativeStrings(
+    laneId,
+    color,
+    (Pointer<Char> id, Pointer<Char> value) =>
+        _bindings.ob_engine_lane_recolor(_engine, id, value),
+  );
+
+  @override
+  void reorderLane(String laneId, int order) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_lane_reorder(_engine, native, order),
+  );
+
+  @override
+  void setLaneHeight(String laneId, int height) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_lane_set_height(_engine, native, height),
+  );
+
+  @override
+  void setLaneMuted(String laneId, {required bool muted}) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_lane_set_muted(_engine, native, muted ? 1 : 0),
+  );
+
+  @override
+  void setLaneSoloed(String laneId, {required bool soloed}) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_lane_set_soloed(_engine, native, soloed ? 1 : 0),
+  );
+
+  @override
+  void setLaneCollapsed(String laneId, {required bool collapsed}) =>
+      _withNativeString(
+        laneId,
+        (Pointer<Char> native) => _bindings.ob_engine_lane_set_collapsed(
+          _engine,
+          native,
+          collapsed ? 1 : 0,
+        ),
+      );
+
+  @override
+  void removeLane(String laneId) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) => _bindings.ob_engine_lane_remove(_engine, native),
+  );
+
+  @override
+  List<ArrangementClip> readClips() {
+    final int count = _bindings.ob_engine_clip_count(_engine);
+    final List<ArrangementClip> clips = <ArrangementClip>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_clip_at(_engine, index, _clipInfo));
+      final ob_clip_info value = _clipInfo.ref;
+      clips.add(
+        ArrangementClip(
+          id: _readFixedUtf8(value.id, 32),
+          laneId: _readFixedUtf8(value.lane_id, 32),
+          patternId: _readFixedUtf8(value.pattern_id, 32),
+          name: _readFixedUtf8(value.name, 128),
+          color: _readFixedUtf8(value.color, 8),
+          startTicks: value.start_ticks,
+          lengthTicks: value.length_ticks,
+          windowStartTicks: value.window_start_ticks,
+          patternLengthTicks: value.pattern_length_ticks,
+          transpose: value.transpose,
+          noteCount: value.note_count,
+          usageCount: value.usage_count,
+          muted: (value.flags & clipFlagMuted) != 0,
+          loop: (value.flags & clipFlagLoop) != 0,
+        ),
+      );
+    }
+    return clips;
+  }
+
+  @override
+  void addClip(
+    String laneId, {
+    String patternId = '',
+    required int startTicks,
+    required int lengthTicks,
+  }) => _withTwoNativeStrings(
+    laneId,
+    patternId,
+    (Pointer<Char> lane, Pointer<Char> pattern) => _bindings.ob_engine_clip_add(
+      _engine,
+      lane,
+      pattern,
+      startTicks,
+      lengthTicks,
+    ),
+  );
+
+  @override
+  void moveClip(String clipId, {String laneId = '', required int startTicks}) =>
+      _withTwoNativeStrings(
+        clipId,
+        laneId,
+        (Pointer<Char> clip, Pointer<Char> lane) =>
+            _bindings.ob_engine_clip_move(_engine, clip, lane, startTicks),
+      );
+
+  @override
+  void resizeClip(String clipId, int lengthTicks) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_clip_resize(_engine, native, lengthTicks),
+  );
+
+  @override
+  void duplicateClip(
+    String clipId, {
+    String laneId = '',
+    required int startTicks,
+  }) => _withTwoNativeStrings(
+    clipId,
+    laneId,
+    (Pointer<Char> clip, Pointer<Char> lane) =>
+        _bindings.ob_engine_clip_duplicate(_engine, clip, lane, startTicks),
+  );
+
+  @override
+  void removeClip(String clipId) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_clip_remove(_engine, native),
+  );
+
+  @override
+  void setClipMuted(String clipId, {required bool muted}) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_clip_set_muted(_engine, native, muted ? 1 : 0),
+  );
+
+  @override
+  void setClipLoop(String clipId, {required bool loop}) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_clip_set_loop(_engine, native, loop ? 1 : 0),
+  );
+
+  @override
+  void setClipWindowStart(String clipId, int windowStartTicks) =>
+      _withNativeString(
+        clipId,
+        (Pointer<Char> native) => _bindings.ob_engine_clip_set_window_start(
+          _engine,
+          native,
+          windowStartTicks,
+        ),
+      );
+
+  @override
+  void setClipTranspose(String clipId, int semitones) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_clip_set_transpose(_engine, native, semitones),
+  );
+
+  // --- project files (OB-3-05's writer, reachable from the UI) --------------
+
+  /// Writes the project bundle. Distinct from [saveSession], which is the v0.2
+  /// scratch file holding one hosted plug-in's opaque chunk.
+  void saveProject(String path) => _withNativeString(
+    path,
+    (Pointer<Char> native) => _bindings.ob_engine_project_save(_engine, native),
+  );
+
+  /// Replaces the whole project. On failure the open project is untouched, so
+  /// an unreadable file costs nothing but the attempt.
+  void openProject(String path) => _withNativeString(
+    path,
+    (Pointer<Char> native) => _bindings.ob_engine_project_open(_engine, native),
+  );
+
+  /// The canonical `project.json` bytes as the project stands. Byte-identical
+  /// for a given model on any machine, which is what makes it usable as a
+  /// save/reopen equality check (docs/project-format.md §6).
+  String get projectJson =>
+      _bindings.ob_engine_project_json(_engine).cast<Utf8>().toDartString();
+
   void _withNativeString(String value, ob_status Function(Pointer<Char>) call) {
     final Pointer<Utf8> native = value.toNativeUtf8();
     try {
@@ -811,7 +1482,12 @@ class EngineClient implements RackClient {
     calloc.free(_instrumentInfo);
     calloc.free(_rackPatternInfo);
     calloc.free(_rackRowInfo);
+    calloc.free(_patternInfo);
+    calloc.free(_laneInfo);
+    calloc.free(_clipInfo);
+    calloc.free(_noteCount);
     calloc.free(_paramInfo);
+    if (_noteBuffer != nullptr) calloc.free(_noteBuffer);
   }
 }
 
@@ -1016,6 +1692,155 @@ class RackRow {
   final List<RackStep> steps;
 }
 
+/// One note, in pattern-relative ticks. Value-equal notes are the same note as
+/// far as every edit is concerned, which is why equality and hashing are
+/// defined: the piano roll's selection is a `Set<SequenceNote>`.
+@immutable
+class SequenceNote {
+  const SequenceNote({
+    required this.startTicks,
+    required this.lengthTicks,
+    required this.key,
+    required this.velocity,
+  });
+
+  final int startTicks;
+  final int lengthTicks;
+  final int key;
+  final int velocity;
+
+  int get endTicks => startTicks + lengthTicks;
+
+  SequenceNote copyWith({
+    int? startTicks,
+    int? lengthTicks,
+    int? key,
+    int? velocity,
+  }) => SequenceNote(
+    startTicks: startTicks ?? this.startTicks,
+    lengthTicks: lengthTicks ?? this.lengthTicks,
+    key: key ?? this.key,
+    velocity: velocity ?? this.velocity,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is SequenceNote &&
+      other.startTicks == startTicks &&
+      other.lengthTicks == lengthTicks &&
+      other.key == key &&
+      other.velocity == velocity;
+
+  @override
+  int get hashCode => Object.hash(startTicks, lengthTicks, key, velocity);
+}
+
+class PatternSummary {
+  const PatternSummary({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.lengthTicks,
+    required this.swing,
+    required this.usageCount,
+    required this.noteCount,
+    required this.isCurrent,
+  });
+
+  final String id;
+  final String name;
+  final String color;
+  final int lengthTicks;
+  final double swing;
+
+  /// Clips referencing this pattern. Editing it changes all of them, which is
+  /// what the selector's badge and D-M6's notice are warning about.
+  final int usageCount;
+  final int noteCount;
+  final bool isCurrent;
+
+  bool get isShared => usageCount > 1;
+}
+
+class ArrangementLane {
+  const ArrangementLane({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.order,
+    required this.height,
+    required this.clipCount,
+    required this.muted,
+    required this.soloed,
+    required this.collapsed,
+  });
+
+  final String id;
+  final String name;
+  final String color;
+  final int order;
+  final int height;
+  final int clipCount;
+
+  /// An *event* gate (D-M4): clips on a muted lane are not scheduled at all.
+  /// This is not the mixer's audio mute and the UI must not name it the same.
+  final bool muted;
+  final bool soloed;
+  final bool collapsed;
+}
+
+class ArrangementClip {
+  const ArrangementClip({
+    required this.id,
+    required this.laneId,
+    required this.patternId,
+    required this.name,
+    required this.color,
+    required this.startTicks,
+    required this.lengthTicks,
+    required this.windowStartTicks,
+    required this.patternLengthTicks,
+    required this.transpose,
+    required this.noteCount,
+    required this.usageCount,
+    required this.muted,
+    required this.loop,
+  });
+
+  final String id;
+  final String laneId;
+
+  /// Empty for audio and automation clips, which exist in the model (D-M7) but
+  /// are not drawn until Stages 4 and 9.
+  final String patternId;
+
+  /// The pattern's name and colour: a clip has none of its own, which is why
+  /// renaming a pattern renames every placement at once.
+  final String name;
+  final String color;
+
+  final int startTicks;
+  final int lengthTicks;
+  final int windowStartTicks;
+  final int patternLengthTicks;
+  final int transpose;
+  final int noteCount;
+  final int usageCount;
+  final bool muted;
+  final bool loop;
+
+  int get endTicks => startTicks + lengthTicks;
+  bool get isPattern => patternId.isNotEmpty;
+  bool get isShared => usageCount > 1;
+
+  /// How many times the source pattern repeats inside the clip. Used to draw
+  /// the loop boundaries on the clip face (OB-3-13 §1).
+  int get repeatCount {
+    if (!loop || patternLengthTicks <= 0) return 1;
+    return (lengthTicks / patternLengthTicks).ceil();
+  }
+}
+
 class HostedParameter {
   const HostedParameter({
     required this.id,
@@ -1053,6 +1878,15 @@ const int cmdSetMasterGain = 10;
 const int cmdPluginParamBegin = 11;
 const int cmdPluginParamValue = 12;
 const int cmdPluginParamEnd = 13;
+
+/// Flag bits from the ABI 1.7 structs. Mirrored rather than generated because
+/// ffigen renders `#define`s inconsistently; the C side freezes them.
+const int patternFlagCurrent = 0x1;
+const int laneFlagMuted = 0x1;
+const int laneFlagSoloed = 0x2;
+const int laneFlagCollapsed = 0x4;
+const int clipFlagMuted = 0x1;
+const int clipFlagLoop = 0x2;
 
 const int evtDeviceChanged = 1;
 const int evtDeviceLost = 2;

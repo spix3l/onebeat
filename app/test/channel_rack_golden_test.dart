@@ -4,7 +4,12 @@ import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/ui/channel_rack.dart';
 
+import 'support/stage3_harness.dart';
+
 void main() {
+  // Real fonts: block glyphs measure nothing like Archivo or MartianMono.
+  setUpAll(loadAppFonts);
+
   testWidgets('channel rack step surface matches the dark token system', (
     WidgetTester tester,
   ) async {

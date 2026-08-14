@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 6
+#define OB_ABI_VERSION_MINOR 7
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -545,9 +545,242 @@ OB_API ob_status ob_engine_rack_set_step_velocity(ob_engine* engine, const char*
 OB_API ob_status ob_engine_rack_remove_sequence(ob_engine* engine, const char* utf8_instrument_id);
 /* Main/UI thread. Begin never blocks; commit/abort may briefly flatten and
  * publish. A paint drag is one undo entry even when it changes many cells. */
+/* Main/UI thread. Begin never blocks; commit/abort may briefly flatten and
+ * publish. A paint drag is one undo entry even when it changes many cells.
+ *
+ * Despite the `rack_` prefix these are the general editor-gesture transaction,
+ * used unchanged by the piano roll and the arrangement (ABI 1.7). The name is
+ * kept because renaming an exported symbol is a breaking change and the
+ * behaviour is identical; `utf8_name` is what the undo entry ends up called. */
 OB_API ob_status ob_engine_rack_gesture_begin(ob_engine* engine, const char* utf8_name);
 OB_API ob_status ob_engine_rack_gesture_commit(ob_engine* engine);
 OB_API ob_status ob_engine_rack_gesture_abort(ob_engine* engine);
+
+/* ------------------------------------------------------------------------- */
+/* Notes: the piano roll (added in ABI 1.7, OB-3-10)                          */
+/* ------------------------------------------------------------------------- */
+
+/* One note of one sequence, in the current pattern, for one instrument.
+ *
+ * A note has no ID. In the model it is a *value* inside a sorted sequence
+ * (model/note_sequence.h), and the editing vocabulary in model/note_edit.h
+ * addresses notes by passing them back by value. The ABI keeps that shape: the
+ * UI reads notes out, holds them as its selection, and hands the same values
+ * back to say which ones an edit applies to. That is why every mutation below
+ * takes an array rather than an index — an index would go stale the instant
+ * another edit re-sorted the sequence. */
+typedef struct ob_note {
+  int64_t start;    /* ticks, pattern-relative, 960 PPQN */
+  int64_t length;   /* ticks, > 0 */
+  int32_t key;      /* MIDI key, 0..127 */
+  int32_t velocity; /* 1..16383 */
+} ob_note;
+
+/* Main/UI thread. Never blocks. Notes for `utf8_instrument_id` in the current
+ * pattern; 0 when the pattern holds no sequence for it. */
+OB_API int32_t ob_engine_note_count(ob_engine* engine, const char* utf8_instrument_id);
+
+/* Main/UI thread. Never blocks, never allocates. Copies up to `capacity` notes
+ * into caller-owned memory in (start, key) order and writes how many were
+ * written to *out_count. Allocate once against ob_engine_note_count and reuse:
+ * this is read every time the sequence changes, not every frame. */
+OB_API ob_status ob_engine_notes_read(ob_engine* engine, const char* utf8_instrument_id,
+                                      ob_note* out_notes, int32_t capacity, int32_t* out_count);
+
+/* Every mutation below goes through an OB-3-03 command, so all of them undo,
+ * and all of them coalesce into the enclosing ob_engine_rack_gesture_* when one
+ * is open. Each may briefly flatten and publish. `snap_ticks` of 0 means "do
+ * not snap"; otherwise the result is snapped to that grid. */
+OB_API ob_status ob_engine_note_add(ob_engine* engine, const char* utf8_instrument_id,
+                                    int64_t start, int64_t length, int32_t key, int32_t velocity);
+OB_API ob_status ob_engine_notes_remove(ob_engine* engine, const char* utf8_instrument_id,
+                                        const ob_note* notes, int32_t count);
+OB_API ob_status ob_engine_notes_move(ob_engine* engine, const char* utf8_instrument_id,
+                                      const ob_note* notes, int32_t count, int64_t delta_ticks,
+                                      int32_t semitones, int64_t snap_ticks);
+OB_API ob_status ob_engine_notes_resize(ob_engine* engine, const char* utf8_instrument_id,
+                                        const ob_note* notes, int32_t count, int64_t length_delta,
+                                        int64_t snap_ticks);
+OB_API ob_status ob_engine_notes_set_velocity(ob_engine* engine, const char* utf8_instrument_id,
+                                              const ob_note* notes, int32_t count,
+                                              int32_t velocity);
+/* `strength` is 0..1: 0 leaves the note where it is, 1 lands it on the grid. */
+OB_API ob_status ob_engine_notes_quantise(ob_engine* engine, const char* utf8_instrument_id,
+                                          const ob_note* notes, int32_t count, int64_t grid_ticks,
+                                          double strength);
+OB_API ob_status ob_engine_notes_duplicate(ob_engine* engine, const char* utf8_instrument_id,
+                                           const ob_note* notes, int32_t count,
+                                           int64_t delta_ticks);
+
+/* ------------------------------------------------------------------------- */
+/* Patterns (added in ABI 1.7, OB-3-11)                                       */
+/* ------------------------------------------------------------------------- */
+
+#define OB_PATTERN_FLAG_CURRENT 0x1u
+
+typedef struct ob_pattern_info {
+  uint32_t struct_size;
+  uint32_t flags; /* OB_PATTERN_FLAG_* */
+  int64_t length_ticks;
+  double swing;
+  /* Derived on read, never stored: a cached count is a second source of truth
+   * that goes stale, and D-M6 needs this to be right rather than fast. */
+  uint32_t usage_count;
+  uint32_t note_count;
+  char id[32];
+  char name[128];
+  char color[8];
+} ob_pattern_info;
+
+/* Main/UI thread. Never blocks. Patterns in creation (ULID) order. */
+OB_API int32_t ob_engine_pattern_count(ob_engine* engine);
+OB_API ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info* out_info);
+/* Which pattern the rack and the piano roll edit. Presentation state: not
+ * undoable, because selecting is not an edit. */
+OB_API ob_status ob_engine_pattern_select(ob_engine* engine, const char* utf8_pattern_id);
+/* May block briefly (flattens). Creates and selects; the new ID is readable by
+ * re-reading the list and looking for OB_PATTERN_FLAG_CURRENT. */
+OB_API ob_status ob_engine_pattern_create(ob_engine* engine, const char* utf8_name);
+OB_API ob_status ob_engine_pattern_rename(ob_engine* engine, const char* utf8_pattern_id,
+                                          const char* utf8_name);
+OB_API ob_status ob_engine_pattern_recolor(ob_engine* engine, const char* utf8_pattern_id,
+                                           const char* utf8_color);
+/* An *unreferenced* clone: copies the sequences, repoints no clip. Distinct
+ * from ob_engine_clips_make_unique, which repoints exactly the clips given
+ * (FR-SEQ-04 vs FR-UX-11's action vocabulary — both exist, differently named,
+ * because they are different intentions). */
+OB_API ob_status ob_engine_pattern_duplicate(ob_engine* engine, const char* utf8_pattern_id);
+/* Deletes the pattern and every clip referencing it, as one undo entry. The
+ * caller is expected to have shown the clip count first (D-M6). */
+OB_API ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pattern_id);
+
+/* ------------------------------------------------------------------------- */
+/* Arrangement: lanes and clips (added in ABI 1.7, OB-3-12/13)                */
+/* ------------------------------------------------------------------------- */
+
+#define OB_LANE_FLAG_MUTED 0x1u /* an *event* gate, never an audio fade (D-M4) */
+#define OB_LANE_FLAG_SOLOED 0x2u
+#define OB_LANE_FLAG_COLLAPSED 0x4u
+
+/* Deliberately absent, and this is the point of the whole entity: there is no
+ * instrument, no mixer track, no gain, no pan, no meter and no plugin here. A
+ * lane is organisational. Adding any of those fields is the anti-pattern
+ * ARCHITECTURE.md §6 #2 names, and the review checklist for this struct is
+ * "does it still hold nothing that implies routing?". */
+typedef struct ob_lane_info {
+  uint32_t struct_size;
+  uint32_t flags; /* OB_LANE_FLAG_* */
+  int32_t order;  /* the display order field, never the array position */
+  int32_t height;
+  uint32_t clip_count;
+  uint32_t reserved_;
+  char id[32];
+  char name[128];
+  char color[8];
+} ob_lane_info;
+
+OB_API int32_t ob_engine_lane_count(ob_engine* engine);
+/* Rows are returned ordered by `order`, which is what the view draws. */
+OB_API ob_status ob_engine_lane_at(ob_engine* engine, int32_t index, ob_lane_info* out_info);
+OB_API ob_status ob_engine_lane_create(ob_engine* engine, const char* utf8_name);
+OB_API ob_status ob_engine_lane_rename(ob_engine* engine, const char* utf8_lane_id,
+                                       const char* utf8_name);
+OB_API ob_status ob_engine_lane_recolor(ob_engine* engine, const char* utf8_lane_id,
+                                        const char* utf8_color);
+OB_API ob_status ob_engine_lane_reorder(ob_engine* engine, const char* utf8_lane_id, int32_t order);
+OB_API ob_status ob_engine_lane_set_height(ob_engine* engine, const char* utf8_lane_id,
+                                           int32_t height);
+OB_API ob_status ob_engine_lane_set_muted(ob_engine* engine, const char* utf8_lane_id,
+                                          int32_t muted);
+OB_API ob_status ob_engine_lane_set_soloed(ob_engine* engine, const char* utf8_lane_id,
+                                           int32_t soloed);
+OB_API ob_status ob_engine_lane_set_collapsed(ob_engine* engine, const char* utf8_lane_id,
+                                              int32_t collapsed);
+/* Deletes the lane and its clips as one undo entry; the caller shows the count. */
+OB_API ob_status ob_engine_lane_remove(ob_engine* engine, const char* utf8_lane_id);
+
+#define OB_CLIP_FLAG_MUTED 0x1u
+#define OB_CLIP_FLAG_LOOP 0x2u /* clear => hold-off: the tail is silence */
+
+typedef struct ob_clip_info {
+  uint32_t struct_size;
+  uint32_t flags; /* OB_CLIP_FLAG_* */
+  int64_t start_ticks;
+  int64_t length_ticks;
+  int64_t window_start_ticks; /* offset into the pattern (DM-Q2) */
+  /* The source pattern's length, so the view can draw loop boundaries and the
+   * tiled repeat without a second lookup per clip while painting. */
+  int64_t pattern_length_ticks;
+  int32_t transpose;    /* semitones, -48..48 (DM-Q3) */
+  uint32_t note_count;  /* in the source pattern, for the density preview */
+  uint32_t usage_count; /* clips sharing this clip's pattern, including it */
+  uint32_t reserved_;
+  char id[32];
+  char lane_id[32];
+  char pattern_id[32];
+  char name[128]; /* the pattern's name — a clip has no name of its own */
+  char color[8];  /* the pattern's colour, likewise */
+} ob_clip_info;
+
+OB_API int32_t ob_engine_clip_count(ob_engine* engine);
+OB_API ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_info);
+/* Places the *current* pattern when `utf8_pattern_id` is NULL or empty, which
+ * is the drag-from-the-selector path. */
+OB_API ob_status ob_engine_clip_add(ob_engine* engine, const char* utf8_lane_id,
+                                    const char* utf8_pattern_id, int64_t start_ticks,
+                                    int64_t length_ticks);
+/* Moving between lanes is deliberately the same call as moving in time, and
+ * changes nothing audible: a lane carries no signal (ARCHITECTURE.md §4). */
+OB_API ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id,
+                                     const char* utf8_lane_id, int64_t start_ticks);
+OB_API ob_status ob_engine_clip_resize(ob_engine* engine, const char* utf8_clip_id,
+                                       int64_t length_ticks);
+OB_API ob_status ob_engine_clip_duplicate(ob_engine* engine, const char* utf8_clip_id,
+                                          const char* utf8_lane_id, int64_t start_ticks);
+OB_API ob_status ob_engine_clip_remove(ob_engine* engine, const char* utf8_clip_id);
+OB_API ob_status ob_engine_clip_set_muted(ob_engine* engine, const char* utf8_clip_id,
+                                          int32_t muted);
+OB_API ob_status ob_engine_clip_set_loop(ob_engine* engine, const char* utf8_clip_id, int32_t loop);
+OB_API ob_status ob_engine_clip_set_window_start(ob_engine* engine, const char* utf8_clip_id,
+                                                 int64_t window_start_ticks);
+OB_API ob_status ob_engine_clip_set_transpose(ob_engine* engine, const char* utf8_clip_id,
+                                              int32_t semitones);
+
+/* FR-SEQ-04. Clones the pattern once, repoints exactly the given clips at the
+ * clone, and leaves every other reference alone — all as one undo entry, so
+ * undo restores the shared reference. `utf8_clip_ids` is NUL-separated and
+ * double-NUL-terminated (the same shape as ob_engine_plugin_scan_start's
+ * directory list), which is how the multi-selection case is expressed without
+ * marshalling an array of pointers. */
+OB_API ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8_clip_ids);
+
+/* ------------------------------------------------------------------------- */
+/* Project files (added in ABI 1.7, OB-3-05's writer reaching the UI)         */
+/* ------------------------------------------------------------------------- */
+
+/* Main/UI thread. May block: writes the project bundle at `utf8_path`.
+ *
+ * Distinct from ob_engine_session_save, which is the v0.2 scratch file holding
+ * one hosted plug-in's opaque chunk. This is the real project format (ADR-004):
+ * instruments, patterns, sequences, lanes, clips and transport.
+ *
+ * Saving is not an edit — it does not touch the undo history, and the model is
+ * not mutated on the way out. */
+OB_API ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path);
+
+/* Main/UI thread. May block: replaces the whole project from the bundle at
+ * `utf8_path`, clears the undo history (the history belongs to the session that
+ * made it, not to the file), and republishes the schedule.
+ *
+ * On failure the currently open project is left exactly as it was: an
+ * unreadable file must not cost the user the session they already have. */
+OB_API ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path);
+
+/* Main/UI thread. Never blocks. The canonical `project.json` bytes for the
+ * project as it stands — byte-identical for a given model on any machine
+ * (docs/project-format.md §6), which is what makes it usable as a
+ * save/reopen equality check. Engine-owned, valid until the next call. */
+OB_API const char* ob_engine_project_json(ob_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

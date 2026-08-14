@@ -19,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.6.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.7.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.6.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.7.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -153,6 +153,45 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_rack_row_info, instrument_id) == 28);
     CHECK(offsetof(ob_rack_row_info, step_active) == 60);
     CHECK(offsetof(ob_rack_row_info, step_velocity) == 316);
+  }
+
+  // Every field is naturally aligned with no implicit padding, which is what
+  // makes these structs safe to memcpy across the boundary and what this test
+  // exists to keep true: a reordered field is an ABI break that compiles.
+  TEST_CASE("ABI 1.7 note, pattern, lane and clip layouts are frozen") {
+    CHECK(sizeof(ob_note) == 24);
+    CHECK(offsetof(ob_note, start) == 0);
+    CHECK(offsetof(ob_note, length) == 8);
+    CHECK(offsetof(ob_note, key) == 16);
+    CHECK(offsetof(ob_note, velocity) == 20);
+
+    CHECK(sizeof(ob_pattern_info) == 200);
+    CHECK(offsetof(ob_pattern_info, length_ticks) == 8);
+    CHECK(offsetof(ob_pattern_info, swing) == 16);
+    CHECK(offsetof(ob_pattern_info, usage_count) == 24);
+    CHECK(offsetof(ob_pattern_info, id) == 32);
+    CHECK(offsetof(ob_pattern_info, name) == 64);
+    CHECK(offsetof(ob_pattern_info, color) == 192);
+
+    CHECK(sizeof(ob_lane_info) == 192);
+    CHECK(offsetof(ob_lane_info, order) == 8);
+    CHECK(offsetof(ob_lane_info, height) == 12);
+    CHECK(offsetof(ob_lane_info, clip_count) == 16);
+    CHECK(offsetof(ob_lane_info, id) == 24);
+    CHECK(offsetof(ob_lane_info, name) == 56);
+    CHECK(offsetof(ob_lane_info, color) == 184);
+
+    CHECK(sizeof(ob_clip_info) == 288);
+    CHECK(offsetof(ob_clip_info, start_ticks) == 8);
+    CHECK(offsetof(ob_clip_info, length_ticks) == 16);
+    CHECK(offsetof(ob_clip_info, window_start_ticks) == 24);
+    CHECK(offsetof(ob_clip_info, pattern_length_ticks) == 32);
+    CHECK(offsetof(ob_clip_info, transpose) == 40);
+    CHECK(offsetof(ob_clip_info, id) == 56);
+    CHECK(offsetof(ob_clip_info, lane_id) == 88);
+    CHECK(offsetof(ob_clip_info, pattern_id) == 120);
+    CHECK(offsetof(ob_clip_info, name) == 152);
+    CHECK(offsetof(ob_clip_info, color) == 280);
   }
 
   TEST_CASE("The plugin list is reachable through the C surface") {
@@ -299,6 +338,233 @@ TEST_SUITE("abi") {
     CHECK(ob_engine_instance_remove(engine, instance.instance_id) == OB_OK);
     CHECK(ob_engine_instance_count(engine) == 0);
     CHECK(ob_engine_instrument_count(engine) == 0);
+    ob_engine_destroy(engine);
+  }
+
+  // OB-3-10/11/12/13's model surface, exercised the way the editors drive it.
+  // The interesting assertion is the last one: Make unique must cut *one* clip
+  // loose and leave the other still sharing, and undo must restore the share.
+  TEST_CASE("Notes, patterns, lanes and clips cross the C surface") {
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/stage3-abi";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    const std::string bundle = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE(ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK);
+    ob_instrument_info instrument{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &instrument) == OB_OK);
+
+    // ----- notes: the piano roll's vocabulary --------------------------------
+    CHECK(ob_engine_note_count(engine, instrument.id) == 0);
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 0, 480, 60, 9000) == OB_OK);
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 960, 480, 64, 0) == OB_OK);
+    CHECK(ob_engine_note_count(engine, instrument.id) == 2);
+
+    ob_note notes[8]{};
+    int32_t note_count = 0;
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    REQUIRE(note_count == 2);
+    CHECK(notes[0].start == 0);
+    CHECK(notes[0].key == 60);
+    CHECK(notes[0].velocity == 9000);
+    CHECK(notes[1].start == 960);
+    // A velocity of 0 asked for the instrument default rather than silence.
+    CHECK(notes[1].velocity > 0);
+
+    // Transpose the second note up an octave and land it on the bar.
+    REQUIRE(ob_engine_notes_move(engine, instrument.id, &notes[1], 1, 0, 12, 0) == OB_OK);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    CHECK(notes[1].key == 76);
+
+    REQUIRE(ob_engine_notes_resize(engine, instrument.id, &notes[1], 1, 480, 0) == OB_OK);
+    REQUIRE(ob_engine_notes_set_velocity(engine, instrument.id, &notes[0], 1, 12000) == OB_OK);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    CHECK(notes[0].velocity == 12000);
+    CHECK(notes[1].length == 960);
+
+    // An off-grid note, quantised back onto the sixteenth grid at full strength.
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 137, 240, 67, 8000) == OB_OK);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    REQUIRE(note_count == 3);
+    const ob_note off_grid = notes[1];
+    REQUIRE(off_grid.start == 137);
+    REQUIRE(ob_engine_notes_quantise(engine, instrument.id, &off_grid, 1, 240, 1.0) == OB_OK);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    CHECK(notes[1].start == 240);
+
+    REQUIRE(ob_engine_notes_duplicate(engine, instrument.id, &notes[1], 1, 1920) == OB_OK);
+    CHECK(ob_engine_note_count(engine, instrument.id) == 4);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 8, &note_count) == OB_OK);
+    REQUIRE(ob_engine_notes_remove(engine, instrument.id, &notes[3], 1) == OB_OK);
+    CHECK(ob_engine_note_count(engine, instrument.id) == 3);
+
+    // A capacity smaller than the sequence truncates rather than overflowing.
+    ob_note single{};
+    int32_t truncated = 0;
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, &single, 1, &truncated) == OB_OK);
+    CHECK(truncated == 1);
+
+    // ----- patterns ----------------------------------------------------------
+    REQUIRE(ob_engine_pattern_count(engine) == 1);
+    ob_pattern_info pattern{};
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK((pattern.flags & OB_PATTERN_FLAG_CURRENT) != 0U);
+    CHECK(pattern.usage_count == 1);  // the default clip placed at startup
+    CHECK(pattern.note_count == 3);
+    const std::string first_pattern = pattern.id;
+
+    REQUIRE(ob_engine_pattern_rename(engine, first_pattern.c_str(), "Verse Drums") == OB_OK);
+    REQUIRE(ob_engine_pattern_recolor(engine, first_pattern.c_str(), "#EF6F91") == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(std::string(pattern.name) == "Verse Drums");
+    CHECK(std::string(pattern.color) == "#EF6F91");
+
+    // Duplicate is the *unreferenced* clone: the notes come along, the clip
+    // count does not.
+    REQUIRE(ob_engine_pattern_duplicate(engine, first_pattern.c_str()) == OB_OK);
+    REQUIRE(ob_engine_pattern_count(engine) == 2);
+    ob_pattern_info clone{};
+    REQUIRE(ob_engine_pattern_at(engine, 1, &clone) == OB_OK);
+    CHECK(std::string(clone.name) == "Verse Drums 2");
+    CHECK(clone.note_count == 3);
+    CHECK(clone.usage_count == 0);
+    CHECK((clone.flags & OB_PATTERN_FLAG_CURRENT) != 0U);
+
+    REQUIRE(ob_engine_pattern_select(engine, first_pattern.c_str()) == OB_OK);
+    REQUIRE(ob_engine_pattern_remove(engine, clone.id) == OB_OK);
+    CHECK(ob_engine_pattern_count(engine) == 1);
+    // The last pattern is load-bearing: every reader assumes one exists.
+    CHECK(ob_engine_pattern_remove(engine, first_pattern.c_str()) == OB_ERR_INVALID_ARGUMENT);
+
+    // ----- lanes -------------------------------------------------------------
+    REQUIRE(ob_engine_lane_count(engine) == 1);
+    REQUIRE(ob_engine_lane_create(engine, "Drums") == OB_OK);
+    REQUIRE(ob_engine_lane_count(engine) == 2);
+    ob_lane_info lane{};
+    REQUIRE(ob_engine_lane_at(engine, 1, &lane) == OB_OK);
+    CHECK(std::string(lane.name) == "Drums");
+    const std::string drums_lane = lane.id;
+
+    REQUIRE(ob_engine_lane_set_muted(engine, drums_lane.c_str(), 1) == OB_OK);
+    REQUIRE(ob_engine_lane_set_soloed(engine, drums_lane.c_str(), 1) == OB_OK);
+    REQUIRE(ob_engine_lane_set_collapsed(engine, drums_lane.c_str(), 1) == OB_OK);
+    REQUIRE(ob_engine_lane_set_height(engine, drums_lane.c_str(), 120) == OB_OK);
+    REQUIRE(ob_engine_lane_recolor(engine, drums_lane.c_str(), "#66C58F") == OB_OK);
+    REQUIRE(ob_engine_lane_at(engine, 1, &lane) == OB_OK);
+    CHECK((lane.flags & OB_LANE_FLAG_MUTED) != 0U);
+    CHECK((lane.flags & OB_LANE_FLAG_SOLOED) != 0U);
+    CHECK((lane.flags & OB_LANE_FLAG_COLLAPSED) != 0U);
+    CHECK(lane.height == 120);
+    CHECK(ob_engine_lane_set_height(engine, drums_lane.c_str(), 10000) == OB_ERR_INVALID_ARGUMENT);
+    REQUIRE(ob_engine_lane_set_muted(engine, drums_lane.c_str(), 0) == OB_OK);
+    REQUIRE(ob_engine_lane_set_soloed(engine, drums_lane.c_str(), 0) == OB_OK);
+
+    // Rows come back ordered by `order`, not by insertion.
+    REQUIRE(ob_engine_lane_reorder(engine, drums_lane.c_str(), -1) == OB_OK);
+    REQUIRE(ob_engine_lane_at(engine, 0, &lane) == OB_OK);
+    CHECK(std::string(lane.id) == drums_lane);
+
+    // ----- clips -------------------------------------------------------------
+    // Two clips on different lanes, both referencing the one pattern: the exact
+    // fixture OB-3-11's usage count and OB-3-12's "moving a clip between lanes
+    // changes nothing audible" are about.
+    REQUIRE(ob_engine_clip_add(engine, drums_lane.c_str(), nullptr, 3840, 3840) == OB_OK);
+    REQUIRE(ob_engine_clip_count(engine) == 2);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.usage_count == 2);
+
+    int32_t placed_index = -1;
+    ob_clip_info clip{};
+    for (int32_t index = 0; index < ob_engine_clip_count(engine); ++index) {
+      REQUIRE(ob_engine_clip_at(engine, index, &clip) == OB_OK);
+      if (clip.start_ticks == 3840) placed_index = index;
+    }
+    REQUIRE(placed_index >= 0);
+    REQUIRE(ob_engine_clip_at(engine, placed_index, &clip) == OB_OK);
+    CHECK(std::string(clip.name) == "Verse Drums");
+    CHECK(std::string(clip.color) == "#EF6F91");
+    CHECK(clip.pattern_length_ticks == 3840);
+    CHECK(clip.note_count == 3);
+    CHECK(clip.usage_count == 2);
+    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) != 0U);
+    const std::string placed_clip = clip.id;
+
+    // OB-3-13's windowing and transform fields.
+    REQUIRE(ob_engine_clip_resize(engine, placed_clip.c_str(), 1920) == OB_OK);
+    REQUIRE(ob_engine_clip_set_window_start(engine, placed_clip.c_str(), 480) == OB_OK);
+    REQUIRE(ob_engine_clip_set_loop(engine, placed_clip.c_str(), 0) == OB_OK);
+    REQUIRE(ob_engine_clip_set_transpose(engine, placed_clip.c_str(), 3) == OB_OK);
+    REQUIRE(ob_engine_clip_set_muted(engine, placed_clip.c_str(), 1) == OB_OK);
+    CHECK(ob_engine_clip_set_transpose(engine, placed_clip.c_str(), 96) == OB_ERR_INVALID_ARGUMENT);
+
+    for (int32_t index = 0; index < ob_engine_clip_count(engine); ++index) {
+      REQUIRE(ob_engine_clip_at(engine, index, &clip) == OB_OK);
+      if (std::string(clip.id) == placed_clip) break;
+    }
+    CHECK(clip.length_ticks == 1920);
+    CHECK(clip.window_start_ticks == 480);
+    CHECK(clip.transpose == 3);
+    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) == 0U);
+    CHECK((clip.flags & OB_CLIP_FLAG_MUTED) != 0U);
+
+    // Copy-drag carries the transforms across.
+    REQUIRE(ob_engine_clip_duplicate(engine, placed_clip.c_str(), nullptr, 7680) == OB_OK);
+    CHECK(ob_engine_clip_count(engine) == 3);
+    for (int32_t index = 0; index < ob_engine_clip_count(engine); ++index) {
+      REQUIRE(ob_engine_clip_at(engine, index, &clip) == OB_OK);
+      if (clip.start_ticks == 7680) break;
+    }
+    CHECK(clip.transpose == 3);
+    CHECK(clip.window_start_ticks == 480);
+    REQUIRE(ob_engine_clip_remove(engine, clip.id) == OB_OK);
+    CHECK(ob_engine_clip_count(engine) == 2);
+
+    // ----- Make unique (FR-SEQ-04, D-M3) -------------------------------------
+    // One clip is cut loose; the other keeps the original. Undo puts the share
+    // back, which is the property that makes the escape hatch safe to try.
+    std::string ids = placed_clip;
+    ids.push_back('\0');
+    ids.push_back('\0');
+    REQUIRE(ob_engine_clips_make_unique(engine, ids.c_str()) == OB_OK);
+    CHECK(ob_engine_pattern_count(engine) == 2);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.usage_count == 1);
+    REQUIRE(ob_engine_pattern_at(engine, 1, &clone) == OB_OK);
+    CHECK(std::string(clone.name) == "Verse Drums 2");
+    CHECK(clone.usage_count == 1);
+    CHECK(clone.note_count == 3);
+
+    // Editing the clone must not touch the original: that is the whole point.
+    REQUIRE(ob_engine_pattern_select(engine, clone.id) == OB_OK);
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 1440, 240, 72, 7000) == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 1, &clone) == OB_OK);
+    CHECK(clone.note_count == 4);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.note_count == 3);
+
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);  // the added note
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);  // the whole Make unique
+    CHECK(ob_engine_pattern_count(engine) == 1);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.usage_count == 2);
+
+    // ----- argument validation ----------------------------------------------
+    CHECK(ob_engine_notes_remove(engine, instrument.id, nullptr, 0) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_note_add(engine, instrument.id, 0, 0, 60, 100) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_note_add(engine, instrument.id, 0, 480, 200, 100) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_note_count(engine, "not-an-id") == 0);
+    CHECK(ob_engine_clip_at(engine, 99, &clip) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_lane_at(engine, 99, &lane) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_pattern_at(engine, 99, &pattern) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_clips_make_unique(engine, "") == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_pattern_select(engine, "pat_nope") == OB_ERR_INVALID_ARGUMENT);
+    CHECK_FALSE(std::string(ob_last_error_message()).empty());
+
     ob_engine_destroy(engine);
   }
 

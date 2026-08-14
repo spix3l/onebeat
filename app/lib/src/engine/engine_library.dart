@@ -110,4 +110,4 @@ void _checkAbiVersion(OneBeatBindings bindings, String path) {
 /// Bump the minor here in the same change that bumps it there — that pairing is
 /// what makes a stale dylib a clear message instead of a missing symbol.
 const int expectedAbiMajor = 1;
-const int expectedAbiMinor = 6;
+const int expectedAbiMinor = 7;

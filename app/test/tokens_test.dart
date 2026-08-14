@@ -33,15 +33,26 @@ void main() {
 
   group('WCAG AA contrast on every surface', () {
     final Map<String, Color> surfaces = <String, Color>{
+      // All five levels the design uses, not just the three the app started
+      // with: text sits on every one of them, so every one has to clear AA.
+      'surfaceSunken': tokens.color.surfaceSunken,
       'surfaceDeep': tokens.color.surfaceDeep,
       'surfacePanel': tokens.color.surfacePanel,
       'surfaceRaised': tokens.color.surfaceRaised,
+      'surfaceOverlay': tokens.color.surfaceOverlay,
     };
 
     for (final MapEntry<String, Color> surface in surfaces.entries) {
       test('textPrimary on ${surface.key} meets AA for body text (4.5:1)', () {
         expect(
           contrastRatio(tokens.color.textPrimary, surface.value),
+          greaterThanOrEqualTo(4.5),
+        );
+      });
+
+      test('textSecondary on ${surface.key} meets AA (4.5:1)', () {
+        expect(
+          contrastRatio(tokens.color.textSecondary, surface.value),
           greaterThanOrEqualTo(4.5),
         );
       });
@@ -53,6 +64,24 @@ void main() {
           contrastRatio(tokens.color.textMuted, surface.value),
           greaterThanOrEqualTo(4.5),
         );
+      });
+
+      // Three weights only earn their keep if they are actually separable.
+      test('the three text weights stay distinct on ${surface.key}', () {
+        final double primary = contrastRatio(
+          tokens.color.textPrimary,
+          surface.value,
+        );
+        final double secondary = contrastRatio(
+          tokens.color.textSecondary,
+          surface.value,
+        );
+        final double muted = contrastRatio(
+          tokens.color.textMuted,
+          surface.value,
+        );
+        expect(primary, greaterThan(secondary));
+        expect(secondary, greaterThan(muted));
       });
     }
   });
@@ -81,13 +110,21 @@ void main() {
     const OneBeatTokens light = OneBeatTokens(
       brightness: Brightness.light,
       color: ColorTokens(
+        surfaceSunken: Color(0xFFE4E4E0),
         surfaceDeep: Color(0xFFFFFFFF),
         surfacePanel: Color(0xFFF2F2F0),
         surfaceRaised: Color(0xFFE8E8E4),
+        surfaceOverlay: Color(0xFFDCDCD6),
+        surfaceWell: Color(0xFFFAFAF8),
+        surfaceColumnHead: Color(0xFFEDEDE9),
         line: Color(0xFFCFCFC9),
+        lineStrong: Color(0xFFB4B4AD),
         textPrimary: Color(0xFF16170F),
+        textSecondary: Color(0xFF44463E),
         textMuted: Color(0xFF5A5C54),
         accent: Color(0xFF4A3FD0),
+        accentDeep: Color(0xFF3A2FB8),
+        accentWash: Color(0x184A3FD0),
         accentMuted: Color(0xFFB9B3F5),
         meterLow: Color(0xFF2E7D46),
         meterMid: Color(0xFFB07A12),
@@ -95,9 +132,37 @@ void main() {
         meterTrack: Color(0xFFDDDDD7),
         warning: Color(0xFFB07A12),
         danger: Color(0xFFB63030),
+        gridLine: Color(0xFFE2E2DC),
+        gridLineStrong: Color(0xFFC9C9C2),
+        rollCanvas: Color(0xFFF7F7FA),
+        rowShade: Color(0xFFEDEDE8),
+        rowShadeInScale: Color(0xFFE4E9DE),
+        noteFill: Color(0xFF2F8C99),
+        noteSelected: Color(0xFF16170F),
+        noteGhost: Color(0xFFD7D7D0),
+        playhead: Color(0xFF4A3FD0),
+        canvasScrim: Color(0x8CFFFFFF),
+        marqueeFill: Color(0x244A3FD0),
+        clipSelectedOutline: Color(0xFF4A3FD0),
+        trafficRed: Color(0xFFFF5F56),
+        trafficYellow: Color(0xFFFFBD2E),
+        trafficGreen: Color(0xFF27C93F),
+        tagPatBg: Color(0xFFD4EED8),
+        tagPatFg: Color(0xFF1E6B37),
+        tagAudBg: Color(0xFFD1E8F7),
+        tagAudFg: Color(0xFF185A85),
+        tagAutoBg: Color(0xFFE8E0F7),
+        tagAutoFg: Color(0xFF563D8C),
+        waveform: Color(0xFF185A85),
+        knobTrack: Color(0xFFDCDCD6),
+        knobIndicator: Color(0xFF4A3FD0),
+        faderTrack: Color(0xFFE4E4E0),
+        faderThumb: Color(0xFF5A5C54),
+        sidechainGold: Color(0xFFB07A12),
       ),
       type: TypeTokens(
         textPrimary: Color(0xFF16170F),
+        textSecondary: Color(0xFF44463E),
         textMuted: Color(0xFF5A5C54),
       ),
     );

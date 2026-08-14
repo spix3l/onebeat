@@ -8,6 +8,7 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'icons.dart';
 import 'plugin_library_store.dart';
 import 'rack_store.dart';
 
@@ -300,6 +301,8 @@ class _ChannelRackState extends State<ChannelRack> {
                                       row: row,
                                       library: library,
                                       rack: rack,
+                                      onEditNotes: () => controller
+                                          .editInPianoRoll(row.instrumentId),
                                     ),
                           ),
                       ],
@@ -490,12 +493,18 @@ class _RackHeader extends StatelessWidget {
     required this.row,
     required this.library,
     required this.rack,
+    required this.onEditNotes,
   });
 
   final ProjectInstrument instrument;
   final RackRow row;
   final PluginLibraryStore library;
   final RackStore rack;
+
+  /// Opens this instrument's sequence in the piano roll. The two editors write
+  /// the same `NoteSequence` (DM-Q4) — a step *is* a quantised note — so this
+  /// is a change of view, not a conversion.
+  final VoidCallback onEditNotes;
 
   @override
   Widget build(BuildContext context) {
@@ -573,6 +582,13 @@ class _RackHeader extends StatelessWidget {
             ),
             SizedBox(width: t.spacing.xs),
             OneBeatButton(
+              label: '♪',
+              semanticLabel:
+                  'Edit ${instrument.name} notes in the piano roll',
+              onPressed: onEditNotes,
+            ),
+            SizedBox(width: t.spacing.xs),
+            OneBeatButton(
               label: '− PAT',
               semanticLabel:
                   'Remove ${instrument.name} sequence from this pattern, keep instrument',
@@ -623,7 +639,11 @@ class _PreviewButton extends StatelessWidget {
             border: Border.all(color: t.color.line),
             borderRadius: t.radius.controlBorder,
           ),
-          child: Text('▶', style: t.type.label),
+          child: OneBeatIcon(
+            OneBeatIconData.play,
+            size: t.size.tagHeight,
+            color: t.color.textPrimary,
+          ),
         ),
       ),
     );

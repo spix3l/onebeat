@@ -14,12 +14,17 @@ class TransportReadout extends StatelessWidget {
 
   final EngineController controller;
 
+  /// Every digit at its widest, in the format [_ReadoutPainter] paints.
+  static const String _widestReading = '88:88:888';
+
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return SizedBox(
-      width: tokens.size.transportReadoutWidth,
-      height: tokens.size.controlHeight,
+      // Sized to the widest reading the clock can ever show, so the digits
+      // never grow into the caption beside them.
+      width: measureText(tokens.type.numericLarge, _widestReading),
+      height: tokens.size.readoutHeight,
       child: CustomPaint(
         painter: _ReadoutPainter(
           repaint: controller,
@@ -45,15 +50,11 @@ class _ReadoutPainter extends CustomPainter {
   final TextDirection textDirection;
 
   final TextPainter _position = TextPainter();
-  final TextPainter _clock = TextPainter();
   String _positionText = '';
-  String _clockText = '';
 
   @override
   void paint(Canvas canvas, Size size) {
     final String position = _formatPosition();
-    final String clock = _formatClock();
-
     if (position != _positionText) {
       _positionText = position;
       _position
@@ -61,31 +62,20 @@ class _ReadoutPainter extends CustomPainter {
         ..textDirection = textDirection
         ..layout();
     }
-    if (clock != _clockText) {
-      _clockText = clock;
-      _clock
-        ..text = TextSpan(text: clock, style: tokens.type.numericSmall)
-        ..textDirection = textDirection
-        ..layout();
-    }
-
-    _position.paint(canvas, Offset.zero);
-    _clock.paint(canvas, Offset(0, _position.height + tokens.spacing.xxs));
+    // One line, vertically centred in the well. There used to be a second line
+    // of wall-clock time under it, which did not fit inside a 34px well and so
+    // spilled over the bar's lower edge.
+    _position.paint(canvas, Offset(0, (size.height - _position.height) / 2));
   }
 
+  /// `02:01:218` — bars, beats, ticks, colon-separated as the design draws it.
   String _formatPosition() {
     final int bar = controller.snapshot.bar;
     final int beat = controller.snapshot.beat;
     final int tick = controller.snapshot.tick;
-    return '${bar.toString().padLeft(3, '0')}.$beat.${tick.toString().padLeft(3, '0')}';
-  }
-
-  String _formatClock() {
-    final double seconds = controller.snapshot.positionSeconds;
-    final int minutes = seconds ~/ 60;
-    final double remainder = seconds - (minutes * 60);
-    return '${minutes.toString().padLeft(2, '0')}:'
-        '${remainder.toStringAsFixed(2).padLeft(5, '0')}';
+    return '${bar.toString().padLeft(2, '0')}:'
+        '${beat.toString().padLeft(2, '0')}:'
+        '${tick.toString().padLeft(3, '0')}';
   }
 
   @override

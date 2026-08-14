@@ -23,10 +23,29 @@ Clips carry source offset, length and loop mode from v1 (DM-Q2), plus the first 
 
 ## Acceptance criteria
 
-- [ ] Windowing UI drives OB-3-04 correctly: truncate/loop/offset all audibly and visually correct (paired render tests).
-- [ ] Transpose on one of two clips sharing a pattern alters only that clip (render test), badge shown.
-- [ ] All operations undoable; inspector reachable without right-click.
-- [ ] Save/load round-trips all clip fields.
+- [x] Windowing UI drives OB-3-04 correctly: truncate/loop/offset all audibly and visually correct (paired render tests).
+- [x] Transpose on one of two clips sharing a pattern alters only that clip (render test), badge shown.
+- [x] All operations undoable; inspector reachable without right-click.
+- [x] Save/load round-trips all clip fields.
+
+**Complete (14 August 2026).** The flattener already honoured `window_start`,
+`loop` and `transpose` from OB-3-04, so this ticket was UI and ABI only. The
+inspector carries start, length, offset, loop mode (`LOOP` / `HOLD-OFF`), mute
+and transpose (±48, clamped), with the transpose value badged on the clip face
+and loop boundaries drawn where the pattern restarts. ⌥-drag inside a clip shifts
+the window; the right edge resizes.
+
+`Make unique` sits directly beside the transform controls, which is the whole
+point of D-M3's placement: varying a clip is the default path and cloning is the
+explicit one, and putting them side by side is what makes that choice legible.
+
+Per §5, the reserved transform fields (velocity scale, nudge, probability) are
+**omitted entirely** — they exist in the schema and round-trip, and no dead UI
+ships for them.
+
+Round-tripping is covered by the exit script's byte-identical save → open → save
+assertion, which necessarily covers every clip field the writer emits.
+
 
 ## Out of scope
 
