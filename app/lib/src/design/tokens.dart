@@ -453,6 +453,29 @@ class SizeTokens {
 
   /// A mixer strip's rotated track name reserves this much vertical run.
   double get mixerNameHeight => 78;
+
+  /// The routing panel (UI-B-10), measured off the right half of
+  /// `screens/routing-mixer.png`. Rows are generous on purpose: this is the
+  /// one panel in the app that is read as sentences rather than scanned as a
+  /// table.
+  double get routingRowHeight => 40;
+  double get routingHeaderHeight => 32;
+  double get routingSectionLabelHeight => 34;
+  double get routingDotSize => 12;
+
+  /// A send's slider and the mono value beside it.
+  double get routingSliderWidth => 200;
+  double get routingSliderTrackHeight => 8;
+  double get routingSliderCapSize => 14;
+  double get routingValueWidth => 52;
+
+  /// The `PRE`/`POST` tag.
+  double get routingTagWidth => 48;
+
+  /// The sidechain card and the switch inside it.
+  double get routingSidechainHeight => 72;
+  double get routingSwitchWidth => 34;
+  double get routingSwitchHeight => 18;
   double get modalWidthLarge => 680;
   double get modalWidthMedium => 540;
   double get dialogHeaderHeight => 48;
