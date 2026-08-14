@@ -2,7 +2,9 @@
 // the callbacks.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/features/browser/browser_panel.dart';
+import 'package:onebeat/src/ui_kit/search_field.dart';
 
 import '../../support/ui_harness.dart';
 import 'fixture.dart';
@@ -124,6 +126,97 @@ void main() {
     );
     expect(find.text('Kick 808'), findsNothing);
     expect(find.byType(BrowserFolderRow), findsOneWidget);
+  });
+
+  testWidgets('search focuses the field and filters matching branches', (
+    WidgetTester tester,
+  ) async {
+    await pumpUi(
+      tester,
+      ObBrowserPanel(vm: ObBrowserPanelVm(nodes: demoBrowserTree)),
+      size: _panel,
+    );
+
+    await tester.tap(find.byType(ObSearchField));
+    await tester.enterText(find.byType(EditableText), 'bass');
+    await tester.pump();
+
+    expect(find.text('Drums'), findsNothing);
+    expect(find.text('Bass Motif'), findsOneWidget);
+    expect(find.text('Main Groove'), findsOneWidget);
+    expect(find.text('Packs'), findsNothing);
+  });
+
+  testWidgets('toggling a folder collapses its children', (
+    WidgetTester tester,
+  ) async {
+    bool expanded = true;
+    await pumpUi(
+      tester,
+      StatefulBuilder(
+        builder: (BuildContext context, StateSetter setState) {
+          return ObBrowserPanel(
+            vm: ObBrowserPanelVm(
+              nodes: <BrowserNodeVm>[
+                BrowserFolderVm(
+                  id: 'drums',
+                  name: 'Drums',
+                  expanded: expanded,
+                  children: demoBrowserSamples,
+                ),
+              ],
+            ),
+            onToggle: (_) => setState(() => expanded = !expanded),
+          );
+        },
+      ),
+      size: _panel,
+    );
+
+    expect(find.text('Kick 808'), findsOneWidget);
+    await tester.tap(find.text('Drums'));
+    await tester.pump();
+    expect(find.text('Kick 808'), findsNothing);
+  });
+
+  testWidgets('filtered folder count matches visible children', (
+    WidgetTester tester,
+  ) async {
+    await pumpUi(
+      tester,
+      ObBrowserPanel(
+        vm: ObBrowserPanelVm(
+          nodes: <BrowserNodeVm>[
+            BrowserFolderVm(
+              id: 'drums',
+              name: 'Drums',
+              count: 2,
+              expanded: true,
+              children: <BrowserNodeVm>[
+                BrowserSampleVm(
+                  id: 'kick',
+                  name: 'Kick 808',
+                  color: channelColors[0],
+                ),
+                BrowserSampleVm(
+                  id: 'snare',
+                  name: 'Snare',
+                  color: channelColors[1],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      size: _panel,
+    );
+
+    await tester.tap(find.byType(ObSearchField));
+    await tester.enterText(find.byType(EditableText), 'kick');
+    await tester.pump();
+
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Snare'), findsNothing);
   });
 
   testWidgets('sample rows carry a waveform mark', (

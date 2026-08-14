@@ -5,9 +5,9 @@
 // screen. Both are the same rows at different depths, which is why there is
 // one panel here and not two.
 //
-// Purely presentational: the panel is handed a tree and a selected id and
-// reports taps and disclosure toggles by id. What a folder contains, and what
-// opening one costs, is Phase D's problem.
+// The panel is handed a tree and a selected id and reports taps and disclosure
+// toggles by id. Search is intentionally local to the panel so the field stays
+// focusable even when the shell has no search command to route.
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
@@ -110,7 +110,7 @@ class ObBrowserPanelVm {
   final String emptyButtonLabel;
 }
 
-class ObBrowserPanel extends StatelessWidget {
+class ObBrowserPanel extends StatefulWidget {
   const ObBrowserPanel({
     required this.vm,
     this.onTap,
@@ -132,9 +132,77 @@ class ObBrowserPanel extends StatelessWidget {
   final VoidCallback? onAddFolder;
 
   @override
+  State<ObBrowserPanel> createState() => _ObBrowserPanelState();
+}
+
+class _ObBrowserPanelState extends State<ObBrowserPanel> {
+  final FocusNode _searchFocus = FocusNode(debugLabel: 'browser-search');
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _focusSearch() {
+    _searchFocus.requestFocus();
+    widget.onSearchTap?.call();
+  }
+
+  List<BrowserNodeVm> _filteredNodes(List<BrowserNodeVm> nodes) {
+    final String query = _query.trim().toLowerCase();
+    if (query.isEmpty) return nodes;
+
+    final List<BrowserNodeVm> filtered = <BrowserNodeVm>[];
+    for (final BrowserNodeVm node in nodes) {
+      final BrowserNodeVm? match = _filteredNode(node, query);
+      if (match != null) filtered.add(match);
+    }
+    return filtered;
+  }
+
+  /// Keeps matching ancestors in the result and expands them when a matching
+  /// descendant is found, so searching never returns an apparently empty tree.
+  BrowserNodeVm? _filteredNode(BrowserNodeVm node, String query) {
+    final bool nameMatches = node.name.toLowerCase().contains(query);
+    final List<BrowserNodeVm> children = <BrowserNodeVm>[];
+    for (final BrowserNodeVm child in node.children) {
+      final BrowserNodeVm? match = _filteredNode(child, query);
+      if (match != null) children.add(match);
+    }
+    if (!nameMatches && children.isEmpty) return null;
+
+    switch (node) {
+      case BrowserFolderVm():
+        return BrowserFolderVm(
+          id: node.id,
+          name: node.name,
+          // While searching, the count describes the visible result set rather
+          // than the unfiltered library total.
+          count: nameMatches ? node.count : children.length,
+          expanded: nameMatches || children.isNotEmpty,
+          children: nameMatches ? node.children : children,
+        );
+      case BrowserPatternVm():
+        return BrowserPatternVm(
+          id: node.id,
+          name: node.name,
+          color: node.color,
+          badge: node.badge,
+          expanded: nameMatches || children.isNotEmpty,
+          children: nameMatches ? node.children : children,
+        );
+      case BrowserSampleVm():
+        return node;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
+    final List<BrowserNodeVm> nodes = _filteredNodes(widget.vm.nodes);
 
     return Container(
       width: tokens.size.browserWidth,
@@ -142,30 +210,32 @@ class ObBrowserPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          _Header(title: vm.title, onSearchTap: onSearchTap),
-          if (vm.nodes.isNotEmpty) ...<Widget>[
+          _Header(title: widget.vm.title, onSearchTap: _focusSearch),
+          if (widget.vm.nodes.isNotEmpty) ...<Widget>[
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: tokens.spacing.sm,
                 vertical: tokens.spacing.sm,
               ),
               child: ObSearchField(
-                hint: vm.searchHint,
+                hint: widget.vm.searchHint,
                 // The field spans the panel's content width rather than the
                 // kit's default: a search box narrower than the list it filters
                 // reads as a control for something else.
                 width: double.infinity,
-                onTap: onSearchTap,
+                focusNode: _searchFocus,
+                onTap: _focusSearch,
+                onChanged: (String value) => setState(() => _query = value),
               ),
             ),
             Container(height: tokens.border.hairline, color: color.line),
           ],
           Expanded(
-            child: vm.nodes.isEmpty
+            child: widget.vm.nodes.isEmpty
                 ? _BrowserEmptyState(
-                    heading: vm.emptyHeading,
-                    buttonLabel: vm.emptyButtonLabel,
-                    onAddFolder: onAddFolder,
+                    heading: widget.vm.emptyHeading,
+                    buttonLabel: widget.vm.emptyButtonLabel,
+                    onAddFolder: widget.onAddFolder,
                   )
                 : ListView(
                     padding: EdgeInsets.symmetric(
@@ -173,7 +243,7 @@ class ObBrowserPanel extends StatelessWidget {
                       vertical: tokens.spacing.sm,
                     ),
                     children: <Widget>[
-                      for (final Widget row in _rows(vm.nodes, 0)) row,
+                      for (final Widget row in _rows(nodes, 0)) row,
                     ],
                   ),
           ),
@@ -186,11 +256,13 @@ class ObBrowserPanel extends StatelessWidget {
   List<Widget> _rows(List<BrowserNodeVm> nodes, int depth) {
     final List<Widget> rows = <Widget>[];
     for (final BrowserNodeVm node in nodes) {
-      final bool selected = node.id == vm.selectedId;
-      final VoidCallback? tap = onTap == null ? null : () => onTap!(node.id);
-      final VoidCallback? toggle = onToggle == null
+      final bool selected = node.id == widget.vm.selectedId;
+      final VoidCallback? tap = widget.onTap == null
           ? null
-          : () => onToggle!(node.id);
+          : () => widget.onTap!(node.id);
+      final VoidCallback? toggle = widget.onToggle == null
+          ? null
+          : () => widget.onToggle!(node.id);
       switch (node) {
         case BrowserFolderVm():
           rows.add(
@@ -205,8 +277,8 @@ class ObBrowserPanel extends StatelessWidget {
               ),
             ),
           );
-          if (node.expanded) {
-            rows.addAll(_rows(node.children, depth + 1));
+          if (node.children.isNotEmpty) {
+            rows.add(_disclosure(node, depth));
           }
         case BrowserPatternVm():
           rows.add(
@@ -221,8 +293,8 @@ class ObBrowserPanel extends StatelessWidget {
               ),
             ),
           );
-          if (node.expanded) {
-            rows.addAll(_rows(node.children, depth + 1));
+          if (node.children.isNotEmpty) {
+            rows.add(_disclosure(node, depth));
           }
         case BrowserSampleVm():
           rows.add(
@@ -239,6 +311,30 @@ class ObBrowserPanel extends StatelessWidget {
       }
     }
     return rows;
+  }
+
+  /// Animates the height of a node's children without making a collapsed tree
+  /// row reserve invisible space. The stable key keeps the animation attached
+  /// to the same node while the parent view model is rebuilt.
+  Widget _disclosure(BrowserNodeVm node, int depth) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final List<Widget> children = _rows(node.children, depth + 1);
+    return KeyedSubtree(
+      key: ValueKey<String>('browser-disclosure:${node.id}'),
+      child: AnimatedSize(
+        duration: tokens.motion.settled,
+        curve: tokens.motion.standard,
+        alignment: Alignment.topCenter,
+        clipBehavior: Clip.hardEdge,
+        child: node is BrowserFolderVm && node.expanded ||
+                node is BrowserPatternVm && node.expanded
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              )
+            : const SizedBox.shrink(),
+      ),
+    );
   }
 
   /// Wraps a row in a [Draggable] when it carries a drag payload, so built-in

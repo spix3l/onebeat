@@ -53,6 +53,7 @@ class _ShellBindingState extends State<ShellBinding>
   bool _showPreferencesDialog = false;
 
   List<BrowserNodeVm> _browserNodes = const <BrowserNodeVm>[];
+  final Map<String, bool> _browserExpanded = <String, bool>{};
   int _framesSinceBrowserRefresh = 0;
   int _builtinsGeneration = -1;
   List<PluginListing> _builtins = const <PluginListing>[];
@@ -149,7 +150,7 @@ class _ShellBindingState extends State<ShellBinding>
           name: p.name,
           color: _resolveColor(p.color, 0),
           badge: p.usageCount > 0 ? '${p.usageCount}×' : 'piano roll',
-          expanded: false,
+          expanded: _browserExpanded['pattern:${p.id}'] ?? false,
         ),
       );
     }
@@ -159,7 +160,7 @@ class _ShellBindingState extends State<ShellBinding>
           id: 'current-project',
           name: 'Current Project',
           count: project.length,
-          expanded: true,
+          expanded: _browserExpanded['current-project'] ?? true,
           children: project,
         ),
       );
@@ -181,7 +182,7 @@ class _ShellBindingState extends State<ShellBinding>
           id: 'builtins',
           name: 'Built-ins',
           count: builtins.length,
-          expanded: true,
+          expanded: _browserExpanded['builtins'] ?? true,
           children: builtins,
         ),
       );
@@ -198,6 +199,28 @@ class _ShellBindingState extends State<ShellBinding>
       }
     }
     return channelColors[fallbackIndex % channelColors.length];
+  }
+
+  BrowserNodeVm? _findBrowserNode(String id, [List<BrowserNodeVm>? source]) {
+    for (final BrowserNodeVm node in source ?? _browserNodes) {
+      if (node.id == id) return node;
+      final BrowserNodeVm? child = _findBrowserNode(id, node.children);
+      if (child != null) return child;
+    }
+    return null;
+  }
+
+  void _onBrowserToggle(String id) {
+    final BrowserNodeVm? node = _findBrowserNode(id);
+    if (node is BrowserFolderVm) {
+      _browserExpanded[id] = !node.expanded;
+    } else if (node is BrowserPatternVm) {
+      _browserExpanded[id] = !node.expanded;
+    } else {
+      return;
+    }
+    _browserNodes = _buildBrowserNodes();
+    if (mounted) setState(() {});
   }
 
   void _onBrowserTap(String id) {
@@ -418,6 +441,7 @@ class _ShellBindingState extends State<ShellBinding>
                 onRedo: _controller.redoProject,
                 onExport: () => setState(() => _showExportDialog = true),
                 onBrowserTap: _onBrowserTap,
+                onBrowserToggle: _onBrowserToggle,
               ),
               if (_showExportDialog)
                 ExportBinding(

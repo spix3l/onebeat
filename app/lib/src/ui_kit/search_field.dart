@@ -1,9 +1,10 @@
 // ObSearchField — the rounded search field (UI-B-01).
 //
-// Magnifier + hint, with an optional `⌘K`-style shortcut tag at the right
-// edge. Static rendering only — wiring actual text input and focus is Phase
-// D territory, so the field paints its hint and accepts a tap callback,
-// nothing more. The compact round variant is [ObSearchIcon].
+// Magnifier + editable text, with an optional `⌘K`-style shortcut tag at the
+// right edge. The compact round variant is [ObSearchIcon].
+//
+// The field deliberately uses [EditableText] rather than Material's [TextField]:
+// OneBeat owns its chrome and does not use the Material theme.
 import 'package:flutter/widgets.dart';
 
 import '../design/tokens.dart';
@@ -14,6 +15,8 @@ class ObSearchField extends StatefulWidget {
     required this.hint,
     this.shortcut,
     this.onTap,
+    this.onChanged,
+    this.focusNode,
     this.width,
     super.key,
   });
@@ -25,6 +28,13 @@ class ObSearchField extends StatefulWidget {
 
   final VoidCallback? onTap;
 
+  /// Called whenever the user changes the query.
+  final ValueChanged<String>? onChanged;
+
+  /// Optional owner-provided focus node, used when another control (such as the
+  /// compact search icon) should focus this field.
+  final FocusNode? focusNode;
+
   /// Defaults to [SizeTokens.searchWidth]; shrink-to-fit rows may override.
   final double? width;
 
@@ -33,7 +43,30 @@ class ObSearchField extends StatefulWidget {
 }
 
 class _ObSearchFieldState extends State<ObSearchField> {
+  late final TextEditingController _controller;
+  late final FocusNode _internalFocusNode;
   bool _hover = false;
+
+  FocusNode get _focusNode => widget.focusNode ?? _internalFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+    _internalFocusNode = FocusNode(debugLabel: 'search-field');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _internalFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _focusNode.requestFocus();
+    widget.onTap?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,9 +81,9 @@ class _ObSearchFieldState extends State<ObSearchField> {
           widget.onTap == null ? null : (_) => setState(() => _hover = true),
       onExit:
           widget.onTap == null ? null : (_) => setState(() => _hover = false),
-      child: GestureDetector(
+      child: Listener(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onPointerDown: (_) => _handleTap(),
         child: Container(
           width: widget.width ?? tokens.size.searchWidth,
           height: tokens.size.searchFieldHeight,
@@ -68,11 +101,39 @@ class _ObSearchFieldState extends State<ObSearchField> {
               ObMagnifierGlyph(color: color.textMuted),
               SizedBox(width: tokens.spacing.xs),
               Expanded(
-                child: Text(
-                  widget.hint,
-                  style: tokens.type.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: <Widget>[
+                    if (_controller.text.isEmpty)
+                      IgnorePointer(
+                        child: Text(
+                          widget.hint,
+                          style: tokens.type.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: EditableText(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          style: tokens.type.label.copyWith(
+                            color: color.textSecondary,
+                          ),
+                          cursorColor: color.accent,
+                          backgroundCursorColor: color.surfaceWell,
+                          maxLines: 1,
+                          onChanged: (String value) {
+                            setState(() {});
+                            widget.onChanged?.call(value);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               if (shortcut != null) ...<Widget>[

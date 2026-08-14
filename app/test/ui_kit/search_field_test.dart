@@ -43,6 +43,27 @@ void main() {
     expect(fired, 1);
   });
 
+  testWidgets('accepts focus and text input', (WidgetTester tester) async {
+    String? query;
+    await pumpUi(
+      tester,
+      Center(
+        child: ObSearchField(
+          hint: 'Search samples, presets…',
+          onChanged: (String value) => query = value,
+        ),
+      ),
+      size: const Size(400, 200),
+    );
+
+    await tester.tap(find.byType(ObSearchField));
+    await tester.enterText(find.byType(EditableText), 'kick');
+
+    final EditableText field = tester.widget(find.byType(EditableText));
+    expect(field.focusNode.hasFocus, isTrue);
+    expect(query, 'kick');
+  });
+
   testWidgets('renders the shortcut tag only when given one', (
     WidgetTester tester,
   ) async {
