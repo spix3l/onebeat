@@ -66,15 +66,73 @@ void main() {
       ),
       size: const Size(300, 300),
     );
-    // Tapping the field toggles the overlay menu; the field text and the menu
-    // row share a label, so `.first` targets the field (it sits before the
-    // overlay entry in tree order).
+    // Tapping the field opens the menu; the field text and the menu row share
+    // a label, so `.first` targets the field (it sits before the overlay entry
+    // in tree order). Once open, the overlay's tap barrier covers the field,
+    // so a second tap on the same spot lands on the barrier and closes it.
     await tester.tap(find.text('Audio 2').first);
     await tester.pumpAndSettle();
     expect(find.text('Audio 1'), findsOneWidget);
-    await tester.tap(find.text('Audio 2').first);
+    await tester.tap(find.text('Audio 2').first, warnIfMissed: false);
     await tester.pumpAndSettle();
     expect(find.text('Audio 1'), findsNothing);
+  });
+
+  testWidgets('the open menu is exactly as wide as the field', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    await pumpUi(
+      tester,
+      const Center(
+        child: ObDropdown(
+          label: 'SNAP',
+          value: '1/4',
+          // Narrower than the 156px default: the menu must shrink to match
+          // the field instead of ballooning to a fixed minimum width.
+          width: 130,
+          items: <String>['1/4', '1/8', '1/16', 'None'],
+        ),
+      ),
+      size: const Size(400, 300),
+    );
+    final Rect field = tester.getRect(find.byType(ObDropdown));
+    expect(field.width, 130);
+
+    await tester.tap(find.text('1/4').first);
+    await tester.pumpAndSettle();
+
+    final Finder menu = find.byWidgetPredicate(
+      (Widget w) =>
+          w is Container &&
+          w.decoration is BoxDecoration &&
+          (w.decoration! as BoxDecoration).color == tokens.color.surfaceOverlay,
+    );
+    expect(menu, findsOneWidget);
+    expect(tester.getRect(menu).width, field.width);
+  });
+
+  testWidgets('a click outside the menu closes it', (WidgetTester tester) async {
+    await pumpUi(
+      tester,
+      const Center(
+        child: ObDropdown(
+          label: 'SNAP',
+          value: '1/4',
+          items: <String>['1/4', '1/8', '1/16', 'None'],
+        ),
+      ),
+      size: const Size(400, 300),
+    );
+    await tester.tap(find.text('1/4').first);
+    await tester.pumpAndSettle();
+    expect(find.text('1/8'), findsOneWidget);
+
+    // Tap well away from the centred field and the menu hanging below it; the
+    // overlay's tap barrier must swallow the click and close the menu.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.text('1/8'), findsNothing);
   });
 }
 

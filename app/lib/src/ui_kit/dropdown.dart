@@ -51,17 +51,22 @@ class _ObDropdownState extends State<ObDropdown> {
   bool _open = false;
 
   void _toggle() {
-    setState(() => _open = !_open);
     if (_open) {
-      _portalController.show();
+      _close();
     } else {
-      _portalController.hide();
+      setState(() => _open = true);
+      _portalController.show();
     }
   }
 
-  void _select(String item) {
+  void _close() {
+    if (!_open) return;
     setState(() => _open = false);
     _portalController.hide();
+  }
+
+  void _select(String item) {
+    _close();
     widget.onSelected?.call(item);
   }
 
@@ -83,20 +88,41 @@ class _ObDropdownState extends State<ObDropdown> {
         child: OverlayPortal(
           controller: _portalController,
           overlayChildBuilder: (BuildContext context) {
-            return CompositedTransformFollower(
-              link: _layerLink,
-              targetAnchor: Alignment.bottomLeft,
-              followerAnchor: Alignment.topLeft,
-              offset: Offset(0, tokens.spacing.xs),
-              showWhenUnlinked: false,
-              child: SizedBox(
-                width: width,
-                child: _Menu(
-                  items: widget.items,
-                  selected: widget.value,
-                  onSelected: widget.onSelected == null ? null : _select,
+            // A full-surface tap barrier sits behind the menu so a click
+            // anywhere else in the window closes the dropdown; the menu rows
+            // (stacked on top) still take their own taps. `Align` shrink-wraps
+            // the menu so the `SizedBox` can pin it to the field's width
+            // rather than the overlay's full-surface constraints.
+            return Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _close,
+                    child: const SizedBox.expand(),
+                  ),
                 ),
-              ),
+                CompositedTransformFollower(
+                  link: _layerLink,
+                  targetAnchor: Alignment.bottomLeft,
+                  followerAnchor: Alignment.topLeft,
+                  offset: Offset(0, tokens.spacing.xs),
+                  showWhenUnlinked: false,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    widthFactor: 1.0,
+                    heightFactor: 1.0,
+                    child: SizedBox(
+                      width: width,
+                      child: _Menu(
+                        items: widget.items,
+                        selected: widget.value,
+                        onSelected: widget.onSelected == null ? null : _select,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             );
           },
           child: _Field(
@@ -198,8 +224,11 @@ class _Menu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    // No width constraint here: the overlay child wraps this in a `SizedBox`
+    // set to the field's width, so the open menu is exactly as wide as the
+    // field that opened it — never a fixed 156px minimum that overhangs a
+    // narrower field.
     return Container(
-      constraints: BoxConstraints(minWidth: tokens.size.dropdownWidth),
       decoration: BoxDecoration(
         color: tokens.color.surfaceOverlay,
         borderRadius: tokens.radius.panelBorder,
