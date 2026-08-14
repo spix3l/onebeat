@@ -339,6 +339,34 @@ class SizeTokens {
   double get pianoToolbarHeight => 44;
   double get pianoResizeHandleWidth => 6;
 
+  /// The rebuilt piano roll (UI-B-07), measured off `screens/piano-roll.png`.
+  /// [pianoRowHeight] (14) survives unchanged — the mockup's octave spans 168px
+  /// — but the key column is 60px there, not [pianoKeyboardWidth]'s 76.
+  double get prKeyColumnWidth => 60;
+  double get prBarRulerHeight => 24;
+  double get prToolbarHeight => 38;
+  double get prVelocityLaneHeight => 72;
+
+  /// A note bar inside its 14px row, and the radius that keeps it from
+  /// reading as a hard-edged block at this size.
+  double get prNoteHeight => 8;
+
+  /// Black keys are this fraction of the column wide, and the C-label plate
+  /// this tall.
+  double get prBlackKeyWidth => 36;
+
+  /// The `VEL ▾` selector at the left of the velocity lane.
+  double get prVelocityChipWidth => 56;
+
+  /// The velocity stem's width — thick enough to hit, thin enough that a
+  /// dense bar stays countable.
+  double get prVelocityStemWidth => 5;
+
+  /// The roll toolbar's pattern select. Wider than the default because a
+  /// pattern name is user data — `Main Groove` must not truncate to `Main
+  /// Gro…` in the one field that says which pattern you are editing.
+  double get prPatternFieldWidth => 190;
+
   /// Arrangement (OB-3-12).
   double get laneHeaderWidth => 208;
   double get laneDefaultHeight => 72;

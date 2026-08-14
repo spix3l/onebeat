@@ -19,6 +19,7 @@ class ObDropdown extends StatefulWidget {
     required this.value,
     required this.items,
     this.onSelected,
+    this.width,
     super.key,
   });
 
@@ -30,6 +31,12 @@ class ObDropdown extends StatefulWidget {
 
   final List<String> items;
   final ValueChanged<String>? onSelected;
+
+  /// Defaults to [SizeTokens.dropdownWidth]. A toolbar whose fields hold
+  /// labels of very different lengths sizes them itself — `CHANNEL TYPE
+  /// Sampler` does not fit the default, and truncating a select's current
+  /// value to `Sa…` defeats the control.
+  final double? width;
 
   @override
   State<ObDropdown> createState() => _ObDropdownState();
@@ -46,7 +53,7 @@ class _ObDropdownState extends State<ObDropdown> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final double width = tokens.size.dropdownWidth;
+    final double width = widget.width ?? tokens.size.dropdownWidth;
     // While open, the box grows to cover the menu: a Stack only hit-tests
     // inside its own bounds, so a menu painted past them (Clip.none) would
     // be visible but untappable. Growing nudges the layout below the field
