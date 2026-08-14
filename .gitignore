@@ -5,6 +5,7 @@ build-*/
 *.dylib
 compile_commands.json
 .cache/
+.vscode/
 
 # Flutter / Dart
 app/.dart_tool/

@@ -15,6 +15,7 @@ import '../../core/shortcuts.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../browser/browser_panel.dart';
+import '../channel_rack/rack_binding.dart';
 import 'menu_bar.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
@@ -25,7 +26,6 @@ import 'transport_bar.dart';
 
 // TODO(UI-D-09): Temporary imports for un-migrated workspace surfaces.
 import '../../ui/arrangement.dart' as old_ui;
-import '../../ui/channel_rack.dart' as old_ui;
 import '../../ui/engine_controller.dart' as old_ui;
 import '../../ui/export_dialog.dart' as old_ui;
 import '../../ui/mixer_view.dart' as old_ui;
@@ -370,8 +370,9 @@ class _WorkspaceSlot extends StatelessWidget {
           onOpenPattern: (String patternId, String clipId) =>
               bridge.openPattern(patternId, fromClipId: clipId),
         ),
-      1 => old_ui.ChannelRack(
-          controller: bridge,
+      1 => RackBinding(
+          client: coreController.client,
+          controller: coreController,
           onBrowsePlugins: () {},
         ),
       2 => old_ui.PianoRoll(
