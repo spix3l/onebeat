@@ -595,6 +595,34 @@ class SizeTokens {
   double get routingSidechainHeight => 72;
   double get routingSwitchWidth => 34;
   double get routingSwitchHeight => 18;
+
+  /// The rebuilt mixer (UI-B-09), measured off `screens/routing-mixer.png`
+  /// and the floating window in `screens/workspace-window.png`.
+  ///
+  /// Two strip variants, two widths: the docked meter strip is a 42px column
+  /// on a 46px pitch, and the floating fader strip is 108px because a fader
+  /// needs a grabbable target where a meter only needs to be read.
+  double get mixerStripWidth => 42;
+  double get mixerStripGap => 4;
+  double get mixerMasterStripWidth => 50;
+  double get mixerFaderStripWidth => 108;
+
+  /// The meter well inside a strip. The master's is wider — it is the one
+  /// meter a mix engineer watches continuously.
+  double get mixerMeterWidth => 12;
+  double get mixerMasterMeterWidth => 14;
+
+  /// The identity bar under a strip's name.
+  double get mixerColorBarHeight => 4;
+
+  /// The M/S squares and the round route lamp beside them.
+  double get mixerToggleSize => 13;
+  double get mixerLampSize => 13;
+
+  /// The fader's track and its cap.
+  double get mixerFaderTrackWidth => 6;
+  double get mixerFaderCapWidth => 22;
+  double get mixerFaderCapHeight => 8;
   double get modalWidthLarge => 680;
   double get modalWidthMedium => 540;
   double get dialogHeaderHeight => 48;
@@ -738,6 +766,33 @@ class TypeTokens {
     color: textMuted,
   );
 
+  /// A mixer strip's track name (UI-B-09). Small on purpose: a strip is 42px
+  /// wide, and the name has to survive in it without truncating `Drums Bus`.
+  TextStyle get stripName => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 8,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
+    // Archivo's condensed width axis, the same trick [labelDense] uses: at the
+    // normal width `Drums Bus` overruns a 42px strip by a letter, and a track
+    // whose name you cannot read is a track you cannot mix.
+    fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
+    color: textSecondary,
+  );
+
+  /// The strip's bottom line: `→ Drums`, `0.0 dB`. Mono, because a column of
+  /// them has to line up down the mixer.
+  TextStyle get stripRoute => TextStyle(
+    fontFamily: numericFamily,
+    fontSize: 7,
+    fontWeight: FontWeight.w400,
+    // MartianMono runs wide even for a mono; narrowed so `→ Drums` fits the
+    // strip it belongs to.
+    fontVariations: const <FontVariation>[FontVariation('wdth', 75)],
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    color: textMuted,
+  );
+
   /// A channel lane's name, and the instrument caption under it (UI-B-05).
   /// Two sizes and two colours in a 46px lane: the name is what you scan for,
   /// the type is what you check once.
@@ -772,7 +827,6 @@ class TypeTokens {
     fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     color: clipInkMuted,
   );
-
   /// Tag labels (PAT, AUD, AUTO).
   TextStyle get tag => TextStyle(
     fontFamily: uiFamily,
