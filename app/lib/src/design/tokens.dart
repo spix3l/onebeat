@@ -21,6 +21,7 @@ class ColorTokens {
     required this.surfaceRaised,
     required this.surfaceOverlay,
     required this.surfaceWell,
+    required this.surfaceHover,
     required this.surfaceColumnHead,
     required this.line,
     required this.lineStrong,
@@ -29,6 +30,7 @@ class ColorTokens {
     required this.textMuted,
     required this.accent,
     required this.accentDeep,
+    required this.accentBright,
     required this.accentWash,
     required this.accentMuted,
     required this.meterLow,
@@ -64,6 +66,7 @@ class ColorTokens {
     required this.faderTrack,
     required this.faderThumb,
     required this.sidechainGold,
+    required this.channelColors,
   });
 
   /// Recessed: the top bar and anything that reads as an input well. The
@@ -85,8 +88,11 @@ class ColorTokens {
   /// why hover states used to read as "selected".
   final Color surfaceOverlay;
 
-  /// Recessed input wells and the keyboard-hint pills inside them.
+  /// Controls at rest: buttons, chips and knob rings (Pen `raised`).
   final Color surfaceWell;
+
+  /// The hover step one level above [surfaceWell] (Pen `raised2`).
+  final Color surfaceHover;
 
   /// Table column headers — the one surface that is darker than its panel.
   final Color surfaceColumnHead;
@@ -107,6 +113,11 @@ class ColorTokens {
   /// The dark stop of the accent gradient. The design fills every accented
   /// control with a gradient, not a flat colour — see [GradientTokens].
   final Color accentDeep;
+
+  /// The light stop of the accent gradient and the hover/active shade of an
+  /// accented control (Pen `accent2`). Lighter than [accent], unlike
+  /// [accentDeep].
+  final Color accentBright;
 
   /// A wash of the accent behind an active chip.
   final Color accentWash;
@@ -186,6 +197,12 @@ class ColorTokens {
   /// Routing and sidechain lines.
   final Color sidechainGold;
 
+  /// The eight channel identity colours (c1…c8): channel, clip and track
+  /// identity. Saturated on purpose — these are the one place the design lets
+  /// saturated colour live (PRD §15.3). The index is the channel colour index,
+  /// so element 0 is c1.
+  final List<Color> channelColors;
+
   /// Fully transparent. A role rather than a literal so that widget code never
   /// has to write `Color(0x00000000)` to switch a border off (FR-UX-02).
   Color get none => const Color(0x00000000);
@@ -220,7 +237,12 @@ class RadiusTokens {
   Radius get xs => const Radius.circular(2);
   Radius get sm => const Radius.circular(3);
   Radius get md => const Radius.circular(5);
+  /// Chips, buttons and step cells (~6–8 in the mockups; step cells are r8).
   Radius get lg => const Radius.circular(8);
+  /// Floating windows and the smaller dialogs (~12 in the mockups).
+  Radius get xl => const Radius.circular(12);
+  /// The larger modal dialogs (~16 in the mockups).
+  Radius get xxl => const Radius.circular(16);
   BorderRadius get controlBorder => BorderRadius.all(md);
   BorderRadius get panelBorder => BorderRadius.all(lg);
   BorderRadius get meterBorder => BorderRadius.all(xs);
@@ -335,7 +357,7 @@ class SizeTokens {
 
   /// Transport buttons are square wells in the design, not text buttons — the
   /// play control is the one accented thing in the bar.
-  double get transportButtonSize => 34;
+  double get transportButtonSize => 32;
   double get transportGlyphSize => 13;
 
   /// Badges and tags.
@@ -347,7 +369,8 @@ class SizeTokens {
   double get exportButtonWidth => 84;
 
   /// Knobs, faders, and dialog sizes.
-  double get knobSmall => 32;
+  /// The compact knob control: 26px in the mockups (UI-B-01).
+  double get knobSmall => 26;
   double get knobMedium => 42;
   double get knobLarge => 56;
   double get faderWidth => 28;
@@ -554,40 +577,41 @@ class OneBeatTokens {
   /// A light theme (FR-UX-04) is a second factory here and nothing else.
   factory OneBeatTokens.dark() => _dark;
 
-  static const Color _textPrimaryDark = Color(0xFFE8E9E4);
-  /// Secondary copy: row names, prose. The design uses three text weights, not
-  /// two — collapsing them is why every caption read as loud as its value.
-  ///
-  /// The two lower steps sit one notch lighter than the screens sample them.
-  /// The design's muted grey clears only 2.9:1 on `surfaceOverlay`, and the AA
-  /// contract in `tokens_test.dart` is normative (FR-UX-26) while a sampled
-  /// hex is not. Lifting both keeps three visibly separate weights —
-  /// 11.2 : 6.9 : 5.1 against the lightest surface — instead of one legible
-  /// step and two that fail.
-  static const Color _textSecondaryDark = Color(0xFFB4B7AE);
-  static const Color _textMutedDark = Color(0xFF9A9D94);
+  static const Color _textPrimaryDark = Color(0xFFE8E9E4); // Pen `text`
+
+  /// Secondary copy: row names, prose (Pen `muted`). The design uses three
+  /// text weights, not two — collapsing them is why every caption read as loud
+  /// as its value.
+  static const Color _textSecondaryDark = Color(0xFF9A9D94); // Pen `muted`
+
+  /// The dimmest tier: placeholders, empty states, disabled labels (Pen
+  /// `dim`). Deliberately below the AA bar the contrast test holds the two
+  /// readable tiers to — this tier is decorative, not essential, and FR-UX-26
+  /// covers "text and essential UI" rather than every dimmed glyph.
+  static const Color _textMutedDark = Color(0xFF6F726B); // Pen `dim`
 
   static const OneBeatTokens _dark = OneBeatTokens(
     brightness: Brightness.dark,
     color: ColorTokens(
-      // Sampled from the design screens rather than transcribed by eye. The
-      // family is the warm neutral PRD §8.1.1 always specified; what the
-      // screens add is a fifth level — a *sunken* surface for the top bar and
-      // input wells — and slightly lighter panel and raised steps.
-      surfaceSunken: Color(0xFF101210),
-      surfaceDeep: Color(0xFF131412),
-      surfacePanel: Color(0xFF1B1D1A),
-      surfaceRaised: Color(0xFF20231F),
+      // Values are the Pen palette (UI-A-01), which is authoritative: where it
+      // differs from the values sampled for the stage-3 screens, the palette
+      // wins.
+      surfaceSunken: Color(0xFF131412), // bg-deep
+      surfaceDeep: Color(0xFF1B1D1A), // panel
+      surfacePanel: Color(0xFF1B1D1A), // panel
+      surfaceRaised: Color(0xFF22251F), // panel2
       surfaceOverlay: Color(0xFF2A2D27),
-      surfaceWell: Color(0xFF0D0E0C),
+      surfaceWell: Color(0xFF2A2D27), // raised: buttons, chips at rest
+      surfaceHover: Color(0xFF33372F), // raised2
       surfaceColumnHead: Color(0xFF181A16),
-      line: Color(0xFF2C2F29),
-      lineStrong: Color(0xFF3A3D37),
+      line: Color(0xFF2C2F29), // line2
+      lineStrong: Color(0xFF3A3D37), // line
       textSecondary: _textSecondaryDark,
       textPrimary: _textPrimaryDark,
       textMuted: _textMutedDark,
-      accent: Color(0xFF7C6CF0),
+      accent: Color(0xFF7C6CF0), // accent
       accentDeep: Color(0xFF6A5DE0),
+      accentBright: Color(0xFF9A8EFF), // accent2: hover/active shade
       accentWash: Color(0x187C6CF0),
       accentMuted: Color(0xFF4A417F),
       meterLow: Color(0xFF5CCB8A),
@@ -627,6 +651,7 @@ class OneBeatTokens {
       faderTrack: Color(0xFF101210),
       faderThumb: Color(0xFF5A5C54),
       sidechainGold: Color(0xFFF59E5B),
+      channelColors: channelColors,
     ),
     type: TypeTokens(
       textPrimary: _textPrimaryDark,
@@ -669,6 +694,20 @@ Color projectColor(String hex, Color fallback) {
   if (!RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex)) return fallback;
   return Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
 }
+
+/// Channel identity colours (c1…c8) from the Pen palette. Shared by every
+/// theme — identity colour does not change with light/dark. Indexed by channel
+/// colour index, so element 0 is c1.
+const List<Color> channelColors = <Color>[
+  Color(0xFFF26D5B), // c1
+  Color(0xFFE8B54B), // c2
+  Color(0xFF9FC65C), // c3
+  Color(0xFF37BE93), // c4
+  Color(0xFF2FB8C6), // c5
+  Color(0xFFE5689E), // c6
+  Color(0xFFC97452), // c7
+  Color(0xFF7A8BA6), // c8
+];
 
 const List<String> instrumentPalette = <String>[
   '#6C8CFF',
