@@ -104,7 +104,19 @@ abstract final class ActionRegistry {
       scope: ShortcutScope.global,
       description:
           'Space is the transport everywhere, always. No control binds it, so '
-          'it works no matter what was clicked last (FR-UX-24).',
+          'it works no matter what was clicked last (FR-UX-24). Stopping '
+          'returns the playhead to zero.',
+    ),
+    const UiAction(
+      id: 'transport.pause',
+      label: 'Pause / resume',
+      area: ActionArea.transport,
+      activator: SingleActivator(LogicalKeyboardKey.space, alt: true),
+      intent: TogglePauseIntent(),
+      scope: ShortcutScope.global,
+      description:
+          'Pauses without moving the playhead, so resuming continues from the '
+          'same place — unlike Space, which restarts from the top.',
     ),
     UiAction(
       id: 'transport.returnToZero',
@@ -131,24 +143,24 @@ abstract final class ActionRegistry {
       scope: ShortcutScope.global,
     ),
     UiAction(
-      id: 'view.playlist',
-      label: 'Playlist',
+      id: 'view.channels',
+      label: 'Channels',
       area: ActionArea.transport,
       activator: _bare(LogicalKeyboardKey.digit1),
       intent: const ShowViewIntent(1),
       scope: ShortcutScope.global,
     ),
     UiAction(
-      id: 'view.channels',
-      label: 'Channels',
+      id: 'view.playlist',
+      label: 'Playlist',
       area: ActionArea.transport,
       activator: _bare(LogicalKeyboardKey.digit2),
       intent: const ShowViewIntent(2),
       scope: ShortcutScope.global,
     ),
     UiAction(
-      id: 'view.pianoRoll',
-      label: 'Piano roll',
+      id: 'view.mixer',
+      label: 'Mixer',
       area: ActionArea.transport,
       activator: _bare(LogicalKeyboardKey.digit3),
       intent: const ShowViewIntent(3),

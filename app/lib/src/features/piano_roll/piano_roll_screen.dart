@@ -80,18 +80,29 @@ class PianoRollScreen extends StatelessWidget {
             onZoomOut: onZoomOut,
             onBack: onBack,
           ),
-          _RulerRow(viewport: vm.roll.viewport),
+          // The whole body scrolls as one: wheel or trackpad anywhere over the
+          // ruler, the key column or the canvas pans the viewport.
           Expanded(
-            child: _GridRow(
-              roll: vm.roll,
-              onKeyPress: onKeyPress,
-              onTapDown: onTapDown,
-              onSecondaryTapDown: onSecondaryTapDown,
-              onPanStart: onPanStart,
-              onPanUpdate: onPanUpdate,
-              onPanEnd: onPanEnd,
-              onPanCancel: onPanCancel,
+            child: Listener(
               onPointerSignal: onPointerSignal,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _RulerRow(viewport: vm.roll.viewport),
+                  Expanded(
+                    child: _GridRow(
+                      roll: vm.roll,
+                      onKeyPress: onKeyPress,
+                      onTapDown: onTapDown,
+                      onSecondaryTapDown: onSecondaryTapDown,
+                      onPanStart: onPanStart,
+                      onPanUpdate: onPanUpdate,
+                      onPanEnd: onPanEnd,
+                      onPanCancel: onPanCancel,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           _InteractiveVelocityArea(
@@ -158,7 +169,6 @@ class _GridRow extends StatelessWidget {
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
-    this.onPointerSignal,
   });
 
   final PianoRollVm roll;
@@ -169,7 +179,6 @@ class _GridRow extends StatelessWidget {
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
-  final void Function(PointerSignalEvent event)? onPointerSignal;
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +195,6 @@ class _GridRow extends StatelessWidget {
             onPanUpdate: onPanUpdate,
             onPanEnd: onPanEnd,
             onPanCancel: onPanCancel,
-            onPointerSignal: onPointerSignal,
           ),
         ),
       ],
@@ -203,7 +211,6 @@ class _InteractiveGridArea extends StatelessWidget {
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
-    this.onPointerSignal,
   });
 
   final PianoRollVm roll;
@@ -213,34 +220,30 @@ class _InteractiveGridArea extends StatelessWidget {
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
-  final void Function(PointerSignalEvent event)? onPointerSignal;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
 
-    return Listener(
-      onPointerSignal: onPointerSignal,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: onTapDown,
-        onSecondaryTapDown: onSecondaryTapDown,
-        onPanStart: onPanStart,
-        onPanUpdate: onPanUpdate,
-        onPanEnd: onPanEnd,
-        onPanCancel: onPanCancel,
-        child: ClipRect(
-          child: CustomPaint(
-            painter: PrGridPainter(
-              vm: roll,
-              color: tokens.color,
-              noteHeight: tokens.size.prNoteHeight,
-              noteRadius: tokens.radius.xs,
-              lineWidth: tokens.border.hairline,
-              playheadWidth: tokens.size.playheadWidth,
-            ),
-            child: const SizedBox.expand(),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: onTapDown,
+      onSecondaryTapDown: onSecondaryTapDown,
+      onPanStart: onPanStart,
+      onPanUpdate: onPanUpdate,
+      onPanEnd: onPanEnd,
+      onPanCancel: onPanCancel,
+      child: ClipRect(
+        child: CustomPaint(
+          painter: PrGridPainter(
+            vm: roll,
+            color: tokens.color,
+            noteHeight: tokens.size.prNoteHeight,
+            noteRadius: tokens.radius.xs,
+            lineWidth: tokens.border.hairline,
+            playheadWidth: tokens.size.playheadWidth,
           ),
+          child: const SizedBox.expand(),
         ),
       ),
     );

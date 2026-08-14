@@ -51,7 +51,20 @@ class EngineController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Play / stop. Stopping returns the playhead to zero, so the next Space
+  /// always starts from the top — the "restart the timer on stop" behaviour.
   void togglePlay() {
+    if (snapshot.playing) {
+      client.stop();
+      client.seekFrames(0);
+    } else {
+      client.play();
+    }
+  }
+
+  /// Pause / resume (⌥Space). Unlike [togglePlay], pausing leaves the playhead
+  /// where it is, so resuming continues from the same place.
+  void togglePause() {
     if (snapshot.playing) {
       client.stop();
     } else {

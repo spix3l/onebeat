@@ -56,7 +56,15 @@ Future<void> pumpUi(
 
   final OneBeatTokens tokens = OneBeatTokens.dark();
 
-  Widget content = OneBeatTheme(
+  // The dropdown (and any future overlay popover) needs a real `Overlay` to
+  // render into, exactly like the `WidgetsApp` the real app runs under. The
+  // overlay's only entry is the widget under test, so when [center] is false
+  // the child still fills the surface, and when it is true the `Center` is the
+  // entry's child — the overlay fills the surface and the `Center` hands the
+  // child loose constraints, keeping component layout identical to before.
+  final Widget entry = center ? Center(child: child) : child;
+
+  final Widget content = OneBeatTheme(
     tokens: tokens,
     child: Directionality(
       textDirection: TextDirection.ltr,
@@ -66,14 +74,14 @@ Future<void> pumpUi(
           devicePixelRatio: 1.0,
           disableAnimations: true,
         ),
-        child: child,
+        child: Overlay(
+          initialEntries: <OverlayEntry>[
+            OverlayEntry(builder: (BuildContext context) => entry),
+          ],
+        ),
       ),
     ),
   );
-
-  if (center) {
-    content = Center(child: content);
-  }
 
   await tester.pumpWidget(
     ColoredBox(color: tokens.color.surfaceSunken, child: content),

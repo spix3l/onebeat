@@ -222,11 +222,12 @@ class ObRackHeader extends StatelessWidget {
 /// shortcut that does it without the mouse.
 class ObRackFooter extends StatelessWidget {
   const ObRackFooter({
-    this.lead = 'Drop a sample from the browser, or',
+    this.lead = 'Double-click, or use',
     this.action = 'Add channel',
     this.trail = 'to grow the rack',
     this.shortcut = '⌘A',
     this.onAddChannel,
+    this.onDoubleTap,
     super.key,
   });
 
@@ -237,6 +238,7 @@ class ObRackFooter extends StatelessWidget {
   final String trail;
   final String shortcut;
   final VoidCallback? onAddChannel;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -246,6 +248,7 @@ class ObRackFooter extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onAddChannel,
+      onDoubleTap: onDoubleTap,
       child: Container(
         height: tokens.size.rackFooterHeight,
         padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),

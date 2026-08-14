@@ -48,6 +48,7 @@ class _ShellBindingState extends State<ShellBinding>
   final FocusNode _rootFocus = FocusNode(debugLabel: 'shell');
 
   int _activeRailIndex = 0;
+  int _lastRailIndex = 0;
   bool _showExportDialog = false;
   bool _showPreferencesDialog = false;
 
@@ -57,10 +58,14 @@ class _ShellBindingState extends State<ShellBinding>
   List<PluginListing> _builtins = const <PluginListing>[];
   bool _demoSeeded = false;
 
+  // The channel rack is the composition home; the arrangement is secondary.
+  // Piano roll is not a rail destination — it is opened from the rack or
+  // playlist and returns to wherever it was opened from (index 4, hidden).
+  static const int _pianoRollIndex = 4;
+
   static const List<RailItemVm> _railItems = <RailItemVm>[
-    RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.help, label: 'Channels'),
-    RailItemVm(icon: ObRailGlyphKind.note, label: 'Piano'),
+    RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.sliders, label: 'Mixer'),
     RailItemVm(icon: ObRailGlyphKind.folder, label: 'Packs'),
   ];
@@ -186,6 +191,7 @@ class _ShellBindingState extends State<ShellBinding>
           id: 'plugin:${builtinPlugins[i].path}',
           name: builtinPlugins[i].name,
           color: _resolveColor('', i),
+          dragData: builtinPlugins[i],
         ),
     ];
     if (builtins.isNotEmpty) {
@@ -242,9 +248,23 @@ class _ShellBindingState extends State<ShellBinding>
 
   void _onRailSelect(int index) {
     if (index >= 0 && index < _railItems.length) {
+      _lastRailIndex = index;
       setState(() => _activeRailIndex = index);
       _browserNodes = _buildBrowserNodes();
     }
+  }
+
+  /// Opens the piano roll for [instrumentId] (or the selected instrument when
+  /// omitted), remembering where to return to.
+  void _openPianoRoll([String? instrumentId]) {
+    if (instrumentId != null && instrumentId.isNotEmpty) {
+      _controller.client.selectInstrument(instrumentId);
+    }
+    setState(() => _activeRailIndex = _pianoRollIndex);
+  }
+
+  void _closePianoRoll() {
+    setState(() => _activeRailIndex = _lastRailIndex);
   }
 
   void _onMenuTap(int index) {
@@ -289,8 +309,10 @@ class _ShellBindingState extends State<ShellBinding>
 
     final ObSideRailVm railVm = ObSideRailVm(
       items: _railItems,
-      activeIndex: _activeRailIndex,
-      separatorBefore: 4,
+      activeIndex: _activeRailIndex == _pianoRollIndex
+          ? _lastRailIndex
+          : _activeRailIndex,
+      separatorBefore: 3,
     );
 
     final double cpuPercent = (snapshot.cpuLoad * 100.0).clamp(0.0, 100.0);
@@ -325,13 +347,12 @@ class _ShellBindingState extends State<ShellBinding>
       status: statusVm,
       browser: (_activeRailIndex == 0 ||
               _activeRailIndex == 1 ||
-              _activeRailIndex == 2 ||
-              _activeRailIndex == 4)
+              _activeRailIndex == 3)
           ? ObBrowserPanelVm(
-              nodes: _activeRailIndex == 4
+              nodes: _activeRailIndex == 3
                   ? const <BrowserNodeVm>[]
                   : _browserNodes,
-              title: _activeRailIndex == 4 ? 'Packs' : 'Browser',
+              title: _activeRailIndex == 3 ? 'Packs' : 'Browser',
             )
           : null,
     );
@@ -356,6 +377,12 @@ class _ShellBindingState extends State<ShellBinding>
               return null;
             },
           ),
+          TogglePauseIntent: CallbackAction<TogglePauseIntent>(
+            onInvoke: (_) {
+              _controller.togglePause();
+              return null;
+            },
+          ),
           ReturnToZeroIntent: CallbackAction<ReturnToZeroIntent>(
             onInvoke: (_) {
               _controller.seekFrames(0);
@@ -377,10 +404,9 @@ class _ShellBindingState extends State<ShellBinding>
           ShowViewIntent: CallbackAction<ShowViewIntent>(
             onInvoke: (ShowViewIntent intent) {
               _onRailSelect(switch (intent.index) {
-                1 => 0, // Playlist
-                2 => 1, // Channels
-                3 => 2, // Piano roll
-                4 => 3, // Mixer
+                1 => 0, // Channels
+                2 => 1, // Playlist
+                3 => 2, // Mixer
                 _ => 0,
               });
               return null;
@@ -398,6 +424,9 @@ class _ShellBindingState extends State<ShellBinding>
                   activeRailIndex: _activeRailIndex,
                   coreController: _controller,
                   onSelectRail: _onRailSelect,
+                  onOpenPianoRoll: _openPianoRoll,
+                  onOpenPattern: () => _openPianoRoll(),
+                  onClosePianoRoll: _closePianoRoll,
                 ),
                 onRailSelect: _onRailSelect,
                 onMenuTap: _onMenuTap,
@@ -435,41 +464,44 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.activeRailIndex,
     required this.coreController,
     required this.onSelectRail,
+    required this.onOpenPianoRoll,
+    required this.onOpenPattern,
+    required this.onClosePianoRoll,
   });
 
   final int activeRailIndex;
   final core.EngineController coreController;
   final ValueChanged<int> onSelectRail;
+  final ValueChanged<String> onOpenPianoRoll;
+  final VoidCallback onOpenPattern;
+  final VoidCallback onClosePianoRoll;
 
   @override
   Widget build(BuildContext context) {
     return switch (activeRailIndex) {
-      0 => PlaylistBinding(
+      0 => RackBinding(
+          client: coreController.client,
+          controller: coreController,
+          onBrowsePlugins: () => onSelectRail(3),
+          onOpenMixer: () => onSelectRail(2),
+          onOpenPianoRoll: onOpenPianoRoll,
+        ),
+      1 => PlaylistBinding(
           client: coreController.client,
           controller: coreController,
           onOpenPattern: (String patternId, String clipId) {
             coreController.client.selectPattern(patternId);
-            onSelectRail(2);
+            onOpenPattern();
           },
         ),
-      1 => RackBinding(
+      2 => MixerBinding(
           client: coreController.client,
           controller: coreController,
-          onBrowsePlugins: () => onSelectRail(4),
-          onOpenMixer: () => onSelectRail(3),
-          onOpenPianoRoll: (String instrumentId) {
-            coreController.client.selectInstrument(instrumentId);
-            onSelectRail(2);
-          },
         ),
-      2 => PianoRollBinding(
+      4 => PianoRollBinding(
           client: coreController.client,
           controller: coreController,
-          onBackToPlaylist: () => onSelectRail(0),
-        ),
-      3 => MixerBinding(
-          client: coreController.client,
-          controller: coreController,
+          onBackToPlaylist: onClosePianoRoll,
         ),
       _ => const SizedBox.expand(),
     };
@@ -569,20 +601,16 @@ class _PlatformMenuHost extends StatelessWidget {
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
                 PlatformMenuItem(
-                  label: 'Playlist',
+                  label: 'Channels',
                   onSelected: () => onSelectRail(0),
                 ),
                 PlatformMenuItem(
-                  label: 'Channels',
+                  label: 'Playlist',
                   onSelected: () => onSelectRail(1),
                 ),
                 PlatformMenuItem(
-                  label: 'Piano roll',
-                  onSelected: () => onSelectRail(2),
-                ),
-                PlatformMenuItem(
                   label: 'Mixer',
-                  onSelected: () => onSelectRail(3),
+                  onSelected: () => onSelectRail(2),
                 ),
               ],
             ),

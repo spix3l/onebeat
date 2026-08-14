@@ -10,7 +10,6 @@ import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/channel_rack/rack_binding.dart';
 import 'package:onebeat/src/features/mixer/mixer_binding.dart';
-import 'package:onebeat/src/features/piano_roll/piano_roll_binding.dart';
 import 'package:onebeat/src/features/playlist/playlist_binding.dart';
 import 'package:onebeat/src/features/shell/shell_binding.dart';
 import 'package:onebeat/src/ui_kit/rail_button.dart';
@@ -75,8 +74,8 @@ void main() {
     ) async {
       await pumpShell(tester, size: size);
       expect(tester.takeException(), isNull);
-      // The arrangement view, as the design screens open on.
-      expect(find.byType(PlaylistBinding), findsOneWidget);
+      // The channel rack is the composition home, so it opens first.
+      expect(find.byType(RackBinding), findsOneWidget);
     });
   }
 
@@ -85,23 +84,19 @@ void main() {
   ) async {
     await pumpShell(tester, size: const Size(1440, 900));
 
-    // Rail buttons: 0=Playlist, 1=Channels, 2=Piano, 3=Mixer
+    // Rail buttons: 0=Channels, 1=Playlist, 2=Mixer, 3=Packs
     await tester.tap(find.byType(ObRailButton).at(1));
     await tester.pump();
-    expect(find.byType(RackBinding), findsOneWidget);
-    expect(find.byType(PlaylistBinding), findsNothing);
+    expect(find.byType(PlaylistBinding), findsOneWidget);
+    expect(find.byType(RackBinding), findsNothing);
 
     await tester.tap(find.byType(ObRailButton).at(2));
-    await tester.pump();
-    expect(find.byType(PianoRollBinding), findsOneWidget);
-
-    await tester.tap(find.byType(ObRailButton).at(3));
     await tester.pump();
     expect(find.byType(MixerBinding), findsOneWidget);
 
     await tester.tap(find.byType(ObRailButton).at(0));
     await tester.pump();
-    expect(find.byType(PlaylistBinding), findsOneWidget);
+    expect(find.byType(RackBinding), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

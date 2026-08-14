@@ -39,6 +39,25 @@ void main() {
   runApp(const OneBeatApp());
 }
 
+/// Builds the plain (non-Material) page route that [WidgetsApp] uses to host
+/// the shell as its home route. Flutter's `WidgetsApp` needs this to know what
+/// kind of route transition to build, and hosting the shell as a route is what
+/// gives it a `Navigator` — and therefore an `Overlay` — above it, which drag
+/// feedback, popover menus and context menus all require.
+PageRoute<T> _pageRoute<T>(RouteSettings settings, WidgetBuilder builder) {
+  return PageRouteBuilder<T>(
+    settings: settings,
+    pageBuilder:
+        (
+          BuildContext context,
+          Animation<double> animation,
+          Animation<double> secondaryAnimation,
+        ) {
+          return builder(context);
+        },
+  );
+}
+
 class OneBeatApp extends StatefulWidget {
   const OneBeatApp({super.key});
 
@@ -97,21 +116,24 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTokens.dark();
+    final EngineClient? client = _client;
+    // The shell is the Navigator's home route rather than a `builder` wrapper:
+    // the Navigator supplies the Overlay that Draggable drag feedback, the
+    // dropdown's OverlayPortal and context menus all require. OneBeat is a
+    // single-view app and never pushes routes, so the navigator only hosts that
+    // overlay infrastructure.
     return OneBeatTheme(
       tokens: tokens,
       child: WidgetsApp(
         title: 'OneBeat',
         color: tokens.color.surfaceDeep,
         debugShowCheckedModeBanner: false,
-        builder: (BuildContext context, Widget? child) {
-          final EngineClient? client = _client;
-          if (client == null) {
-            return _EngineUnavailable(
-              message: _failure ?? 'The engine could not start.',
-            );
-          }
-          return ShellBinding(client: client);
-        },
+        pageRouteBuilder: _pageRoute,
+        home: client == null
+            ? _EngineUnavailable(
+                message: _failure ?? 'The engine could not start.',
+              )
+            : ShellBinding(client: client),
       ),
     );
   }

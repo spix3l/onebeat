@@ -124,4 +124,36 @@ void main() {
 
     controller.dispose();
   });
+
+  testWidgets('Space restarts the timer on stop; pause keeps position', (
+    WidgetTester tester,
+  ) async {
+    final _FakeEngineClient fakeClient = _FakeEngineClient();
+    final EngineController controller = EngineController(
+      client: fakeClient,
+      vsync: const TestVSync(),
+      motion: const MotionTokens(),
+    );
+
+    controller.togglePlay();
+    expect(fakeClient.isPlaying, isTrue);
+    await tester.pump();
+
+    // Move the playhead, then stop with Space: it returns to zero.
+    controller.seekFrames(512);
+    controller.togglePlay();
+    expect(fakeClient.isPlaying, isFalse);
+    expect(fakeClient.seekTarget, 0);
+    await tester.pump();
+
+    // Pause instead: resume from the same place.
+    controller.togglePause();
+    await tester.pump();
+    controller.seekFrames(1024);
+    controller.togglePause();
+    expect(fakeClient.isPlaying, isFalse);
+    expect(fakeClient.seekTarget, 1024);
+
+    controller.dispose();
+  });
 }

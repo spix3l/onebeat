@@ -45,6 +45,10 @@ class TogglePlayIntent extends Intent {
   const TogglePlayIntent();
 }
 
+class TogglePauseIntent extends Intent {
+  const TogglePauseIntent();
+}
+
 class ReturnToZeroIntent extends Intent {
   const ReturnToZeroIntent();
 }

@@ -17,7 +17,9 @@ void main() {
     await pumpUi(
       tester,
       _DropdownStates(spacing: tokens.spacing.lg),
-      size: const Size(400, 200),
+      // Tall enough that the open menu, which now floats in the overlay rather
+      // than inflating the field's own box, clears the surface's bottom edge.
+      size: const Size(400, 240),
       center: true,
     );
     await tester.pumpAndSettle();
@@ -64,8 +66,9 @@ void main() {
       ),
       size: const Size(300, 300),
     );
-    // While open the widget's box grows to cover the menu, so the field —
-    // not the box centre — is the tap target.
+    // Tapping the field toggles the overlay menu; the field text and the menu
+    // row share a label, so `.first` targets the field (it sits before the
+    // overlay entry in tree order).
     await tester.tap(find.text('Audio 2').first);
     await tester.pumpAndSettle();
     expect(find.text('Audio 1'), findsOneWidget);

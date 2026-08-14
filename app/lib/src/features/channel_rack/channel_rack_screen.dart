@@ -18,6 +18,9 @@ class ChannelRackScreen extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     this.onAddChannel,
+    this.onDoubleTap,
+    this.onRowSecondaryTapDown,
+    this.onDropInstrument,
     this.onSearchTap,
     this.onChannelType,
     this.onGroup,
@@ -48,6 +51,10 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
+  final VoidCallback? onDoubleTap;
+  final void Function(int rowIndex, TapDownDetails details)?
+      onRowSecondaryTapDown;
+  final void Function(int rowIndex, Object data)? onDropInstrument;
   final VoidCallback? onSearchTap;
   final ValueChanged<String>? onChannelType;
   final ValueChanged<String>? onGroup;
@@ -111,6 +118,9 @@ class ChannelRackScreen extends StatelessWidget {
               onPanChanged: onPanChanged,
               onRouteTap: onRouteTap,
               onAddChannel: onAddChannel,
+              onDoubleTap: onDoubleTap,
+              onRowSecondaryTapDown: onRowSecondaryTapDown,
+              onDropInstrument: onDropInstrument,
               onPointerDownStep: onPointerDownStep,
               onPointerMoveStep: onPointerMoveStep,
               onPointerUpStep: onPointerUpStep,
@@ -347,6 +357,9 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     this.onAddChannel,
+    this.onDoubleTap,
+    this.onRowSecondaryTapDown,
+    this.onDropInstrument,
     this.onPointerDownStep,
     this.onPointerMoveStep,
     this.onPointerUpStep,
@@ -366,6 +379,10 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
+  final VoidCallback? onDoubleTap;
+  final void Function(int rowIndex, TapDownDetails details)?
+      onRowSecondaryTapDown;
+  final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
       onPointerDownStep;
   final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
@@ -394,6 +411,8 @@ class _RackRowsScrollArea extends StatelessWidget {
                 onVolChanged: onVolChanged,
                 onPanChanged: onPanChanged,
                 onRouteTap: onRouteTap,
+                onSecondaryTapDown: onRowSecondaryTapDown,
+                onDropInstrument: onDropInstrument,
                 onPointerDownStep: onPointerDownStep,
                 onPointerMoveStep: onPointerMoveStep,
                 onPointerUpStep: onPointerUpStep,
@@ -408,6 +427,7 @@ class _RackRowsScrollArea extends StatelessWidget {
                 trail: footerTrail,
                 shortcut: footerShortcut,
                 onAddChannel: onAddChannel,
+                onDoubleTap: onDoubleTap,
               ),
             ),
           ],
@@ -428,6 +448,8 @@ class _RackRowItem extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
+    this.onSecondaryTapDown,
+    this.onDropInstrument,
     this.onPointerDownStep,
     this.onPointerMoveStep,
     this.onPointerUpStep,
@@ -443,6 +465,9 @@ class _RackRowItem extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
+  final void Function(int rowIndex, TapDownDetails details)?
+      onSecondaryTapDown;
+  final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
       onPointerDownStep;
   final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
@@ -452,25 +477,58 @@ class _RackRowItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerUp: onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
-      onPointerCancel:
-          onPointerCancelStep == null ? null : (_) => onPointerCancelStep!(),
-      child: ObRackRow(
-        vm: row,
-        playingStep: playingStep,
-        onTap: onSelectRow == null ? null : () => onSelectRow!(index),
-        onPower: onTogglePower == null ? null : () => onTogglePower!(index),
-        onStepTap:
-            onStepTap == null ? null : (int step) => onStepTap!(index, step),
-        onVol: onVolChanged == null
-            ? null
-            : (double val) => onVolChanged!(index, val),
-        onPan: onPanChanged == null
-            ? null
-            : (double val) => onPanChanged!(index, val),
-        onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
-      ),
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final void Function(int, Object)? drop = onDropInstrument;
+
+    return DragTarget<Object>(
+      onAcceptWithDetails:
+          drop == null
+              ? null
+              : (DragTargetDetails<Object> details) =>
+                    drop(index, details.data),
+      builder: (BuildContext context, List<Object?> candidates, List<Object?> rejected) {
+        final bool hovering = candidates.isNotEmpty;
+        return Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: hovering ? tokens.color.accent : tokens.color.none,
+              width: hovering ? tokens.border.emphasis : 0,
+            ),
+          ),
+          child: Listener(
+            onPointerUp:
+                onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
+            onPointerCancel:
+                onPointerCancelStep == null
+                    ? null
+                    : (_) => onPointerCancelStep!(),
+            child: ObRackRow(
+              vm: row,
+              playingStep: playingStep,
+              onTap: onSelectRow == null ? null : () => onSelectRow!(index),
+              onSecondaryTapDown: onSecondaryTapDown == null
+                  ? null
+                  : (TapDownDetails details) =>
+                        onSecondaryTapDown!(index, details),
+              onPower: onTogglePower == null
+                  ? null
+                  : () => onTogglePower!(index),
+              onStepTap: onStepTap == null
+                  ? null
+                  : (int step) => onStepTap!(index, step),
+              onVol: onVolChanged == null
+                  ? null
+                  : (double val) => onVolChanged!(index, val),
+              onPan: onPanChanged == null
+                  ? null
+                  : (double val) => onPanChanged!(index, val),
+              onRouteTap: onRouteTap == null
+                  ? null
+                  : () => onRouteTap!(index),
+            ),
+          ),
+        );
+      },
     );
   }
 }

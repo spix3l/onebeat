@@ -70,6 +70,7 @@ class ObRackRow extends StatelessWidget {
     required this.vm,
     this.playingStep,
     this.onTap,
+    this.onSecondaryTapDown,
     this.onPower,
     this.onStepTap,
     this.onVol,
@@ -85,6 +86,7 @@ class ObRackRow extends StatelessWidget {
   final int? playingStep;
 
   final VoidCallback? onTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onPower;
   final ValueChanged<int>? onStepTap;
   final ValueChanged<double>? onVol;
@@ -99,6 +101,7 @@ class ObRackRow extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
       child: Container(
         height: tokens.size.rackLaneHeight,
         decoration: BoxDecoration(

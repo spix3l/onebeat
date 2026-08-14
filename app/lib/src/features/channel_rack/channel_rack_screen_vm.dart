@@ -28,7 +28,7 @@ class ChannelRackScreenVm {
   const ChannelRackScreenVm({
     this.title = 'CHANNEL RACK',
     this.patterns = const <PatternTabVm>[],
-    this.hint = 'double-click a channel to open its piano roll',
+    this.hint = 'right-click a channel to open its piano roll',
     required this.toolbar,
     this.stepCount = 16,
     required this.rows,

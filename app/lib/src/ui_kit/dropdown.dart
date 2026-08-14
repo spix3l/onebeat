@@ -5,10 +5,13 @@
 // field — raised panel, radius, hairline, and an accent wash plus check mark
 // on the selected row (the layouts popover in `screens/workspace-window.png`).
 //
-// The menu renders inside this widget's own stack, so a dropdown near the
-// bottom of a scroll view can be clipped by an ancestor clip; screens own
-// that placement, the atom stays free of overlay plumbing until Phase D asks
-// for it.
+// The menu renders in the nearest `Overlay` via `OverlayPortal`, anchored
+// below the field with `CompositedTransformFollower`. That keeps the field's
+// own box at its closed size — opening does not reflow the toolbar row it
+// sits in — and paints the menu above whatever content follows it. The two
+// bugs the first in-stack version had (a vertical jump on open, and the menu
+// dropping behind the lane below) are both structural properties of an
+// overlay, not per-screen fixes.
 import 'package:flutter/widgets.dart';
 
 import '../design/tokens.dart';
@@ -43,10 +46,22 @@ class ObDropdown extends StatefulWidget {
 }
 
 class _ObDropdownState extends State<ObDropdown> {
+  final OverlayPortalController _portalController = OverlayPortalController();
+  final LayerLink _layerLink = LayerLink();
   bool _open = false;
+
+  void _toggle() {
+    setState(() => _open = !_open);
+    if (_open) {
+      _portalController.show();
+    } else {
+      _portalController.hide();
+    }
+  }
 
   void _select(String item) {
     setState(() => _open = false);
+    _portalController.hide();
     widget.onSelected?.call(item);
   }
 
@@ -54,43 +69,45 @@ class _ObDropdownState extends State<ObDropdown> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final double width = widget.width ?? tokens.size.dropdownWidth;
-    // While open, the box grows to cover the menu: a Stack only hit-tests
-    // inside its own bounds, so a menu painted past them (Clip.none) would
-    // be visible but untappable. Growing nudges the layout below the field
-    // rather than overlapping it — screens that need a true overlay popover
-    // get it in Phase D.
-    final double menuHeight =
-        widget.items.length * tokens.size.menuItemHeight +
-        tokens.border.hairline * 2;
-    final double height =
-        tokens.size.microFieldHeight +
-        (_open ? tokens.spacing.xs + menuHeight : 0);
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: <Widget>[
-          _Field(
+    // The field stays a fixed 26px box; the menu is a separate overlay child
+    // anchored below it, so opening never reflows this widget's parent row.
+    // The SizedBox pins both axes explicitly — the width is what the field's
+    // `Expanded` value text needs, and the height keeps the box from growing
+    // to a stretchy parent, now that the field no longer inflates to hold its
+    // own menu.
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: SizedBox(
+        width: width,
+        height: tokens.size.microFieldHeight,
+        child: OverlayPortal(
+          controller: _portalController,
+          overlayChildBuilder: (BuildContext context) {
+            return CompositedTransformFollower(
+              link: _layerLink,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: Offset(0, tokens.spacing.xs),
+              showWhenUnlinked: false,
+              child: SizedBox(
+                width: width,
+                child: _Menu(
+                  items: widget.items,
+                  selected: widget.value,
+                  onSelected: widget.onSelected == null ? null : _select,
+                ),
+              ),
+            );
+          },
+          child: _Field(
             label: widget.label,
             value: widget.value,
             open: _open,
-            // Opening is local UI state, so it works without a callback;
-            // only selecting needs one.
-            onTap: () => setState(() => _open = !_open),
+            // Opening is local UI state, so it works without a callback; only
+            // selecting needs one.
+            onTap: _toggle,
           ),
-          if (_open)
-            Positioned(
-              left: 0,
-              top: tokens.size.microFieldHeight + tokens.spacing.xs,
-              width: width,
-              child: _Menu(
-                items: widget.items,
-                selected: widget.value,
-                onSelected: widget.onSelected == null ? null : _select,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

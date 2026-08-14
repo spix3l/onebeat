@@ -39,7 +39,14 @@ Widget wrapForTest(Widget child, {Size size = const Size(1200, 800)}) {
             // whether the widget actually covers its own bounds.
             child: ColoredBox(
               color: OneBeatTokens.dark().color.surfaceDeep,
-              child: child,
+              // The real app's `WidgetsApp` provides the root `Overlay` that
+              // dropdown menus and popovers render into; mirror it here so a
+              // binding test can open one without a missing-overlay assert.
+              child: Overlay(
+                initialEntries: <OverlayEntry>[
+                  OverlayEntry(builder: (BuildContext context) => child),
+                ],
+              ),
             ),
           ),
         ),

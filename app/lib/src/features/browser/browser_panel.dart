@@ -23,10 +23,14 @@ import 'browser_glyphs.dart';
 /// compile error at every place that draws one, rather than a row that
 /// silently renders as a folder.
 sealed class BrowserNodeVm {
-  const BrowserNodeVm({required this.id, required this.name});
+  const BrowserNodeVm({required this.id, required this.name, this.dragData});
 
   final String id;
   final String name;
+
+  /// Payload carried by a drag that starts on this row (a plug-in to drop into
+  /// the channel rack). Rows with a null payload are not draggable.
+  final Object? dragData;
 
   /// Rows nested under this one. Only shown when the node is expanded.
   List<BrowserNodeVm> get children;
@@ -76,6 +80,7 @@ class BrowserSampleVm extends BrowserNodeVm {
     required super.id,
     required super.name,
     required this.color,
+    super.dragData,
   });
 
   final Color color;
@@ -197,12 +202,15 @@ class ObBrowserPanel extends StatelessWidget {
       switch (node) {
         case BrowserFolderVm():
           rows.add(
-            BrowserFolderRow(
-              node: node,
-              depth: depth,
-              selected: selected,
-              onTap: tap,
-              onToggle: toggle,
+            _dragWrap(
+              node,
+              BrowserFolderRow(
+                node: node,
+                depth: depth,
+                selected: selected,
+                onTap: tap,
+                onToggle: toggle,
+              ),
             ),
           );
           if (node.expanded) {
@@ -210,12 +218,15 @@ class ObBrowserPanel extends StatelessWidget {
           }
         case BrowserPatternVm():
           rows.add(
-            BrowserPatternRow(
-              node: node,
-              depth: depth,
-              selected: selected,
-              onTap: tap,
-              onToggle: toggle,
+            _dragWrap(
+              node,
+              BrowserPatternRow(
+                node: node,
+                depth: depth,
+                selected: selected,
+                onTap: tap,
+                onToggle: toggle,
+              ),
             ),
           );
           if (node.expanded) {
@@ -223,16 +234,32 @@ class ObBrowserPanel extends StatelessWidget {
           }
         case BrowserSampleVm():
           rows.add(
-            BrowserSampleRow(
-              node: node,
-              depth: depth,
-              selected: selected,
-              onTap: tap,
+            _dragWrap(
+              node,
+              BrowserSampleRow(
+                node: node,
+                depth: depth,
+                selected: selected,
+                onTap: tap,
+              ),
             ),
           );
       }
     }
     return rows;
+  }
+
+  /// Wraps a row in a [Draggable] when it carries a drag payload, so built-in
+  /// plug-ins can be dragged into the channel rack.
+  Widget _dragWrap(BrowserNodeVm node, Widget row) {
+    final Object? data = node.dragData;
+    if (data == null) return row;
+    return Draggable<Object>(
+      data: data,
+      feedback: _DragFeedback(label: node.name),
+      childWhenDragging: Opacity(opacity: 0.4, child: row),
+      child: row,
+    );
   }
 }
 
@@ -574,6 +601,44 @@ class _BrowserEmptyState extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The chip that rides the cursor while a plug-in is dragged out of the
+/// browser: a small raised tag carrying the node's name.
+class _DragFeedback extends StatelessWidget {
+  const _DragFeedback({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: tokens.spacing.md,
+        vertical: tokens.spacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.color.surfaceRaised,
+        borderRadius: tokens.radius.controlBorder,
+        border: Border.all(
+          color: tokens.color.lineStrong,
+          width: tokens.border.hairline,
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: tokens.color.windowShadow,
+            blurRadius: tokens.size.windowShadowBlur,
+            offset: Offset(0, tokens.size.windowShadowOffset),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: tokens.type.body.copyWith(color: tokens.color.textPrimary),
       ),
     );
   }

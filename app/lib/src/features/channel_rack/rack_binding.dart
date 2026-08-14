@@ -12,6 +12,8 @@ import 'package:flutter/widgets.dart';
 import '../../core/engine_controller.dart' as core;
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
+import '../../ui_kit/kit_glyphs.dart';
+import '../../ui_kit/popover_menu.dart';
 import 'channel_inspector.dart';
 import 'channel_rack_screen.dart';
 import 'channel_rack_screen_vm.dart';
@@ -52,6 +54,8 @@ class _RackBindingState extends State<RackBinding>
   String _selectedType = 'Sampler';
   String _selectedSnap = '1/16';
 
+  OverlayEntry? _contextMenuEntry;
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +83,7 @@ class _RackBindingState extends State<RackBinding>
 
   @override
   void dispose() {
+    _hideContextMenu();
     _controller.removeListener(_onEngineChanged);
     _store.removeListener(_onStoreChanged);
     if (_ownsStore) {
@@ -279,21 +284,105 @@ class _RackBindingState extends State<RackBinding>
     }
   }
 
-  void _onAddChannel() {
-    if (widget.onBrowsePlugins != null) {
-      widget.onBrowsePlugins!();
-    } else {
-      // If there are un-included instruments, include the first one
-      final Set<String> visibleIds =
-          _store.rows.where(_store.isVisible).map((r) => r.instrumentId).toSet();
-      for (final ProjectInstrument inst in _store.instruments) {
-        if (!visibleIds.contains(inst.id)) {
-          _store.includeInstrument(inst.id);
-          return;
-        }
-      }
-      _store.setShowAll(value: true);
+  /// The first usable built-in plug-in, for adding a channel or an instrument
+  /// without browsing. Falls back to any usable plug-in.
+  PluginListing? _firstBuiltin() {
+    final PluginScanStatus status = widget.client.readPluginScanStatus();
+    if (status.pluginCount <= 0) return null;
+    final List<PluginListing> plugins = widget.client.readPluginList(
+      status.pluginCount,
+    );
+    PluginListing? fallback;
+    for (final PluginListing p in plugins) {
+      if (!p.isUsable) continue;
+      if (p.format == PluginFormat.builtin) return p;
+      fallback ??= p;
     }
+    return fallback;
+  }
+
+  /// Adds the default instrument as a new, empty channel. When no usable
+  /// plug-in has been discovered yet, falls back to opening the browser.
+  void _addInstrument() {
+    final PluginListing? plugin = _firstBuiltin();
+    if (plugin == null) {
+      widget.onBrowsePlugins?.call();
+      return;
+    }
+    widget.client.addPluginByPath(plugin.path, plugin.id);
+    _store.refresh();
+    if (_store.instruments.isNotEmpty) {
+      _store.selectInstrument(_store.instruments.last.id);
+    }
+  }
+
+  void _onAddChannel() => _addInstrument();
+
+  void _onDoubleTap() => _addInstrument();
+
+  void _onRowSecondaryTapDown(int rowIndex, TapDownDetails details) {
+    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    _showContextMenu(visible[rowIndex].instrumentId, details.globalPosition);
+  }
+
+  void _onDropInstrument(int rowIndex, Object data) {
+    if (data is! PluginListing) return;
+    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
+    _store.refresh();
+  }
+
+  void _showContextMenu(String instrumentId, Offset globalPosition) {
+    _hideContextMenu();
+    final OverlayState overlay = Overlay.of(context);
+    _contextMenuEntry = OverlayEntry(
+      builder: (BuildContext overlayContext) {
+        return Stack(
+          children: <Widget>[
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _hideContextMenu,
+                onSecondaryTapDown: (_) => _hideContextMenu(),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: globalPosition.dx,
+              top: globalPosition.dy,
+              child: ObPopoverMenu(
+                vm: const ObPopoverMenuVm(
+                  sections: <ObMenuSectionVm>[
+                    ObMenuSectionVm(
+                      rows: <ObMenuRowVm>[
+                        ObMenuRowVm(
+                          label: 'Open in piano roll',
+                          icon: ObKitGlyphKind.note,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                onSelect: (int index) {
+                  _hideContextMenu();
+                  if (index == 0) {
+                    widget.onOpenPianoRoll?.call(instrumentId);
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlay.insert(_contextMenuEntry!);
+  }
+
+  void _hideContextMenu() {
+    _contextMenuEntry?.remove();
+    _contextMenuEntry = null;
   }
 
   @override
@@ -306,6 +395,9 @@ class _RackBindingState extends State<RackBinding>
       onSelectRow: _onSelectRow,
       onStepTap: _onStepTap,
       onAddChannel: _onAddChannel,
+      onDoubleTap: _onDoubleTap,
+      onRowSecondaryTapDown: _onRowSecondaryTapDown,
+      onDropInstrument: _onDropInstrument,
       onChannelType: (String val) => setState(() => _selectedType = val),
       onGroup: (String val) => setState(() => _selectedGroup = val),
       onSnap: (String val) {

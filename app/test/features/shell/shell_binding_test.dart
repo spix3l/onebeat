@@ -220,29 +220,29 @@ void main() {
     );
     await tester.pump();
 
-    // Initial state: Playlist active (index 0)
+    // Initial state: Channels active (index 0), the composition home
     final ObSideRail railInitial = tester.widget(find.byType(ObSideRail));
     expect(railInitial.vm.activeIndex, 0);
 
-    // Tap Channels (index 1)
-    await tester.tap(find.text('CHANNELS'));
+    // Tap Playlist (index 1)
+    await tester.tap(find.text('PLAYLIST'));
     await tester.pump();
 
-    final ObSideRail railChannels = tester.widget(find.byType(ObSideRail));
-    expect(railChannels.vm.activeIndex, 1);
+    final ObSideRail railPlaylist = tester.widget(find.byType(ObSideRail));
+    expect(railPlaylist.vm.activeIndex, 1);
 
-    // Tap Piano (index 2)
-    await tester.tap(find.text('PIANO'));
-    await tester.pump();
-
-    final ObSideRail railPiano = tester.widget(find.byType(ObSideRail));
-    expect(railPiano.vm.activeIndex, 2);
-
-    // Tap Mixer (index 3)
+    // Tap Mixer (index 2)
     await tester.tap(find.text('MIXER'));
     await tester.pump();
 
     final ObSideRail railMixer = tester.widget(find.byType(ObSideRail));
-    expect(railMixer.vm.activeIndex, 3);
+    expect(railMixer.vm.activeIndex, 2);
+
+    // Tap Channels (index 0)
+    await tester.tap(find.text('CHANNELS'));
+    await tester.pump();
+
+    final ObSideRail railChannels = tester.widget(find.byType(ObSideRail));
+    expect(railChannels.vm.activeIndex, 0);
   });
 }
