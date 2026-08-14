@@ -15,7 +15,13 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens.dart';
 
 /// Which rail destination glyph to paint.
-enum ObRailGlyphKind { grid, help, note, sliders, folder }
+///
+/// [script] and [extension] are the two destinations the extension screens add
+/// to the rail (UI-C-11): `screens/ext-manager.png` reduces it to PLAYLIST,
+/// SCRIPT, EXTNS, PACKS. They are here rather than in the extensions feature
+/// because the rail is shell chrome, and a rail whose glyphs came from two
+/// places would drift in weight the first time either was touched.
+enum ObRailGlyphKind { grid, help, note, sliders, folder, script, extension }
 
 class ObRailGlyph extends StatelessWidget {
   const ObRailGlyph({required this.kind, super.key});
@@ -128,6 +134,45 @@ class _RailGlyphPainter extends CustomPainter {
             line,
           );
         }
+      case ObRailGlyphKind.script:
+        // A page with a prompt caret on it: the console is a place you type.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(w * 0.16, h * 0.12, w * 0.68, h * 0.76),
+            Radius.circular(w * 0.12),
+          ),
+          line,
+        );
+        canvas.drawLine(
+          Offset(w * 0.32, h * 0.36),
+          Offset(w * 0.44, h * 0.48),
+          line,
+        );
+        canvas.drawLine(
+          Offset(w * 0.44, h * 0.48),
+          Offset(w * 0.32, h * 0.60),
+          line,
+        );
+        canvas.drawLine(
+          Offset(w * 0.52, h * 0.64),
+          Offset(w * 0.68, h * 0.64),
+          line,
+        );
+      case ObRailGlyphKind.extension:
+        // A rounded tile with a tab on its edge — a block that plugs into
+        // something, which is the whole idea.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(w * 0.18, h * 0.18, w * 0.64, h * 0.64),
+            Radius.circular(w * 0.14),
+          ),
+          line,
+        );
+        canvas.drawLine(
+          Offset(w * 0.50, h * 0.06),
+          Offset(w * 0.50, h * 0.18),
+          line,
+        );
       case ObRailGlyphKind.folder:
         final Path folder =
             Path()

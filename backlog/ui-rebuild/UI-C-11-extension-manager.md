@@ -24,8 +24,8 @@ Per `ext-manager.png`: reduced rail (PLAYLIST, SCRIPT, EXTNS active, PACKS); lef
 
 ## Acceptance criteria
 
-- [ ] Three goldens match the mockups; all copy verbatim (it is product voice, not lorem).
-- [ ] No store/engine imports; analyze + token lint + tests clean.
+- [x] Three goldens match the mockups; all copy verbatim (it is product voice, not lorem).
+- [x] No store/engine imports; analyze + token lint + tests clean.
 
 ## Out of scope
 
