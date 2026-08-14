@@ -373,6 +373,26 @@ class SizeTokens {
   double get tagHeight => 16;
   double get tagRadius => 3;
 
+  /// Top chrome (UI-B-02). Two stacked bars sit on every screen: the 24px
+  /// system/menu bar and the 68px transport bar below it. The readout boxes
+  /// are the dark inset wells between them — taller than the old 34px strip
+  /// because their numerals are 21px MartianMono.
+  double get menuBarHeight => 24;
+  double get transportBarHeight => 68;
+  double get readoutBoxHeight => 44;
+
+  /// The rounded accent square in the transport bar's title block.
+  double get appTileSize => 28;
+
+  /// macOS traffic-light dots as the transport bar itself draws them (the
+  /// window's real ones sit inside the app's chrome — see MainFlutterWindow).
+  double get trafficLightDotSize => 12;
+
+  /// The master meter sliver pair at the transport bar's right edge: two
+  /// hairline-thin vertical L/R bars, as tall as the readout boxes beside them.
+  double get masterMeterSliverWidth => 4;
+  double get masterMeterSliverGap => 2;
+
   /// Core controls (UI-B-01). The micro field is the 26px-tall strip the
   /// dropdowns, FX chips and chip rows all sit in — one height so a row of
   /// mixed controls shares a baseline.
@@ -520,6 +540,42 @@ class TypeTokens {
     fontWeight: FontWeight.w400,
     color: textMuted,
   );
+
+  /// Top chrome (UI-B-02). The `OneBeat` wordmark in the menu bar — smaller
+  /// and quieter than [brand], which is the title-block treatment.
+  TextStyle get wordmark => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
+    color: textPrimary,
+  );
+
+  /// The `ONEBEAT` caps line of the transport bar's title block: wide-tracked
+  /// small caps, one step down from [brand] so it reads as chrome, not a
+  /// headline.
+  TextStyle get brandCaps => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.0,
+    color: textPrimary,
+  );
+
+  /// The numerals of the top-bar readout boxes (BPM, time signature, the
+  /// bar·beat·tick clock): the largest mono in the app at 21px, the size the
+  /// design gives the values a user glances at most often. Tightened because
+  /// MartianMono runs wide, and at the default line height the value + unit
+  /// stack does not fit a 44px box.
+  TextStyle get readoutValue => numeric.copyWith(
+    fontSize: 21,
+    letterSpacing: -0.5,
+    height: 1.15,
+  );
+
+  /// The unit label under a readout value — [microCaps] on the same tightened
+  /// leading so the pair stacks inside the box.
+  TextStyle get readoutUnit => microCaps.copyWith(height: 1.2);
 
   /// Section headers like BROWSER, PLAYLIST.
   TextStyle get sectionHeader => TextStyle(
