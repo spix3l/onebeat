@@ -16,6 +16,7 @@ import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../browser/browser_panel.dart';
 import '../channel_rack/rack_binding.dart';
+import '../piano_roll/piano_roll_binding.dart';
 import 'menu_bar.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
@@ -29,7 +30,6 @@ import '../../ui/arrangement.dart' as old_ui;
 import '../../ui/engine_controller.dart' as old_ui;
 import '../../ui/export_dialog.dart' as old_ui;
 import '../../ui/mixer_view.dart' as old_ui;
-import '../../ui/piano_roll.dart' as old_ui;
 import '../../ui/preferences_dialog.dart' as old_ui;
 
 class ShellBinding extends StatefulWidget {
@@ -316,6 +316,7 @@ class _ShellBindingState extends State<ShellBinding>
                   activeRailIndex: _activeRailIndex,
                   oldUiController: _oldUiController,
                   coreController: _controller,
+                  onSelectRail: _onRailSelect,
                 ),
                 onRailSelect: _onRailSelect,
                 onMenuTap: _onMenuTap,
@@ -348,11 +349,13 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.activeRailIndex,
     required this.oldUiController,
     required this.coreController,
+    required this.onSelectRail,
   });
 
   final int activeRailIndex;
   final old_ui.EngineController? oldUiController;
   final core.EngineController coreController;
+  final ValueChanged<int> onSelectRail;
 
   @override
   Widget build(BuildContext context) {
@@ -374,11 +377,14 @@ class _WorkspaceSlot extends StatelessWidget {
           client: coreController.client,
           controller: coreController,
           onBrowsePlugins: () {},
+          onOpenPianoRoll: (String instrumentId) {
+            onSelectRail(2);
+          },
         ),
-      2 => old_ui.PianoRoll(
-          controller: bridge,
-          store: bridge.pianoRoll,
-          patterns: bridge.patterns,
+      2 => PianoRollBinding(
+          client: coreController.client,
+          controller: coreController,
+          onBackToPlaylist: () => onSelectRail(0),
         ),
       3 => old_ui.MixerRoutingView(controller: bridge),
       _ => const SizedBox.expand(),

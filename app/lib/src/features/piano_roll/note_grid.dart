@@ -118,6 +118,7 @@ class PianoRollVm {
     this.ghostNotes = const <PrNoteVm>[],
     this.playheadTick,
     this.selected = const <int>{},
+    this.marqueeRect,
   });
 
   final List<PrNoteVm> notes;
@@ -129,6 +130,7 @@ class PianoRollVm {
   final PrViewport viewport;
   final int? playheadTick;
   final Set<int> selected;
+  final Rect? marqueeRect;
 }
 
 /// The roll canvas: row banding, grid lines, ghosts, notes, playhead.
@@ -237,6 +239,12 @@ class PrGridPainter extends CustomPainter {
   late final Paint _ghost = Paint()..color = color.noteGhost;
   late final Paint _note = Paint()..color = color.noteFill;
   late final Paint _selected = Paint()..color = color.noteSelected;
+  late final Paint _marqueeFill = Paint()..color = color.marqueeFill;
+  late final Paint _marqueeStroke =
+      Paint()
+        ..color = color.accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lineWidth;
   late final Paint _playhead =
       Paint()
         ..color = color.playhead
@@ -289,6 +297,13 @@ class PrGridPainter extends CustomPainter {
         note,
         vm.selected.contains(note.id) ? _selected : _note,
       );
+    }
+
+    final Rect? marquee = vm.marqueeRect;
+    if (marquee != null) {
+      canvas
+        ..drawRect(marquee, _marqueeFill)
+        ..drawRect(marquee, _marqueeStroke);
     }
 
     final int? playhead = vm.playheadTick;

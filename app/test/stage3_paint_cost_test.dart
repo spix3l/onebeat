@@ -12,7 +12,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
+import 'package:onebeat/src/features/piano_roll/note_grid.dart';
 import 'package:onebeat/src/ui/arrangement.dart';
 import 'package:onebeat/src/ui/piano_roll.dart';
 import 'package:onebeat/src/ui/piano_roll_store.dart';
@@ -87,6 +89,49 @@ void main() {
       reason:
           'the piano roll must paint 2,000 notes inside a 120 Hz frame; '
           'measured ${perPaint.toStringAsFixed(4)} ms',
+    );
+  });
+
+  testWidgets('new PrGridPainter paints 2,000 notes inside 120 Hz budget', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    final List<PrNoteVm> notes = <PrNoteVm>[
+      for (int i = 0; i < 2000; i++)
+        PrNoteVm(
+          id: i,
+          startTick: (i * 61) % (ticksPerBar * 32),
+          lengthTicks: 240,
+          midiNote: 48 + (i % 48),
+          velocity: (2000 + (i * 97) % 14000) / 16383.0,
+        ),
+    ];
+    final PianoRollVm vm = PianoRollVm(
+      notes: notes,
+      viewport: const PrViewport(
+        ticksPerPx: 3.33,
+        rowHeight: 14.0,
+        firstVisibleTick: 0,
+        topMidiNote: 96,
+      ),
+    );
+    final PrGridPainter painter = PrGridPainter(
+      vm: vm,
+      color: tokens.color,
+      noteHeight: tokens.size.prNoteHeight,
+      noteRadius: tokens.radius.xs,
+      lineWidth: tokens.border.hairline,
+      playheadWidth: tokens.size.playheadWidth,
+    );
+    final double cost = measurePaint(painter, const Size(1600, 760));
+    // ignore: avoid_print
+    print('PrGridPainter 2,000-note paint: ${cost.toStringAsFixed(4)} ms/frame');
+    expect(
+      cost,
+      lessThan(budget120Hz * allowedFractionOfBudget),
+      reason:
+          'PrGridPainter must paint 2,000 notes inside a 120 Hz frame; '
+          'measured ${cost.toStringAsFixed(4)} ms',
     );
   });
 
