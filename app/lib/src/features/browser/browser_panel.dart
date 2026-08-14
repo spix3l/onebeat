@@ -11,6 +11,8 @@
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../ui_kit/button.dart';
+import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/search_field.dart';
 import '../../ui_kit/search_icon.dart';
 import 'browser_glyphs.dart';
@@ -89,6 +91,8 @@ class ObBrowserPanelVm {
     this.selectedId,
     this.title = 'Browser',
     this.searchHint = 'Search samples, presets…',
+    this.emptyHeading = 'No sound folders yet.',
+    this.emptyButtonLabel = 'Add sound folder...',
   });
 
   final List<BrowserNodeVm> nodes;
@@ -97,6 +101,8 @@ class ObBrowserPanelVm {
   /// Micro-caps panel title; upper-cased on render.
   final String title;
   final String searchHint;
+  final String emptyHeading;
+  final String emptyButtonLabel;
 }
 
 class ObBrowserPanel extends StatelessWidget {
@@ -105,6 +111,7 @@ class ObBrowserPanel extends StatelessWidget {
     this.onTap,
     this.onToggle,
     this.onSearchTap,
+    this.onAddFolder,
     super.key,
   });
 
@@ -117,6 +124,7 @@ class ObBrowserPanel extends StatelessWidget {
   final ValueChanged<String>? onToggle;
 
   final VoidCallback? onSearchTap;
+  final VoidCallback? onAddFolder;
 
   @override
   Widget build(BuildContext context) {
@@ -138,34 +146,39 @@ class ObBrowserPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _Header(title: vm.title, onSearchTap: onSearchTap),
-          Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: tokens.spacing.sm,
-              vertical: tokens.spacing.sm,
-            ),
-            child: ObSearchField(
-              hint: vm.searchHint,
-              // The field spans the panel's content width rather than the
-              // kit's default: a search box narrower than the list it filters
-              // reads as a control for something else.
-              width: double.infinity,
-              onTap: onSearchTap,
-            ),
-          ),
-          Container(
-            height: tokens.border.hairline,
-            color: color.line,
-          ),
-          Expanded(
-            child: ListView(
+          if (vm.nodes.isNotEmpty) ...<Widget>[
+            Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: tokens.spacing.sm,
                 vertical: tokens.spacing.sm,
               ),
-              children: <Widget>[
-                for (final Widget row in _rows(vm.nodes, 0)) row,
-              ],
+              child: ObSearchField(
+                hint: vm.searchHint,
+                // The field spans the panel's content width rather than the
+                // kit's default: a search box narrower than the list it filters
+                // reads as a control for something else.
+                width: double.infinity,
+                onTap: onSearchTap,
+              ),
             ),
+            Container(height: tokens.border.hairline, color: color.line),
+          ],
+          Expanded(
+            child: vm.nodes.isEmpty
+                ? _BrowserEmptyState(
+                    heading: vm.emptyHeading,
+                    buttonLabel: vm.emptyButtonLabel,
+                    onAddFolder: onAddFolder,
+                  )
+                : ListView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: tokens.spacing.sm,
+                      vertical: tokens.spacing.sm,
+                    ),
+                    children: <Widget>[
+                      for (final Widget row in _rows(vm.nodes, 0)) row,
+                    ],
+                  ),
           ),
         ],
       ),
@@ -177,10 +190,10 @@ class ObBrowserPanel extends StatelessWidget {
     final List<Widget> rows = <Widget>[];
     for (final BrowserNodeVm node in nodes) {
       final bool selected = node.id == vm.selectedId;
-      final VoidCallback? tap =
-          onTap == null ? null : () => onTap!(node.id);
-      final VoidCallback? toggle =
-          onToggle == null ? null : () => onToggle!(node.id);
+      final VoidCallback? tap = onTap == null ? null : () => onTap!(node.id);
+      final VoidCallback? toggle = onToggle == null
+          ? null
+          : () => onToggle!(node.id);
       switch (node) {
         case BrowserFolderVm():
           rows.add(
@@ -210,7 +223,12 @@ class ObBrowserPanel extends StatelessWidget {
           }
         case BrowserSampleVm():
           rows.add(
-            BrowserSampleRow(node: node, depth: depth, selected: selected, onTap: tap),
+            BrowserSampleRow(
+              node: node,
+              depth: depth,
+              selected: selected,
+              onTap: tap,
+            ),
           );
       }
     }
@@ -299,12 +317,15 @@ class _RowState extends State<_Row> {
     }
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : MouseCursor.defer,
+      onEnter: widget.onTap == null
+          ? null
+          : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null
+          ? null
+          : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
@@ -361,10 +382,9 @@ class BrowserFolderRow extends StatelessWidget {
       onTap: onToggle ?? onTap,
       children: <Widget>[
         ObBrowserGlyph(
-          kind:
-              node.expanded
-                  ? ObBrowserGlyphKind.folderOpen
-                  : ObBrowserGlyphKind.folder,
+          kind: node.expanded
+              ? ObBrowserGlyphKind.folderOpen
+              : ObBrowserGlyphKind.folder,
           color: tokens.color.textSecondary,
         ),
         SizedBox(width: tokens.spacing.sm),
@@ -440,10 +460,9 @@ class BrowserPatternRow extends StatelessWidget {
           SizedBox(width: tokens.spacing.sm),
           Text(
             badge,
-            style:
-                selected
-                    ? tokens.type.listRowMeta.copyWith(color: color.textPrimary)
-                    : tokens.type.listRowMeta,
+            style: selected
+                ? tokens.type.listRowMeta.copyWith(color: color.textPrimary)
+                : tokens.type.listRowMeta,
           ),
         ],
       ],
@@ -489,12 +508,73 @@ class BrowserSampleRow extends StatelessWidget {
             node.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style:
-                selected ? tokens.type.listRowSelected : tokens.type.listRow,
+            style: selected ? tokens.type.listRowSelected : tokens.type.listRow,
           ),
         ),
         ObSampleWaveGlyph(color: tokens.color.textMuted),
       ],
+    );
+  }
+}
+
+class _BrowserEmptyState extends StatelessWidget {
+  const _BrowserEmptyState({
+    required this.heading,
+    required this.buttonLabel,
+    this.onAddFolder,
+  });
+
+  final String heading;
+  final String buttonLabel;
+  final VoidCallback? onAddFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ColorTokens color = tokens.color;
+
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Container(
+              width: tokens.size.emptyTileSize,
+              height: tokens.size.emptyTileSize,
+              decoration: BoxDecoration(
+                color: color.surfaceWell,
+                borderRadius: BorderRadius.all(tokens.radius.xxl),
+                border: Border.all(
+                  color: color.lineStrong,
+                  width: tokens.border.hairline,
+                ),
+              ),
+              child: Center(
+                child: ObKitGlyph(
+                  kind: ObKitGlyphKind.folder,
+                  color: color.textSecondary,
+                  size: ObKitGlyphSize.feature,
+                ),
+              ),
+            ),
+            SizedBox(height: tokens.spacing.md),
+            Text(
+              heading,
+              textAlign: TextAlign.center,
+              style: tokens.type.body.copyWith(color: color.textMuted),
+            ),
+            SizedBox(height: tokens.spacing.lg),
+            ObButton(
+              label: buttonLabel,
+              icon: ObKitGlyphKind.folder,
+              tone: ObButtonTone.primary,
+              onTap: onAddFolder,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

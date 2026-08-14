@@ -94,11 +94,7 @@ class _WordMark extends StatelessWidget {
 }
 
 class _MenuItem extends StatefulWidget {
-  const _MenuItem({
-    required this.label,
-    required this.active,
-    this.onTap,
-  });
+  const _MenuItem({required this.label, required this.active, this.onTap});
 
   final String label;
   final bool active;
@@ -125,12 +121,15 @@ class _MenuItemState extends State<_MenuItem> {
     return Padding(
       padding: EdgeInsets.only(right: tokens.spacing.sm),
       child: MouseRegion(
-        cursor:
-            widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-        onEnter:
-            widget.onTap == null ? null : (_) => setState(() => _hover = true),
-        onExit:
-            widget.onTap == null ? null : (_) => setState(() => _hover = false),
+        cursor: widget.onTap != null
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
+        onEnter: widget.onTap == null
+            ? null
+            : (_) => setState(() => _hover = true),
+        onExit: widget.onTap == null
+            ? null
+            : (_) => setState(() => _hover = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,

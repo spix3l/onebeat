@@ -152,7 +152,7 @@ void main() {
     expect(find.text('02:01:218'), findsOneWidget);
 
     // Initial transport status
-    expect(find.text('Ready'), findsOneWidget);
+    expect(find.text('New project'), findsOneWidget);
   });
 
   testWidgets('play and loop callbacks reach the engine client', (

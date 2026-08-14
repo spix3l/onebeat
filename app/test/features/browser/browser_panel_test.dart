@@ -138,4 +138,24 @@ void main() {
     );
     expect(find.byType(BrowserSampleRow), findsNWidgets(8));
   });
+
+  testWidgets('empty browser nodes render empty state with add folder button', (
+    WidgetTester tester,
+  ) async {
+    bool addFolderClicked = false;
+    await pumpUi(
+      tester,
+      ObBrowserPanel(
+        vm: const ObBrowserPanelVm(nodes: <BrowserNodeVm>[]),
+        onAddFolder: () => addFolderClicked = true,
+      ),
+      size: _panel,
+    );
+    expect(find.text('No sound folders yet.'), findsOneWidget);
+    expect(find.text('Add sound folder...'), findsOneWidget);
+
+    await tester.tap(find.text('Add sound folder...'));
+    await tester.pump();
+    expect(addFolderClicked, isTrue);
+  });
 }

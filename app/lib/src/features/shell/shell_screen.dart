@@ -7,7 +7,6 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 import '../browser/browser_panel.dart';
-import 'menu_bar.dart';
 import 'shell_screen_vm.dart';
 import 'side_rail.dart';
 import 'status_bar.dart';
@@ -58,10 +57,7 @@ class ShellScreen extends StatelessWidget {
     final Widget frame = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        ObMenuBar(
-          vm: vm.menuBar,
-          onMenuTap: onMenuTap,
-        ),
+        SizedBox(height: tokens.spacing.xl),
         ObTransportBar(
           vm: vm.transport,
           onUndo: onUndo,
@@ -76,10 +72,7 @@ class ShellScreen extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              ObSideRail(
-                vm: vm.rail,
-                onSelect: onRailSelect,
-              ),
+              ObSideRail(vm: vm.rail, onSelect: onRailSelect),
               if (vm.browser != null)
                 ObBrowserPanel(
                   vm: vm.browser!,
@@ -99,12 +92,7 @@ class ShellScreen extends StatelessWidget {
       color: tokens.color.surfaceSunken,
       child: overlay == null
           ? frame
-          : Stack(
-              children: <Widget>[
-                frame,
-                overlay,
-              ],
-            ),
+          : Stack(children: <Widget>[frame, overlay]),
     );
   }
 }

@@ -91,8 +91,6 @@ class ObTransportBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          _TrafficLights(tokens: tokens),
-          SizedBox(width: tokens.spacing.lg),
           _TitleBlock(vm: vm, tokens: tokens),
           SizedBox(width: tokens.spacing.xl),
           _TransportCluster(
@@ -121,34 +119,6 @@ class ObTransportBar extends StatelessWidget {
           _ExportButton(onTap: onExport),
         ],
       ),
-    );
-  }
-}
-
-class _TrafficLights extends StatelessWidget {
-  const _TrafficLights({required this.tokens});
-
-  final OneBeatTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorTokens color = tokens.color;
-    final List<Color> lights = <Color>[
-      color.trafficRed,
-      color.trafficYellow,
-      color.trafficGreen,
-    ];
-    return Row(
-      children: <Widget>[
-        for (int i = 0; i < lights.length; i++) ...<Widget>[
-          if (i > 0) SizedBox(width: tokens.spacing.sm),
-          Container(
-            width: tokens.size.trafficLightDotSize,
-            height: tokens.size.trafficLightDotSize,
-            decoration: BoxDecoration(color: lights[i], shape: BoxShape.circle),
-          ),
-        ],
-      ],
     );
   }
 }
@@ -336,7 +306,10 @@ class _MeterSliverPainter extends CustomPainter {
       final double top = size.height - to.clamp(0.0, fillHeight);
       final double bottom = size.height - from.clamp(0.0, fillHeight);
       if (bottom > top) {
-        canvas.drawRect(Rect.fromLTWH(0, top, size.width, bottom - top), Paint()..color = c);
+        canvas.drawRect(
+          Rect.fromLTWH(0, top, size.width, bottom - top),
+          Paint()..color = c,
+        );
       }
     }
 
@@ -366,12 +339,15 @@ class _ExportButtonState extends State<_ExportButton> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : MouseCursor.defer,
+      onEnter: widget.onTap == null
+          ? null
+          : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null
+          ? null
+          : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,

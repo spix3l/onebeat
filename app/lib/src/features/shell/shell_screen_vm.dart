@@ -13,14 +13,14 @@ import 'transport_bar.dart';
 @immutable
 class ShellScreenVm {
   const ShellScreenVm({
-    required this.menuBar,
+    this.menuBar,
     required this.transport,
     required this.rail,
     required this.status,
     this.browser,
   });
 
-  final ObMenuBarVm menuBar;
+  final ObMenuBarVm? menuBar;
   final ObTransportBarVm transport;
   final ObSideRailVm rail;
   final ObBrowserPanelVm? browser;

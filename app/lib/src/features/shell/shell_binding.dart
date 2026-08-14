@@ -21,7 +21,6 @@ import '../mixer/mixer_binding.dart';
 import '../piano_roll/piano_roll_binding.dart';
 import '../playlist/playlist_binding.dart';
 import '../preferences/preferences_binding.dart';
-import 'menu_bar.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
 import 'shell_screen_vm.dart';
@@ -52,23 +51,18 @@ class _ShellBindingState extends State<ShellBinding>
   bool _showExportDialog = false;
   bool _showPreferencesDialog = false;
 
+  List<BrowserNodeVm> _browserNodes = const <BrowserNodeVm>[];
+  int _framesSinceBrowserRefresh = 0;
+  int _builtinsGeneration = -1;
+  List<PluginListing> _builtins = const <PluginListing>[];
+  bool _demoSeeded = false;
+
   static const List<RailItemVm> _railItems = <RailItemVm>[
     RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.help, label: 'Channels'),
     RailItemVm(icon: ObRailGlyphKind.note, label: 'Piano'),
     RailItemVm(icon: ObRailGlyphKind.sliders, label: 'Mixer'),
     RailItemVm(icon: ObRailGlyphKind.folder, label: 'Packs'),
-  ];
-
-  static const List<String> _menus = <String>[
-    'File',
-    'Edit',
-    'Pattern',
-    'View',
-    'Tools ▾',
-    'Mixer',
-    'Window',
-    'Help',
   ];
 
   @override
@@ -87,6 +81,8 @@ class _ShellBindingState extends State<ShellBinding>
         'onebeat: shell usable in ${startupStopwatch.elapsedMilliseconds} ms',
       );
     });
+
+    _browserNodes = _buildBrowserNodes();
   }
 
   @override
@@ -99,13 +95,155 @@ class _ShellBindingState extends State<ShellBinding>
     super.dispose();
   }
 
+  /// Adds the bundled stock instrument and a short pattern when the project is
+  /// empty, then starts playback (FR-UX-14: opens playing, never an empty
+  /// window). Called from the per-frame listener so it runs as soon as the scan
+  /// reports the built-in; a no-op afterwards. Fails quietly when no usable
+  /// built-in is found.
+  void _maybeSeedDemo() {
+    if (_demoSeeded) return;
+    final EngineClient client = _controller.client;
+    if (client.readInstruments().isNotEmpty) {
+      _demoSeeded = true;
+      return;
+    }
+    final PluginScanStatus status = client.readPluginScanStatus();
+    if (status.isScanning || status.pluginCount <= 0) return;
+    _demoSeeded = true;
+
+    final List<PluginListing> builtins = _readBuiltins();
+    final PluginListing? piano = builtins
+        .cast<PluginListing?>()
+        .firstWhere(
+          (PluginListing? p) => p?.format == PluginFormat.builtin,
+          orElse: () => null,
+        );
+    if (piano == null) return;
+    client.addPluginByPath(piano.path, piano.id);
+
+    final List<ProjectInstrument> instruments = client.readInstruments();
+    if (instruments.isEmpty) return;
+    final String instrumentId = instruments.first.id;
+    final int stepTicks = client.readRackPattern().baseGridTicks;
+    final List<int> notes = <int>[60, 64, 67, 71, 67, 64];
+    for (int i = 0; i < notes.length; i++) {
+      client.addNote(
+        instrumentId,
+        i * stepTicks,
+        stepTicks,
+        notes[i],
+        velocity: 12900,
+      );
+    }
+    client.play();
+    _browserNodes = _buildBrowserNodes();
+  }
+
+  List<PluginListing> _readBuiltins() {
+    final PluginScanStatus status = _controller.client.readPluginScanStatus();
+    if (status.pluginCount > 0 && status.listGeneration != _builtinsGeneration) {
+      _builtinsGeneration = status.listGeneration;
+      _builtins = _controller.client
+          .readPluginList(status.pluginCount)
+          .where((PluginListing p) => p.isUsable)
+          .toList();
+    }
+    return _builtins;
+  }
+
+  List<BrowserNodeVm> _buildBrowserNodes() {
+    final EngineClient client = _controller.client;
+    final List<BrowserNodeVm> nodes = <BrowserNodeVm>[];
+
+    final List<BrowserNodeVm> project = <BrowserNodeVm>[];
+    for (final PatternSummary p in client.readPatterns()) {
+      project.add(
+        BrowserPatternVm(
+          id: 'pattern:${p.id}',
+          name: p.name,
+          color: _resolveColor(p.color, 0),
+          badge: p.usageCount > 0 ? '${p.usageCount}×' : 'piano roll',
+          expanded: false,
+        ),
+      );
+    }
+    if (project.isNotEmpty) {
+      nodes.add(
+        BrowserFolderVm(
+          id: 'current-project',
+          name: 'Current Project',
+          count: project.length,
+          expanded: true,
+          children: project,
+        ),
+      );
+    }
+
+    final List<PluginListing> builtinPlugins = _readBuiltins();
+    final List<BrowserNodeVm> builtins = <BrowserNodeVm>[
+      for (int i = 0; i < builtinPlugins.length; i++)
+        BrowserSampleVm(
+          id: 'plugin:${builtinPlugins[i].path}',
+          name: builtinPlugins[i].name,
+          color: _resolveColor('', i),
+        ),
+    ];
+    if (builtins.isNotEmpty) {
+      nodes.add(
+        BrowserFolderVm(
+          id: 'builtins',
+          name: 'Built-ins',
+          count: builtins.length,
+          expanded: true,
+          children: builtins,
+        ),
+      );
+    }
+
+    return nodes;
+  }
+
+  Color _resolveColor(String? hex, int fallbackIndex) {
+    if (hex != null && hex.isNotEmpty) {
+      final int? parsed = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+      if (parsed != null && parsed != 0) {
+        return Color(0xFF000000 | parsed);
+      }
+    }
+    return channelColors[fallbackIndex % channelColors.length];
+  }
+
+  void _onBrowserTap(String id) {
+    if (id.startsWith('pattern:')) {
+      _controller.client.selectPattern(id.substring('pattern:'.length));
+      setState(() {});
+      _browserNodes = _buildBrowserNodes();
+    } else if (id.startsWith('plugin:')) {
+      final String path = id.substring('plugin:'.length);
+      for (final PluginListing p in _readBuiltins()) {
+        if (p.path == path) {
+          _controller.client.addPluginByPath(p.path, p.id);
+          setState(() {});
+          _browserNodes = _buildBrowserNodes();
+          return;
+        }
+      }
+    }
+  }
+
   void _onControllerChanged() {
+    _maybeSeedDemo();
+    if (++_framesSinceBrowserRefresh >= 20) {
+      _framesSinceBrowserRefresh = 0;
+      _browserNodes = _buildBrowserNodes();
+    }
     if (mounted) setState(() {});
   }
 
   void _onRailSelect(int index) {
     if (index >= 0 && index < _railItems.length) {
       setState(() => _activeRailIndex = index);
+      _browserNodes = _buildBrowserNodes();
     }
   }
 
@@ -146,12 +284,7 @@ class _ShellBindingState extends State<ShellBinding>
       positionText: positionText,
       meterLeft: meterLeft,
       meterRight: meterRight,
-      searchHint: 'Action, shortcut, instrument, note…',
-    );
-
-    const ObMenuBarVm menuBarVm = ObMenuBarVm(
-      menus: _menus,
-      clock: '14:02',
+      searchHint: 'Search actions',
     );
 
     final ObSideRailVm railVm = ObSideRailVm(
@@ -170,24 +303,35 @@ class _ShellBindingState extends State<ShellBinding>
 
     final ObStatusBarVm statusVm = ObStatusBarVm(
       tone: snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
-      primary: snapshot.playing ? 'Playing' : 'Ready',
-      details: <String>[
-        leftDetail,
-        '${cpuPercent.toStringAsFixed(0)}% CPU',
-        '${snapshot.activeVoices} voices',
-      ],
-      rightHint: '⌘K Search actions',
+      primary: snapshot.playing ? 'Playing' : 'New project',
+      details: snapshot.playing
+          ? <String>[
+              leftDetail,
+              '${cpuPercent.toStringAsFixed(0)}% CPU',
+              '${snapshot.activeVoices} voices',
+            ]
+          : const <String>[
+              'Untitled.onebeat',
+              'Nothing saved yet — autosave starts on first edit',
+            ],
+      rightHint:
+          snapshot.playing ? '⌘K Search actions' : '⌘N new pattern · ⌘K actions',
     );
 
     return ShellScreenVm(
-      menuBar: menuBarVm,
+      menuBar: null,
       transport: transportVm,
       rail: railVm,
       status: statusVm,
-      browser: _activeRailIndex == 4
-          ? const ObBrowserPanelVm(
-              nodes: <BrowserNodeVm>[],
-              title: 'Packs',
+      browser: (_activeRailIndex == 0 ||
+              _activeRailIndex == 1 ||
+              _activeRailIndex == 2 ||
+              _activeRailIndex == 4)
+          ? ObBrowserPanelVm(
+              nodes: _activeRailIndex == 4
+                  ? const <BrowserNodeVm>[]
+                  : _browserNodes,
+              title: _activeRailIndex == 4 ? 'Packs' : 'Browser',
             )
           : null,
     );
@@ -263,6 +407,7 @@ class _ShellBindingState extends State<ShellBinding>
                 onUndo: _controller.undoProject,
                 onRedo: _controller.redoProject,
                 onExport: () => setState(() => _showExportDialog = true),
+                onBrowserTap: _onBrowserTap,
               ),
               if (_showExportDialog)
                 ExportBinding(
@@ -303,14 +448,17 @@ class _WorkspaceSlot extends StatelessWidget {
           client: coreController.client,
           controller: coreController,
           onOpenPattern: (String patternId, String clipId) {
+            coreController.client.selectPattern(patternId);
             onSelectRail(2);
           },
         ),
       1 => RackBinding(
           client: coreController.client,
           controller: coreController,
-          onBrowsePlugins: () {},
+          onBrowsePlugins: () => onSelectRail(4),
+          onOpenMixer: () => onSelectRail(3),
           onOpenPianoRoll: (String instrumentId) {
+            coreController.client.selectInstrument(instrumentId);
             onSelectRail(2);
           },
         ),

@@ -59,6 +59,12 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
         useNullDevice: isHeadlessEnvironment,
       );
       client.startAudio();
+      // FR-PLG-05: the plug-in library is ready by the first frame. The cache
+      // load is one blocking file read; the scan itself runs on a background
+      // thread so it never delays the shell. The shell seeds a first-run demo
+      // from the built-in instrument once the scan reports it.
+      client.loadPluginCache();
+      client.startPluginScan();
       _client = client;
     } on EngineLoadException catch (error) {
       _failure = error.message;

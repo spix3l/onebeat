@@ -75,7 +75,7 @@ void main() {
     ) async {
       await pumpShell(tester, size: size);
       expect(tester.takeException(), isNull);
-      // The playlist, as the design screens open on.
+      // The arrangement view, as the design screens open on.
       expect(find.byType(PlaylistBinding), findsOneWidget);
     });
   }
