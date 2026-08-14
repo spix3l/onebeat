@@ -78,7 +78,11 @@ class _ObRailButtonState extends State<ObRailButton> {
               SizedBox(height: tokens.spacing.xxs),
               Text(
                 widget.label.toUpperCase(),
-                style: tokens.type.railLabel.copyWith(color: foreground),
+                // A destination caption is one word and must stay one line:
+                // `CHANNELS` broken across two lines reads as two rails.
+                maxLines: 1,
+                softWrap: false,
+                style: tokens.type.railCaption.copyWith(color: foreground),
               ),
             ],
           ),
