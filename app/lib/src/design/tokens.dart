@@ -237,10 +237,13 @@ class RadiusTokens {
   Radius get xs => const Radius.circular(2);
   Radius get sm => const Radius.circular(3);
   Radius get md => const Radius.circular(5);
+
   /// Chips, buttons and step cells (~6–8 in the mockups; step cells are r8).
   Radius get lg => const Radius.circular(8);
+
   /// Floating windows and the smaller dialogs (~12 in the mockups).
   Radius get xl => const Radius.circular(12);
+
   /// The larger modal dialogs (~16 in the mockups).
   Radius get xxl => const Radius.circular(16);
   BorderRadius get controlBorder => BorderRadius.all(md);
@@ -254,6 +257,11 @@ class BorderTokens {
 
   double get hairline => 1;
   double get emphasis => 2;
+
+  /// Stroke weight of hand-painted glyphs (chevrons, checks, magnifiers) —
+  /// between the hairline and the emphasis rule so they read as ink, not
+  /// chrome.
+  double get glyph => 1.5;
 }
 
 /// Sizes of the chrome itself: bar heights, control sizes, meter geometry.
@@ -364,6 +372,22 @@ class SizeTokens {
   double get tagWidth => 36;
   double get tagHeight => 16;
   double get tagRadius => 3;
+
+  /// Core controls (UI-B-01). The micro field is the 26px-tall strip the
+  /// dropdowns, FX chips and chip rows all sit in — one height so a row of
+  /// mixed controls shares a baseline.
+  double get microFieldHeight => 26;
+  double get dropdownWidth => 156;
+  double get chipHeight => 26;
+  double get fxChipWidth => 67;
+  double get chipDotSize => 6;
+  double get toggleChipSize => 18;
+  double get railButtonWidth => 42;
+
+  /// Search chrome: the full field, and the compact round icon variant that
+  /// sits at the right of the rack header.
+  double get searchFieldHeight => 26;
+  double get searchIconFieldSize => 26;
   double get browserHeaderHeight => 38;
   double get browserSearchHeight => 32;
   double get exportButtonWidth => 84;
@@ -377,6 +401,7 @@ class SizeTokens {
   double get faderHeight => 160;
   double get faderThumbHeight => 16;
   double get faderThumbWidth => 24;
+
   /// A mixer strip's rotated track name reserves this much vertical run.
   double get mixerNameHeight => 78;
   double get modalWidthLarge => 680;
@@ -518,6 +543,17 @@ class TypeTokens {
     fontFamily: uiFamily,
     fontSize: 9,
     fontWeight: FontWeight.w600,
+    letterSpacing: 0.5,
+    color: textMuted,
+  );
+
+  /// Micro caps in MartianMono: the `VOL`/`PAN` captions under knobs and the
+  /// `SNAP`/`SCALE` prefixes inside dropdown fields. Mono so a column of them
+  /// aligns glyph-to-glyph across controls (UI-B-01).
+  TextStyle get microCaps => TextStyle(
+    fontFamily: numericFamily,
+    fontSize: 8,
+    fontWeight: FontWeight.w500,
     letterSpacing: 0.5,
     color: textMuted,
   );
