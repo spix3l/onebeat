@@ -183,6 +183,17 @@ class _FakeStoreEngineClient implements EngineClient {
 }
 
 void main() {
+  test('refresh leaves the inspector selection empty until a lane is chosen', () {
+    final _FakeStoreEngineClient client = _FakeStoreEngineClient();
+    final RackStore store = RackStore(client)..load();
+    addTearDown(store.dispose);
+
+    expect(store.selectedInstrumentId, isNull);
+
+    store.selectInstrument('kick');
+    expect(store.selectedInstrumentId, 'kick');
+  });
+
   test('paint drag is one transaction and paints each crossed step once', () {
     final _FakeStoreEngineClient client = _FakeStoreEngineClient();
     final RackStore store = RackStore(client)..load();

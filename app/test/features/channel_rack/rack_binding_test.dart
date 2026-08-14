@@ -164,6 +164,41 @@ class _FakeRackEngineClient implements EngineClient {
   List<ProjectInstrument> readInstruments() => instruments;
 
   @override
+  void addEmptyInstrument(String name) {
+    final String id = 'empty-${instruments.length}';
+    instruments.add(
+      ProjectInstrument(
+        id: id,
+        name: name,
+        color: '#9FC65C',
+        order: instruments.length,
+        pluginId: '',
+        pluginName: '',
+        pluginVendor: '',
+        pluginPath: '',
+        muted: false,
+        selected: false,
+        affectedPatterns: 0,
+        affectedClips: 0,
+        affectedNotes: 0,
+      ),
+    );
+    rows.add(
+      RackRow(
+        instrumentId: id,
+        gridTicks: 240,
+        hasSequence: false,
+        offGridCount: 0,
+        noteCount: 0,
+        steps: List<RackStep>.filled(
+          16,
+          const RackStep(active: false, velocity: 0),
+        ),
+      ),
+    );
+  }
+
+  @override
   void selectPattern(String patternId) {
     patterns = patterns
         .map((PatternSummary p) => PatternSummary(
@@ -336,7 +371,7 @@ class _FakeRackEngineClient implements EngineClient {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('RackBinding renders rows, pattern tabs, toolbar and inspector', (
+  testWidgets('RackBinding keeps the inspector closed until a lane is selected', (
     WidgetTester tester,
   ) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
@@ -348,18 +383,39 @@ void main() {
     );
     await tester.pump();
 
-    // Check title and pattern tabs
+    // The rack can show lanes without implying that one is selected.
     expect(find.text('CHANNEL RACK'), findsOneWidget);
     expect(find.text('Main Groove'), findsOneWidget);
     expect(find.text('Verse Drums'), findsOneWidget);
-
-    // Check row instruments (Kick 808 is in row and selected in inspector)
-    expect(find.text('Kick 808'), findsNWidgets(2));
+    expect(find.text('Kick 808'), findsOneWidget);
     expect(find.text('Snare'), findsOneWidget);
+    expect(find.byType(ObChannelInspector), findsNothing);
 
-    // Check inspector
+    await tester.tap(find.text('Kick 808'));
+    await tester.pump();
+
+    expect(find.text('Kick 808'), findsNWidgets(2));
     expect(find.byType(ObChannelInspector), findsOneWidget);
     expect(find.byType(MiniKeyboard), findsOneWidget);
+  });
+
+  testWidgets('Add channel creates a visible empty lane without opening the inspector', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('+ Add channel'));
+    await tester.pump();
+
+    expect(find.text('Channel 3'), findsOneWidget);
+    expect(find.byType(ObChannelInspector), findsNothing);
   });
 
   testWidgets('step toggle updates store and reflects on UI', (
@@ -474,6 +530,9 @@ void main() {
       RackBinding(client: client),
       size: const Size(1520, 880),
     );
+    await tester.pump();
+
+    await tester.tap(find.text('Kick 808'));
     await tester.pump();
 
     final Rect keysRect = tester.getRect(find.byType(MiniKeyboard));

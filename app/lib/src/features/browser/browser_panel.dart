@@ -138,15 +138,7 @@ class ObBrowserPanel extends StatelessWidget {
 
     return Container(
       width: tokens.size.browserWidth,
-      decoration: BoxDecoration(
-        color: color.surfacePanel,
-        border: Border(
-          right: BorderSide(
-            color: color.lineStrong,
-            width: tokens.border.hairline,
-          ),
-        ),
-      ),
+      decoration: BoxDecoration(color: color.surfacePanel),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[

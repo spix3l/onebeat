@@ -100,11 +100,9 @@ class _ShellBindingState extends State<ShellBinding>
     super.dispose();
   }
 
-  /// Adds the bundled stock instrument and a short pattern when the project is
-  /// empty, then starts playback (FR-UX-14: opens playing, never an empty
-  /// window). Called from the per-frame listener so it runs as soon as the scan
-  /// reports the built-in; a no-op afterwards. Fails quietly when no usable
-  /// built-in is found.
+  /// Adds one default channel (the bundled stock instrument) to an empty
+  /// project, so the rack never opens blank (FR-UX-14). It does not seed notes
+  /// or start playback — the project opens silent and ready.
   void _maybeSeedDemo() {
     if (_demoSeeded) return;
     final EngineClient client = _controller.client;
@@ -116,31 +114,14 @@ class _ShellBindingState extends State<ShellBinding>
     if (status.isScanning || status.pluginCount <= 0) return;
     _demoSeeded = true;
 
-    final List<PluginListing> builtins = _readBuiltins();
-    final PluginListing? piano = builtins
-        .cast<PluginListing?>()
-        .firstWhere(
-          (PluginListing? p) => p?.format == PluginFormat.builtin,
-          orElse: () => null,
-        );
+    final PluginListing? piano = client.firstUsablePlugin();
     if (piano == null) return;
-    client.addPluginByPath(piano.path, piano.id);
-
-    final List<ProjectInstrument> instruments = client.readInstruments();
-    if (instruments.isEmpty) return;
-    final String instrumentId = instruments.first.id;
-    final int stepTicks = client.readRackPattern().baseGridTicks;
-    final List<int> notes = <int>[60, 64, 67, 71, 67, 64];
-    for (int i = 0; i < notes.length; i++) {
-      client.addNote(
-        instrumentId,
-        i * stepTicks,
-        stepTicks,
-        notes[i],
-        velocity: 12900,
-      );
+    try {
+      client.addPluginByPath(piano.path, piano.id);
+    } catch (_) {
+      // Hosting failed (missing helper, incompatible plug-in). Leave the rack
+      // empty rather than crashing the shell.
     }
-    client.play();
     _browserNodes = _buildBrowserNodes();
   }
 

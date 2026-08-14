@@ -15,7 +15,12 @@ import '../../design/tokens.dart';
 /// Ticks per quarter-note beat. The roll's whole tick vocabulary is derived
 /// from this, so "what is a 16th" is arithmetic rather than a second
 /// constant.
-const int prTicksPerBeat = 240;
+///
+/// This is 960 because that is what the model and the ABI are (`ob_note.start`
+/// is "ticks, pattern-relative, 960 PPQN"). It used to be 240, which meant the
+/// painter drew a beat line every 16th and the ruler numbered every
+/// quarter-note as a bar.
+const int prTicksPerBeat = 960;
 
 /// What part of the roll is on screen, and at what scale.
 @immutable
@@ -26,6 +31,7 @@ class PrViewport {
     required this.firstVisibleTick,
     required this.topMidiNote,
     this.beatsPerBar = 4,
+    this.subdivisionTicks = 0,
   });
 
   /// Horizontal zoom. Larger means more music per pixel.
@@ -41,6 +47,11 @@ class PrViewport {
   final int topMidiNote;
 
   final int beatsPerBar;
+
+  /// The active snap division, in ticks. Drawn as the faintest grid line, so
+  /// the canvas shows the resolution an edit will land on. 0 draws no
+  /// subdivision — which is what "Snap: Off" looks like.
+  final int subdivisionTicks;
 
   int get ticksPerBar => prTicksPerBeat * beatsPerBar;
 
@@ -64,12 +75,14 @@ class PrViewport {
     double? rowHeight,
     int? firstVisibleTick,
     int? topMidiNote,
+    int? subdivisionTicks,
   }) => PrViewport(
     ticksPerPx: ticksPerPx ?? this.ticksPerPx,
     rowHeight: rowHeight ?? this.rowHeight,
     firstVisibleTick: firstVisibleTick ?? this.firstVisibleTick,
     topMidiNote: topMidiNote ?? this.topMidiNote,
     beatsPerBar: beatsPerBar,
+    subdivisionTicks: subdivisionTicks ?? this.subdivisionTicks,
   );
 
   @override
@@ -79,7 +92,8 @@ class PrViewport {
       other.rowHeight == rowHeight &&
       other.firstVisibleTick == firstVisibleTick &&
       other.topMidiNote == topMidiNote &&
-      other.beatsPerBar == beatsPerBar;
+      other.beatsPerBar == beatsPerBar &&
+      other.subdivisionTicks == subdivisionTicks;
 
   @override
   int get hashCode => Object.hash(
@@ -88,6 +102,7 @@ class PrViewport {
     firstVisibleTick,
     topMidiNote,
     beatsPerBar,
+    subdivisionTicks,
   );
 }
 
@@ -119,6 +134,9 @@ class PianoRollVm {
     this.playheadTick,
     this.selected = const <int>{},
     this.marqueeRect,
+    this.activeKeys = const <int>{},
+    this.scaleIntervals = const <int>[],
+    this.scaleRoot = 0,
   });
 
   final List<PrNoteVm> notes;
@@ -131,6 +149,28 @@ class PianoRollVm {
   final int? playheadTick;
   final Set<int> selected;
   final Rect? marqueeRect;
+
+  /// MIDI keys sounding right now — every key the playhead is currently inside
+  /// a note of. Their rows light up, which is what makes an audible note
+  /// findable on a dense canvas.
+  final Set<int> activeKeys;
+
+  /// Semitone offsets of the selected scale, from [scaleRoot]. Empty, or a full
+  /// twelve, means chromatic: the banding falls back to the keyboard, because
+  /// shading every row identically would say nothing.
+  final List<int> scaleIntervals;
+  final int scaleRoot;
+
+  /// Whether [midiNote] belongs to the selected scale. Always true when the
+  /// scale is chromatic.
+  bool inScale(int midiNote) {
+    if (scaleIntervals.isEmpty || scaleIntervals.length >= 12) return true;
+    return scaleIntervals.contains(((midiNote - scaleRoot) % 12 + 12) % 12);
+  }
+
+  /// True when the scale actually distinguishes rows from one another.
+  bool get hasScale =>
+      scaleIntervals.isNotEmpty && scaleIntervals.length < 12;
 }
 
 /// The roll canvas: row banding, grid lines, ghosts, notes, playhead.
@@ -224,9 +264,28 @@ class PrGridPainter extends CustomPainter {
 
   late final Paint _band = Paint()..color = color.rollCanvas;
   late final Paint _bandDark = Paint()..color = color.surfaceDeep;
+
+  /// The two scale bands. In-scale rows are *lifted* above the canvas and
+  /// out-of-scale rows sit below it, so "in the scale" reads as the brighter
+  /// surface rather than as a colour the user has to learn.
+  late final Paint _bandInScale = Paint()..color = color.rowShadeInScale;
+  late final Paint _bandOutOfScale = Paint()..color = color.rowShade;
+
+  /// The row under a sounding note. A wash rather than a fill: it has to be
+  /// legible behind the note that caused it.
+  late final Paint _activeRow = Paint()..color = color.accentWash;
+
   late final Paint _rowLine =
       Paint()
         ..color = color.gridLine
+        ..strokeWidth = lineWidth;
+
+  /// The snap division, drawn fainter than a beat. This is the one line whose
+  /// spacing changes with the Snap control, which is what makes that control
+  /// legible before you draw anything.
+  late final Paint _subdivisionLine =
+      Paint()
+        ..color = color.gridLineSubdivision
         ..strokeWidth = lineWidth;
   late final Paint _beatLine =
       Paint()
@@ -239,6 +298,11 @@ class PrGridPainter extends CustomPainter {
   late final Paint _ghost = Paint()..color = color.noteGhost;
   late final Paint _note = Paint()..color = color.noteFill;
   late final Paint _selected = Paint()..color = color.noteSelected;
+
+  /// A note the playhead is inside. Brighter than at rest but not the
+  /// selection colour — "sounding" and "selected" are different facts and the
+  /// user acts on them differently.
+  late final Paint _sounding = Paint()..color = color.accentBright;
   late final Paint _marqueeFill = Paint()..color = color.marqueeFill;
   late final Paint _marqueeStroke =
       Paint()
@@ -254,23 +318,50 @@ class PrGridPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final PrViewport view = vm.viewport;
 
-    // Rows.
+    // Rows. When a scale is selected the banding follows *it*; otherwise it
+    // follows the keyboard, because shading twelve of twelve rows the same
+    // would be a control that changed nothing.
     final int rows = view.rowsIn(size.height);
+    final bool byScale = vm.hasScale;
     for (int i = 0; i < rows; i++) {
       final int midi = view.topMidiNote - i;
       final int pitchClass = ((midi % 12) + 12) % 12;
       final double top = i * view.rowHeight;
-      canvas.drawRect(
-        Rect.fromLTWH(0, top, size.width, view.rowHeight),
-        _liftedPitchClasses.contains(pitchClass) ? _band : _bandDark,
-      );
+      final Rect row = Rect.fromLTWH(0, top, size.width, view.rowHeight);
+      final Paint band;
+      if (byScale) {
+        band = vm.inScale(midi) ? _bandInScale : _bandOutOfScale;
+      } else {
+        band = _liftedPitchClasses.contains(pitchClass) ? _band : _bandDark;
+      }
+      canvas.drawRect(row, band);
+      if (vm.activeKeys.contains(midi)) {
+        canvas.drawRect(row, _activeRow);
+      }
       canvas.drawLine(Offset(0, top), Offset(size.width, top), _rowLine);
     }
 
-    // Beat and bar lines. Walking beats rather than pixels keeps the lines on
-    // the music when the zoom is not a whole number of pixels per beat.
-    final int firstBeat = vm.viewport.firstVisibleTick ~/ prTicksPerBeat;
+    // Vertical rules, faintest first so a bar line always wins where two
+    // coincide. Walking divisions rather than pixels keeps the lines on the
+    // music when the zoom is not a whole number of pixels per beat.
     final int lastTick = view.tickAt(size.width);
+    final int subdivision = view.subdivisionTicks;
+    // Below roughly this spacing the subdivision stops being a grid and starts
+    // being a texture, so it drops out rather than filling the canvas.
+    if (subdivision > 0 && subdivision / view.ticksPerPx >= 4.0) {
+      for (
+        int tick = (view.firstVisibleTick ~/ subdivision) * subdivision;
+        tick <= lastTick;
+        tick += subdivision
+      ) {
+        if (tick % prTicksPerBeat == 0) continue;
+        final double x = view.xOf(tick);
+        if (x < 0) continue;
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), _subdivisionLine);
+      }
+    }
+
+    final int firstBeat = view.firstVisibleTick ~/ prTicksPerBeat;
     for (int beat = firstBeat; ; beat++) {
       final int tick = beat * prTicksPerBeat;
       if (tick > lastTick) {
@@ -290,12 +381,19 @@ class PrGridPainter extends CustomPainter {
     for (final PrNoteVm ghost in vm.ghostNotes) {
       _paintNote(canvas, view, ghost, _ghost);
     }
+    final int? playing = vm.playheadTick;
     for (final PrNoteVm note in vm.notes) {
+      final bool sounding =
+          playing != null &&
+          playing >= note.startTick &&
+          playing < note.startTick + note.lengthTicks;
       _paintNote(
         canvas,
         view,
         note,
-        vm.selected.contains(note.id) ? _selected : _note,
+        vm.selected.contains(note.id)
+            ? _selected
+            : (sounding ? _sounding : _note),
       );
     }
 

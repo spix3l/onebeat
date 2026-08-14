@@ -133,7 +133,9 @@ typedef enum ob_command_type {
   OB_CMD_SET_MASTER_GAIN = 10,      /* f64_a = linear gain, 0..2 */
   OB_CMD_PLUGIN_PARAM_BEGIN = 11,   /* i64_a = ParamId */
   OB_CMD_PLUGIN_PARAM_VALUE = 12,   /* i64_a = ParamId, f64_a = value */
-  OB_CMD_PLUGIN_PARAM_END = 13      /* i64_a = ParamId */
+  OB_CMD_PLUGIN_PARAM_END = 13,     /* i64_a = ParamId */
+  OB_CMD_SET_INSTRUMENT_GAIN = 14,  /* f64_a = linear gain, 0..2 */
+  OB_CMD_SET_INSTRUMENT_PAN = 15    /* f64_a = pan -1..1 */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).
@@ -489,6 +491,16 @@ OB_API ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf
                                               const char* utf8_plugin_id);
 OB_API ob_status ob_engine_instrument_duplicate(ob_engine* engine, const char* utf8_instrument_id);
 OB_API ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instrument_id);
+/* Adds a channel with no plug-in — an empty lane to drop an instrument into.
+ * Main/UI thread. `utf8_name` may be empty for a generated name. */
+OB_API ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_name);
+/* Per-channel gain (linear 0..2) and pan (-1..1), applied to the active voice.
+ * v0.3 hosts one instrument, so these act on the hosted voice; the per-track
+ * mixer (v0.4) replaces this. */
+OB_API ob_status ob_engine_instrument_set_gain(ob_engine* engine, const char* utf8_instrument_id,
+                                               float gain);
+OB_API ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instrument_id,
+                                              float pan);
 OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
 OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);
 /* Main/UI thread. Never blocks. Engine-owned UTF-8, valid until the next call

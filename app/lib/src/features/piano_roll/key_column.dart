@@ -2,16 +2,26 @@
 //
 // Its only job is to say which row is which note. It shares [PrViewport] with
 // the grid, so a key and its row cannot drift apart: both are `yOf(midi)`.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 import 'note_grid.dart';
 
 class PrKeyColumn extends StatelessWidget {
-  const PrKeyColumn({required this.viewport, this.onKeyPress, super.key});
+  const PrKeyColumn({
+    required this.viewport,
+    this.onKeyPress,
+    this.activeKeys = const <int>{},
+    super.key,
+  });
 
   final PrViewport viewport;
   final ValueChanged<int>? onKeyPress;
+
+  /// The keys sounding right now. Drawn held-down, which is the keyboard's own
+  /// vocabulary for it — no legend required.
+  final Set<int> activeKeys;
 
   /// Semitone offsets that are black keys, from C.
   static const Set<int> blackPitchClasses = <int>{1, 3, 6, 8, 10};
@@ -43,6 +53,8 @@ class PrKeyColumn extends StatelessWidget {
             lineWidth: tokens.border.hairline,
             blackWidth: tokens.size.prBlackKeyWidth,
             labelStyle: tokens.type.microCaps,
+            activeKeys: activeKeys,
+            active: tokens.color.accent,
           ),
           child: const SizedBox.expand(),
         ),
@@ -60,6 +72,8 @@ class _KeyColumnPainter extends CustomPainter {
     required this.lineWidth,
     required this.blackWidth,
     required this.labelStyle,
+    required this.activeKeys,
+    required this.active,
   });
 
   final PrViewport viewport;
@@ -69,9 +83,12 @@ class _KeyColumnPainter extends CustomPainter {
   final double lineWidth;
   final double blackWidth;
   final TextStyle labelStyle;
+  final Set<int> activeKeys;
+  final Color active;
 
   late final Paint _white = Paint()..color = white;
   late final Paint _black = Paint()..color = black;
+  late final Paint _active = Paint()..color = active;
   late final Paint _line =
       Paint()
         ..color = line
@@ -88,12 +105,21 @@ class _KeyColumnPainter extends CustomPainter {
     for (int i = 0; i < rows; i++) {
       final int midi = viewport.topMidiNote - i;
       final double top = i * viewport.rowHeight;
+      final bool sounding = activeKeys.contains(midi);
       if (PrKeyColumn.isBlack(midi)) {
         canvas.drawRect(
           Rect.fromLTWH(0, top, blackWidth, viewport.rowHeight),
-          _black,
+          sounding ? _active : _black,
         );
         continue;
+      }
+      // A white key lights across its full width; the black keys are already
+      // painted over it, so the accent reads as the key going down.
+      if (sounding) {
+        canvas.drawRect(
+          Rect.fromLTWH(0, top, size.width, viewport.rowHeight),
+          _active,
+        );
       }
       // A separator only between white keys — a black key already separates
       // the two it sits between.
@@ -127,5 +153,6 @@ class _KeyColumnPainter extends CustomPainter {
   bool shouldRepaint(_KeyColumnPainter oldDelegate) =>
       oldDelegate.viewport != viewport ||
       oldDelegate.white != white ||
-      oldDelegate.black != black;
+      oldDelegate.black != black ||
+      !setEquals(oldDelegate.activeKeys, activeKeys);
 }

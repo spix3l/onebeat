@@ -334,14 +334,20 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   float peak_right = 0.0F;
   double sum_left = 0.0;
   double sum_right = 0.0;
+  // Per-channel gain and a constant-power balance: pan == 0 is centred, +1 is
+  // hard right, -1 is hard left. Applied before the master gain.
+  const float channel_gain = instrument_gain_;
+  const float pan = instrument_pan_;
+  const float left_gain = master_gain_ * channel_gain * (pan > 0.0F ? 1.0F - pan : 1.0F);
+  const float right_gain = master_gain_ * channel_gain * (pan < 0.0F ? 1.0F + pan : 1.0F);
   const int channels = output.numChannels();
   for (int frame = 0; frame < context.num_frames; ++frame) {
-    const float left = output.channel(0)[frame] * master_gain_;
+    const float left = output.channel(0)[frame] * left_gain;
     output.channel(0)[frame] = left;
     peak_left = std::max(peak_left, std::abs(left));
     sum_left += static_cast<double>(left) * static_cast<double>(left);
     if (channels > 1) {
-      const float right = output.channel(1)[frame] * master_gain_;
+      const float right = output.channel(1)[frame] * right_gain;
       output.channel(1)[frame] = right;
       peak_right = std::max(peak_right, std::abs(right));
       sum_right += static_cast<double>(right) * static_cast<double>(right);
@@ -559,6 +565,12 @@ void Engine::applyCommand(const ob_command& command,
       break;
     case OB_CMD_SET_MASTER_GAIN:
       master_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
+      break;
+    case OB_CMD_SET_INSTRUMENT_GAIN:
+      instrument_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
+      break;
+    case OB_CMD_SET_INSTRUMENT_PAN:
+      instrument_pan_ = std::clamp(static_cast<float>(command.f64_a), -1.0F, 1.0F);
       break;
     case OB_CMD_PLUGIN_PARAM_BEGIN:
       block_events.push(

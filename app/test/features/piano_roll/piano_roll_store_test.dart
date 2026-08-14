@@ -104,4 +104,118 @@ void main() {
       <int>{60, 61},
     );
   });
+
+  test('an anchored zoom keeps the anchor tick under the same pixel', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll..panTo(1920, 84);
+
+    // The pixel the anchor sat at before the zoom...
+    const double anchor = 3840;
+    final double pixelBefore = (anchor - roll.scrollTicks) * roll.pixelsPerTick;
+
+    roll.zoomHorizontally(2.0, anchorTick: anchor);
+
+    final double pixelAfter = (anchor - roll.scrollTicks) * roll.pixelsPerTick;
+    expect(pixelAfter, closeTo(pixelBefore, 0.001));
+    expect(roll.horizontalZoom, 2.0);
+  });
+
+  test('an unanchored zoom leaves the scroll position alone', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll..panTo(1920, 84);
+
+    roll.zoomHorizontally(2.0);
+
+    expect(roll.scrollTicks, 1920);
+  });
+
+  test('zooming does not scroll past the start of the pattern', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll..panTo(0, 84);
+
+    roll.zoomHorizontally(0.5, anchorTick: 0);
+
+    expect(roll.scrollTicks, greaterThanOrEqualTo(0));
+  });
+
+  test('panning stops at the ends of the keyboard and the pattern', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll..panTo(0, 84);
+
+    roll.panBy(deltaTicks: -10000, deltaKeys: 99);
+    expect(roll.scrollTicks, 0, reason: 'time does not go negative');
+    expect(roll.topKey, 127, reason: 'and the keyboard has a top');
+
+    // With 24 rows on screen the lowest row must still be key 0, so the top
+    // row can go no lower than 23.
+    roll.panBy(deltaKeys: -999, visibleRows: 24);
+    expect(roll.topKey, 23);
+  });
+
+  test('choosing a snap resolution arms the next note length', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+
+    roll.setGrid(const GridChoice('1/8', ticksPerQuarter ~/ 2));
+    roll.addNoteAt(0, 60);
+
+    expect(roll.notes.single.lengthTicks, ticksPerQuarter ~/ 2);
+  });
+
+  test('"Snap: Off" leaves the note length where it was', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+
+    roll.addNoteAt(0, 60, length: 960);
+    roll.setGrid(const GridChoice('Off', 0));
+    roll.addNoteAt(1920, 62);
+
+    expect(roll.notes.map((SequenceNote n) => n.lengthTicks), <int>[960, 960]);
+  });
+
+  test('the lane edits one note without flattening the selection', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll..selectAll();
+    final SequenceNote target = roll.notes.first;
+
+    roll.setNoteVelocity(target, 4000);
+
+    final List<SequenceNote> byKey = roll.notes.toList()
+      ..sort((SequenceNote a, SequenceNote b) => a.key.compareTo(b.key));
+    expect(byKey.first.velocity, 4000);
+    expect(
+      byKey.skip(1).map((SequenceNote n) => n.velocity),
+      everyElement(9000),
+      reason: 'the other selected notes are untouched',
+    );
+  });
+
+  test('an edited note stays selected under its new value', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll;
+    final SequenceNote target = roll.notes.first;
+    roll.selectOnly(target);
+
+    roll.setNoteVelocity(target, 4000);
+
+    expect(roll.selection.single.velocity, 4000);
+  });
+
+  test('the lane hit-tests the nearest stem within tolerance', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll;
+
+    // Notes start at 0/240/480/720.
+    expect(roll.noteNearTick(250, 40)?.startTicks, 240);
+    expect(roll.noteNearTick(600, 40), isNull, reason: 'nothing is close');
+  });
+
+  test('the scroll extent covers the last note plus room to keep writing', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+
+    roll.addNoteAt(ticksPerBar * 7, 60, length: ticksPerQuarter);
+
+    expect(roll.contentEndTicks, greaterThan(ticksPerBar * 7));
+  });
 }

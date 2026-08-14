@@ -11,7 +11,8 @@ class PianoRollScreenVm {
     required this.roll,
     this.channelColor,
     this.velocityLane = 'VEL',
-    this.velocityLanes = const <String>['VEL', 'PAN', 'MOD'],
+    this.velocityLanes = const <String>['VEL', 'PAN'],
+    this.contentEndTicks = 0,
     this.hasInstrument = true,
     this.emptyMessage =
         'Select an instrument in the channel rack to edit its notes here.',
@@ -24,6 +25,11 @@ class PianoRollScreenVm {
   final Color? channelColor;
   final String velocityLane;
   final List<String> velocityLanes;
+
+  /// Where the horizontal rail's track ends — the last tick with content on it,
+  /// plus room to keep writing.
+  final int contentEndTicks;
+
   final bool hasInstrument;
   final String emptyMessage;
   final bool canUndo;

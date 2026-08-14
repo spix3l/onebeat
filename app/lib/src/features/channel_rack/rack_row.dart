@@ -25,9 +25,24 @@ class StepVm {
   /// without a second control to look at.
   final double velocity;
 
-  /// A step that is off; `const StepVm.off()` reads better in a fixture than
-  /// `StepVm(on: false)` sixteen times.
+/// A step that is off; `const StepVm.off()` reads better in a fixture than
+/// `StepVm(on: false)` sixteen times.
   const StepVm.off() : this(on: false);
+}
+
+/// One note in a channel's piano-roll preview (UI-C-02). Pitch and time are
+/// plain integers so the rack row needs no engine types.
+@immutable
+class RackPreviewNoteVm {
+  const RackPreviewNoteVm({
+    required this.startTick,
+    required this.lengthTicks,
+    required this.midiNote,
+  });
+
+  final int startTick;
+  final int lengthTicks;
+  final int midiNote;
 }
 
 @immutable
@@ -42,6 +57,7 @@ class RackRowVm {
     required this.route,
     this.powered = true,
     this.selected = false,
+    this.previewNotes,
   });
 
   final String name;
@@ -63,6 +79,10 @@ class RackRowVm {
 
   final bool powered;
   final bool selected;
+
+  /// When non-null the row is a melody and shows a mini piano roll instead of
+  /// the step grid.
+  final List<RackPreviewNoteVm>? previewNotes;
 }
 
 class ObRackRow extends StatelessWidget {
@@ -155,11 +175,18 @@ class ObRackRow extends StatelessWidget {
                 ],
               ),
             ),
-            ObStepGrid(
-              steps: vm.steps,
-              playingStep: playingStep,
-              onStepTap: onStepTap,
-            ),
+            if (vm.previewNotes != null)
+              RackPianoPreview(
+                notes: vm.previewNotes!,
+                color: vm.color,
+                stepCount: vm.steps.length,
+              )
+            else
+              ObStepGrid(
+                steps: vm.steps,
+                playingStep: playingStep,
+                onStepTap: onStepTap,
+              ),
             SizedBox(width: tokens.spacing.md),
             ObKnob(value: vm.vol, onChanged: onVol),
             SizedBox(width: tokens.spacing.sm),
@@ -221,6 +248,101 @@ class ObStepGrid extends StatelessWidget {
     }
     return Row(children: cells);
   }
+}
+
+/// The compact piano-roll preview a melody channel shows in place of its step
+/// grid: the same notes as the piano roll, scaled into one strip.
+class RackPianoPreview extends StatelessWidget {
+  const RackPianoPreview({
+    required this.notes,
+    required this.color,
+    this.stepCount = 16,
+    super.key,
+  });
+
+  final List<RackPreviewNoteVm> notes;
+  final Color color;
+  final int stepCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return SizedBox(
+      width: _rackGridWidth(tokens.size, stepCount),
+      height: tokens.size.rackStepCell,
+      child: CustomPaint(
+        painter: _RackPianoPreviewPainter(
+          notes: notes,
+          color: color,
+          noteRadius: tokens.radius.xs,
+        ),
+      ),
+    );
+  }
+}
+
+/// The width of the step grid for [count] steps, so the preview and the grid it
+/// replaces occupy identical space.
+double _rackGridWidth(SizeTokens size, int count) {
+  double width = 0;
+  for (int i = 0; i < count; i++) {
+    if (i > 0) {
+      width += i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap;
+    }
+    width += size.rackStepCell;
+  }
+  return width;
+}
+
+class _RackPianoPreviewPainter extends CustomPainter {
+  _RackPianoPreviewPainter({
+    required this.notes,
+    required this.color,
+    required this.noteRadius,
+  });
+
+  final List<RackPreviewNoteVm> notes;
+  final Color color;
+  final Radius noteRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (notes.isEmpty) return;
+    int low = 1 << 30;
+    int high = -(1 << 30);
+    int end = 1;
+    for (final RackPreviewNoteVm note in notes) {
+      if (note.midiNote < low) low = note.midiNote;
+      if (note.midiNote > high) high = note.midiNote;
+      final int noteEnd = note.startTick + note.lengthTicks;
+      if (noteEnd > end) end = noteEnd;
+    }
+    final int pitchSpan = (high - low) + 1;
+    final double rowHeight = size.height / pitchSpan;
+    final Paint paint = Paint()..color = color;
+
+    for (final RackPreviewNoteVm note in notes) {
+      final double x = (note.startTick / end) * size.width;
+      final double width = (note.lengthTicks / end) * size.width;
+      final double y = (high - note.midiNote) * rowHeight;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            x,
+            y + rowHeight * 0.15,
+            width < 2 ? 2 : width,
+            rowHeight * 0.7,
+          ),
+          noteRadius,
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RackPianoPreviewPainter oldDelegate) =>
+      oldDelegate.notes != notes || oldDelegate.color != color;
 }
 
 class _StepCell extends StatelessWidget {

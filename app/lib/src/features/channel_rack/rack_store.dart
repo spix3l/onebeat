@@ -19,6 +19,11 @@ class RackStore extends ChangeNotifier {
   List<PatternSummary> patterns = const <PatternSummary>[];
   List<ProjectInstrument> instruments = const <ProjectInstrument>[];
 
+  /// Notes per instrument, read for rows that have a sequence so the rack can
+  /// draw a piano-roll preview for melodies.
+  final Map<String, List<SequenceNote>> notesByInstrument =
+      <String, List<SequenceNote>>{};
+
   bool showAll = false;
   final Set<String> _includedEmptyRows = <String>{};
 
@@ -45,15 +50,22 @@ class RackStore extends ChangeNotifier {
     patterns = _client.readPatterns();
     instruments = _client.readInstruments();
 
-    if (selectedInstrumentId == null && instruments.isNotEmpty) {
-      final ProjectInstrument? selected = instruments.cast<ProjectInstrument?>().firstWhere(
-            (ProjectInstrument? inst) => inst?.selected ?? false,
-            orElse: () => instruments.first,
-          );
-      selectedInstrumentId = selected?.id;
-    } else if (selectedInstrumentId != null &&
+    notesByInstrument.clear();
+    for (final RackRow row in rows) {
+      if (!row.hasSequence) continue;
+      try {
+        notesByInstrument[row.instrumentId] = _client.readNotes(row.instrumentId);
+      } catch (_) {
+        // Stub if readNotes is unavailable.
+      }
+    }
+
+    // Selection is a UI action, not a default derived from the engine's
+    // current instrument. Keeping it null until a lane is clicked prevents the
+    // inspector from occupying the rack before the user has selected anything.
+    if (selectedInstrumentId != null &&
         !instruments.any((ProjectInstrument inst) => inst.id == selectedInstrumentId)) {
-      selectedInstrumentId = instruments.isNotEmpty ? instruments.first.id : null;
+      selectedInstrumentId = null;
     }
 
     notifyListeners();
@@ -239,6 +251,10 @@ class RackStore extends ChangeNotifier {
     }
     return null;
   }
+
+  /// The notes of [instrumentId], or an empty list when it has none.
+  List<SequenceNote> notesFor(String instrumentId) =>
+      notesByInstrument[instrumentId] ?? const <SequenceNote>[];
 
   void undo() {
     _client.undoProject();

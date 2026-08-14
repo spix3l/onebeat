@@ -614,6 +614,22 @@ class EngineClient
     return plugins;
   }
 
+  /// The first usable plug-in for "add an instrument": the bundled stock
+  /// instruments (vendor `OneBeat`) are preferred, falling back to any usable
+  /// plug-in. The stock piano always works, whereas a third-party plug-in can
+  /// refuse to load, so the bundled set is the reliable default channel.
+  PluginListing? firstUsablePlugin() {
+    final PluginScanStatus status = readPluginScanStatus();
+    if (status.pluginCount <= 0) return null;
+    PluginListing? fallback;
+    for (final PluginListing p in readPluginList(status.pluginCount)) {
+      if (!p.isUsable) continue;
+      if (p.vendor == 'OneBeat') return p;
+      fallback ??= p;
+    }
+    return fallback;
+  }
+
   HostedInstance? readHostedInstance() {
     if (_bindings.ob_engine_instance_count(_engine) == 0 ||
         _bindings.ob_engine_instance_at(_engine, 0, _instanceInfo) !=
@@ -759,6 +775,28 @@ class EngineClient
     id,
     (Pointer<Char> native) =>
         _bindings.ob_engine_instrument_remove(_engine, native),
+  );
+
+  /// Adds an empty channel (no plug-in) — a blank lane to drop an instrument
+  /// into. [name] may be empty for a generated name.
+  void addEmptyInstrument(String name) => _withNativeString(
+    name,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_add_empty(_engine, native),
+  );
+
+  /// Per-channel gain (linear 0..2) applied to the active voice.
+  void setInstrumentGain(String id, double gain) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_set_gain(_engine, native, gain),
+  );
+
+  /// Per-channel pan (-1..1) applied to the active voice.
+  void setInstrumentPan(String id, double pan) => _withNativeString(
+    id,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_instrument_set_pan(_engine, native, pan),
   );
 
   @override

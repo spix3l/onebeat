@@ -6,8 +6,11 @@
 //
 // Selection is a `Set<SequenceNote>` of values, matching how the ABI addresses
 // notes. After any edit the selection is re-derived rather than carried.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import 'pr_toolbar.dart';
 
@@ -108,6 +111,13 @@ class PianoRollStore extends ChangeNotifier {
 
   /// Length of the last note drawn, reused as default for next note.
   int lastNoteLength = ticksPerQuarter ~/ 4;
+
+  /// The length a newly drawn note gets: whatever the last one was.
+  ///
+  /// Reuse rather than "always the grid", because once you have sized a note by
+  /// hand you are usually about to draw more like it. [setGrid] is what
+  /// re-couples the two — see the note there.
+  int get defaultNoteLength => lastNoteLength;
 
   /// Viewport state.
   double horizontalZoom = 1.0;
@@ -277,8 +287,15 @@ class PianoRollStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Picks the snap resolution — and, with it, the size of the next note.
+  ///
+  /// Choosing "1/8" and then drawing a 1/16 is the reason Snap read as a
+  /// control that did nothing. Reaching for the grid is a statement about the
+  /// resolution you are working at, so it re-arms [lastNoteLength]; drawing or
+  /// resizing by hand then takes over again until you next change it.
   void setGrid(GridChoice value) {
     grid = value;
+    if (value.ticks > 0) lastNoteLength = value.ticks;
     notifyListeners();
   }
 
@@ -288,23 +305,71 @@ class PianoRollStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void zoomHorizontally(double factor) {
-    horizontalZoom = (horizontalZoom * factor).clamp(0.15, 12.0);
+  /// Zooms the time axis, keeping [anchorTick] under the same pixel.
+  ///
+  /// Without an anchor a zoom is measured from the left edge, which walks the
+  /// thing you were looking at off the screen — the single most common
+  /// complaint about a roll that "zooms wrong". The anchor is normally the tick
+  /// under the pointer, or the centre of the viewport for a button or a key.
+  void zoomHorizontally(double factor, {double? anchorTick}) {
+    final double before = horizontalZoom;
+    horizontalZoom = (horizontalZoom * factor).clamp(minZoom, maxZoom);
+    if (horizontalZoom == before) return;
+    if (anchorTick != null) {
+      final double offsetFromLeft = anchorTick - scrollTicks;
+      scrollTicks = anchorTick - offsetFromLeft * (before / horizontalZoom);
+      if (scrollTicks < 0) scrollTicks = 0;
+    }
     _saveViewport();
     notifyListeners();
   }
 
-  void zoomVertically(double factor) {
-    verticalZoom = (verticalZoom * factor).clamp(0.5, 4.0);
+  /// Zooms the pitch axis, keeping [anchorKey] on the same row.
+  void zoomVertically(double factor, {int? anchorKey, int visibleRows = 0}) {
+    final double before = verticalZoom;
+    verticalZoom = (verticalZoom * factor).clamp(minRowZoom, maxRowZoom);
+    if (verticalZoom == before) return;
+    if (anchorKey != null && visibleRows > 0) {
+      final int rowsAbove = topKey - anchorKey;
+      final int scaled = (rowsAbove * (before / verticalZoom)).round();
+      topKey = (anchorKey + scaled).clamp(0, maxKey);
+    }
     _saveViewport();
     notifyListeners();
   }
+
+  static const double minZoom = 0.15;
+  static const double maxZoom = 12.0;
+  static const double minRowZoom = 0.5;
+  static const double maxRowZoom = 4.0;
+  static const int maxKey = 127;
 
   void panTo(double ticks, int key) {
     scrollTicks = ticks < 0 ? 0 : ticks;
-    topKey = key.clamp(11, 127);
+    topKey = key.clamp(0, maxKey);
     _saveViewport();
     notifyListeners();
+  }
+
+  /// Pans by a delta in each axis. The one entry point every pan gesture and
+  /// key binding goes through, so bounds are enforced once.
+  ///
+  /// [visibleRows] lets the bottom of the keyboard be a real floor: without it
+  /// the roll scrolls past key 0 into empty canvas.
+  void panBy({double deltaTicks = 0, int deltaKeys = 0, int visibleRows = 0}) {
+    final double ticks = scrollTicks + deltaTicks;
+    final int floor = visibleRows > 0 ? (visibleRows - 1).clamp(0, maxKey) : 0;
+    panTo(ticks, (topKey + deltaKeys).clamp(floor, maxKey));
+  }
+
+  /// The last tick with anything on it — where the horizontal rail's track
+  /// ends. Padded by a bar so there is always somewhere to write next.
+  int get contentEndTicks {
+    int end = ticksPerBar * 4;
+    for (final SequenceNote note in notes) {
+      if (note.endTicks > end) end = note.endTicks;
+    }
+    return end + ticksPerBar;
   }
 
   void zoomToSelection({required double viewportWidth}) {
@@ -321,11 +386,11 @@ class PianoRollStore extends ChangeNotifier {
     }
     final int span = (highTick - lowTick).clamp(ticksPerQuarter, 1 << 30);
     horizontalZoom = (viewportWidth / (span * _basePixelsPerTick)).clamp(
-      0.15,
-      12.0,
+      minZoom,
+      maxZoom,
     );
     scrollTicks = (lowTick - ticksPerQuarter / 2).clamp(0, double.infinity);
-    topKey = (highKey + 2).clamp(11, 127);
+    topKey = (highKey + 2).clamp(0, maxKey);
     _saveViewport();
     notifyListeners();
   }
@@ -391,7 +456,7 @@ class PianoRollStore extends ChangeNotifier {
   void addNoteAt(int tick, int key, {int? length, int velocity = 12900}) {
     if (instrumentId.isEmpty) return;
     final int start = snapDown(tick);
-    final int noteLength = length ?? lastNoteLength;
+    final int noteLength = length ?? defaultNoteLength;
     _client.addNote(
       instrumentId,
       start,
@@ -462,6 +527,52 @@ class PianoRollStore extends ChangeNotifier {
       ..clear()
       ..addAll(updated);
     refresh();
+  }
+
+  /// Sets one note's velocity, leaving the selection alone.
+  ///
+  /// The lane edits the stem you are pointing at. Routing every lane drag
+  /// through [setSelectionVelocity] meant grabbing one stem flattened every
+  /// selected note to the same value — destructive, and invisible until you
+  /// looked away from the stem you were dragging.
+  void setNoteVelocity(SequenceNote note, int velocity) {
+    if (instrumentId.isEmpty) return;
+    final int clamped = velocity.clamp(1, 16383);
+    if (note.velocity == clamped) return;
+    _client.setNoteVelocity(instrumentId, <SequenceNote>[note], clamped);
+    // The selection holds notes by value, so the edited note's old value would
+    // dangle. Swap it for the new one rather than dropping the selection.
+    if (selection.remove(note)) {
+      selection.add(note.copyWith(velocity: clamped));
+    }
+    refresh();
+  }
+
+  /// Opens an undo transaction around a run of lane drags, so dragging across
+  /// twenty stems is one undo step rather than twenty.
+  void beginVelocityGesture() {
+    if (dragKind == PianoDragKind.velocity) return;
+    dragKind = PianoDragKind.velocity;
+    _beginGesture('Set velocity');
+    notifyListeners();
+  }
+
+  /// The note whose stem is nearest [tick], within [toleranceTicks].
+  ///
+  /// A stem is a few pixels wide, so the lane hit-tests by proximity to the
+  /// note's *start* rather than by containment — otherwise short notes at a
+  /// low zoom would be unhittable.
+  SequenceNote? noteNearTick(int tick, int toleranceTicks) {
+    SequenceNote? best;
+    int bestDistance = toleranceTicks;
+    for (final SequenceNote note in notes) {
+      final int distance = (note.startTicks - tick).abs();
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = note;
+      }
+    }
+    return best;
   }
 
   void quantiseSelection({double strength = 1.0}) {
@@ -605,15 +716,42 @@ class PianoRollStore extends ChangeNotifier {
 
   // ----- Audition -----------------------------------------------------------
 
+  Timer? _auditionTimer;
+  int _auditionKey = -1;
+
+  /// Previews a note with an audible length: note-on now, note-off a moment
+  /// later. Sending both back-to-back produced a note so short it was silent.
   void audition(int key, {double velocity = 0.8}) {
+    _releaseAudition();
+    _auditionKey = key;
     try {
-      _client
-        ..auditionNoteOn(key, velocity)
-        ..auditionNoteOff(key);
+      _client.auditionNoteOn(key, velocity);
+    } catch (_) {
+      // Preview path stub
+    }
+    _auditionTimer = Timer(OneBeatTokens.dark().motion.settled, _releaseAudition);
+  }
+
+  void _releaseAudition() {
+    _auditionTimer?.cancel();
+    _auditionTimer = null;
+    if (_auditionKey < 0) return;
+    final int key = _auditionKey;
+    _auditionKey = -1;
+    try {
+      _client.auditionNoteOff(key);
     } catch (_) {
       // Preview path stub
     }
   }
+
+  /// Ends any audition in flight and cancels its pending note-off.
+  ///
+  /// The preview is a note-on with a note-off owed 250ms later. If the roll
+  /// goes away in between, nobody sends the note-off and the instrument holds
+  /// the note forever — so whoever started the preview has to be able to end
+  /// it, whether or not it owns this store.
+  void stopAudition() => _releaseAudition();
 
   void auditionNoteOff(int key) {
     try {
@@ -621,6 +759,12 @@ class PianoRollStore extends ChangeNotifier {
     } catch (_) {
       // Preview path stub
     }
+  }
+
+  @override
+  void dispose() {
+    _releaseAudition();
+    super.dispose();
   }
 
   void undo() {

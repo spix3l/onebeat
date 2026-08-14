@@ -1219,6 +1219,56 @@ ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instru
   return OB_OK;
 }
 
+ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_name) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  try {
+    std::string name = (utf8_name != nullptr && utf8_name[0] != '\0') ? utf8_name : "Channel";
+    onebeat::model::PluginRef plugin;  // no plug-in: an empty lane
+    if (executeModel(*engine, onebeat::model::addInstrument(engine->project, name, plugin),
+                     "Could not add the channel.") != OB_OK) {
+      return fail(OB_ERR_INTERNAL, "Could not add the channel.");
+    }
+    // Select the newest channel so the rack highlights the empty lane.
+    const int32_t count = static_cast<int32_t>(engine->project.instruments().size());
+    for (const auto& [id, instrument] : engine->project.instruments()) {
+      (void)instrument;
+      if (instrument.order == count - 1) {
+        engine->selected_instrument = id;
+        break;
+      }
+    }
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instrument_set_gain(ob_engine* engine, const char* utf8_instrument_id,
+                                        float gain) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  ob_command command{};
+  command.type = OB_CMD_SET_INSTRUMENT_GAIN;
+  command.f64_a = static_cast<double>(gain);
+  return engine->engine->postCommand(command) ? OB_OK : OB_ERR_QUEUE_FULL;
+}
+
+ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instrument_id,
+                                       float pan) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  ob_command command{};
+  command.type = OB_CMD_SET_INSTRUMENT_PAN;
+  command.f64_a = static_cast<double>(pan);
+  return engine->engine->postCommand(command) ? OB_OK : OB_ERR_QUEUE_FULL;
+}
+
 int32_t ob_engine_project_can_undo(ob_engine* engine) {
   return engine != nullptr && engine->commands.canUndo() ? 1 : 0;
 }

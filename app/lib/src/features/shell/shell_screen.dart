@@ -69,19 +69,27 @@ class ShellScreen extends StatelessWidget {
           onExport: onExport,
         ),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              ObSideRail(vm: vm.rail, onSelect: onRailSelect),
-              if (vm.browser != null)
-                ObBrowserPanel(
-                  vm: vm.browser!,
-                  onTap: onBrowserTap,
-                  onToggle: onBrowserToggle,
-                  onSearchTap: onBrowserSearchTap,
-                ),
-              Expanded(child: workspace),
-            ],
+          child: Padding(
+            padding: EdgeInsets.all(tokens.spacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                ObSideRail(vm: vm.rail, onSelect: onRailSelect),
+                if (vm.browser != null) ...<Widget>[
+                  SizedBox(width: tokens.spacing.sm),
+                  _ShellPanel(
+                    child: ObBrowserPanel(
+                      vm: vm.browser!,
+                      onTap: onBrowserTap,
+                      onToggle: onBrowserToggle,
+                      onSearchTap: onBrowserSearchTap,
+                    ),
+                  ),
+                ],
+                SizedBox(width: tokens.spacing.sm),
+                Expanded(child: _ShellPanel(child: workspace)),
+              ],
+            ),
           ),
         ),
         ObStatusBar(vm: vm.status),
@@ -93,6 +101,28 @@ class ShellScreen extends StatelessWidget {
       child: overlay == null
           ? frame
           : Stack(children: <Widget>[frame, overlay]),
+    );
+  }
+}
+
+/// The shell's docked surfaces share one inset frame. Keeping the clipping and
+/// outline here preserves the reusable panel components while making their
+/// relationship to the workspace visible as a single composition.
+class _ShellPanel extends StatelessWidget {
+  const _ShellPanel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: tokens.color.surfaceDeep,
+        borderRadius: tokens.radius.panelBorder,
+      ),
+      child: child,
     );
   }
 }

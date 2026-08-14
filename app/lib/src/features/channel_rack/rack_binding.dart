@@ -54,6 +54,9 @@ class _RackBindingState extends State<RackBinding>
   String _selectedType = 'Sampler';
   String _selectedSnap = '1/16';
 
+  final Map<String, double> _gains = <String, double>{};
+  final Map<String, double> _pans = <String, double>{};
+
   OverlayEntry? _contextMenuEntry;
 
   @override
@@ -206,16 +209,17 @@ class _RackBindingState extends State<RackBinding>
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type: inst?.pluginName.isNotEmpty == true
-              ? inst!.pluginName
-              : 'Sampler',
+          type: inst != null && inst.pluginName.isNotEmpty
+              ? inst.pluginName
+              : 'Empty channel',
           color: color,
           steps: stepVms,
-          vol: 0.75,
-          pan: 0.5,
+          vol: _gains[row.instrumentId] ?? 1.0,
+          pan: _pans[row.instrumentId] ?? 0.5,
           route: '→ D1',
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
+          previewNotes: _previewNotesFor(row),
         ),
       );
     }
@@ -270,6 +274,36 @@ class _RackBindingState extends State<RackBinding>
     );
   }
 
+  /// A piano-roll preview for a row whose notes read as a melody rather than a
+  /// step grid: off-grid timing or more than one pitch. Null keeps the grid.
+  List<RackPreviewNoteVm>? _previewNotesFor(RackRow row) {
+    if (!row.hasSequence) return null;
+    final List<SequenceNote> notes = _store.notesFor(row.instrumentId);
+    if (notes.isEmpty) return null;
+
+    final bool offGrid = row.offGridCount > 0;
+    bool multiPitch = false;
+    int? firstKey;
+    for (final SequenceNote note in notes) {
+      if (firstKey == null) {
+        firstKey = note.key;
+      } else if (note.key != firstKey) {
+        multiPitch = true;
+        break;
+      }
+    }
+    if (!offGrid && !multiPitch) return null;
+
+    return <RackPreviewNoteVm>[
+      for (final SequenceNote note in notes)
+        RackPreviewNoteVm(
+          startTick: note.startTicks,
+          lengthTicks: note.lengthTicks,
+          midiNote: note.key,
+        ),
+    ];
+  }
+
   void _onStepTap(int rowIndex, int stepIndex) {
     final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
     if (rowIndex >= 0 && rowIndex < visible.length) {
@@ -284,41 +318,65 @@ class _RackBindingState extends State<RackBinding>
     }
   }
 
-  /// The first usable built-in plug-in, for adding a channel or an instrument
-  /// without browsing. Falls back to any usable plug-in.
-  PluginListing? _firstBuiltin() {
-    final PluginScanStatus status = widget.client.readPluginScanStatus();
-    if (status.pluginCount <= 0) return null;
-    final List<PluginListing> plugins = widget.client.readPluginList(
-      status.pluginCount,
-    );
-    PluginListing? fallback;
-    for (final PluginListing p in plugins) {
-      if (!p.isUsable) continue;
-      if (p.format == PluginFormat.builtin) return p;
-      fallback ??= p;
-    }
-    return fallback;
-  }
-
-  /// Adds the default instrument as a new, empty channel. When no usable
-  /// plug-in has been discovered yet, falls back to opening the browser.
-  void _addInstrument() {
-    final PluginListing? plugin = _firstBuiltin();
-    if (plugin == null) {
+  /// Adds a new, empty channel (no plug-in) as a visible blank lane. Creating
+  /// a lane must not select an instrument: the inspector belongs to an
+  /// explicit row selection, not to the add action.
+  void _addChannelLane() {
+    final int index = _store.instruments.length + 1;
+    try {
+      widget.client.addEmptyInstrument('Channel $index');
+    } catch (_) {
       widget.onBrowsePlugins?.call();
       return;
     }
-    widget.client.addPluginByPath(plugin.path, plugin.id);
     _store.refresh();
     if (_store.instruments.isNotEmpty) {
-      _store.selectInstrument(_store.instruments.last.id);
+      _store.includeInstrument(_store.instruments.last.id);
     }
   }
 
-  void _onAddChannel() => _addInstrument();
+  void _onAddChannel() => _addChannelLane();
 
-  void _onDoubleTap() => _addInstrument();
+  void _onDoubleTap() => _addChannelLane();
+
+  void _onVolChanged(int rowIndex, double value) {
+    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    final String id = visible[rowIndex].instrumentId;
+    setState(() => _gains[id] = value.clamp(0.0, 1.0));
+    try {
+      widget.client.setInstrumentGain(id, value.clamp(0.0, 1.0));
+    } catch (_) {
+      // Stub when the fake client has no gain command.
+    }
+  }
+
+  void _onPanChanged(int rowIndex, double value) {
+    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    final String id = visible[rowIndex].instrumentId;
+    setState(() => _pans[id] = value.clamp(0.0, 1.0));
+    try {
+      widget.client.setInstrumentPan(id, (value.clamp(0.0, 1.0) - 0.5) * 2.0);
+    } catch (_) {
+      // Stub when the fake client has no pan command.
+    }
+  }
+
+  void _onAddInstrument(Object data) {
+    if (data is! PluginListing) return;
+    try {
+      widget.client.addPluginByPath(data.path, data.id);
+      _store.refresh();
+      if (_store.instruments.isNotEmpty) {
+        // A dropped instrument becomes a visible lane, but selection remains a
+        // separate action so the preview does not appear unexpectedly.
+        _store.includeInstrument(_store.instruments.last.id);
+      }
+    } catch (_) {
+      // Hosting failed; ignore the drop.
+    }
+  }
 
   void _onRowSecondaryTapDown(int rowIndex, TapDownDetails details) {
     final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
@@ -330,7 +388,11 @@ class _RackBindingState extends State<RackBinding>
     if (data is! PluginListing) return;
     final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
     if (rowIndex < 0 || rowIndex >= visible.length) return;
-    widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
+    try {
+      widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
+    } catch (_) {
+      // Hosting failed; leave the lane as it was.
+    }
     _store.refresh();
   }
 
@@ -394,10 +456,13 @@ class _RackBindingState extends State<RackBinding>
       onSelectPattern: (String id) => _store.selectPattern(id),
       onSelectRow: _onSelectRow,
       onStepTap: _onStepTap,
+      onVolChanged: _onVolChanged,
+      onPanChanged: _onPanChanged,
       onAddChannel: _onAddChannel,
       onDoubleTap: _onDoubleTap,
       onRowSecondaryTapDown: _onRowSecondaryTapDown,
       onDropInstrument: _onDropInstrument,
+      onAddInstrument: _onAddInstrument,
       onChannelType: (String val) => setState(() => _selectedType = val),
       onGroup: (String val) => setState(() => _selectedGroup = val),
       onSnap: (String val) {

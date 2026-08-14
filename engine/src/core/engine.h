@@ -213,6 +213,8 @@ class Engine final : public audio_io::RenderCallback {
 
   // Audio-thread-owned state (no synchronisation, single writer).
   float master_gain_ = 1.0F;
+  float instrument_gain_ = 1.0F;
+  float instrument_pan_ = 0.0F;
   float peak_left_ = 0.0F;
   float peak_right_ = 0.0F;
   float rms_left_ = 0.0F;

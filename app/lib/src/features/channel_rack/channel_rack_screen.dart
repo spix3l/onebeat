@@ -21,6 +21,7 @@ class ChannelRackScreen extends StatelessWidget {
     this.onDoubleTap,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
+    this.onAddInstrument,
     this.onSearchTap,
     this.onChannelType,
     this.onGroup,
@@ -55,6 +56,7 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, TapDownDetails details)?
       onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
+  final void Function(Object data)? onAddInstrument;
   final VoidCallback? onSearchTap;
   final ValueChanged<String>? onChannelType;
   final ValueChanged<String>? onGroup;
@@ -121,6 +123,7 @@ class ChannelRackScreen extends StatelessWidget {
               onDoubleTap: onDoubleTap,
               onRowSecondaryTapDown: onRowSecondaryTapDown,
               onDropInstrument: onDropInstrument,
+              onAddInstrument: onAddInstrument,
               onPointerDownStep: onPointerDownStep,
               onPointerMoveStep: onPointerMoveStep,
               onPointerUpStep: onPointerUpStep,
@@ -168,7 +171,7 @@ class _ChannelRackHeader extends StatelessWidget {
     final ColorTokens color = tokens.color;
 
     return Container(
-      height: tokens.size.rackToolbarHeight,
+      height: tokens.size.rackHeaderHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: color.surfacePanel,
@@ -360,6 +363,7 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onDoubleTap,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
+    this.onAddInstrument,
     this.onPointerDownStep,
     this.onPointerMoveStep,
     this.onPointerUpStep,
@@ -383,6 +387,7 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, TapDownDetails details)?
       onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
+  final void Function(Object data)? onAddInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
       onPointerDownStep;
   final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
@@ -393,31 +398,51 @@ class _RackRowsScrollArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final void Function(Object)? add = onAddInstrument;
 
-    return SingleChildScrollView(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
-        child: Column(
+    return DragTarget<Object>(
+      onAcceptWithDetails:
+          add == null
+              ? null
+              : (DragTargetDetails<Object> details) => add(details.data),
+      builder: (
+        BuildContext context,
+        List<Object?> candidates,
+        List<Object?> rejected,
+      ) {
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            for (int i = 0; i < rows.length; i++)
-              _RackRowItem(
-                index: i,
-                row: rows[i],
-                playingStep: playingStep,
-                onSelectRow: onSelectRow,
-                onTogglePower: onTogglePower,
-                onStepTap: onStepTap,
-                onVolChanged: onVolChanged,
-                onPanChanged: onPanChanged,
-                onRouteTap: onRouteTap,
-                onSecondaryTapDown: onRowSecondaryTapDown,
-                onDropInstrument: onDropInstrument,
-                onPointerDownStep: onPointerDownStep,
-                onPointerMoveStep: onPointerMoveStep,
-                onPointerUpStep: onPointerUpStep,
-                onPointerCancelStep: onPointerCancelStep,
+            // The rows own the scroll. The footer stays attached to the bottom
+            // of the rack, matching the reference instead of travelling away
+            // after the last channel.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    for (int i = 0; i < rows.length; i++)
+                      _RackRowItem(
+                        index: i,
+                        row: rows[i],
+                        playingStep: playingStep,
+                        onSelectRow: onSelectRow,
+                        onTogglePower: onTogglePower,
+                        onStepTap: onStepTap,
+                        onVolChanged: onVolChanged,
+                        onPanChanged: onPanChanged,
+                        onRouteTap: onRouteTap,
+                        onSecondaryTapDown: onRowSecondaryTapDown,
+                        onDropInstrument: onDropInstrument,
+                        onPointerDownStep: onPointerDownStep,
+                        onPointerMoveStep: onPointerMoveStep,
+                        onPointerUpStep: onPointerUpStep,
+                        onPointerCancelStep: onPointerCancelStep,
+                      ),
+                  ],
+                ),
               ),
+            ),
             SizedBox(height: tokens.spacing.md),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
@@ -431,8 +456,8 @@ class _RackRowsScrollArea extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

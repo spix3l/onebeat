@@ -139,6 +139,22 @@ class ColorTokens {
   final Color gridLine;
   final Color gridLineStrong;
 
+  /// The snap subdivision on the roll — the third and faintest weight, under
+  /// [gridLine]. A subdivision line has to be visible enough to aim at and
+  /// quiet enough that a 1/32 grid does not read as a solid field.
+  Color get gridLineSubdivision => gridLine.withValues(alpha: 0.4);
+
+  /// The roll's scroll rails.
+  ///
+  /// The thumb is [lineStrong] rather than a surface: an always-visible rail
+  /// only earns its space if you can find it without looking for it, and at
+  /// [surfaceWell] on [surfaceSunken] the contrast was low enough that the rail
+  /// read as an empty gutter. Rails are chrome, so the resting thumb stops at
+  /// line strength and only reaches text strength under the pointer.
+  Color get scrollTrack => surfaceSunken;
+  Color get scrollThumb => lineStrong;
+  Color get scrollThumbHover => textMuted;
+
   /// The piano roll's canvas. Deliberately cooler than the chrome, which is
   /// how the design screens separate "the thing you are editing" from "the
   /// tool you are editing it with" — the roll is the only surface that does
@@ -345,7 +361,9 @@ class SizeTokens {
   double get sliderHeight => 18;
   double get stockPianoControlSize => 72;
   double get stockPianoKeyboardHeight => 150;
-  double get rackToolbarHeight => 58;
+  /// The compact title strip above the rack controls. The workspace gutters
+  /// provide the breathing room; this row only needs to hold its title and tabs.
+  double get rackHeaderHeight => 34;
   double get rackHeaderWidth => 316;
   double get rackRowHeight => 52;
   double get rackStepWidth => 34;
@@ -450,6 +468,13 @@ class SizeTokens {
   /// pattern name is user data — `Main Groove` must not truncate to `Main
   /// Gro…` in the one field that says which pattern you are editing.
   double get prPatternFieldWidth => 190;
+
+  /// The roll's always-visible scroll rails. Thin enough to read as chrome,
+  /// thick enough to grab without aiming. [prScrollbarMinThumb] is the floor a
+  /// thumb never paints below: on 128 rows at a tight zoom the proportional
+  /// thumb would otherwise vanish exactly when it is most needed.
+  double get prScrollbarThickness => 12;
+  double get prScrollbarMinThumb => 28;
 
   /// Arrangement (OB-3-12).
   double get laneHeaderWidth => 208;
@@ -744,6 +769,11 @@ class MotionTokens {
   Duration get settled => const Duration(milliseconds: 240);
   Curve get standard => Curves.easeOutCubic;
   Curve get emphasized => Curves.easeOutBack;
+
+  /// How long the pointer must rest on an icon-only control before it names
+  /// itself. Long enough that sweeping across a toolbar stays quiet, short
+  /// enough that stopping on a glyph feels like asking a question.
+  Duration get tooltipDelay => const Duration(milliseconds: 400);
 
   /// Meter ballistics, in decibels per second, applied against wall-clock time
   /// so that a dropped frame cannot change the decay rate (OB-1-11 §3).

@@ -148,4 +148,70 @@ void main() {
     );
     expect(build(moved).shouldRepaint(same), isTrue);
   });
+
+  test('a beat is the model\'s beat, not a sixteenth of one', () {
+    // The painter and the store have to agree about what a tick is: notes
+    // arrive from the ABI at 960 PPQN, so a "beat line" is 960 ticks apart and
+    // a bar is four of them.
+    expect(prTicksPerBeat, 960);
+    expect(demoViewport.ticksPerBar, 960 * 4);
+  });
+
+  test('a chromatic scale bands by the keyboard, not by the scale', () {
+    const PianoRollVm chromatic = PianoRollVm(
+      notes: <PrNoteVm>[],
+      viewport: demoViewport,
+      scaleIntervals: <int>[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    );
+    expect(chromatic.hasScale, isFalse, reason: 'twelve of twelve says nothing');
+    // With no scale selected at all, every row is "in".
+    const PianoRollVm none = PianoRollVm(
+      notes: <PrNoteVm>[],
+      viewport: demoViewport,
+    );
+    expect(none.hasScale, isFalse);
+    expect(none.inScale(61), isTrue);
+  });
+
+  test('a selected scale sorts rows into in and out', () {
+    // C minor: C D E♭ F G A♭ B♭.
+    const PianoRollVm cMinor = PianoRollVm(
+      notes: <PrNoteVm>[],
+      viewport: demoViewport,
+      scaleIntervals: <int>[0, 2, 3, 5, 7, 8, 10],
+    );
+    expect(cMinor.hasScale, isTrue);
+    expect(cMinor.inScale(60), isTrue, reason: 'C');
+    expect(cMinor.inScale(63), isTrue, reason: 'E♭');
+    expect(cMinor.inScale(64), isFalse, reason: 'E is out of C minor');
+  });
+
+  test('a scale follows its root', () {
+    const PianoRollVm dMinor = PianoRollVm(
+      notes: <PrNoteVm>[],
+      viewport: demoViewport,
+      scaleIntervals: <int>[0, 2, 3, 5, 7, 8, 10],
+      scaleRoot: 2,
+    );
+    expect(dMinor.inScale(64), isTrue, reason: 'E is in D minor');
+    expect(dMinor.inScale(63), isFalse, reason: 'E♭ is not');
+  });
+
+  test('the painter repaints when the sounding rows change', () {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    PrGridPainter build(PianoRollVm vm) => PrGridPainter(
+      vm: vm,
+      color: tokens.color,
+      noteHeight: tokens.size.prNoteHeight,
+      noteRadius: tokens.radius.xs,
+      lineWidth: tokens.border.hairline,
+      playheadWidth: tokens.size.playheadWidth,
+    );
+    final PianoRollVm lit = PianoRollVm(
+      notes: demoNotes,
+      viewport: demoViewport,
+      activeKeys: const <int>{70},
+    );
+    expect(build(lit).shouldRepaint(build(demoPianoRoll)), isTrue);
+  });
 }

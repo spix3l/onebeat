@@ -9,9 +9,35 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 import '../../ui_kit/dropdown.dart';
+import '../../ui_kit/tooltip.dart';
 
-/// The four editing tools the mockup shows.
-enum PrTool { pencil, select, tag, eraser }
+/// The editing tools.
+///
+/// There were four. The fourth — `tag` — was a diamond glyph wired to nothing:
+/// selecting it made the roll inert, because every gesture path branched on
+/// pencil or eraser and fell through. A control that cannot be explained is a
+/// control that should not ship, so the tools are now the three the roll
+/// actually implements.
+enum PrTool {
+  pencil,
+  select,
+  eraser;
+
+  /// What the tool does, in the imperative. This is the tooltip and it is the
+  /// only reason the glyph is legible on first sight.
+  String get label => switch (this) {
+    PrTool.pencil => 'Draw notes',
+    PrTool.select => 'Select notes',
+    PrTool.eraser => 'Erase notes',
+  };
+
+  /// The key that picks it up, shown alongside the label.
+  String get shortcut => switch (this) {
+    PrTool.pencil => 'P',
+    PrTool.select => 'E',
+    PrTool.eraser => 'D',
+  };
+}
 
 @immutable
 class PrToolbarVm {
@@ -116,10 +142,14 @@ class PrToolbar extends StatelessWidget {
           ),
           SizedBox(width: tokens.spacing.sm),
           for (final PrTool tool in PrTool.values) ...<Widget>[
-            _ToolButton(
-              tool: tool,
-              active: tool == vm.tool,
-              onTap: onTool == null ? null : () => onTool!(tool),
+            ObTooltip(
+              message: tool.label,
+              shortcut: tool.shortcut,
+              child: _ToolButton(
+                tool: tool,
+                active: tool == vm.tool,
+                onTap: onTool == null ? null : () => onTool!(tool),
+              ),
             ),
             SizedBox(width: tokens.spacing.xs),
           ],
@@ -138,9 +168,17 @@ class PrToolbar extends StatelessWidget {
             onSelected: onSnap,
           ),
           SizedBox(width: tokens.spacing.sm),
-          _ZoomButton(zoomIn: false, onTap: onZoomOut),
+          ObTooltip(
+            message: 'Zoom out',
+            shortcut: '⌘−',
+            child: _ZoomButton(zoomIn: false, onTap: onZoomOut),
+          ),
           SizedBox(width: tokens.spacing.xs),
-          _ZoomButton(zoomIn: true, onTap: onZoomIn),
+          ObTooltip(
+            message: 'Zoom in',
+            shortcut: '⌘+',
+            child: _ZoomButton(zoomIn: true, onTap: onZoomIn),
+          ),
           SizedBox(width: tokens.spacing.sm),
           _BackButton(label: vm.backLabel, onTap: onBack),
         ],
@@ -385,15 +423,6 @@ class _ToolPainter extends CustomPainter {
         ]) {
           canvas.drawLine(from, to, line);
         }
-      case PrTool.tag:
-        final Path tag =
-            Path()
-              ..moveTo(w * 0.5, h * 0.26)
-              ..lineTo(w * 0.74, h * 0.5)
-              ..lineTo(w * 0.5, h * 0.74)
-              ..lineTo(w * 0.26, h * 0.5)
-              ..close();
-        canvas.drawPath(tag, line);
       case PrTool.eraser:
         final Path body =
             Path()

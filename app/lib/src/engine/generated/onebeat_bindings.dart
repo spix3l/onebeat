@@ -838,6 +838,79 @@ class OneBeatBindings {
         int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
       >();
 
+  ob_status ob_engine_instrument_add_empty(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_add_empty(engine, utf8_name),
+    );
+  }
+
+  late final _ob_engine_instrument_add_emptyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_instrument_add_empty');
+  late final _ob_engine_instrument_add_empty = _ob_engine_instrument_add_emptyPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  ob_status ob_engine_instrument_set_gain(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    double gain,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_set_gain(engine, utf8_instrument_id, gain),
+    );
+  }
+
+  late final _ob_engine_instrument_set_gainPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Float,
+          )
+        >
+      >('ob_engine_instrument_set_gain');
+  late final _ob_engine_instrument_set_gain = _ob_engine_instrument_set_gainPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)
+      >();
+
+  ob_status ob_engine_instrument_set_pan(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    double pan,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_set_pan(engine, utf8_instrument_id, pan),
+    );
+  }
+
+  late final _ob_engine_instrument_set_panPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Float,
+          )
+        >
+      >('ob_engine_instrument_set_pan');
+  late final _ob_engine_instrument_set_pan = _ob_engine_instrument_set_panPtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)
+      >();
+
   int ob_engine_project_can_undo(ffi.Pointer<ob_engine> engine) {
     return _ob_engine_project_can_undo(engine);
   }

@@ -132,6 +132,12 @@ int runRuntimeHost(const std::string& bundle_path, const std::string& plugin_id,
   auto* shared = static_cast<RuntimeShared*>(mapping);
   if (shared->magic != RuntimeMagic || shared->version != RuntimeVersion) return 22;
 
+  // The helper is its own process with its own ThreadCheck statics, and the
+  // engine only registers a main thread in the app process. Register this
+  // process's main thread before the plug-in is created so CLAP plug-ins that
+  // consult the thread-check extension see `init()` on the main thread.
+  ThreadCheck::enterMainThread();
+
   NullPluginHost host;
   std::string error;
   auto plugin = clap::ClapPluginInstance::create(&host, bundle_path, plugin_id, error);

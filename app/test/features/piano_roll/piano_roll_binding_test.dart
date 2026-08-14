@@ -9,6 +9,7 @@
 // 6. Scale and snap changes.
 // 7. Key column press and note placement auditioning.
 // 8. Pattern switching and back-to-playlist navigation.
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
@@ -357,5 +358,150 @@ void main() {
 
     final PianoRollScreen screen = tester.widget(find.byType(PianoRollScreen));
     expect(screen.vm.roll.playheadTick, 960);
+  });
+
+  testWidgets('a sounding note lights its row and its key', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient(
+      isPlaying: true,
+      positionBeats: 1.0, // tick 960
+    );
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    // One note the playhead is inside, one it is not.
+    store.addNoteAt(960, 64, length: 480);
+    store.addNoteAt(2880, 67, length: 480);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final PianoRollScreen screen = tester.widget(find.byType(PianoRollScreen));
+    expect(screen.vm.roll.activeKeys, <int>{64});
+  });
+
+  testWidgets('nothing is lit when the transport is stopped', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store.addNoteAt(0, 64, length: 480);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final PianoRollScreen screen = tester.widget(find.byType(PianoRollScreen));
+    expect(screen.vm.roll.activeKeys, isEmpty);
+  });
+
+  testWidgets('the canvas is told the snap grid and the scale', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    store
+      ..setGrid(const GridChoice('1/8', 480))
+      ..setScale(MusicalScale.all[2], 0); // Minor
+    await tester.pump();
+
+    final PianoRollScreen screen = tester.widget(find.byType(PianoRollScreen));
+    expect(screen.vm.roll.viewport.subdivisionTicks, 480);
+    expect(screen.vm.roll.hasScale, isTrue);
+    expect(screen.vm.roll.inScale(63), isTrue, reason: 'E♭ is in C minor');
+    expect(screen.vm.roll.inScale(64), isFalse, reason: 'E is not');
+  });
+
+  testWidgets('⌘-drag lassos even with the draw tool up', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store.addNoteAt(0, 84, length: 480);
+    final int notesBefore = store.notes.length;
+    expect(store.tool, PrTool.pencil);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect grid = tester.getRect(find.byType(PrKeyColumn));
+    final Offset start = Offset(grid.right + 20, grid.top + 20);
+
+    await simulateKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.dragFrom(start, const Offset(160, 60));
+    await tester.pump();
+    await simulateKeyUpEvent(LogicalKeyboardKey.metaLeft);
+
+    expect(
+      store.notes.length,
+      notesBefore,
+      reason: 'a lasso drag must not draw',
+    );
+  });
+
+  testWidgets('a plain drag with the draw tool still draws', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    final int notesBefore = store.notes.length;
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect grid = tester.getRect(find.byType(PrKeyColumn));
+    await tester.dragFrom(
+      Offset(grid.right + 20, grid.top + 20),
+      const Offset(160, 0),
+    );
+    await tester.pump();
+
+    expect(store.notes.length, notesBefore + 1);
+  });
+
+  testWidgets('the roll releases a preview note when it goes away', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect rect = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(rect.center.dx, rect.top + 7));
+    await tester.pump();
+    expect(client.auditionedKeys, isNotEmpty);
+
+    // Tearing the roll down mid-preview must not leave the note ringing — and
+    // must not leave the note-off timer pending either.
+    await pumpForTest(tester, const SizedBox(), size: const Size(1600, 900));
+    await tester.pump();
   });
 }
