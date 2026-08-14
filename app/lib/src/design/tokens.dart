@@ -214,6 +214,21 @@ class ColorTokens {
     final double clamped = unit.clamp(0.0, 1.0);
     return noteFill.withValues(alpha: 0.45 + 0.55 * clamped);
   }
+
+  /// The two stops of a lit step cell's fill, top then bottom.
+  ///
+  /// The design fills accented controls with a gradient rather than a flat
+  /// colour, and a step also has to carry its velocity: quiet steps sit back
+  /// toward [accentMuted], loud ones reach the full accent. The floor is 0.4
+  /// so that a step at velocity zero still reads as *on* — "lit but quiet" and
+  /// "off" must never look the same.
+  List<Color> stepGradient(double velocity) {
+    final double unit = 0.4 + 0.6 * velocity.clamp(0.0, 1.0);
+    return <Color>[
+      Color.lerp(accentMuted, accentDeep, unit)!,
+      Color.lerp(accentMuted, accent, unit)!,
+    ];
+  }
 }
 
 /// Spacing scale. Every gap in the app is one of these.
@@ -306,6 +321,44 @@ class SizeTokens {
   double get rackStepInset => 3;
   double get rackVelocityHeight => 4;
   double get rackCursorWidth => 2;
+
+  /// The rebuilt channel rack (UI-B-05), measured off
+  /// `components/channel-row.png` — a 919×46 row whose every landmark is
+  /// listed here, so a change to the rhythm is a change to one file.
+  ///
+  /// The lane is 46px, not [rackRowHeight]'s 52: the old rack sized itself,
+  /// this one is sized by the design. Both survive until UI-D-09.
+  double get rackLaneHeight => 46;
+
+  /// Step cells: 30px squares on a 34px pitch, with a wider gap every four so
+  /// the beat groups read without a rule between them.
+  double get rackStepCell => 30;
+  double get rackStepGap => 4;
+  double get rackStepGroupGap => 8;
+
+  /// The lane's left block: power well, identity chip, name column. Their
+  /// widths add up to where the grid starts, which is why they live together.
+  double get rackPowerSize => 18;
+  double get rackColorChipSize => 22;
+  double get rackNameWidth => 158;
+
+  /// The mono route chip at the lane's right edge (`→ D1`).
+  double get rackRouteChipWidth => 42;
+
+  /// The accent bar down the left edge of the selected lane.
+  double get rackSelectedEdgeWidth => 3;
+
+  /// The rack's own chrome rows: the control toolbar above the grid, the
+  /// column-caption strip under it, and the "add a channel" card below.
+  double get rackToolbarBarHeight => 38;
+  double get rackColumnHeaderHeight => 25;
+  double get rackFooterHeight => 44;
+
+  /// The toolbar's three select fields. They differ because their labels do:
+  /// `CHANNEL TYPE Sampler` needs room the `SNAP 1/4` field would waste.
+  double get rackTypeFieldWidth => 200;
+  double get rackGroupFieldWidth => 140;
+  double get rackSnapFieldWidth => 130;
 
   /// Piano roll (OB-3-10). Row height and key width are the two numbers the
   /// whole canvas is derived from, so zoom is a multiplier on these rather than
@@ -522,6 +575,23 @@ class TypeTokens {
     letterSpacing: 0.6,
     color: textMuted,
     fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
+  );
+
+  /// A channel lane's name, and the instrument caption under it (UI-B-05).
+  /// Two sizes and two colours in a 46px lane: the name is what you scan for,
+  /// the type is what you check once.
+  TextStyle get rackName => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+  );
+
+  TextStyle get rackCaption => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 10,
+    fontWeight: FontWeight.w400,
+    color: textMuted,
   );
 
   /// Tag labels (PAT, AUD, AUTO).
