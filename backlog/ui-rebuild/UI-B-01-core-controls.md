@@ -6,7 +6,7 @@
 | **Type** | Feature (UI, presentational) |
 | **Dependencies** | UI-A-02 |
 | **Reference** | `ui-files/components/knob.png`, `rail-button.png`, `transport-btn.png`, `dropdown.png`, `fx-chip.png`; usage in `ui-files/screens/channel-rack.png` |
-| **Target files** | `app/lib/src/ui_kit/knob.dart`, `buttons.dart`, `dropdown.dart`, `chips.dart`, `search_field.dart`; tests in `app/test/ui_kit/core_controls_golden_test.dart` |
+| **Target files** | `app/lib/src/ui_kit/knob.dart`, `transport_button.dart`, `rail_button.dart`, `dropdown.dart`, `fx_chip.dart`, `toggle_chip.dart`, `tag_chip.dart`, `search_field.dart`, `search_icon.dart`, `magnifier_glyph.dart`; one mirrored test file per component in `app/test/ui_kit/` |
 | **Estimate** | M |
 
 ## Context
@@ -26,12 +26,12 @@ All widgets: presentational, tokens only, `(data, callbacks)` constructors, no s
    - `ObToggleChip`: `M` / `S` mute-solo squares with on-colours (danger for M, amber for S per `screens/export-audio.png` inspector).
    - `ObTagChip`: small counter/badge (`4 tracks`, `12`) in mono.
 6. **`ObSearchField`** — rounded search input with magnifier icon and hint (`Search samples, presets…`) plus the compact icon-only round variant (top-right of rack header) and the `⌘K` shortcut tag variant (`Search actions ⌘K` in the top bar). Static text rendering is enough; a real `TextField` styled to match is fine but not required to be functional.
-7. Golden tests: one board-style golden laying out every widget in every state on a `surfaceSunken` background (like a storybook sheet), named `core_controls_dark`.
+7. Golden tests: one file per component in `app/test/ui_kit/`, mirroring `lib/src/ui_kit/` one-to-one. Each has a golden of the component in every state on a `surfaceSunken` background (`knob_dark.png`, `transport_button_dark.png`, …), plus behaviour tests for the callbacks.
 
 ## Acceptance criteria
 
 - [ ] Each widget matches its component PNG at 1:1 size (PNGs are 2×: on-screen size = px/2).
-- [ ] All states listed above visible on the golden board.
+- [ ] All states listed above visible in the per-component goldens.
 - [ ] No imports from `engine/`, stores, or old `ui/*.dart` files.
 - [ ] analyze + token lint + `flutter test` clean; goldens committed.
 
