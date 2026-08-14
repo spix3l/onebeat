@@ -410,6 +410,24 @@ class SizeTokens {
   double get searchIconFieldSize => 26;
   double get browserHeaderHeight => 38;
   double get browserSearchHeight => 32;
+
+  /// The browser panel (UI-B-04). Width and row rhythm are measured off
+  /// `screens/channel-rack.png` at the export's 2× scale: a 240px column of
+  /// 24px rows, children indented one glyph box per level.
+  double get browserWidth => 240;
+  double get browserRowHeight => 24;
+  double get browserRowIndent => 18;
+
+  /// The identity tick beside a pattern name: a slim vertical bar rather than
+  /// a dot, so a colour reads at a glance down a column of rows.
+  double get browserTickWidth => 3;
+  double get browserTickHeight => 14;
+
+  /// The 8px identity dot on a sample row, and the waveform mark at its right
+  /// edge that says "this is audio".
+  double get browserDotSize => 8;
+  double get browserWaveWidth => 14;
+  double get browserWaveHeight => 12;
   double get exportButtonWidth => 84;
 
   /// Knobs, faders, and dialog sizes.
@@ -522,6 +540,32 @@ class TypeTokens {
     letterSpacing: 0.6,
     color: textMuted,
     fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
+  );
+
+  /// A row in a dense list: the browser's folders, patterns and samples
+  /// (UI-B-04). Smaller than [body] because the mockup's browser rows are
+  /// 24px tall — at 13px the names would fill the row edge to edge and the
+  /// list would lose the rhythm that makes it scannable.
+  TextStyle get listRow => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    color: textSecondary,
+  );
+
+  /// The selected row: same size, more weight, full-strength ink. Weight
+  /// rather than size, so selection never reflows the list.
+  TextStyle get listRowSelected =>
+      listRow.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
+
+  /// The dim mono trailing a list row: a count (`12`, `4×`) or a kind tag
+  /// (`piano roll`).
+  TextStyle get listRowMeta => TextStyle(
+    fontFamily: numericFamily,
+    fontSize: 9,
+    fontWeight: FontWeight.w400,
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    color: textMuted,
   );
 
   /// Tag labels (PAT, AUD, AUTO).
