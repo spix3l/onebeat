@@ -83,6 +83,7 @@ Future<void> pumpUi(
 /// The golden matcher for a component or screen.
 ///
 /// Goldens live in a `goldens/` folder colocated with the calling test, named
-/// `<name>_dark.png` — so a test in `test/ui_kit/` writes
-/// `test/ui_kit/goldens/<name>_dark.png`.
-Matcher uiGolden(String name) => matchesGoldenFile('goldens/${name}_dark.png');
+/// `<name>.png` — so a test in `test/ui_kit/` writes
+/// `test/ui_kit/goldens/<name>.png`. A component's variants — states, content,
+/// themes — are composed into that one file rather than given sibling files.
+Matcher uiGolden(String name) => matchesGoldenFile('goldens/$name.png');

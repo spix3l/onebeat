@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/mixer/mixer_binding.dart';
 
-import '../../support/fake_stage3_client.dart';
-import '../../support/stage3_harness.dart';
+import '../../support/fake_engine_client.dart';
+import '../../support/app_harness.dart';
 
-class _FakeMixerEngineClient extends FakeStage3Client implements EngineClient {
+class _FakeMixerEngineClient extends FakeEngineClient implements EngineClient {
   _FakeMixerEngineClient({
     this.isPlaying = false,
   }) {

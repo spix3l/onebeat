@@ -16,7 +16,7 @@ import 'package:onebeat/src/features/channel_rack/rack_binding.dart';
 import 'package:onebeat/src/features/channel_rack/rack_row.dart';
 import 'package:onebeat/src/features/channel_rack/rack_store.dart';
 
-import '../../support/stage3_harness.dart';
+import '../../support/app_harness.dart';
 
 class _FakeRackEngineClient implements EngineClient {
   _FakeRackEngineClient({

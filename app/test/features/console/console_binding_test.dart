@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/features/console/console_binding.dart';
 
-import '../../support/stage3_harness.dart';
+import '../../support/app_harness.dart';
 
 void main() {
   setUpAll(loadAppFonts);

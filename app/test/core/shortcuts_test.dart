@@ -6,7 +6,7 @@ import 'package:onebeat/src/core/action_registry.dart';
 import 'package:onebeat/src/core/shortcuts.dart';
 import 'package:onebeat/src/design/tokens.dart';
 
-import '../support/stage3_harness.dart';
+import '../support/app_harness.dart';
 
 void main() {
   setUpAll(loadAppFonts);
@@ -99,6 +99,34 @@ void main() {
 
       expect(toolChanges, 0, reason: 'typing "b" must not switch tools');
       expect(deletes, 0, reason: 'backspace in a field must not delete notes');
+    });
+
+    testWidgets('bare letters work normally when no field has focus', (
+      WidgetTester tester,
+    ) async {
+      int toolChanges = 0;
+      final FocusNode canvas = FocusNode();
+      addTearDown(canvas.dispose);
+
+      await pumpForTest(
+        tester,
+        ScopedShortcuts(
+          shortcuts: <ShortcutActivator, Intent>{
+            const SingleActivator(LogicalKeyboardKey.keyB):
+                const RunActionIntent('tool'),
+          },
+          handlers: <String, VoidCallback>{'tool': () => toolChanges++},
+          child: Focus(focusNode: canvas, child: const SizedBox.expand()),
+        ),
+        size: const Size(400, 200),
+      );
+
+      canvas.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.pump();
+
+      expect(toolChanges, 1);
     });
 
     testWidgets('modified shortcuts keep working while typing', (

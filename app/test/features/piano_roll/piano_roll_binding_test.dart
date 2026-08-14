@@ -20,10 +20,10 @@ import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart';
 import 'package:onebeat/src/features/piano_roll/pr_toolbar.dart';
 import 'package:onebeat/src/features/piano_roll/velocity_lane.dart';
 
-import '../../support/fake_stage3_client.dart';
-import '../../support/stage3_harness.dart';
+import '../../support/fake_engine_client.dart';
+import '../../support/app_harness.dart';
 
-class _FakePianoRollEngineClient extends FakeStage3Client implements EngineClient {
+class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClient {
   _FakePianoRollEngineClient({
     this.isPlaying = false,
     this.positionBeats = 0.0,

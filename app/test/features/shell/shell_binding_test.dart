@@ -10,7 +10,7 @@ import 'package:onebeat/src/features/shell/shell_binding.dart';
 import 'package:onebeat/src/features/shell/side_rail.dart';
 import 'package:onebeat/src/ui_kit/transport_button.dart';
 
-import '../../support/stage3_harness.dart';
+import '../../support/app_harness.dart';
 
 class _FakeEngineClient implements EngineClient {
   bool isPlaying = false;
