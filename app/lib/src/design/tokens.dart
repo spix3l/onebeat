@@ -307,6 +307,26 @@ class SizeTokens {
   double get rackVelocityHeight => 4;
   double get rackCursorWidth => 2;
 
+  /// The channel inspector strip (UI-B-06), measured off the bottom of
+  /// `screens/channel-rack.png`. One row, six blocks: identity, waveform,
+  /// mix, mute/solo, FX chain, routing, keyboard.
+  double get inspectorHeight => 120;
+  double get inspectorTileSize => 48;
+  double get inspectorWaveWidth => 275;
+  double get inspectorWaveHeight => 44;
+
+  /// Waveform bars are drawn, not sampled: a fixed bar pitch keeps the
+  /// preview legible at any strip width and keeps the paint cost flat.
+  double get inspectorWaveBarPitch => 3;
+
+  /// The round state lamps under the M and S chips.
+  double get inspectorLampSize => 18;
+  double get inspectorLampDotSize => 8;
+
+  /// The two-octave keyboard at the strip's right edge.
+  double get inspectorKeyboardWidth => 166;
+  double get inspectorKeyboardHeight => 54;
+
   /// Piano roll (OB-3-10). Row height and key width are the two numbers the
   /// whole canvas is derived from, so zoom is a multiplier on these rather than
   /// a second set of constants.

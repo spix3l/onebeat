@@ -13,6 +13,7 @@ class ObFxChip extends StatefulWidget {
     required this.label,
     required this.dotColor,
     this.mono = false,
+    this.active = false,
     this.onTap,
     super.key,
   });
@@ -25,6 +26,11 @@ class ObFxChip extends StatefulWidget {
 
   /// Route-chip variant: label in the numeric family.
   final bool mono;
+
+  /// The chain entry currently being edited: accent outline over an accent
+  /// wash. An outline rather than a fill, because the dot beside the label is
+  /// already carrying a colour and two saturated fields in one chip fight.
+  final bool active;
   final VoidCallback? onTap;
 
   @override
@@ -51,10 +57,15 @@ class _ObFxChipState extends State<ObFxChip> {
           height: tokens.size.chipHeight,
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
           decoration: BoxDecoration(
-            color: _hover && enabled ? color.surfaceHover : color.surfaceWell,
+            color:
+                widget.active
+                    ? color.accentWash
+                    : (_hover && enabled
+                        ? color.surfaceHover
+                        : color.surfaceWell),
             borderRadius: tokens.radius.controlBorder,
             border: Border.all(
-              color: color.lineStrong,
+              color: widget.active ? color.accentBright : color.lineStrong,
               width: tokens.border.hairline,
             ),
           ),
