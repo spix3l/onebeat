@@ -10,6 +10,7 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'action_registry.dart';
 import 'controls.dart';
+import 'icons.dart';
 import 'pattern_store.dart';
 
 class PatternSelector extends StatefulWidget {
@@ -34,10 +35,15 @@ class _PatternSelectorState extends State<PatternSelector> {
   String _renamingId = '';
   bool _showColors = false;
 
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode(debugLabel: 'browser-search');
+
   @override
   void dispose() {
     _rename.dispose();
     _renameFocus.dispose();
+    _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -76,11 +82,25 @@ class _PatternSelectorState extends State<PatternSelector> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Padding(
-                padding: EdgeInsets.all(tokens.spacing.md),
+              Container(
+                height: tokens.size.browserHeaderHeight,
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: tokens.color.line,
+                      width: tokens.border.hairline,
+                    ),
+                  ),
+                ),
                 child: Row(
                   children: <Widget>[
-                    Expanded(child: Text('PATTERNS', style: tokens.type.label)),
+                    Expanded(
+                      child: Text(
+                        'BROWSER',
+                        style: tokens.type.sectionHeader,
+                      ),
+                    ),
                     OneBeatButton(
                       key: actionKey('pattern.create'),
                       label: '+',
@@ -94,24 +114,81 @@ class _PatternSelectorState extends State<PatternSelector> {
                   ],
                 ),
               ),
+              Padding(
+                padding: EdgeInsets.all(tokens.spacing.sm),
+                child: Container(
+                  height: tokens.size.browserSearchHeight,
+                  padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
+                  decoration: BoxDecoration(
+                    color: tokens.color.surfaceDeep,
+                    borderRadius: tokens.radius.controlBorder,
+                    border: Border.all(
+                      color: tokens.color.line,
+                      width: tokens.border.hairline,
+                    ),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      OneBeatIcon(
+                        OneBeatIconData.search,
+                        size: tokens.size.tagHeight,
+                        color: tokens.color.textMuted,
+                      ),
+                      SizedBox(width: tokens.spacing.xs),
+                      Expanded(
+                        child: Text(
+                          'Search samples, presets...',
+                          style: tokens.type.label,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               Expanded(
-                child: ListView.builder(
-                  itemCount: widget.store.patterns.length,
-                  itemBuilder: (BuildContext context, int index) {
-                    final PatternSummary pattern = widget.store.patterns[index];
-                    if (pattern.id == _renamingId) {
-                      return _RenameRow(
-                        controller: _rename,
-                        focusNode: _renameFocus,
-                        onCommit: _commitRename,
-                      );
-                    }
-                    return _PatternRow(
-                      pattern: pattern,
-                      onTap: () => widget.onOpenPattern(pattern.id),
-                      onRename: () => _startRename(pattern),
-                    );
-                  },
+                child: ListView(
+                  children: <Widget>[
+                    const _BrowserFolderRow(
+                      icon: OneBeatIconData.folder,
+                      name: 'Packs',
+                      badge: '12',
+                      isFolder: true,
+                    ),
+                    _BrowserFolderRow(
+                      icon: OneBeatIconData.folderOpen,
+                      name: 'Current Project',
+                      badge: '${widget.store.patterns.length}',
+                      isFolder: true,
+                      expanded: true,
+                    ),
+                    for (int index = 0; index < widget.store.patterns.length; index++) ...<Widget>[
+                      if (widget.store.patterns[index].id == _renamingId)
+                        _RenameRow(
+                          controller: _rename,
+                          focusNode: _renameFocus,
+                          onCommit: _commitRename,
+                        )
+                      else
+                        _PatternRow(
+                          pattern: widget.store.patterns[index],
+                          onTap: () => widget.onOpenPattern(widget.store.patterns[index].id),
+                          onRename: () => _startRename(widget.store.patterns[index]),
+                        ),
+                    ],
+                    const _BrowserFolderRow(
+                      icon: OneBeatIconData.folder,
+                      name: 'Drums',
+                      badge: '340',
+                      isFolder: true,
+                    ),
+                    const _BrowserFolderRow(
+                      icon: OneBeatIconData.folder,
+                      name: 'Synths',
+                      badge: '',
+                      isFolder: true,
+                    ),
+                  ],
                 ),
               ),
               if (current != null) _buildActions(tokens, current),
@@ -373,3 +450,54 @@ class SharedPatternNoticeBar extends StatelessWidget {
     );
   }
 }
+
+class _BrowserFolderRow extends StatelessWidget {
+  const _BrowserFolderRow({
+    required this.icon,
+    required this.name,
+    this.badge = '',
+    this.isFolder = true,
+    this.expanded = false,
+  });
+
+  final OneBeatIconData icon;
+  final String name;
+  final String badge;
+  final bool isFolder;
+  final bool expanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      height: tokens.size.patternRowHeight,
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+      child: Row(
+        children: <Widget>[
+          OneBeatIcon(
+            icon,
+            size: tokens.size.tagHeight,
+            color: tokens.color.textMuted,
+          ),
+          SizedBox(width: tokens.spacing.sm),
+          Expanded(
+            child: Text(
+              name,
+              overflow: TextOverflow.ellipsis,
+              style: tokens.type.body.copyWith(
+                fontWeight: isFolder ? FontWeight.w500 : FontWeight.w400,
+                color: isFolder ? tokens.color.textPrimary : tokens.color.textMuted,
+              ),
+            ),
+          ),
+          if (badge.isNotEmpty)
+            Text(
+              badge,
+              style: tokens.type.numericSmall,
+            ),
+        ],
+      ),
+    );
+  }
+}
+

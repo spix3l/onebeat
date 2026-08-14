@@ -20,7 +20,15 @@ import 'rack_store.dart';
 /// switcher (`onebeat-shell.html`): the three Stage 3 surfaces edit the same
 /// project through the same command bus, so switching between them is pure
 /// presentation and costs nothing.
-enum WorkspaceView { arrangement, rack, pianoRoll }
+enum WorkspaceView {
+  arrangement,
+  rack,
+  pianoRoll,
+  mixer,
+  console,
+  plugins,
+  extensions,
+}
 
 class EngineController extends ChangeNotifier {
   EngineController({
@@ -52,7 +60,21 @@ class EngineController extends ChangeNotifier {
   late final PianoRollStore pianoRoll;
 
   /// Which editor the shell's centre shows.
-  WorkspaceView view = WorkspaceView.rack;
+  ///
+  /// The playlist, as the design screens open on: it is the view that shows
+  /// the whole project, and the rack is a detail of one pattern within it.
+  ///
+  /// A notifier of its own, and not just a field read during the shell's
+  /// build, because this controller notifies on **every frame** — the meter and
+  /// the clock need that. Rebuilding the rail and the whole workspace from
+  /// those notifications would repaint every editor at display rate to show a
+  /// view that changes once; reading the field without listening at all is
+  /// worse still, and was the actual bug: clicking a rail tile moved the top
+  /// bar's switcher and left the rail and the editor behind it unchanged.
+  final ValueNotifier<WorkspaceView> viewNotifier =
+      ValueNotifier<WorkspaceView>(WorkspaceView.arrangement);
+
+  WorkspaceView get view => viewNotifier.value;
 
   late final Ticker _ticker;
 
@@ -107,7 +129,7 @@ class EngineController extends ChangeNotifier {
 
   void setView(WorkspaceView value) {
     if (view == value) return;
-    view = value;
+    viewNotifier.value = value;
     // Each editor re-reads on entry rather than staying live: an edit made in
     // another view has already changed the model underneath it.
     switch (value) {
@@ -117,6 +139,11 @@ class EngineController extends ChangeNotifier {
         pianoRoll.refresh();
       case WorkspaceView.arrangement:
         arrangement.refresh();
+      case WorkspaceView.mixer:
+      case WorkspaceView.plugins:
+      case WorkspaceView.console:
+      case WorkspaceView.extensions:
+        break;
     }
     notifyListeners();
   }
@@ -177,6 +204,7 @@ class EngineController extends ChangeNotifier {
   @override
   void dispose() {
     _ticker.dispose();
+    viewNotifier.dispose();
     frameStats.dispose();
     library.cancelScan();
     library.dispose();

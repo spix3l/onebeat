@@ -48,6 +48,9 @@ void _paintOnce(CustomPainter painter, Size size) {
 }
 
 void main() {
+  // Real fonts: block glyphs measure nothing like Archivo or MartianMono.
+  setUpAll(loadAppFonts);
+
   testWidgets('a 2,000-note piano roll stays inside the 120 Hz paint budget', (
     WidgetTester tester,
   ) async {
@@ -69,8 +72,10 @@ void main() {
       ..panTo(0, 96);
     expect(harness.pianoRoll.notes.length, 2000);
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildPianoRoll(), size: const Size(1600, 900)),
+    await pumpForTest(
+      tester,
+      harness.buildPianoRoll(),
+      size: const Size(1600, 900),
     );
 
     final double perPaint = _worstPainterCost(tester, const Size(1600, 760));
@@ -112,8 +117,10 @@ void main() {
       ..zoomHorizontally(0.4);
     expect(harness.arrangement.clips.length, 200);
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildArrangement(), size: const Size(1600, 900)),
+    await pumpForTest(
+      tester,
+      harness.buildArrangement(),
+      size: const Size(1600, 900),
     );
 
     final double perPaint = _worstPainterCost(tester, const Size(1400, 820));
@@ -142,9 +149,7 @@ void main() {
       harness.buildPianoRoll(),
       harness.buildArrangement(),
     ]) {
-      await tester.pumpWidget(
-        wrapForTest(surface, size: const Size(1400, 800)),
-      );
+      await pumpForTest(tester, surface, size: const Size(1400, 800));
       expect(
         find.byType(PianoRollSurface).evaluate().isNotEmpty ||
             find.byType(ArrangementSurface).evaluate().isNotEmpty,

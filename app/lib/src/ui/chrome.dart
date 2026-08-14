@@ -4,19 +4,21 @@
 // Split out of shell.dart because the shell was becoming a file where layout,
 // shortcut wiring and three bespoke widgets all lived together, and the bespoke
 // widgets are the part that gets restyled.
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../design/tokens.dart';
 import 'action_registry.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'icons.dart';
 
 /// One destination in the left rail.
 @immutable
 class RailDestination {
   const RailDestination({
     required this.actionId,
-    required this.glyph,
+    required this.icon,
     required this.label,
     this.view,
     this.onSelected,
@@ -25,9 +27,10 @@ class RailDestination {
   /// The registry entry this tile satisfies, so FR-UX-17 can find it.
   final String actionId;
 
-  /// A text glyph rather than an icon font: the app ships two typefaces and no
-  /// icon set, and inventing a third dependency for six tiles is not worth it.
-  final String glyph;
+  /// A painted icon (see icons.dart). Text glyphs were tried first and were
+  /// the reason half the rail rendered as tofu: the shipped typefaces do not
+  /// carry `▥` or `🎛`.
+  final OneBeatIconData icon;
   final String label;
 
   /// The workspace this tile switches to, when it is a view.
@@ -146,18 +149,19 @@ class _RailTileState extends State<_RailTile> {
                   color: background,
                   borderRadius: tokens.radius.controlBorder,
                 ),
-                child: Text(
-                  destination.glyph,
-                  style: tokens.type.title.copyWith(
-                    color: foreground,
-                    fontSize: tokens.size.railGlyphSize,
-                  ),
+                child: OneBeatIcon(
+                  destination.icon,
+                  size: tokens.size.railGlyphSize,
+                  color: foreground,
                 ),
               ),
               SizedBox(height: tokens.spacing.xxs),
               Text(
                 destination.label.toUpperCase(),
-                style: tokens.type.label.copyWith(
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+                style: tokens.type.railLabel.copyWith(
                   color: widget.active
                       ? tokens.color.textPrimary
                       : tokens.color.textMuted,
@@ -171,7 +175,7 @@ class _RailTileState extends State<_RailTile> {
   }
 }
 
-/// Transport and history: play/stop, undo, redo, return-to-zero.
+/// Transport and history: play/stop, undo, redo, return-to-zero, loop.
 ///
 /// Takes plain values and callbacks rather than an `EngineController`, so the
 /// reachability test can render the *real* controls instead of a copy that
@@ -185,6 +189,8 @@ class TransportCluster extends StatelessWidget {
     required this.onUndo,
     required this.onRedo,
     required this.onReturnToZero,
+    this.loopEnabled = false,
+    this.onToggleLoop,
     this.undoName = '',
     this.redoName = '',
     super.key,
@@ -193,10 +199,12 @@ class TransportCluster extends StatelessWidget {
   final bool playing;
   final bool canUndo;
   final bool canRedo;
+  final bool loopEnabled;
   final VoidCallback onTogglePlay;
   final VoidCallback onUndo;
   final VoidCallback onRedo;
   final VoidCallback onReturnToZero;
+  final VoidCallback? onToggleLoop;
   final String undoName;
   final String redoName;
 
@@ -206,48 +214,157 @@ class TransportCluster extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        OneBeatButton(
-          key: actionKey('transport.play'),
-          label: playing ? 'STOP' : 'PLAY',
-          semanticLabel: ActionRegistry.byId('transport.play').tooltip,
-          active: playing,
-          onPressed: onTogglePlay,
-        ),
-        SizedBox(width: tokens.spacing.sm),
-        // Undo and redo need visible controls, not just ⌘Z: a keyboard-only
-        // action is as unreachable as a right-click-only one to someone who
-        // does not already know it exists (FR-UX-17).
-        OneBeatButton(
+        TransportButton(
           key: actionKey('edit.undo'),
-          label: '↶',
+          icon: OneBeatIconData.undo,
           semanticLabel: canUndo && undoName.isNotEmpty
               ? 'Undo $undoName'
               : ActionRegistry.byId('edit.undo').tooltip,
           onPressed: canUndo ? onUndo : null,
         ),
         SizedBox(width: tokens.spacing.xs),
-        OneBeatButton(
+        TransportButton(
           key: actionKey('edit.redo'),
-          label: '↷',
+          icon: OneBeatIconData.redo,
           semanticLabel: canRedo && redoName.isNotEmpty
               ? 'Redo $redoName'
               : ActionRegistry.byId('edit.redo').tooltip,
           onPressed: canRedo ? onRedo : null,
         ),
-        SizedBox(width: tokens.spacing.sm),
-        OneBeatButton(
+        SizedBox(width: tokens.spacing.md),
+        // The play control is the one filled thing in the bar, playing or not:
+        // in the design it is what your eye finds without looking.
+        TransportButton(
+          key: actionKey('transport.play'),
+          icon: playing ? OneBeatIconData.pause : OneBeatIconData.play,
+          semanticLabel: ActionRegistry.byId('transport.play').tooltip,
+          filled: true,
+          wide: true,
+          onPressed: onTogglePlay,
+        ),
+        SizedBox(width: tokens.spacing.xs),
+        TransportButton(
           key: actionKey('transport.returnToZero'),
-          label: 'RTZ',
+          icon: OneBeatIconData.stop,
           semanticLabel: ActionRegistry.byId('transport.returnToZero').tooltip,
           onPressed: onReturnToZero,
         ),
+        if (onToggleLoop != null) ...<Widget>[
+          SizedBox(width: tokens.spacing.xs),
+          TransportButton(
+            icon: OneBeatIconData.loop,
+            semanticLabel: 'Toggle loop playback',
+            filled: loopEnabled,
+            onPressed: onToggleLoop,
+          ),
+        ],
       ],
     );
   }
 }
 
-/// The view switcher from the design's top bar. Always shows all three, so the
-/// app's shape is legible before anything has been built.
+/// A square icon well. The transport is the one row in the app where controls
+/// carry no text at all, so it does not reuse [OneBeatButton]'s label layout.
+class TransportButton extends StatefulWidget {
+  const TransportButton({
+    required this.icon,
+    required this.semanticLabel,
+    required this.onPressed,
+    this.filled = false,
+    this.wide = false,
+    super.key,
+  });
+
+  final OneBeatIconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+
+  /// Accent-filled: the play control, and the loop control while looping.
+  final bool filled;
+  final bool wide;
+
+  @override
+  State<TransportButton> createState() => _TransportButtonState();
+}
+
+class _TransportButtonState extends State<TransportButton> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final bool enabled = widget.onPressed != null;
+    final Color background = widget.filled && enabled
+        ? tokens.color.accent
+        : _hovered && enabled
+        ? tokens.color.surfaceOverlay
+        : tokens.color.surfaceRaised;
+    final Color foreground = !enabled
+        ? tokens.color.textMuted
+        : widget.filled
+        ? tokens.color.textPrimary
+        : tokens.color.textPrimary;
+
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.semanticLabel,
+      child: FocusableActionDetector(
+        onShowHoverHighlight: (bool value) => setState(() => _hovered = value),
+        onShowFocusHighlight: (bool value) => setState(() => _focused = value),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.numpadEnter): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed?.call();
+              return null;
+            },
+          ),
+        },
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: GestureDetector(
+            onTap: widget.onPressed,
+            child: AnimatedContainer(
+              duration: tokens.motion.instant,
+              curve: tokens.motion.standard,
+              width: widget.wide
+                  ? tokens.size.transportButtonSize * 1.3 // token-lint-ok: ratio
+                  : tokens.size.transportButtonSize,
+              height: tokens.size.transportButtonSize,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: tokens.radius.controlBorder,
+                border: Border.all(
+                  color: _focused
+                      ? tokens.color.accent
+                      : widget.filled
+                      ? tokens.color.accent
+                      : tokens.color.line,
+                  width: _focused
+                      ? tokens.size.focusRingWidth
+                      : tokens.border.hairline,
+                ),
+              ),
+              child: OneBeatIcon(
+                widget.icon,
+                size: tokens.size.transportGlyphSize,
+                color: foreground,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The view switcher from the design's top bar. Always shows all options.
 class ViewSwitcher extends StatelessWidget {
   const ViewSwitcher({
     required this.activeView,
@@ -258,11 +375,13 @@ class ViewSwitcher extends StatelessWidget {
   final WorkspaceView activeView;
   final ValueChanged<WorkspaceView> onSelect;
 
-  static const Map<WorkspaceView, String> labels = <WorkspaceView, String>{
-    WorkspaceView.arrangement: 'PLAYLIST',
-    WorkspaceView.rack: 'CHANNELS',
-    WorkspaceView.pianoRoll: 'PIANO ROLL',
-  };
+  static const List<(WorkspaceView, OneBeatIconData, String)> _destinations =
+      <(WorkspaceView, OneBeatIconData, String)>[
+    (WorkspaceView.arrangement, OneBeatIconData.playlist, 'Playlist'),
+    (WorkspaceView.rack, OneBeatIconData.channels, 'Channels'),
+    (WorkspaceView.pianoRoll, OneBeatIconData.piano, 'Piano roll'),
+    (WorkspaceView.mixer, OneBeatIconData.mixer, 'Mixer'),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -270,17 +389,96 @@ class ViewSwitcher extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        for (final MapEntry<WorkspaceView, String> entry in labels.entries)
+        for (final (WorkspaceView view, OneBeatIconData icon, String label)
+            in _destinations)
           Padding(
             padding: EdgeInsets.only(right: tokens.spacing.xs),
-            child: OneBeatButton(
-              label: entry.value,
-              semanticLabel: 'Show the ${entry.value.toLowerCase()} view',
-              active: activeView == entry.key,
-              onPressed: () => onSelect(entry.key),
+            child: _ViewSwitcherTile(
+              icon: icon,
+              label: label,
+              active: activeView == view,
+              onTap: () => onSelect(view),
             ),
           ),
       ],
+    );
+  }
+}
+
+/// One switcher tile: icon over caption, exactly as the design draws it. Kept
+/// distinct from the rail tile because it is half the size and its caption is
+/// sentence case, not the rail's uppercase.
+class _ViewSwitcherTile extends StatefulWidget {
+  const _ViewSwitcherTile({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final OneBeatIconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  State<_ViewSwitcherTile> createState() => _ViewSwitcherTileState();
+}
+
+class _ViewSwitcherTileState extends State<_ViewSwitcherTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final Color foreground = widget.active
+        ? tokens.color.textPrimary
+        : tokens.color.textMuted;
+    return Semantics(
+      button: true,
+      selected: widget.active,
+      label: 'Show the ${widget.label.toLowerCase()} view',
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: tokens.motion.instant,
+            curve: tokens.motion.standard,
+            width: tokens.size.viewSwitcherTileWidth,
+            height: tokens.size.readoutHeight + tokens.spacing.sm,
+            padding: EdgeInsets.symmetric(vertical: tokens.spacing.xxs),
+            decoration: BoxDecoration(
+              color: widget.active
+                  ? tokens.color.accent
+                  : _hovered
+                  ? tokens.color.surfaceOverlay
+                  : tokens.color.surfaceSunken,
+              borderRadius: tokens.radius.controlBorder,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                OneBeatIcon(
+                  widget.icon,
+                  size: tokens.size.iconSize,
+                  color: foreground,
+                ),
+                SizedBox(height: tokens.spacing.xxs),
+                Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: tokens.type.railLabel.copyWith(color: foreground),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -309,7 +507,7 @@ class ReadoutWell extends StatelessWidget {
     return Container(
       width: width,
       height: tokens.size.readoutHeight,
-      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
       decoration: BoxDecoration(
         color: tokens.color.surfaceDeep,
         borderRadius: tokens.radius.controlBorder,
@@ -320,11 +518,26 @@ class ReadoutWell extends StatelessWidget {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
+        // A well with no fixed [width] shrink-wraps, and its children are
+        // Flexible rather than Expanded so that they may. Leaving this at
+        // `max` asks the row to fill an unbounded width, which throws during
+        // layout and takes the whole top bar down with it.
+        mainAxisSize: width == null ? MainAxisSize.min : MainAxisSize.max,
         children: <Widget>[
           Flexible(child: child),
           if (label.isNotEmpty) ...<Widget>[
-            SizedBox(width: tokens.spacing.sm),
-            Text(label, style: tokens.type.label),
+            SizedBox(width: tokens.spacing.xs),
+            // The caption never wraps and never pushes the digits out of the
+            // well: it is the part of the readout you can afford to lose.
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.fade,
+                style: tokens.type.labelDense,
+              ),
+            ),
           ],
         ],
       ),
@@ -332,7 +545,22 @@ class ReadoutWell extends StatelessWidget {
   }
 }
 
-/// The app's identity block, top-left, above the rail in the design.
+/// The gap the window's real traffic lights occupy.
+///
+/// The window uses a full-size content view, so the close/minimise/zoom buttons
+/// are drawn by macOS *inside* the app's top bar — the design's own arrangement.
+/// The app used to paint three coloured dots of its own here, which meant two
+/// sets of them: the real ones in a title strip above, and a decorative set
+/// that did nothing when clicked.
+class TitleBarInset extends StatelessWidget {
+  const TitleBarInset({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(width: OneBeatTheme.of(context).size.titleBarInset);
+}
+
+/// The app's identity block, top-left, matching the design.
 class BrandMark extends StatelessWidget {
   const BrandMark({required this.version, super.key});
 
@@ -341,26 +569,112 @@ class BrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    return SizedBox(
-      width: tokens.size.brandWidth,
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: tokens.size.railGlyphSize,
-            height: tokens.size.railGlyphSize,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: tokens.size.controlHeight,
+          height: tokens.size.controlHeight,
+          decoration: BoxDecoration(
+            color: tokens.color.accent,
+            borderRadius: BorderRadius.all(tokens.radius.md),
+          ),
+          alignment: Alignment.center,
+          child: Container(
+            width: tokens.spacing.sm,
+            height: tokens.spacing.sm,
             decoration: BoxDecoration(
-              color: tokens.color.accent,
-              borderRadius: BorderRadius.all(tokens.radius.sm),
+              color: tokens.color.surfaceSunken,
+              shape: BoxShape.circle,
             ),
           ),
-          SizedBox(width: tokens.spacing.sm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+        ),
+        SizedBox(width: tokens.spacing.sm),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Text('ONEBEAT', style: tokens.type.brand),
+            Text(version, style: tokens.type.labelDense),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Export action button.
+class ExportButton extends StatelessWidget {
+  const ExportButton({this.onPressed, super.key});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Semantics(
+      button: true,
+      label: 'Export audio',
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          height: tokens.size.controlHeight,
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+          decoration: BoxDecoration(
+            color: tokens.color.accent,
+            borderRadius: tokens.radius.controlBorder,
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text('ONEBEAT', style: tokens.type.brand),
-              Text(version, style: tokens.type.label),
+              OneBeatIcon(
+                OneBeatIconData.export,
+                size: tokens.size.tagHeight,
+                color: tokens.color.textPrimary,
+              ),
+              SizedBox(width: tokens.spacing.xs),
+              Text(
+                'Export',
+                style: tokens.type.labelDense.copyWith(
+                  color: tokens.color.textPrimary,
+                ),
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A vertical master peak indicator on the far right of the top bar.
+class MasterPeakIndicator extends StatelessWidget {
+  const MasterPeakIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      width: tokens.spacing.xs,
+      height: tokens.size.controlHeight,
+      decoration: BoxDecoration(
+        color: tokens.color.surfaceRaised,
+        borderRadius: tokens.radius.controlBorder,
+      ),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            flex: 2,
+            child: Container(color: tokens.color.meterHigh),
+          ),
+          Expanded(
+            flex: 3,
+            child: Container(color: tokens.color.meterMid),
+          ),
+          Expanded(
+            flex: 10,
+            child: Container(color: tokens.color.meterLow),
           ),
         ],
       ),
@@ -386,7 +700,10 @@ class SearchAffordance extends StatelessWidget {
         key: actionKey(action.id),
         onTap: onTap,
         child: Container(
-          width: tokens.size.searchWidth,
+          constraints: BoxConstraints(
+            minWidth: tokens.size.controlHeight,
+            maxWidth: tokens.size.searchWidth,
+          ),
           height: tokens.size.readoutHeight,
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
           decoration: BoxDecoration(
@@ -399,8 +716,20 @@ class SearchAffordance extends StatelessWidget {
           ),
           child: Row(
             children: <Widget>[
+              OneBeatIcon(
+                OneBeatIconData.search,
+                size: tokens.size.tagHeight,
+                color: tokens.color.textMuted,
+              ),
+              SizedBox(width: tokens.spacing.xs),
               Expanded(
-                child: Text(action.label, style: tokens.type.label),
+                child: Text(
+                  action.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: tokens.type.label,
+                ),
               ),
               Text(action.shortcut, style: tokens.type.numericSmall),
             ],

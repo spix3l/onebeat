@@ -7,10 +7,81 @@
 // Focus policy (FR-UX-24): controls are focusable and activate on Enter, never
 // on Space. Space belongs to the transport, everywhere, always — including
 // right after clicking a button.
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../design/tokens.dart';
+import 'icons.dart';
+
+/// A square icon-only button: dialog closes, row removals, small toolbar
+/// affordances. Text-labelled `✕` buttons were doing this job and rendering as
+/// a heavy multiplication sign in the middle of a 44px-wide control.
+class IconButtonSmall extends StatefulWidget {
+  const IconButtonSmall({
+    required this.icon,
+    required this.semanticLabel,
+    required this.onPressed,
+    this.bordered = true,
+    super.key,
+  });
+
+  final OneBeatIconData icon;
+  final String semanticLabel;
+  final VoidCallback? onPressed;
+  final bool bordered;
+
+  @override
+  State<IconButtonSmall> createState() => _IconButtonSmallState();
+}
+
+class _IconButtonSmallState extends State<IconButtonSmall> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final bool enabled = widget.onPressed != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: Container(
+            width: tokens.size.controlHeight,
+            height: tokens.size.controlHeight,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _hovered && enabled
+                  ? tokens.color.surfaceOverlay
+                  : widget.bordered
+                  ? tokens.color.surfaceRaised
+                  : tokens.color.none,
+              borderRadius: tokens.radius.controlBorder,
+              border: widget.bordered
+                  ? Border.all(
+                      color: tokens.color.line,
+                      width: tokens.border.hairline,
+                    )
+                  : null,
+            ),
+            child: OneBeatIcon(
+              widget.icon,
+              size: tokens.size.iconSize,
+              color: enabled ? tokens.color.textPrimary : tokens.color.textMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class OneBeatButton extends StatefulWidget {
   const OneBeatButton({
@@ -324,7 +395,11 @@ class _OneBeatSelectState<T> extends State<OneBeatSelect<T>> {
                     ),
                   ),
                   SizedBox(width: tokens.spacing.xs),
-                  Text('▾', style: tokens.type.label),
+                  OneBeatIcon(
+                    OneBeatIconData.chevronDown,
+                    size: tokens.size.tagHeight,
+                    color: tokens.color.textMuted,
+                  ),
                 ],
               ),
             ),
@@ -551,7 +626,7 @@ class TempoField extends StatefulWidget {
 
 class _TempoFieldState extends State<TempoField> {
   late final TextEditingController _controller = TextEditingController(
-    text: widget.tempo.toStringAsFixed(1),
+    text: widget.tempo.toStringAsFixed(2),
   );
   final FocusNode _focusNode = FocusNode();
   bool _editing = false;
@@ -571,7 +646,7 @@ class _TempoFieldState extends State<TempoField> {
   void didUpdateWidget(TempoField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!_editing && widget.tempo != oldWidget.tempo) {
-      _controller.text = widget.tempo.toStringAsFixed(1);
+      _controller.text = widget.tempo.toStringAsFixed(2);
     }
   }
 
@@ -580,11 +655,11 @@ class _TempoFieldState extends State<TempoField> {
       _controller.text.replaceAll(',', '.'),
     );
     if (parsed == null) {
-      _controller.text = widget.tempo.toStringAsFixed(1);
+      _controller.text = widget.tempo.toStringAsFixed(2);
       return;
     }
     final double clamped = parsed.clamp(20.0, 999.0);
-    _controller.text = clamped.toStringAsFixed(1);
+    _controller.text = clamped.toStringAsFixed(2);
     widget.onChanged(clamped);
   }
 
@@ -601,24 +676,26 @@ class _TempoFieldState extends State<TempoField> {
     return Semantics(
       label: 'Tempo in beats per minute',
       textField: true,
+      // No border of its own: the field sits *inside* a ReadoutWell, and two
+      // nested outlines is what made the top bar read as boxes-in-boxes rather
+      // than as the design's single recessed well. The accent underline is what
+      // says "editing" instead.
       child: Container(
-        width: tokens.size.controlMinWidth * 1.7,
+        width: measureText(tokens.type.numericLarge, '888.88'),
         height: tokens.size.controlHeight,
-        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
         alignment: Alignment.centerRight,
         decoration: BoxDecoration(
-          color: tokens.color.surfacePanel,
-          borderRadius: tokens.radius.controlBorder,
-          border: Border.all(
-            color: _editing ? tokens.color.accent : tokens.color.line,
-            width:
-                _editing ? tokens.size.focusRingWidth : tokens.border.hairline,
+          border: Border(
+            bottom: BorderSide(
+              color: _editing ? tokens.color.accent : tokens.color.none,
+              width: tokens.border.emphasis,
+            ),
           ),
         ),
         child: EditableText(
           controller: _controller,
           focusNode: _focusNode,
-          style: tokens.type.numeric,
+          style: tokens.type.numericLarge,
           cursorColor: tokens.color.accent,
           backgroundCursorColor: tokens.color.line,
           selectionColor: tokens.color.accentMuted,
@@ -634,3 +711,341 @@ class _TempoFieldState extends State<TempoField> {
     );
   }
 }
+
+/// Rotary knob control for plugin parameters and mixer sends.
+class OneBeatKnob extends StatefulWidget {
+  const OneBeatKnob({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.min = 0.0,
+    this.max = 1.0,
+    this.defaultValue = 0.5,
+    this.unit = '',
+    this.displayValue,
+    super.key,
+  });
+
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+  final double min;
+  final double max;
+  final double defaultValue;
+  final String unit;
+  final String? displayValue;
+
+  @override
+  State<OneBeatKnob> createState() => _OneBeatKnobState();
+}
+
+class _OneBeatKnobState extends State<OneBeatKnob> {
+  double _dragStartY = 0.0;
+  double _dragStartValue = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final double normalized = ((widget.value - widget.min) / (widget.max - widget.min)).clamp(0.0, 1.0); // token-lint-ok: math
+    final String valStr = widget.displayValue ?? '${widget.value.toStringAsFixed(widget.value.abs() < 10 ? 1 : 0)}${widget.unit}';
+
+    return GestureDetector(
+      onDoubleTap: () => widget.onChanged(widget.defaultValue),
+      onVerticalDragStart: (DragStartDetails details) {
+        _dragStartY = details.localPosition.dy;
+        _dragStartValue = widget.value;
+      },
+      onVerticalDragUpdate: (DragUpdateDetails details) {
+        final double deltaY = _dragStartY - details.localPosition.dy;
+        final double range = widget.max - widget.min;
+        final double deltaVal = (deltaY / 100.0) * range; // token-lint-ok: drag sensitivity
+        final double next = (_dragStartValue + deltaVal).clamp(widget.min, widget.max);
+        widget.onChanged(next);
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(widget.label.toUpperCase(), style: tokens.type.knobLabel),
+          SizedBox(height: tokens.spacing.xxs),
+          SizedBox(
+            width: tokens.size.knobMedium,
+            height: tokens.size.knobMedium,
+            child: CustomPaint(
+              painter: _KnobPainter(
+                normalized: normalized,
+                tokens: tokens,
+              ),
+            ),
+          ),
+          SizedBox(height: tokens.spacing.xxs),
+          Text(valStr, style: tokens.type.knobValue),
+        ],
+      ),
+    );
+  }
+}
+
+class _KnobPainter extends CustomPainter {
+  const _KnobPainter({
+    required this.normalized,
+    required this.tokens,
+  });
+
+  final double normalized;
+  final OneBeatTokens tokens;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Offset center = Offset(size.width / 2, size.height / 2); // token-lint-ok: center
+    final double radius = (size.width / 2) - tokens.border.emphasis; // token-lint-ok: radius
+
+    final Paint trackPaint = Paint()
+      ..color = tokens.color.knobTrack
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tokens.border.emphasis;
+
+    final Paint bodyPaint = Paint()
+      ..color = tokens.color.surfacePanel
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, radius, bodyPaint);
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // Angle from -135 deg to +135 deg (270 deg span)
+    const double startAngle = 0.75 * 3.141592653589793; // token-lint-ok: radian math
+    const double sweepAngle = 1.5 * 3.141592653589793; // token-lint-ok: radian math
+    final double currentAngle = startAngle + normalized * sweepAngle; // token-lint-ok: angle
+
+    final Paint activePaint = Paint()
+      ..color = tokens.color.knobIndicator
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tokens.border.emphasis
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      normalized * sweepAngle, // token-lint-ok: arc sweep
+      false,
+      activePaint,
+    );
+
+    // Indicator line
+    final Offset indicatorEnd = Offset(
+      center.dx + (radius - tokens.spacing.xs) * math.cos(currentAngle), // token-lint-ok: trig
+      center.dy + (radius - tokens.spacing.xs) * math.sin(currentAngle), // token-lint-ok: trig
+    );
+    final Offset indicatorStart = Offset(
+      center.dx + (radius * 0.4) * math.cos(currentAngle), // token-lint-ok: trig
+      center.dy + (radius * 0.4) * math.sin(currentAngle), // token-lint-ok: trig
+    );
+
+    final Paint indicatorPaint = Paint()
+      ..color = tokens.color.knobIndicator
+      ..strokeWidth = tokens.border.emphasis
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(indicatorStart, indicatorEnd, indicatorPaint);
+  }
+
+  @override
+  bool shouldRepaint(_KnobPainter oldDelegate) => oldDelegate.normalized != normalized;
+}
+
+/// Linear vertical fader for mixer tracks.
+class OneBeatLinearFader extends StatelessWidget {
+  const OneBeatLinearFader({
+    required this.value,
+    required this.onChanged,
+    this.min = 0.0,
+    this.max = 1.0,
+    super.key,
+  });
+
+  final double value;
+  final ValueChanged<double> onChanged;
+  final double min;
+  final double max;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final double normalized = ((value - min) / (max - min)).clamp(0.0, 1.0); // token-lint-ok: math
+
+    return SizedBox(
+      width: tokens.size.faderWidth,
+      height: tokens.size.faderHeight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (DragUpdateDetails details) {
+          final RenderBox box = context.findRenderObject()! as RenderBox;
+          final Offset local = box.globalToLocal(details.globalPosition);
+          final double fraction = (1.0 - (local.dy / tokens.size.faderHeight)).clamp(0.0, 1.0); // token-lint-ok: fraction
+          onChanged(min + fraction * (max - min));
+        },
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            // Fader groove
+            Container(
+              width: tokens.spacing.xs,
+              height: tokens.size.faderHeight,
+              decoration: BoxDecoration(
+                color: tokens.color.faderTrack,
+                borderRadius: tokens.radius.controlBorder,
+              ),
+            ),
+            // Fader thumb
+            Positioned(
+              bottom: normalized * (tokens.size.faderHeight - tokens.size.faderThumbHeight), // token-lint-ok: positioning
+              child: Container(
+                width: tokens.size.faderThumbWidth,
+                height: tokens.size.faderThumbHeight,
+                decoration: BoxDecoration(
+                  color: tokens.color.faderThumb,
+                  borderRadius: tokens.radius.controlBorder,
+                  border: Border.all(
+                    color: tokens.color.line,
+                    width: tokens.border.hairline,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Container(
+                  width: tokens.spacing.md,
+                  height: tokens.border.emphasis,
+                  color: tokens.color.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Styled checkbox control.
+class OneBeatCheckbox extends StatelessWidget {
+  const OneBeatCheckbox({
+    required this.value,
+    required this.onChanged,
+    this.label = '',
+    super.key,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: tokens.size.checkboxSize,
+            height: tokens.size.checkboxSize,
+            decoration: BoxDecoration(
+              color: value ? tokens.color.accent : tokens.color.surfaceDeep,
+              borderRadius: BorderRadius.all(tokens.radius.sm),
+              border: Border.all(
+                color: value ? tokens.color.accent : tokens.color.line,
+                width: tokens.border.hairline,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: value
+                ? OneBeatIcon(
+                    OneBeatIconData.check,
+                    size: tokens.size.checkboxSize,
+                    color: tokens.color.surfaceSunken,
+                  )
+                : null,
+          ),
+          if (label.isNotEmpty) ...<Widget>[
+            SizedBox(width: tokens.spacing.sm),
+            Text(label, style: tokens.type.body),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Segmented radio/toggle buttons group.
+class OneBeatSegmentedControl<T> extends StatelessWidget {
+  const OneBeatSegmentedControl({
+    required this.value,
+    required this.options,
+    required this.labelOf,
+    required this.onChanged,
+    this.subtitleOf,
+    super.key,
+  });
+
+  final T value;
+  final List<T> options;
+  final String Function(T) labelOf;
+  final String Function(T)? subtitleOf;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        for (final T option in options)
+          Padding(
+            padding: EdgeInsets.only(right: tokens.spacing.xs),
+            child: GestureDetector(
+              onTap: () => onChanged(option),
+              child: Container(
+                height: tokens.size.controlHeight,
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+                decoration: BoxDecoration(
+                  color: option == value
+                      ? tokens.color.surfaceOverlay
+                      : tokens.color.surfaceRaised,
+                  borderRadius: tokens.radius.controlBorder,
+                  border: Border.all(
+                    color: option == value
+                        ? tokens.color.accent
+                        : tokens.color.line,
+                    width: option == value
+                        ? tokens.border.emphasis
+                        : tokens.border.hairline,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      labelOf(option),
+                      style: tokens.type.labelDense.copyWith(
+                        color: option == value
+                            ? tokens.color.textPrimary
+                            : tokens.color.textMuted,
+                      ),
+                    ),
+                    if (subtitleOf != null) ...<Widget>[
+                      SizedBox(width: tokens.spacing.xs),
+                      Text(
+                        subtitleOf!(option),
+                        style: tokens.type.numericSmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+

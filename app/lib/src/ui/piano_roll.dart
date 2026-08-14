@@ -19,6 +19,7 @@ import '../engine/engine_client.dart';
 import 'action_registry.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'icons.dart';
 import 'pattern_store.dart';
 import 'piano_roll_store.dart';
 import 'shortcuts.dart';
@@ -442,11 +443,40 @@ class _PianoToolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: <Widget>[
-            Text(
-              patterns.current?.name ?? 'Piano roll',
-              style: tokens.type.title,
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.spacing.sm,
+                vertical: tokens.spacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: tokens.color.surfaceDeep,
+                borderRadius: tokens.radius.controlBorder,
+                border: Border.all(
+                  color: tokens.color.line,
+                  width: tokens.border.hairline,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  OneBeatIcon(
+                    OneBeatIconData.piano,
+                    size: tokens.size.tagHeight,
+                    color: tokens.color.accent,
+                  ),
+                  SizedBox(width: tokens.spacing.xs),
+                  Text('Piano roll', style: tokens.type.breadcrumb),
+                  SizedBox(width: tokens.spacing.xs),
+                  Text('›', style: tokens.type.label),
+                  SizedBox(width: tokens.spacing.xs),
+                  Text(
+                    patterns.current?.name ?? 'Pattern',
+                    style: tokens.type.breadcrumb,
+                  ),
+                ],
+              ),
             ),
-            SizedBox(width: tokens.spacing.lg),
+            SizedBox(width: tokens.spacing.md),
             _ToolbarAction(
               id: 'piano.tool.draw',
               active: store.tool == PianoTool.draw,

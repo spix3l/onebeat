@@ -8,6 +8,7 @@ import '../design/tokens.dart';
 import '../engine/engine_client.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'icons.dart';
 import 'plugin_library_store.dart';
 import 'rack_store.dart';
 
@@ -638,7 +639,11 @@ class _PreviewButton extends StatelessWidget {
             border: Border.all(color: t.color.line),
             borderRadius: t.radius.controlBorder,
           ),
-          child: Text('▶', style: t.type.label),
+          child: OneBeatIcon(
+            OneBeatIconData.play,
+            size: t.size.tagHeight,
+            color: t.color.textPrimary,
+          ),
         ),
       ),
     );

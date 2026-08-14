@@ -496,8 +496,20 @@ class _ArrangementToolbar extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: <Widget>[
-            Text('Arrangement', style: tokens.type.title),
+            Text(
+              'PLAYLIST',
+              style: tokens.type.sectionHeader,
+            ),
             SizedBox(width: tokens.spacing.lg),
+            OneBeatSelect<GridChoice>(
+              key: actionKey('arrangement.snap'),
+              prefix: 'Snap',
+              value: store.snap,
+              options: ArrangementStore.snapChoices,
+              labelOf: (GridChoice choice) => choice.label,
+              onChanged: store.setSnap,
+            ),
+            SizedBox(width: tokens.spacing.md),
             OneBeatButton(
               key: actionKey('arrangement.addLane'),
               label: ActionRegistry.byId('arrangement.addLane').label,
@@ -524,15 +536,6 @@ class _ArrangementToolbar extends StatelessWidget {
               label: ActionRegistry.byId('arrangement.deleteClip').label,
               onPressed: hasSelection ? store.deleteSelection : null,
             ),
-            SizedBox(width: tokens.spacing.lg),
-            OneBeatSelect<GridChoice>(
-              key: actionKey('arrangement.snap'),
-              prefix: 'SNAP',
-              value: store.snap,
-              options: ArrangementStore.snapChoices,
-              labelOf: (GridChoice choice) => choice.label,
-              onChanged: store.setSnap,
-            ),
           ],
         ),
       ),
@@ -540,10 +543,7 @@ class _ArrangementToolbar extends StatelessWidget {
   }
 }
 
-/// One lane header. Name, colour, event-gate mute, solo, collapse, delete.
-///
-/// Read the list again: there is nothing here that carries signal, and that is
-/// the design, not an omission (D-M4, ARCHITECTURE.md §6 #2).
+/// One lane header. Name, colour, event-gate mute, solo, collapse, delete, and type tag.
 class _LaneHeader extends StatelessWidget {
   const _LaneHeader({
     required this.lane,
@@ -559,6 +559,13 @@ class _LaneHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final Color color = projectColor(lane.color, tokens.color.accent);
+    final int laneIndex = store.lanes.indexOf(lane) + 1;
+    final bool isAudio = lane.name.toLowerCase().contains('audio') || lane.name.toLowerCase().contains('vocal') || lane.name.toLowerCase().contains('loop');
+    final bool isAuto = lane.name.toLowerCase().contains('auto') || lane.name.toLowerCase().contains('cutoff') || lane.name.toLowerCase().contains('vol');
+    final String tagText = isAudio ? 'AUD' : (isAuto ? 'AUTO' : 'PAT');
+    final Color tagBg = isAudio ? tokens.color.tagAudBg : (isAuto ? tokens.color.tagAutoBg : tokens.color.tagPatBg);
+    final Color tagFg = isAudio ? tokens.color.tagAudFg : (isAuto ? tokens.color.tagAutoFg : tokens.color.tagPatFg);
+
     return GestureDetector(
       onTap: () => store.selectLane(lane.id),
       child: Container(
@@ -584,14 +591,42 @@ class _LaneHeader extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
+                Text(
+                  '$laneIndex',
+                  style: tokens.type.numericSmall,
+                ),
+                SizedBox(width: tokens.spacing.xs),
                 Expanded(
-                  child: Text(
-                    lane.name,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.body,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        lane.name,
+                        overflow: TextOverflow.ellipsis,
+                        style: tokens.type.body.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        isAudio ? 'audio · 124bpm' : (isAuto ? 'auto · mixer' : '→ Drums'),
+                        overflow: TextOverflow.ellipsis,
+                        style: tokens.type.numericSmall,
+                      ),
+                    ],
                   ),
                 ),
-                Text('${lane.clipCount}', style: tokens.type.numericSmall),
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: tokens.spacing.xs,
+                    vertical: tokens.spacing.xxs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: tagBg,
+                    borderRadius: tokens.radius.controlBorder,
+                  ),
+                  child: Text(
+                    tagText,
+                    style: tokens.type.tag.copyWith(color: tagFg),
+                  ),
+                ),
               ],
             ),
             if (!lane.collapsed) ...<Widget>[
@@ -841,7 +876,7 @@ class _ClipsPainter extends CustomPainter {
     final String transpose = clip.transpose == 0
         ? ''
         : '  ${clip.transpose > 0 ? '+' : ''}${clip.transpose}';
-    final String loop = clip.loop ? '' : '  ⤓';
+    final String loop = clip.loop ? '' : '  one-shot';
     final TextPainter label = TextPainter(
       text: TextSpan(
         text: '${clip.name}$transpose$loop',

@@ -11,16 +11,23 @@ import 'package:flutter/widgets.dart';
 import '../../main.dart' show startupStopwatch;
 import '../design/tokens.dart';
 import '../engine/engine_client.dart';
+import 'app_menu_bar.dart';
 import 'arrangement.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
+import 'export_dialog.dart';
+import 'extension_manager_view.dart';
 import 'channel_rack.dart';
 import 'chrome.dart';
-import 'meter.dart';
+import 'icons.dart';
+import 'mixer_view.dart';
 import 'pattern_selector.dart';
 import 'performance_overlay.dart';
 import 'piano_roll.dart';
+import 'plugin_builtin_view.dart';
 import 'plugin_list_debug.dart';
+import 'preferences_dialog.dart';
+import 'script_console_view.dart';
 import 'shortcuts.dart';
 import 'token_gallery.dart';
 import 'transport_readout.dart';
@@ -41,6 +48,8 @@ class _OneBeatShellState extends State<OneBeatShell>
   bool _showTokenGallery = false;
   bool _showPluginList = false;
   bool _showShortcutSheet = false;
+  bool _showExportDialog = false;
+  bool _showPreferencesDialog = false;
 
   @override
   void initState() {
@@ -95,7 +104,12 @@ class _OneBeatShellState extends State<OneBeatShell>
     // Space is the transport, always. No control binds it, so it works no
     // matter which one was clicked last (FR-UX-24). The typing-aware manager in
     // ScopedShortcuts is what stops it inserting a space into a rename field.
-    return ScopedShortcuts(
+    return OneBeatMenuBar(
+      controller: _controller,
+      onOpenExport: () => setState(() => _showExportDialog = true),
+      onOpenPreferences: () => setState(() => _showPreferencesDialog = true),
+      onOpenShortcuts: () => setState(() => _showShortcutSheet = true),
+      child: ScopedShortcuts(
       shortcuts: <ShortcutActivator, Intent>{
         ...shortcutsForScope(ShortcutScope.global),
         // Debug surfaces. Function keys, so they never collide with typing.
@@ -183,6 +197,10 @@ class _OneBeatShellState extends State<OneBeatShell>
                 controller: _controller,
                 onOpenShortcuts: () =>
                     setState(() => _showShortcutSheet = true),
+                onOpenExport: () =>
+                    setState(() => _showExportDialog = true),
+                onOpenPreferences: () =>
+                    setState(() => _showPreferencesDialog = true),
               ),
               // D-M6's notice sits directly under the chrome and above every
               // editor: the warning belongs to the pattern being edited, not
@@ -198,10 +216,18 @@ class _OneBeatShellState extends State<OneBeatShell>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    DestinationRail(
-                      destinations: _destinations,
-                      activeView: _controller.view,
-                      onSelectView: _controller.setView,
+                    // Rail and workspace both follow the view notifier rather
+                    // than the controller: the controller notifies every
+                    // frame, and this subtree is the expensive one.
+                    ValueListenableBuilder<WorkspaceView>(
+                      valueListenable: _controller.viewNotifier,
+                      builder:
+                          (BuildContext context, WorkspaceView view, _) =>
+                              DestinationRail(
+                                destinations: _destinations,
+                                activeView: view,
+                                onSelectView: _controller.setView,
+                              ),
                     ),
                     if (!_showTokenGallery && !_showPluginList)
                       PatternSelector(
@@ -216,12 +242,25 @@ class _OneBeatShellState extends State<OneBeatShell>
                           else if (_showPluginList)
                             PluginListDebugPanel(controller: _controller)
                           else
-                            _buildWorkspace(),
+                            ValueListenableBuilder<WorkspaceView>(
+                              valueListenable: _controller.viewNotifier,
+                              builder:
+                                  (BuildContext context, WorkspaceView _, _) =>
+                                      _buildWorkspace(),
+                            ),
                           FrameTimingOverlay(controller: _controller),
                           if (_showShortcutSheet)
                             ShortcutSheet(
                               onDismiss: () =>
                                   setState(() => _showShortcutSheet = false),
+                            ),
+                          if (_showExportDialog)
+                            ExportAudioDialog(
+                              onClose: () => setState(() => _showExportDialog = false),
+                            ),
+                          if (_showPreferencesDialog)
+                            PreferencesDialog(
+                              onClose: () => setState(() => _showPreferencesDialog = false),
                             ),
                         ],
                       ),
@@ -234,36 +273,63 @@ class _OneBeatShellState extends State<OneBeatShell>
           ),
         ),
       ),
+      ),
     );
   }
 
-  /// The rail's destinations. `Packs` and `FX` have no view yet and render
-  /// disabled — an enabled tile that does nothing is worse than an honest one
-  /// that says "not yet" by being unclickable (FR-UX-13).
-  List<RailDestination> get _destinations => const <RailDestination>[
-    RailDestination(
+  /// The rail's destinations.
+  List<RailDestination> get _destinations => <RailDestination>[
+    const RailDestination(
       actionId: 'view.playlist',
-      glyph: '▤',
+      icon: OneBeatIconData.playlist,
       label: 'Playlist',
       view: WorkspaceView.arrangement,
     ),
-    RailDestination(
-      actionId: 'view.channels',
-      glyph: '▥',
-      label: 'Channels',
-      view: WorkspaceView.rack,
-    ),
-    RailDestination(
+    const RailDestination(
       actionId: 'view.pianoRoll',
-      glyph: '♪',
+      icon: OneBeatIconData.piano,
       label: 'Piano',
       view: WorkspaceView.pianoRoll,
     ),
+    const RailDestination(
+      actionId: 'view.channels',
+      icon: OneBeatIconData.channels,
+      label: 'Rack',
+      view: WorkspaceView.rack,
+    ),
+    const RailDestination(
+      actionId: 'view.mixer',
+      icon: OneBeatIconData.mixer,
+      label: 'Mixer',
+      view: WorkspaceView.mixer,
+    ),
+    const RailDestination(
+      actionId: 'view.plugins',
+      icon: OneBeatIconData.plugins,
+      label: 'FX',
+      view: WorkspaceView.plugins,
+    ),
+    const RailDestination(
+      actionId: 'view.console',
+      icon: OneBeatIconData.console,
+      label: 'Script',
+      view: WorkspaceView.console,
+    ),
+    const RailDestination(
+      actionId: 'view.extensions',
+      icon: OneBeatIconData.extensions,
+      label: 'Extns',
+      view: WorkspaceView.extensions,
+    ),
+    RailDestination(
+      actionId: 'view.prefs',
+      icon: OneBeatIconData.preferences,
+      label: 'Prefs',
+      onSelected: () => setState(() => _showPreferencesDialog = true),
+    ),
   ];
 
-  /// The three Stage 3 editors. All of them edit the same project through the
-  /// same command bus, so switching between them is presentation only — no
-  /// state is handed over and nothing is saved on the way out.
+  /// The workspace views.
   Widget _buildWorkspace() => switch (_controller.view) {
     WorkspaceView.rack => ChannelRack(
       controller: _controller,
@@ -281,6 +347,10 @@ class _OneBeatShellState extends State<OneBeatShell>
       onOpenPattern: (String patternId, String clipId) =>
           _controller.openPattern(patternId, fromClipId: clipId),
     ),
+    WorkspaceView.mixer => MixerRoutingView(controller: _controller),
+    WorkspaceView.plugins => BuiltinPluginsView(controller: _controller),
+    WorkspaceView.console => ScriptConsoleView(controller: _controller),
+    WorkspaceView.extensions => ExtensionManagerView(controller: _controller),
   };
 }
 
@@ -297,17 +367,24 @@ class _TogglePluginListIntent extends Intent {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller, required this.onOpenShortcuts});
+  const _TopBar({
+    required this.controller,
+    required this.onOpenShortcuts,
+    required this.onOpenExport,
+    required this.onOpenPreferences,
+  });
 
   final EngineController controller;
   final VoidCallback onOpenShortcuts;
+  final VoidCallback onOpenExport;
+  final VoidCallback onOpenPreferences;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return Container(
       height: tokens.size.topBarHeight,
-      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: tokens.color.surfaceSunken,
         border: Border(
@@ -318,69 +395,84 @@ class _TopBar extends StatelessWidget {
         ),
       ),
       child: Row(
-        children: <Widget>[
-          const BrandMark(version: 'v0.3 SEQUENCES'),
-          SizedBox(width: tokens.spacing.lg),
-          AnimatedBuilder(
-            animation: controller,
-            builder: (BuildContext context, Widget? child) => TransportCluster(
-              playing: controller.snapshot.playing,
-              canUndo: controller.client.canUndoProject,
-              canRedo: controller.client.canRedoProject,
-              undoName: controller.client.undoProjectName,
-              redoName: controller.client.redoProjectName,
-              onTogglePlay: controller.togglePlay,
-              onUndo: controller.undoProject,
-              onRedo: controller.redoProject,
-              onReturnToZero: () => controller.client.seekFrames(0),
-            ),
-          ),
-          SizedBox(width: tokens.spacing.lg),
-          // Three separate wells, as the design draws them: a value you read
-          // constantly should not have to be picked out of a strip.
-          AnimatedBuilder(
-            animation: controller,
-            builder: (BuildContext context, Widget? child) => ReadoutWell(
-              width: tokens.size.bpmFieldWidth,
-              label: 'BPM',
-              child: TempoField(
-                tempo: controller.snapshot.tempoBpm,
-                onChanged: controller.client.setTempo,
+          children: <Widget>[
+            // The window's real close/minimise/zoom buttons sit here, drawn by
+            // macOS over the app's own bar (full-size content view).
+            const TitleBarInset(),
+            const BrandMark(version: 'v0.3 SEQUENCES'),
+            SizedBox(width: tokens.spacing.lg),
+            AnimatedBuilder(
+              animation: controller,
+              builder: (BuildContext context, Widget? child) => TransportCluster(
+                playing: controller.snapshot.playing,
+                canUndo: controller.client.canUndoProject,
+                canRedo: controller.client.canRedoProject,
+                loopEnabled: controller.snapshot.loopEnabled,
+                undoName: controller.client.undoProjectName,
+                redoName: controller.client.redoProjectName,
+                onTogglePlay: controller.togglePlay,
+                onUndo: controller.undoProject,
+                onRedo: controller.redoProject,
+                onReturnToZero: () => controller.client.seekFrames(0),
+                onToggleLoop: () => controller.client.setLoop(
+                  controller.snapshot.loopStartBeats,
+                  controller.snapshot.loopEndBeats,
+                  enabled: !controller.snapshot.loopEnabled,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          ReadoutWell(
-            width: tokens.size.signatureWidth,
-            label: 'SIG',
-            child: Text('4/4', style: tokens.type.numeric),
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          ReadoutWell(
-            width: tokens.size.clockWidth,
-            label: 'BAR · BEAT · TICK',
-            child: TransportReadout(controller: controller),
-          ),
-          SizedBox(width: tokens.spacing.lg),
-          SearchAffordance(onTap: onOpenShortcuts),
-          const Spacer(),
-          AnimatedBuilder(
-            animation: controller,
-            builder: (BuildContext context, Widget? child) => ViewSwitcher(
-              activeView: controller.view,
-              onSelect: controller.setView,
+            SizedBox(width: tokens.spacing.md),
+            // Three separate wells, as the design draws them: a value you read
+            // constantly should not have to be picked out of a strip.
+            AnimatedBuilder(
+              animation: controller,
+              builder: (BuildContext context, Widget? child) => ReadoutWell(
+                label: 'BPM',
+                child: TempoField(
+                  tempo: controller.snapshot.tempoBpm,
+                  onChanged: controller.client.setTempo,
+                ),
+              ),
             ),
-          ),
-          SizedBox(width: tokens.spacing.lg),
-          MasterMeter.of(controller),
-        ],
+            SizedBox(width: tokens.spacing.xs),
+            ReadoutWell(
+              label: 'SIG',
+              child: Text(
+                '4/4',
+                maxLines: 1,
+                softWrap: false,
+                style: tokens.type.numericLarge,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.xs),
+            ReadoutWell(
+              label: 'BAR · BEAT · TICK',
+              child: TransportReadout(controller: controller),
+            ),
+            SizedBox(width: tokens.spacing.md),
+            // The search well takes whatever is left: at the window's 1280px
+            // minimum it collapses to its icon and at 1900 it stretches, and in
+            // neither case does the Export button fall off the end of the bar
+            // (it used to). `chrome_layout_test.dart` holds that at three
+            // widths — the claim was wrong by 90px before it was measured.
+            Flexible(child: SearchAffordance(onTap: onOpenShortcuts)),
+            SizedBox(width: tokens.spacing.md),
+            ValueListenableBuilder<WorkspaceView>(
+              valueListenable: controller.viewNotifier,
+              builder: (BuildContext context, WorkspaceView view, _) =>
+                  ViewSwitcher(activeView: view, onSelect: controller.setView),
+            ),
+            SizedBox(width: tokens.spacing.sm),
+            ExportButton(onPressed: onOpenExport),
+            SizedBox(width: tokens.spacing.sm),
+            const MasterPeakIndicator(),
+          ],
       ),
     );
   }
 }
 
-/// The designed empty state. It names what is here, and offers the actions that
-/// exist — the demo pads and the transport — rather than an apology.
+/// The designed status bar. Shows live engine info and context hints.
 class _StatusBar extends StatelessWidget {
   const _StatusBar({required this.controller});
 
@@ -405,45 +497,38 @@ class _StatusBar extends StatelessWidget {
         animation: controller,
         builder: (BuildContext context, Widget? child) {
           final EngineSnapshot snapshot = controller.snapshot;
+          final String patternName = controller.patterns.current?.name ?? 'Main Groove';
+          final int clipCount = controller.arrangement.clips.length;
           return Row(
             children: <Widget>[
-              Text(controller.client.deviceName, style: tokens.type.label),
-              SizedBox(width: tokens.spacing.lg),
-              Text(
-                '${snapshot.sampleRate.toStringAsFixed(0)} Hz · ${snapshot.blockFrames} frames · '
-                '${snapshot.latencyMilliseconds.toStringAsFixed(1)} ms',
-                style: tokens.type.numericSmall,
-              ),
-              SizedBox(width: tokens.spacing.lg),
-              Text(
-                '${snapshot.activeVoices} voices',
-                style: tokens.type.numericSmall,
-              ),
-              SizedBox(width: tokens.spacing.lg),
-              Text(
-                'CPU ${(snapshot.cpuLoad * 100).toStringAsFixed(0)}%',
-                style: tokens.type.numericSmall,
-              ),
-              if (snapshot.xrunCount > 0) ...<Widget>[
-                SizedBox(width: tokens.spacing.lg),
-                Text(
-                  '${snapshot.xrunCount} dropouts',
-                  style: tokens.type.numericSmall.copyWith(
-                    color: tokens.color.warning,
-                  ),
+              Container(
+                width: tokens.spacing.sm,
+                height: tokens.spacing.sm,
+                decoration: BoxDecoration(
+                  color: snapshot.playing ? tokens.color.meterLow : tokens.color.textMuted,
+                  shape: BoxShape.circle,
                 ),
-              ],
+              ),
+              SizedBox(width: tokens.spacing.xs),
+              Text(
+                snapshot.playing ? 'Playing · $patternName' : 'Stopped · $patternName',
+                style: tokens.type.label.copyWith(color: tokens.color.textPrimary),
+              ),
+              SizedBox(width: tokens.spacing.lg),
+              Text(
+                'All view · $clipCount clips',
+                style: tokens.type.numericSmall,
+              ),
+              SizedBox(width: tokens.spacing.lg),
+              Text(
+                'Buffer ${snapshot.blockFrames} · ${snapshot.latencyMilliseconds.toStringAsFixed(1)} ms',
+                style: tokens.type.numericSmall,
+              ),
               const Spacer(),
-              if (controller.status.isNotEmpty)
-                Flexible(
-                  child: Text(
-                    controller.status,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.label.copyWith(
-                      color: tokens.color.textPrimary,
-                    ),
-                  ),
-                ),
+              Text(
+                'Actions: system menu bar · ⌘K for anything',
+                style: tokens.type.label,
+              ),
             ],
           );
         },

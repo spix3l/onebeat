@@ -2,10 +2,16 @@
 //
 // Wires the fake seam to real stores and real widgets, so a test drives the
 // same code the app does — the only substitution is the engine itself.
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/ui/arrangement.dart';
 import 'package:onebeat/src/ui/chrome.dart';
+import 'package:onebeat/src/ui/icons.dart';
 import 'package:onebeat/src/ui/engine_controller.dart' show WorkspaceView;
 import 'package:onebeat/src/ui/arrangement_store.dart';
 import 'package:onebeat/src/ui/pattern_store.dart';
@@ -41,6 +47,46 @@ Widget wrapForTest(Widget child, {Size size = const Size(1200, 800)}) {
       ),
     ),
   );
+}
+
+/// Loads the app's two real font families into the test binding.
+///
+/// Without this, every glyph is the test fallback's fixed-width box, which is
+/// far wider than Archivo or MartianMono. Goldens then record blocks instead of
+/// text, and any test that asks "does this fit?" measures a font the app does
+/// not ship. Call once from `main`, before the tests.
+Future<void> loadAppFonts() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  const Map<String, String> families = <String, String>{
+    'Archivo': '../third_party/fonts/archivo/Archivo[wdth,wght].ttf',
+    'MartianMono':
+        '../third_party/fonts/martian_mono/MartianMono[wdth,wght].ttf',
+  };
+  for (final MapEntry<String, String> family in families.entries) {
+    final FontLoader loader = FontLoader(family.key)
+      ..addFont(
+        File(family.value).readAsBytes().then(ByteData.sublistView),
+      );
+    await loader.load();
+  }
+}
+
+/// Pumps [child] in the app chrome at a window of [size].
+///
+/// Use this rather than `pumpWidget(wrapForTest(...))`. The test surface is
+/// 800×600 by default, so a `SizedBox` asking for anything larger is simply
+/// clipped: the widget lays out into a window it never gets, and a golden
+/// records the top-left 800×600 of it with the rest of the frame blank. Every
+/// size in these tests was a lie until the view was resized to match.
+Future<void> pumpForTest(
+  WidgetTester tester,
+  Widget child, {
+  Size size = const Size(1200, 800),
+}) async {
+  final double ratio = tester.view.devicePixelRatio;
+  tester.view.physicalSize = Size(size.width * ratio, size.height * ratio);
+  addTearDown(tester.view.resetPhysicalSize);
+  await tester.pumpWidget(wrapForTest(child, size: size));
 }
 
 class Stage3Harness {
@@ -116,7 +162,6 @@ class _ArrangementHost extends StatelessWidget {
   );
 }
 
-
 /// The shell's chrome, assembled from the *same* widgets the shell uses.
 ///
 /// Deliberately not a copy of the top bar: a reachability test that checked a
@@ -141,19 +186,19 @@ class ShellChromeForTest extends StatelessWidget {
           destinations: const <RailDestination>[
             RailDestination(
               actionId: 'view.playlist',
-              glyph: '▤',
+              icon: OneBeatIconData.playlist,
               label: 'Playlist',
               view: WorkspaceView.arrangement,
             ),
             RailDestination(
               actionId: 'view.channels',
-              glyph: '▥',
+              icon: OneBeatIconData.channels,
               label: 'Channels',
               view: WorkspaceView.rack,
             ),
             RailDestination(
               actionId: 'view.pianoRoll',
-              glyph: '♪',
+              icon: OneBeatIconData.piano,
               label: 'Piano',
               view: WorkspaceView.pianoRoll,
             ),

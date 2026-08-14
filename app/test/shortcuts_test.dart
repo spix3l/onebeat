@@ -13,6 +13,9 @@ import 'package:onebeat/src/ui/shortcuts.dart';
 import 'support/stage3_harness.dart';
 
 void main() {
+  // Real fonts: block glyphs measure nothing like Archivo or MartianMono.
+  setUpAll(loadAppFonts);
+
   group('the registry is the single source of truth', () {
     test('every declared shortcut renders as the glyphs a Mac user reads', () {
       expect(ActionRegistry.byId('edit.undo').shortcut, '⌘Z');
@@ -27,8 +30,10 @@ void main() {
     test('the tooltip pairs the label with the real binding', () {
       // FR-UX-18: the keyboard path has to be discoverable from the mouse path.
       // Derived, so it cannot promise a shortcut that is not bound.
-      expect(ActionRegistry.byId('piano.duplicate').tooltip,
-          'Duplicate notes  ·  ⌘D');
+      expect(
+        ActionRegistry.byId('piano.duplicate').tooltip,
+        'Duplicate notes  ·  ⌘D',
+      );
       expect(ActionRegistry.byId('pattern.recolor').tooltip, 'Pattern colour');
     });
 
@@ -77,29 +82,28 @@ void main() {
       final FocusNode field = FocusNode();
       addTearDown(field.dispose);
 
-      await tester.pumpWidget(
-        wrapForTest(
-          ScopedShortcuts(
-            shortcuts: <ShortcutActivator, Intent>{
-              const SingleActivator(LogicalKeyboardKey.keyB):
-                  const RunActionIntent('tool'),
-              const SingleActivator(LogicalKeyboardKey.backspace):
-                  const RunActionIntent('delete'),
-            },
-            handlers: <String, VoidCallback>{
-              'tool': () => toolChanges++,
-              'delete': () => deletes++,
-            },
-            child: EditableText(
-              controller: text,
-              focusNode: field,
-              style: OneBeatTokens.dark().type.body,
-              cursorColor: OneBeatTokens.dark().color.accent,
-              backgroundCursorColor: OneBeatTokens.dark().color.line,
-            ),
+      await pumpForTest(
+        tester,
+        ScopedShortcuts(
+          shortcuts: <ShortcutActivator, Intent>{
+            const SingleActivator(LogicalKeyboardKey.keyB):
+                const RunActionIntent('tool'),
+            const SingleActivator(LogicalKeyboardKey.backspace):
+                const RunActionIntent('delete'),
+          },
+          handlers: <String, VoidCallback>{
+            'tool': () => toolChanges++,
+            'delete': () => deletes++,
+          },
+          child: EditableText(
+            controller: text,
+            focusNode: field,
+            style: OneBeatTokens.dark().type.body,
+            cursorColor: OneBeatTokens.dark().color.accent,
+            backgroundCursorColor: OneBeatTokens.dark().color.line,
           ),
-          size: const Size(400, 200),
         ),
+        size: const Size(400, 200),
       );
 
       field.requestFocus();
@@ -124,24 +128,23 @@ void main() {
       final FocusNode field = FocusNode();
       addTearDown(field.dispose);
 
-      await tester.pumpWidget(
-        wrapForTest(
-          ScopedShortcuts(
-            shortcuts: <ShortcutActivator, Intent>{
-              const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
-                  const RunActionIntent('undo'),
-            },
-            handlers: <String, VoidCallback>{'undo': () => undos++},
-            child: EditableText(
-              controller: text,
-              focusNode: field,
-              style: OneBeatTokens.dark().type.body,
-              cursorColor: OneBeatTokens.dark().color.accent,
-              backgroundCursorColor: OneBeatTokens.dark().color.line,
-            ),
+      await pumpForTest(
+        tester,
+        ScopedShortcuts(
+          shortcuts: <ShortcutActivator, Intent>{
+            const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
+                const RunActionIntent('undo'),
+          },
+          handlers: <String, VoidCallback>{'undo': () => undos++},
+          child: EditableText(
+            controller: text,
+            focusNode: field,
+            style: OneBeatTokens.dark().type.body,
+            cursorColor: OneBeatTokens.dark().color.accent,
+            backgroundCursorColor: OneBeatTokens.dark().color.line,
           ),
-          size: const Size(400, 200),
         ),
+        size: const Size(400, 200),
       );
 
       field.requestFocus();
@@ -162,18 +165,17 @@ void main() {
       final FocusNode canvas = FocusNode();
       addTearDown(canvas.dispose);
 
-      await tester.pumpWidget(
-        wrapForTest(
-          ScopedShortcuts(
-            shortcuts: <ShortcutActivator, Intent>{
-              const SingleActivator(LogicalKeyboardKey.keyB):
-                  const RunActionIntent('tool'),
-            },
-            handlers: <String, VoidCallback>{'tool': () => toolChanges++},
-            child: Focus(focusNode: canvas, child: const SizedBox.expand()),
-          ),
-          size: const Size(400, 200),
+      await pumpForTest(
+        tester,
+        ScopedShortcuts(
+          shortcuts: <ShortcutActivator, Intent>{
+            const SingleActivator(LogicalKeyboardKey.keyB):
+                const RunActionIntent('tool'),
+          },
+          handlers: <String, VoidCallback>{'tool': () => toolChanges++},
+          child: Focus(focusNode: canvas, child: const SizedBox.expand()),
         ),
+        size: const Size(400, 200),
       );
 
       canvas.requestFocus();
@@ -198,25 +200,24 @@ void main() {
       final FocusNode canvas = FocusNode(debugLabel: 'canvas');
       addTearDown(canvas.dispose);
 
-      await tester.pumpWidget(
-        wrapForTest(
-          Column(
-            children: <Widget>[
-              SizedBox(
-                height: 40,
-                child: EditableText(
-                  controller: text,
-                  focusNode: field,
-                  style: OneBeatTokens.dark().type.body,
-                  cursorColor: OneBeatTokens.dark().color.accent,
-                  backgroundCursorColor: OneBeatTokens.dark().color.line,
-                ),
+      await pumpForTest(
+        tester,
+        Column(
+          children: <Widget>[
+            SizedBox(
+              height: 40,
+              child: EditableText(
+                controller: text,
+                focusNode: field,
+                style: OneBeatTokens.dark().type.body,
+                cursorColor: OneBeatTokens.dark().color.accent,
+                backgroundCursorColor: OneBeatTokens.dark().color.line,
               ),
-              Focus(focusNode: canvas, child: const SizedBox(height: 40)),
-            ],
-          ),
-          size: const Size(400, 200),
+            ),
+            Focus(focusNode: canvas, child: const SizedBox(height: 40)),
+          ],
         ),
+        size: const Size(400, 200),
       );
 
       field.requestFocus();
@@ -236,11 +237,10 @@ void main() {
       final FocusNode canvas = FocusNode(debugLabel: 'canvas');
       addTearDown(canvas.dispose);
 
-      await tester.pumpWidget(
-        wrapForTest(
-          Focus(focusNode: canvas, child: const SizedBox.expand()),
-          size: const Size(400, 200),
-        ),
+      await pumpForTest(
+        tester,
+        Focus(focusNode: canvas, child: const SizedBox.expand()),
+        size: const Size(400, 200),
       );
 
       FocusPolicy.takeUnlessTyping(canvas);

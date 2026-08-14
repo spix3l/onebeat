@@ -13,6 +13,9 @@ import 'package:onebeat/src/ui/piano_roll_store.dart';
 import 'support/stage3_harness.dart';
 
 void main() {
+  // Real fonts: block glyphs measure nothing like Archivo or MartianMono.
+  setUpAll(loadAppFonts);
+
   testWidgets('piano roll surface matches the dark token system', (
     WidgetTester tester,
   ) async {
@@ -43,8 +46,10 @@ void main() {
       ..panTo(0, 74);
     harness.pianoRoll.selectOnly(harness.pianoRoll.notes[3]);
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildPianoRoll(), size: const Size(900, 560)),
+    await pumpForTest(
+      tester,
+      harness.buildPianoRoll(),
+      size: const Size(900, 560),
     );
     await tester.pumpAndSettle();
 
@@ -71,8 +76,10 @@ void main() {
     }
     harness.arrangement.refresh();
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildArrangement(), size: const Size(1200, 460)),
+    await pumpForTest(
+      tester,
+      harness.buildArrangement(),
+      size: const Size(1200, 460),
     );
     await tester.pumpAndSettle();
 

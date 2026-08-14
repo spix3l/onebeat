@@ -20,17 +20,19 @@ import 'support/fake_stage3_client.dart';
 import 'support/stage3_harness.dart';
 
 void main() {
+  // Real fonts: block glyphs measure nothing like Archivo or MartianMono.
+  setUpAll(loadAppFonts);
+
   testWidgets('every pattern action is reachable from a visible control', (
     WidgetTester tester,
   ) async {
     final FakeStage3Client client = FakeStage3Client();
     final PatternStore patterns = PatternStore(client)..load();
 
-    await tester.pumpWidget(
-      wrapForTest(
-        PatternSelector(store: patterns, onOpenPattern: (_) {}),
-        size: const Size(320, 700),
-      ),
+    await pumpForTest(
+      tester,
+      PatternSelector(store: patterns, onOpenPattern: (_) {}),
+      size: const Size(320, 700),
     );
 
     expectAreaReachable(ActionArea.pattern);
@@ -45,8 +47,10 @@ void main() {
     // enabled or not, the control has to be *there*, which is what this asserts.
     harness.pianoRoll.selectAll();
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildPianoRoll(), size: const Size(1200, 800)),
+    await pumpForTest(
+      tester,
+      harness.buildPianoRoll(),
+      size: const Size(1200, 800),
     );
 
     expectAreaReachable(ActionArea.pianoRoll);
@@ -57,8 +61,10 @@ void main() {
   ) async {
     final Stage3Harness harness = Stage3Harness()..seedArrangement();
 
-    await tester.pumpWidget(
-      wrapForTest(harness.buildArrangement(), size: const Size(1400, 800)),
+    await pumpForTest(
+      tester,
+      harness.buildArrangement(),
+      size: const Size(1400, 800),
     );
 
     expectAreaReachable(ActionArea.arrangement);
@@ -71,11 +77,10 @@ void main() {
     final ArrangementStore store = harness.arrangement;
     store.selectClip(store.clips.first.id);
 
-    await tester.pumpWidget(
-      wrapForTest(
-        ClipInspector(store: store, patterns: harness.patterns),
-        size: const Size(320, 900),
-      ),
+    await pumpForTest(
+      tester,
+      ClipInspector(store: store, patterns: harness.patterns),
+      size: const Size(320, 900),
     );
 
     expectAreaReachable(ActionArea.clip);
@@ -90,14 +95,13 @@ void main() {
     // know it is there.
     final Stage3Harness harness = Stage3Harness()..seedArrangement();
 
-    await tester.pumpWidget(
-      wrapForTest(
-        ShellChromeForTest(
-          patterns: harness.patterns,
-          activeView: WorkspaceView.arrangement,
-        ),
-        size: const Size(1600, 320),
+    await pumpForTest(
+      tester,
+      ShellChromeForTest(
+        patterns: harness.patterns,
+        activeView: WorkspaceView.arrangement,
       ),
+      size: const Size(1600, 320),
     );
 
     expectAreaReachable(ActionArea.transport);
@@ -112,11 +116,10 @@ void main() {
       final FakeStage3Client client = FakeStage3Client();
       final PatternStore patterns = PatternStore(client)..load();
 
-      await tester.pumpWidget(
-        wrapForTest(
-          PatternSelector(store: patterns, onOpenPattern: (_) {}),
-          size: const Size(320, 700),
-        ),
+      await pumpForTest(
+        tester,
+        PatternSelector(store: patterns, onOpenPattern: (_) {}),
+        size: const Size(320, 700),
       );
 
       const UiAction contextMenuOnly = UiAction(
