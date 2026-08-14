@@ -244,6 +244,11 @@ void main() {
         textPrimary: Color(0xFF16170F),
         textSecondary: Color(0xFF44463E),
         textMuted: Color(0xFF5A5C54),
+        // Clip ink stays dark in both themes: a clip's fill is a saturated
+        // identity colour either way, and the label sits on the fill rather
+        // than on the surface.
+        clipInk: Color(0xFF16170F),
+        clipInkMuted: Color(0x9E16170F),
       ),
     );
     expect(light.brightness, Brightness.light);

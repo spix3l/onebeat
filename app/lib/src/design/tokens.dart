@@ -207,6 +207,14 @@ class ColorTokens {
   /// has to write `Color(0x00000000)` to switch a border off (FR-UX-02).
   Color get none => const Color(0x00000000);
 
+  /// Ink on a clip. Clip fills are user identity colours and always bright, so
+  /// their label is dark — the canvas colour, which is the darkest thing the
+  /// eye already associates with "behind". [clipInkMuted] is the same ink at
+  /// reading strength for the duration under the name; the alpha lives here
+  /// rather than at the call site (FR-UX-02).
+  Color get clipInk => surfaceDeep;
+  Color get clipInkMuted => surfaceDeep.withValues(alpha: 0.62);
+
   /// Velocity reads as opacity on a note. The ramp lives here because "how
   /// loud looks how solid" is a design decision, not a painter detail; `unit`
   /// is 0..1.
@@ -328,6 +336,18 @@ class SizeTokens {
   double get clipInspectorWidth => 268;
   double get clipBadgeHeight => 16;
   double get inspectorWidth => 280;
+
+  /// The rebuilt playlist (UI-B-08), measured off `screens/arrangement.png`.
+  /// Lanes are a 50px pitch carrying a 44px card, and four bars of the ruler
+  /// span 153px — so a bar is a hair over 38.
+  double get playlistLaneHeight => 50;
+  double get playlistClipHeight => 44;
+  double get playlistPxPerBar => 38.3;
+  double get playlistRulerHeight => 20;
+  double get playlistHeaderHeight => 32;
+
+  /// The ruler numbers every fourth bar, as the mockup labels them.
+  int get playlistBarLabelEvery => 4;
 
   /// Shared editor chrome.
   double get playheadWidth => 2;
@@ -458,6 +478,8 @@ class TypeTokens {
     required this.textPrimary,
     required this.textSecondary,
     required this.textMuted,
+    required this.clipInk,
+    required this.clipInkMuted,
   });
 
   final Color textPrimary;
@@ -466,6 +488,12 @@ class TypeTokens {
   /// enough to read as content, quiet enough that a value beside them wins.
   final Color textSecondary;
   final Color textMuted;
+
+  /// Ink for text that sits on a bright identity fill rather than on a
+  /// surface — a playlist clip's label. Mirrors [ColorTokens.clipInk], which
+  /// is where the role is defined.
+  final Color clipInk;
+  final Color clipInkMuted;
 
   static const String uiFamily = 'Archivo';
   static const String numericFamily = 'MartianMono';
@@ -522,6 +550,24 @@ class TypeTokens {
     letterSpacing: 0.6,
     color: textMuted,
     fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
+  );
+
+  /// A playlist clip's name and the duration under it (UI-B-08). Both take
+  /// the dark ink roles rather than a text colour: they sit on a bright
+  /// identity fill, not on a surface.
+  TextStyle get clipName => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: clipInk,
+  );
+
+  TextStyle get clipDuration => TextStyle(
+    fontFamily: numericFamily,
+    fontSize: 9,
+    fontWeight: FontWeight.w500,
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    color: clipInkMuted,
   );
 
   /// Tag labels (PAT, AUD, AUTO).
@@ -682,6 +728,10 @@ class OneBeatTokens {
   /// covers "text and essential UI" rather than every dimmed glyph.
   static const Color _textMutedDark = Color(0xFF6F726B); // Pen `dim`
 
+  /// The canvas colour, used as ink on a clip's bright fill (UI-B-08).
+  static const Color _clipInkDark = Color(0xFF1B1D1A);
+  static const Color _clipInkMutedDark = Color(0x9E1B1D1A);
+
   static const OneBeatTokens _dark = OneBeatTokens(
     brightness: Brightness.dark,
     color: ColorTokens(
@@ -749,6 +799,8 @@ class OneBeatTokens {
       textPrimary: _textPrimaryDark,
       textSecondary: _textSecondaryDark,
       textMuted: _textMutedDark,
+      clipInk: _clipInkDark,
+      clipInkMuted: _clipInkMutedDark,
     ),
   );
 
