@@ -208,6 +208,31 @@ struct Clip {
 // Project-level, non-entity state
 // --------------------------------------------------------------------------
 
+// The last tick any note in `pattern` ends on, across every instrument. 0 when
+// the pattern holds nothing.
+inline Ticks patternContentEnd(const Pattern& pattern) {
+  Ticks end = 0;
+  for (const auto& [instrument, sequence] : pattern.sequences) {
+    (void)instrument;
+    end = std::max(end, sequence.contentEnd());
+  }
+  return end;
+}
+
+// How long the transport loops when this pattern is what you are playing: its
+// content, rounded up to a whole bar, and never less than one bar.
+//
+// Not `Pattern::length`. That is a stored four-bar default which nothing in the
+// UI can yet change, so looping on it made a one-bar idea play four bars and cut
+// a five-bar idea off at four. Rounding up to the bar keeps the turnaround on a
+// barline, which is where the ear expects it.
+inline Ticks patternLoopLength(const Pattern& pattern) {
+  const Ticks content = patternContentEnd(pattern);
+  if (content <= 0) return TicksPerBarFourFour;
+  const Ticks bars = (content + TicksPerBarFourFour - 1) / TicksPerBarFourFour;
+  return bars * TicksPerBarFourFour;
+}
+
 struct TimeSignature {
   int32_t numerator = 4;
   int32_t denominator = 4;

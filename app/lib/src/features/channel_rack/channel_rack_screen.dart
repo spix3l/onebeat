@@ -541,6 +541,14 @@ class _RackRowItem extends StatelessWidget {
               onStepTap: onStepTap == null
                   ? null
                   : (int step) => onStepTap!(index, step),
+              onPointerDownStep: onPointerDownStep == null
+                  ? null
+                  : (PointerDownEvent event, int step) =>
+                        onPointerDownStep!(event, index, step),
+              onPointerMoveStep: onPointerMoveStep == null
+                  ? null
+                  : (PointerMoveEvent event, int step) =>
+                        onPointerMoveStep!(event, index, step),
               onVol: onVolChanged == null
                   ? null
                   : (double val) => onVolChanged!(index, val),

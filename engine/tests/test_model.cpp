@@ -28,7 +28,10 @@ using onebeat::model::InstrumentId;
 using onebeat::model::MixerTrackId;
 using onebeat::model::Note;
 using onebeat::model::NoteSequence;
+using onebeat::model::Pattern;
+using onebeat::model::patternContentEnd;
 using onebeat::model::PatternId;
+using onebeat::model::patternLoopLength;
 using onebeat::model::PatternSource;
 using onebeat::model::PluginFormat;
 using onebeat::model::PluginRef;
@@ -37,6 +40,7 @@ using onebeat::model::Project;
 using onebeat::model::RawId;
 using onebeat::model::Ticks;
 using onebeat::model::TicksPerBarFourFour;
+using onebeat::model::TicksPerQuarter;
 using onebeat::model::velocityFromMidi1;
 
 namespace {
@@ -50,10 +54,10 @@ PluginRef claps(const std::string& id) {
   return plugin;
 }
 
-Note note(Ticks start, int16_t key) {
+Note note(Ticks start, int16_t key, Ticks length = 240) {
   Note value;
   value.start = start;
-  value.length = 240;
+  value.length = length;
   value.key = key;
   value.velocity = velocityFromMidi1(100);
   return value;
@@ -535,6 +539,53 @@ TEST_SUITE("unit") {
     CHECK(notes[2].start == 480);
     CHECK(notes[3].start == 960);
     CHECK(sequence.contentEnd() == 1200);
+  }
+
+  // What the transport loops over when you press play on a pattern. The rule
+  // is content-driven rather than Pattern::length, because that length is a
+  // fixed four-bar default nothing can yet change — see patternLoopLength.
+  TEST_CASE("A pattern loops over its content, rounded up to a whole bar") {
+    IdGenerator generator;
+    Pattern pattern;
+    const InstrumentId keys = generator.next<EntityKind::Instrument>();
+    const InstrumentId bass = generator.next<EntityKind::Instrument>();
+
+    // Empty: there still has to be something to loop over.
+    CHECK(patternContentEnd(pattern) == 0);
+    CHECK(patternLoopLength(pattern) == TicksPerBarFourFour);
+
+    // A single beat at the top still loops a whole bar: the turnaround belongs
+    // on a barline, not wherever the phrase stops.
+    pattern.sequences[keys].insert(note(0, 60, TicksPerQuarter));
+    CHECK(patternContentEnd(pattern) == TicksPerQuarter);
+    CHECK(patternLoopLength(pattern) == TicksPerBarFourFour);
+
+    // A note starting at the top of bar 4 loops four bars — not the five that
+    // looping past the content would give, and not the three that truncating
+    // instead of rounding up would give.
+    pattern.sequences[keys].insert(note(3 * TicksPerBarFourFour, 64, TicksPerQuarter));
+    CHECK(patternLoopLength(pattern) == 4 * TicksPerBarFourFour);
+
+    // One tick over a barline pulls the loop out to the following bar.
+    pattern.sequences[keys].insert(note(4 * TicksPerBarFourFour - 1, 67, 2));
+    CHECK(patternLoopLength(pattern) == 5 * TicksPerBarFourFour);
+
+    // Every instrument in the pattern counts, not just the one you are editing.
+    pattern.sequences[bass].insert(note(6 * TicksPerBarFourFour, 36, TicksPerQuarter));
+    CHECK(patternLoopLength(pattern) == 7 * TicksPerBarFourFour);
+  }
+
+  // A long note early outlasting a short note late is the case a "just read the
+  // last element" implementation gets wrong, and the sequence is sorted by
+  // start, so the last element is not the furthest-reaching one.
+  TEST_CASE("Content end follows the note that reaches furthest, not the last one") {
+    IdGenerator generator;
+    Pattern pattern;
+    const InstrumentId keys = generator.next<EntityKind::Instrument>();
+    pattern.sequences[keys].insert(note(0, 60, 8 * TicksPerQuarter));
+    pattern.sequences[keys].insert(note(TicksPerQuarter, 64, TicksPerQuarter));
+
+    CHECK(patternContentEnd(pattern) == 8 * TicksPerQuarter);
   }
 
   TEST_CASE("MIDI-1 velocity survives the 14-bit representation exactly") {

@@ -93,6 +93,8 @@ class ObRackRow extends StatelessWidget {
     this.onSecondaryTapDown,
     this.onPower,
     this.onStepTap,
+    this.onPointerDownStep,
+    this.onPointerMoveStep,
     this.onVol,
     this.onPan,
     this.onRouteTap,
@@ -109,6 +111,9 @@ class ObRackRow extends StatelessWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onPower;
   final ValueChanged<int>? onStepTap;
+  final void Function(PointerDownEvent event, int stepIndex)?
+      onPointerDownStep;
+  final void Function(PointerMoveEvent event, int stepIndex)? onPointerMoveStep;
   final ValueChanged<double>? onVol;
   final ValueChanged<double>? onPan;
   final VoidCallback? onRouteTap;
@@ -186,6 +191,8 @@ class ObRackRow extends StatelessWidget {
                 steps: vm.steps,
                 playingStep: playingStep,
                 onStepTap: onStepTap,
+                onPointerDownStep: onPointerDownStep,
+                onPointerMoveStep: onPointerMoveStep,
               ),
             SizedBox(width: tokens.spacing.md),
             ObKnob(value: vm.vol, onChanged: onVol),
@@ -211,6 +218,8 @@ class ObStepGrid extends StatelessWidget {
     required this.steps,
     this.playingStep,
     this.onStepTap,
+    this.onPointerDownStep,
+    this.onPointerMoveStep,
     this.groupSize = 4,
     super.key,
   });
@@ -218,6 +227,9 @@ class ObStepGrid extends StatelessWidget {
   final List<StepVm> steps;
   final int? playingStep;
   final ValueChanged<int>? onStepTap;
+  final void Function(PointerDownEvent event, int stepIndex)?
+      onPointerDownStep;
+  final void Function(PointerMoveEvent event, int stepIndex)? onPointerMoveStep;
 
   /// Cells per visual group. Four in every mockup; a parameter because a
   /// triplet grid is the same widget with a different number.
@@ -226,6 +238,8 @@ class ObStepGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final bool painting =
+        onPointerDownStep != null || onPointerMoveStep != null;
     final List<Widget> cells = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
       if (i > 0) {
@@ -242,11 +256,50 @@ class ObStepGrid extends StatelessWidget {
         _StepCell(
           step: steps[i],
           playing: playingStep == i,
-          onTap: onStepTap == null ? null : () => onStepTap!(i),
+          // A binding that paints from pointer events must not also run the
+          // ordinary tap toggle, or one click would add and remove the step.
+          onTap: painting || onStepTap == null
+              ? null
+              : () => onStepTap!(i),
         ),
       );
     }
-    return Row(children: cells);
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: onPointerDownStep == null
+          ? null
+          : (PointerDownEvent event) {
+              final int? step = _stepAt(event.localPosition, tokens.size);
+              if (step != null) onPointerDownStep!(event, step);
+            },
+      onPointerMove: onPointerMoveStep == null
+          ? null
+          : (PointerMoveEvent event) {
+              final int? step = _stepAt(event.localPosition, tokens.size);
+              if (step != null) onPointerMoveStep!(event, step);
+            },
+      child: Row(
+        children: <Widget>[
+          for (final Widget cell in cells) cell,
+        ],
+      ),
+    );
+  }
+
+  int? _stepAt(Offset position, SizeTokens size) {
+    if (position.dy < 0 || position.dy > size.rackStepCell) return null;
+    double left = 0;
+    for (int index = 0; index < steps.length; index++) {
+      final double right = left + size.rackStepCell;
+      if (position.dx >= left && position.dx < right) return index;
+      left = right;
+      if (index < steps.length - 1) {
+        left += index % groupSize == groupSize - 1
+            ? size.rackStepGroupGap
+            : size.rackStepGap;
+      }
+    }
+    return null;
   }
 }
 

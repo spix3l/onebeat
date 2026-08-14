@@ -42,6 +42,46 @@ void main() {
     expect(find.text('D'), findsOneWidget, reason: 'the shortcut comes too');
   });
 
+  testWidgets('the label sits under the control, centred on it', (
+    WidgetTester tester,
+  ) async {
+    // Off to one side of a wide surface: a follower that measures the *window*
+    // instead of itself lands near the middle, which is the bug this pins.
+    await pumpUi(
+      tester,
+      Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 80, top: 12),
+          child: ObTooltip(
+            message: 'Erase notes',
+            shortcut: 'D',
+            child: Container(width: 26, height: 26, color: const Color(0xFF222222)),
+          ),
+        ),
+      ),
+      size: const Size(1400, 400),
+    );
+
+    final TestGesture pointer = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await pointer.addPointer();
+    addTearDown(pointer.removePointer);
+    final Rect target = tester.getRect(find.byType(ObTooltip));
+    await pointer.moveTo(target.center);
+    await tester.pump(OneBeatTokens.dark().motion.tooltipDelay);
+
+    final Rect card = tester.getRect(find.text('Erase notes'));
+    expect(
+      card.center.dx,
+      closeTo(target.center.dx, 40),
+      reason: 'centred on the control, not on the window',
+    );
+    expect(card.top, greaterThanOrEqualTo(target.bottom));
+    expect(card.width, lessThan(300), reason: 'a label, not a banner');
+  });
+
   testWidgets('leaving the control takes the label with it', (
     WidgetTester tester,
   ) async {

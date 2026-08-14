@@ -9,6 +9,7 @@
 // 6. Scale and snap changes.
 // 7. Key column press and note placement auditioning.
 // 8. Pattern switching and back-to-playlist navigation.
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,8 @@ class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClien
   _FakePianoRollEngineClient({
     this.isPlaying = false,
     this.positionBeats = 0.0,
+    this.loopStartBeats = 0,
+    this.loopEndBeats = 4,
   }) {
     instruments = <ProjectInstrument>[
       const ProjectInstrument(
@@ -65,6 +68,8 @@ class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClien
 
   bool isPlaying;
   double positionBeats;
+  double loopStartBeats;
+  double loopEndBeats;
   late List<ProjectInstrument> instruments;
   int undoCalls = 0;
   int redoCalls = 0;
@@ -94,8 +99,8 @@ class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClien
   EngineSnapshot readSnapshot() => EngineSnapshot(
         playing: isPlaying,
         loopEnabled: true,
-        loopStartBeats: 0,
-        loopEndBeats: 4,
+        loopStartBeats: loopStartBeats,
+        loopEndBeats: loopEndBeats,
         positionFrames: 0,
         positionBeats: positionBeats,
         positionSeconds: 0,
@@ -360,6 +365,29 @@ void main() {
     expect(screen.vm.roll.playheadTick, 960);
   });
 
+  testWidgets('playhead wraps on the loop region', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient(
+      isPlaying: true,
+      positionBeats: 3.5, // past the end of a [1, 3) loop region
+      loopStartBeats: 1,
+      loopEndBeats: 3,
+    );
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final PianoRollScreen screen = tester.widget(find.byType(PianoRollScreen));
+    // 3.5 beats minus a 1-beat loop start, wrapped on a 2-beat region, is 0.5
+    // beat = 480 ticks.
+    expect(screen.vm.roll.playheadTick, 480);
+  });
+
   testWidgets('a sounding note lights its row and its key', (
     WidgetTester tester,
   ) async {
@@ -479,6 +507,117 @@ void main() {
     await tester.pump();
 
     expect(store.notes.length, notesBefore + 1);
+  });
+
+  testWidgets('a trackpad two-finger scroll pans and never draws', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    final int notesBefore = store.notes.length;
+    final int keyBefore = store.topKey;
+    expect(store.tool, PrTool.pencil, reason: 'the draw tool is up');
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    final Offset over = Offset(keys.right + 200, keys.top + 200);
+
+    // A trackpad scroll is a pan/zoom gesture, not a drag and not a scroll
+    // signal. It used to reach the canvas's drag recogniser and draw.
+    final TestPointer pad = TestPointer(1, PointerDeviceKind.trackpad);
+    await tester.sendEventToBinding(pad.panZoomStart(over));
+    await tester.sendEventToBinding(
+      pad.panZoomUpdate(over, pan: const Offset(0, 120)),
+    );
+    await tester.sendEventToBinding(pad.panZoomEnd());
+    await tester.pump();
+
+    expect(store.notes.length, notesBefore, reason: 'scrolling is not drawing');
+    expect(store.topKey, isNot(keyBefore), reason: 'and it did scroll');
+  });
+
+  testWidgets('a chord only moves the voices that are selected', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    // Three voices sharing a start tick: their stems coincide in the lane.
+    store
+      ..addNoteAt(0, 60, length: 480)
+      ..addNoteAt(0, 64, length: 480)
+      ..addNoteAt(0, 67, length: 480);
+    store.clearSelection();
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect lane = tester.getRect(find.byType(PrVelocityLane));
+    final Offset onStem = Offset(lane.left + 62, lane.top + 20);
+
+    // Nothing selected: an ambiguous grab must not flatten the chord.
+    final List<int> before =
+        store.notes.map((SequenceNote n) => n.velocity).toList();
+    await tester.tapAt(onStem);
+    await tester.pump();
+    expect(
+      store.notes.map((SequenceNote n) => n.velocity),
+      before,
+      reason: 'an ambiguous stem changes nothing until you say which note',
+    );
+
+    // Select one voice, and only that one follows the lane.
+    final SequenceNote target =
+        store.notes.firstWhere((SequenceNote n) => n.key == 64);
+    store.selectOnly(target);
+    await tester.pump();
+
+    await tester.tapAt(onStem);
+    await tester.pump();
+
+    final SequenceNote after =
+        store.notes.firstWhere((SequenceNote n) => n.key == 64);
+    expect(after.velocity, isNot(target.velocity));
+    for (final SequenceNote note in store.notes) {
+      if (note.key == 64) continue;
+      expect(note.velocity, 12900, reason: 'the other voices are untouched');
+    }
+  });
+
+  testWidgets('auditioning a key lights its row', (WidgetTester tester) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    PianoRollScreen screen() =>
+        tester.widget(find.byType(PianoRollScreen)) as PianoRollScreen;
+    expect(screen().vm.roll.activeKeys, isEmpty);
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(keys.center.dx, keys.top + 7));
+    await tester.pump();
+
+    expect(screen().vm.roll.activeKeys, isNotEmpty);
+
+    // And it goes dark when the preview is released.
+    store.stopAudition();
+    await tester.pump();
+    expect(screen().vm.roll.activeKeys, isEmpty);
   });
 
   testWidgets('the roll releases a preview note when it goes away', (

@@ -244,15 +244,25 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         Object.hash(sel.startTicks, sel.key),
     };
 
-    // Playhead calculation
+    // Playhead calculation.
+    //
+    // Wrapped on the transport's *loop region* — the same [start, end) the
+    // engine wraps the audio on, read straight back from the snapshot. Deriving
+    // the loop length from the notes under-read once several instruments share
+    // a pattern; reading it from the snapshot keeps the drawn playhead on
+    // exactly the tick the audio wraps on.
     int? playheadTick;
     final EngineSnapshot snapshot = _controller.snapshot;
     if (snapshot.playing) {
-      final int patternLength = currentPattern?.lengthTicks ?? ticksPerBar;
-      final double rawTick = snapshot.positionBeats * ticksPerQuarter;
-      playheadTick = patternLength > 0
-          ? (rawTick % patternLength).round()
-          : rawTick.round();
+      final double startBeats = snapshot.loopStartBeats;
+      final double endBeats = snapshot.loopEndBeats;
+      final double loopLengthBeats =
+          endBeats > startBeats ? endBeats - startBeats : 0.0;
+      final double inLoop = snapshot.positionBeats - startBeats;
+      final double looped = loopLengthBeats > 0.0
+          ? inLoop % loopLengthBeats
+          : inLoop;
+      playheadTick = ((looped < 0.0 ? 0.0 : looped) * ticksPerQuarter).round();
     }
 
     // Marquee rect in canvas space
@@ -278,6 +288,11 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         }
       }
     }
+    // A previewed note lights the same way a played one does. "Sounding" is one
+    // idea, and the roll should not care whether the transport or your own
+    // click is what made the sound.
+    final int? previewing = _store.auditionKey;
+    if (previewing != null) activeKeys.add(previewing);
 
     final PianoRollVm rollVm = PianoRollVm(
       notes: noteVms,
@@ -457,11 +472,10 @@ class _PianoRollBindingState extends State<PianoRollBinding>
 
   /// Applies a lane gesture at [local] to the stem under the pointer.
   ///
-  /// Two rules, both of them FL's: you edit the note you are pointing at, and
-  /// if that note is part of a selection you edit the whole selection. The lane
-  /// used to do only the second, so grabbing one stem while several notes were
-  /// selected flattened all of them — with the pointer on the one stem that
-  /// looked like it was behaving.
+  /// The lane edits *one* note. Where several notes start on the same tick
+  /// their stems coincide exactly, and there is no axis left in the lane to
+  /// tell them apart — so the selection breaks the tie, and with nothing
+  /// selected an ambiguous grab does nothing rather than flattening the chord.
   void _applyVelocity(Offset local, double height, PrViewport view, double gutter) {
     if (PrLaneKind.fromLabel(_selectedVelocityLane) != PrLaneKind.velocity) {
       return;
@@ -475,14 +489,56 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     final double stemWidth =
         OneBeatTheme.of(context).size.prVelocityStemWidth;
     final int tolerance = (stemWidth * 2 * view.ticksPerPx).round();
-    final SequenceNote? hit = _store.noteNearTick(tick, tolerance);
-    if (hit == null) return;
+    final List<SequenceNote> hits = _store.notesNearTick(tick, tolerance);
+    if (hits.isEmpty) return;
 
-    if (_store.selection.contains(hit) && _store.selection.length > 1) {
-      _store.setSelectionVelocity(velocity);
-    } else {
-      _store.setNoteVelocity(hit, velocity);
+    if (hits.length == 1) {
+      _store.setNoteVelocity(hits.single, velocity);
+      return;
     }
+
+    // A chord. Only the selected voices move, and only those.
+    for (final SequenceNote note in hits) {
+      if (_store.selection.contains(note)) {
+        _store.setNoteVelocity(note, velocity);
+      }
+    }
+  }
+
+  // ----- Trackpad -----------------------------------------------------------
+
+  /// The cumulative scale reported at the previous pan/zoom update. A trackpad
+  /// reports total scale since the gesture began, so the frame-to-frame zoom
+  /// factor is the ratio between two of them.
+  double _lastPinchScale = 1.0;
+
+  void _onPanZoomStart(PointerPanZoomStartEvent event) {
+    _lastPinchScale = 1.0;
+  }
+
+  void _onPanZoomUpdate(
+    PointerPanZoomUpdateEvent event,
+    PrViewport view,
+    double gutter,
+  ) {
+    // Pinch to zoom the time axis, about the pointer.
+    if (event.scale != _lastPinchScale && event.scale > 0) {
+      final double factor = event.scale / _lastPinchScale;
+      _lastPinchScale = event.scale;
+      final double canvasX = event.localPosition.dx - gutter;
+      _store.zoomHorizontally(
+        factor,
+        anchorTick: _store.scrollTicks + canvasX / _store.pixelsPerTick,
+      );
+      return;
+    }
+    // Two-finger pan. Unlike a scroll signal, a pan delta follows the fingers,
+    // so the content moves *with* the gesture rather than against it.
+    _store.panBy(
+      deltaTicks: -event.panDelta.dx * view.ticksPerPx,
+      deltaKeys: (event.panDelta.dy / view.rowHeight).round(),
+      visibleRows: _visibleRows,
+    );
   }
 
   void _onVelocityTapDown(
@@ -731,6 +787,10 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onPanCancel: _store.cancelDrag,
           onPointerSignal: (PointerSignalEvent e) =>
               _onPointerSignal(e, view, gutter),
+          onPointerPanZoomStart: _onPanZoomStart,
+          onPointerPanZoomUpdate: (PointerPanZoomUpdateEvent e) =>
+              _onPanZoomUpdate(e, view, gutter),
+          onPointerPanZoomEnd: (_) => _lastPinchScale = 1.0,
           onScrollTicks: (double ticks) => _store.panTo(ticks, _store.topKey),
           onScrollTopKey: (int key) => _store.panTo(_store.scrollTicks, key),
           onGridSize: _onGridSize,

@@ -114,19 +114,26 @@ class _RackBindingState extends State<RackBinding>
     final EngineSnapshot snapshot = _controller.snapshot;
     if (!snapshot.playing) return null;
     final RackPattern? pattern = _store.pattern;
-    final int baseStepCount = pattern?.baseStepCount ?? 16;
-    if (baseStepCount <= 0) return null;
-
-    final int lengthTicks = pattern?.lengthTicks ?? (baseStepCount * 240);
-    if (lengthTicks <= 0) return null;
-
-    final double currentTicks = snapshot.positionBeats * 960.0;
-    final double loopTicks = currentTicks % lengthTicks;
     final int gridTicks = pattern?.baseGridTicks ?? 240;
     if (gridTicks <= 0) return null;
+    final int stepCount = pattern?.baseStepCount ?? 16;
+    if (stepCount <= 0) return null;
 
-    final int step = (loopTicks / gridTicks).floor();
-    return step.clamp(0, baseStepCount - 1);
+    // The playhead loops on the transport's *loop region* — the same [start,
+    // end) the engine wraps the audio on — not on the pattern's stored length,
+    // which is a fixed default and can differ from where the audio loops.
+    final double startBeats = snapshot.loopStartBeats;
+    final double endBeats = snapshot.loopEndBeats;
+    final double loopLengthBeats =
+        endBeats > startBeats ? endBeats - startBeats : 0.0;
+    final double inLoop = snapshot.positionBeats - startBeats;
+    final double looped = loopLengthBeats > 0.0
+        ? inLoop % loopLengthBeats
+        : inLoop;
+    final double currentTicks = (looped < 0.0 ? 0.0 : looped) * 960.0;
+
+    final int step = (currentTicks / gridTicks).floor();
+    return step.clamp(0, stepCount - 1);
   }
 
   Color _resolveInstrumentColor(int index, String? colorStr) {

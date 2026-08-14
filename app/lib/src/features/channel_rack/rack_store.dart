@@ -35,6 +35,7 @@ class RackStore extends ChangeNotifier {
   bool _velocityPainting = false;
   bool _paintActive = true;
   String? _paintInstrument;
+  int? _lastPaintStep;
   final Set<int> _paintedSteps = <int>{};
 
   bool get canUndo => _client.canUndoProject;
@@ -132,19 +133,34 @@ class RackStore extends ChangeNotifier {
     _painting = true;
     _paintActive = active;
     _paintInstrument = instrumentId;
+    _lastPaintStep = null;
     _paintedSteps.clear();
     _client.beginRackGesture(active ? 'Paint steps' : 'Erase steps');
     paintStep(instrumentId, step);
   }
 
+  /// Paints the step under the pointer and fills any indices skipped by a
+  /// coalesced pointer-move event. That makes a quick click-drag continuous
+  /// instead of dependent on the event rate.
   void paintStep(String instrumentId, int step) {
-    if (!_painting ||
-        _paintInstrument != instrumentId ||
-        !_paintedSteps.add(step)) {
-      return;
-    }
+    if (!_painting || _paintInstrument != instrumentId) return;
     final RackRow? row = rowFor(instrumentId);
-    if (row == null || step >= row.steps.length) return;
+    if (row == null || step < 0 || step >= row.steps.length) return;
+
+    final int previous = _lastPaintStep ?? step;
+    final int direction = step >= previous ? 1 : -1;
+    for (int index = previous;; index += direction) {
+      _paintSingleStep(instrumentId, index);
+      if (index == step) break;
+    }
+    _lastPaintStep = step;
+    notifyListeners();
+  }
+
+  void _paintSingleStep(String instrumentId, int step) {
+    if (!_paintedSteps.add(step)) return;
+    final RackRow? row = rowFor(instrumentId);
+    if (row == null || step < 0 || step >= row.steps.length) return;
     if (row.steps[step].active != _paintActive) {
       _client.toggleRackStep(instrumentId, step);
       rows = _client.readRackRows();
@@ -152,7 +168,6 @@ class RackStore extends ChangeNotifier {
     selectedVelocityInstrument = instrumentId;
     selectedVelocityStep = step;
     selectedInstrumentId = instrumentId;
-    notifyListeners();
   }
 
   void commitPaint() {
@@ -160,6 +175,7 @@ class RackStore extends ChangeNotifier {
     _client.commitRackGesture();
     _painting = false;
     _paintInstrument = null;
+    _lastPaintStep = null;
     _paintedSteps.clear();
     refresh();
   }
@@ -169,6 +185,7 @@ class RackStore extends ChangeNotifier {
     _client.abortRackGesture();
     _painting = false;
     _paintInstrument = null;
+    _lastPaintStep = null;
     _paintedSteps.clear();
     refresh();
   }

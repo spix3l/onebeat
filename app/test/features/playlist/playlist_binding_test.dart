@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/playlist/playlist_binding.dart';
+import 'package:onebeat/src/features/playlist/playlist_screen.dart';
 import 'package:onebeat/src/features/playlist/playlist_store.dart';
 
 import '../../support/fake_engine_client.dart';
@@ -9,14 +10,17 @@ import '../../support/app_harness.dart';
 class _FakePlaylistEngineClient extends FakeEngineClient implements EngineClient {
   _FakePlaylistEngineClient();
 
+  bool isPlaying = false;
+  double positionBeats = 0.0;
+
   @override
-  EngineSnapshot readSnapshot() => const EngineSnapshot(
-        playing: false,
+  EngineSnapshot readSnapshot() => EngineSnapshot(
+        playing: isPlaying,
         loopEnabled: true,
         loopStartBeats: 0,
         loopEndBeats: 4,
         positionFrames: 0,
-        positionBeats: 0.0,
+        positionBeats: positionBeats,
         positionSeconds: 0,
         hostTimeNanos: 0,
         tempoBpm: 120,
@@ -185,5 +189,22 @@ void main() {
     // Delete
     store.deleteSelection();
     expect(store.clips.length, 1);
+  });
+
+  testWidgets('the playhead runs linearly over the playlist, not looped', (
+    WidgetTester tester,
+  ) async {
+    fakeClient.isPlaying = true;
+    fakeClient.positionBeats = 6.0; // past the 4-beat loop region
+
+    await pumpForTest(
+      tester,
+      PlaylistBinding(client: fakeClient, store: store),
+    );
+    await tester.pump();
+
+    final PlaylistScreen screen = tester.widget(find.byType(PlaylistScreen));
+    // 6 beats is 24 sixteenths. A looped head would wrap to 2 beats (8).
+    expect(screen.vm.canvas.playheadBar16ths, 24);
   });
 }

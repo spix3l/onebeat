@@ -17,6 +17,20 @@ const int prLowestKey = 0;
 const int prHighestKey = 127;
 const int prKeyCount = prHighestKey - prLowestKey + 1;
 
+/// The pointers a canvas drag will accept — every kind but
+/// [PointerDeviceKind.trackpad].
+///
+/// A trackpad's two-finger scroll is delivered as a pan gesture, which a drag
+/// recogniser accepts by default. On an editing surface that means scrolling
+/// silently draws. Trackpad scrolling is handled as a pan/zoom signal instead.
+const Set<PointerDeviceKind> prCanvasPointers = <PointerDeviceKind>{
+  PointerDeviceKind.touch,
+  PointerDeviceKind.mouse,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.unknown,
+};
+
 class PianoRollScreen extends StatelessWidget {
   const PianoRollScreen({
     required this.vm,
@@ -35,6 +49,9 @@ class PianoRollScreen extends StatelessWidget {
     this.onPanEnd,
     this.onPanCancel,
     this.onPointerSignal,
+    this.onPointerPanZoomStart,
+    this.onPointerPanZoomUpdate,
+    this.onPointerPanZoomEnd,
     this.onLaneChanged,
     this.onVelocityTapDown,
     this.onVelocityDragStart,
@@ -63,6 +80,13 @@ class PianoRollScreen extends StatelessWidget {
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
   final void Function(PointerSignalEvent event)? onPointerSignal;
+
+  /// Trackpad gestures. Separate from [onPointerSignal] because a trackpad
+  /// two-finger scroll is a pan/zoom gesture at the framework level, not a
+  /// scroll signal.
+  final void Function(PointerPanZoomStartEvent event)? onPointerPanZoomStart;
+  final void Function(PointerPanZoomUpdateEvent event)? onPointerPanZoomUpdate;
+  final void Function(PointerPanZoomEndEvent event)? onPointerPanZoomEnd;
 
   final ValueChanged<String>? onLaneChanged;
   final void Function(TapDownDetails details, double height)? onVelocityTapDown;
@@ -110,9 +134,17 @@ class PianoRollScreen extends StatelessWidget {
           ),
           // The whole body scrolls as one: wheel or trackpad anywhere over the
           // ruler, the key column or the canvas pans the viewport.
+          //
+          // A trackpad reports a two-finger scroll as a *pan/zoom gesture*, not
+          // as a scroll signal, so it needs its own three callbacks. Without
+          // them the gesture fell through to the canvas's drag recogniser and
+          // two-finger scrolling drew notes.
           Expanded(
             child: Listener(
               onPointerSignal: onPointerSignal,
+              onPointerPanZoomStart: onPointerPanZoomStart,
+              onPointerPanZoomUpdate: onPointerPanZoomUpdate,
+              onPointerPanZoomEnd: onPointerPanZoomEnd,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
@@ -383,6 +415,11 @@ class _InteractiveGridArea extends StatelessWidget {
         }
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
+          // Everything that can point at a canvas *except* a trackpad. A
+          // trackpad two-finger scroll arrives as a pan gesture, and a drag
+          // recogniser will happily accept it — which is how scrolling ended up
+          // drawing notes. Scrolling is handled by the Listener above instead.
+          supportedDevices: prCanvasPointers,
           onTapDown: onTapDown,
           onSecondaryTapDown: onSecondaryTapDown,
           onPanStart: onPanStart,
@@ -438,6 +475,7 @@ class _InteractiveVelocityArea extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      supportedDevices: prCanvasPointers,
       onTapDown: onVelocityTapDown == null || !editable
           ? null
           : (TapDownDetails d) => onVelocityTapDown!(d, laneHeight),

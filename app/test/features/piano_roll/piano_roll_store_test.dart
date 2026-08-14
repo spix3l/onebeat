@@ -210,6 +210,59 @@ void main() {
     expect(roll.noteNearTick(600, 40), isNull, reason: 'nothing is close');
   });
 
+  test('a chord reports every stem that shares its lane position', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    // Three voices starting together, plus one that does not.
+    roll
+      ..addNoteAt(0, 60, length: 240)
+      ..addNoteAt(0, 64, length: 240)
+      ..addNoteAt(0, 67, length: 240)
+      ..addNoteAt(960, 72, length: 240);
+
+    expect(roll.notesNearTick(0, 40).length, 3);
+    expect(roll.notesNearTick(960, 40).length, 1);
+    expect(roll.notesNearTick(2000, 40), isEmpty);
+  });
+
+  test('the loop covers the content, rounded up to a whole bar', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+
+    // An empty pattern still loops on something.
+    expect(roll.loopLengthTicks, ticksPerBar);
+
+    // A note ending inside bar 1 loops one bar.
+    roll.addNoteAt(0, 60, length: ticksPerQuarter);
+    expect(roll.loopLengthTicks, ticksPerBar);
+
+    // A note starting at the top of bar 4 loops four bars, not five.
+    roll.addNoteAt(ticksPerBar * 3, 62, length: ticksPerQuarter);
+    expect(roll.loopLengthTicks, ticksPerBar * 4);
+  });
+
+  test('a note crossing a barline extends the loop to the next bar', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+
+    // Ends one tick into bar 2, so the loop has to reach the end of bar 2.
+    roll.addNoteAt(0, 60, length: ticksPerBar + 1);
+
+    expect(roll.loopLengthTicks, ticksPerBar * 2);
+  });
+
+  test('a preview lights its key and goes dark when released', () {
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
+    final PianoRollStore roll = harness.pianoRoll;
+
+    expect(roll.auditionKey, isNull);
+    roll.audition(64);
+    expect(roll.auditionKey, 64);
+
+    roll.stopAudition();
+    expect(roll.auditionKey, isNull);
+  });
+
   test('the scroll extent covers the last note plus room to keep writing', () {
     final EditorHarness harness = EditorHarness();
     final PianoRollStore roll = harness.pianoRoll..load('inst_a');

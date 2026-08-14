@@ -22,6 +22,8 @@ class _FakeRackEngineClient implements EngineClient {
   _FakeRackEngineClient({
     this.isPlaying = false,
     this.positionBeats = 0.0,
+    this.loopStartBeats = 0,
+    this.loopEndBeats = 4,
   }) {
     patterns = <PatternSummary>[
       const PatternSummary(
@@ -111,6 +113,8 @@ class _FakeRackEngineClient implements EngineClient {
 
   bool isPlaying;
   double positionBeats;
+  double loopStartBeats;
+  double loopEndBeats;
   late List<PatternSummary> patterns;
   late List<ProjectInstrument> instruments;
   late List<RackRow> rows;
@@ -338,8 +342,8 @@ class _FakeRackEngineClient implements EngineClient {
   EngineSnapshot readSnapshot() => EngineSnapshot(
         playing: isPlaying,
         loopEnabled: true,
-        loopStartBeats: 0,
-        loopEndBeats: 4,
+        loopStartBeats: loopStartBeats,
+        loopEndBeats: loopEndBeats,
         positionFrames: 0,
         positionBeats: positionBeats,
         positionSeconds: 0,
@@ -466,6 +470,42 @@ void main() {
     expect(client.rows.first.steps[3].active, isTrue);
   });
 
+  testWidgets('click-drag paints every crossed step cell', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+    final RackStore store = RackStore(client)..load();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, store: store),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    final Rect grid = tester.getRect(find.byType(ObStepGrid).first);
+    const double cell = 30;
+    const double gap = 4;
+    const double groupGap = 8;
+    final Offset start = Offset(grid.left + cell * 1.5 + gap, grid.center.dy);
+    final Offset end = Offset(
+      grid.left + cell * 4 + gap * 3 + groupGap + cell / 2,
+      grid.center.dy,
+    );
+
+    final TestGesture gesture = await tester.startGesture(start);
+    await gesture.moveTo(end);
+    await gesture.up();
+    await tester.pump();
+
+    // Kick starts with 1/5/9/13. Painting from step 2 to step 5 fills the
+    // skipped cells 3 and 4 as well, without toggling the existing step 5 off.
+    expect(client.rows.first.steps[1].active, isTrue);
+    expect(client.rows.first.steps[2].active, isTrue);
+    expect(client.rows.first.steps[3].active, isTrue);
+    expect(client.rows.first.steps[4].active, isTrue);
+  });
+
   testWidgets('velocity setting updates step velocity', (
     WidgetTester tester,
   ) async {
@@ -518,6 +558,30 @@ void main() {
     final ChannelRackScreen screen =
         tester.widget(find.byType(ChannelRackScreen));
     expect(screen.vm.playingStep, 6);
+  });
+
+  testWidgets('playhead loops on the loop region, not the stored length', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient(
+      isPlaying: true,
+      positionBeats: 3.5, // past the end of a [1, 3) loop region
+      loopStartBeats: 1,
+      loopEndBeats: 3,
+    );
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    final ChannelRackScreen screen =
+        tester.widget(find.byType(ChannelRackScreen));
+    // 3.5 beats minus a 1-beat loop start wraps (2-beat region) to 0.5 beat,
+    // which is step 2 of the 1/16 grid.
+    expect(screen.vm.playingStep, 2);
   });
 
   testWidgets('mini keyboard in inspector triggers audition', (

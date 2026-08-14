@@ -159,9 +159,11 @@ void publishModel(ob_engine& handle) {
   }
   double loop_end_beats = 4.0;
   const onebeat::model::Pattern* pattern = currentPattern(handle);
-  if (pattern != nullptr && pattern->length > 0) {
-    loop_end_beats =
-        static_cast<double>(pattern->length) / static_cast<double>(onebeat::model::TicksPerQuarter);
+  if (pattern != nullptr) {
+    /* The loop covers what the pattern contains, not its stored length — see
+     * model::patternLoopLength for why. */
+    loop_end_beats = static_cast<double>(onebeat::model::patternLoopLength(*pattern)) /
+                     static_cast<double>(onebeat::model::TicksPerQuarter);
   } else if (flattened.length_frames > 0) {
     loop_end_beats =
         handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames);

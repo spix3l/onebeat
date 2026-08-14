@@ -392,51 +392,105 @@ class _ToolPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
           ..color = color;
-    final double w = size.width;
-    final double h = size.height;
+    final Paint fill = Paint()..color = color;
+
+    // The glyphs are drawn inside a square inset from the 26px button, rather
+    // than in fractions of the button itself. The old glyphs occupied the
+    // middle ~45% — about 12px — which at a 1.5px stroke left three-pixel
+    // segments that read as a broken shape rather than as a pencil.
+    final double side = size.shortestSide;
+    final double inset = side * 0.22;
+    final Rect box = Rect.fromLTWH(
+      (size.width - side) / 2 + inset,
+      (size.height - side) / 2 + inset,
+      side - inset * 2,
+      side - inset * 2,
+    );
+    double x(double t) => box.left + box.width * t;
+    double y(double t) => box.top + box.height * t;
 
     switch (tool) {
       case PrTool.pencil:
-        canvas.drawLine(
-          Offset(w * 0.3, h * 0.7),
-          Offset(w * 0.68, h * 0.32),
-          line,
-        );
-        canvas.drawLine(
-          Offset(w * 0.62, h * 0.26),
-          Offset(w * 0.74, h * 0.38),
-          line,
-        );
-        canvas.drawLine(
-          Offset(w * 0.3, h * 0.7),
-          Offset(w * 0.26, h * 0.74),
-          line,
-        );
-      case PrTool.select:
-        // A marquee: a dashed-looking box drawn as four corner brackets.
-        final Rect box = Rect.fromLTWH(w * 0.26, h * 0.26, w * 0.48, h * 0.48);
-        for (final (Offset from, Offset to) in <(Offset, Offset)>[
-          (box.topLeft, box.topLeft.translate(w * 0.16, 0)),
-          (box.topLeft, box.topLeft.translate(0, h * 0.16)),
-          (box.bottomRight, box.bottomRight.translate(-w * 0.16, 0)),
-          (box.bottomRight, box.bottomRight.translate(0, -h * 0.16)),
-        ]) {
-          canvas.drawLine(from, to, line);
-        }
-      case PrTool.eraser:
+        // A pencil pointing down-left: a body with two parallel edges, a
+        // ferrule across it, and a closed tip. Closed and continuous, so it
+        // survives being 14px across.
         final Path body =
             Path()
-              ..moveTo(w * 0.24, h * 0.62)
-              ..lineTo(w * 0.52, h * 0.3)
-              ..lineTo(w * 0.76, h * 0.5)
-              ..lineTo(w * 0.5, h * 0.74)
+              ..moveTo(x(0.72), y(0.0))
+              ..lineTo(x(1.0), y(0.28))
+              ..lineTo(x(0.34), y(0.94))
+              ..lineTo(x(0.0), y(1.0))
+              ..lineTo(x(0.06), y(0.66))
               ..close();
         canvas.drawPath(body, line);
-        canvas.drawLine(
-          Offset(w * 0.36, h * 0.74),
-          Offset(w * 0.76, h * 0.74),
-          line,
-        );
+        // The ferrule: where the wood stops and the metal starts.
+        canvas.drawLine(Offset(x(0.52), y(0.2)), Offset(x(0.8), y(0.48)), line);
+        // The graphite tip, filled so the business end reads at a glance.
+        final Path tip =
+            Path()
+              ..moveTo(x(0.0), y(1.0))
+              ..lineTo(x(0.06), y(0.66))
+              ..lineTo(x(0.34), y(0.94))
+              ..close();
+        canvas.drawPath(tip, fill);
+
+      case PrTool.select:
+        // A marquee as four corner brackets. Dashes were tried first and at
+        // 14px the gaps close up into a plain square — the corners have to
+        // carry the whole idea, so the gap in the middle of each edge is made
+        // large enough that it cannot fill in.
+        final Rect marquee = Rect.fromLTRB(x(0.0), y(0.06), x(1.0), y(0.94));
+        const double arm = 0.32;
+        for (final (Offset corner, double dx, double dy) in <(
+          Offset,
+          double,
+          double,
+        )>[
+          (marquee.topLeft, 1, 1),
+          (marquee.topRight, -1, 1),
+          (marquee.bottomLeft, 1, -1),
+          (marquee.bottomRight, -1, -1),
+        ]) {
+          canvas
+            ..drawLine(
+              corner,
+              corner.translate(dx * marquee.width * arm, 0),
+              line,
+            )
+            ..drawLine(
+              corner,
+              corner.translate(0, dy * marquee.height * arm),
+              line,
+            );
+        }
+
+      case PrTool.eraser:
+        // A block eraser held at an angle over the line it is clearing.
+        //
+        // The rubber end is *filled* rather than divided from the body by a
+        // seam: an outlined block with a line through it reads as stacked
+        // layers at this size, which is exactly what the previous glyph looked
+        // like. One solid end and one hollow one cannot be mistaken for a
+        // stack.
+        final Path body =
+            Path()
+              ..moveTo(x(0.34), y(0.04))
+              ..lineTo(x(1.0), y(0.38))
+              ..lineTo(x(0.66), y(0.74))
+              ..lineTo(x(0.0), y(0.4))
+              ..close();
+        final Path nib =
+            Path()
+              ..moveTo(x(0.0), y(0.4))
+              ..lineTo(x(0.24), y(0.14))
+              ..lineTo(x(0.9), y(0.48))
+              ..lineTo(x(0.66), y(0.74))
+              ..close();
+        canvas
+          ..drawPath(body, line)
+          ..drawPath(nib, fill)
+          // The surface being erased.
+          ..drawLine(Offset(x(0.1), y(0.97)), Offset(x(1.0), y(0.97)), line);
     }
   }
 
@@ -526,4 +580,29 @@ class _NotePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_NotePainter oldDelegate) => oldDelegate.color != color;
+}
+
+/// Renders one tool glyph on its own. Exists so the glyphs can be inspected and
+/// golden-tested at size, independent of the button that carries them.
+@visibleForTesting
+class PrToolGlyphPreview extends StatelessWidget {
+  const PrToolGlyphPreview({required this.tool, super.key});
+
+  final PrTool tool;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return SizedBox(
+      width: tokens.size.microFieldHeight,
+      height: tokens.size.microFieldHeight,
+      child: CustomPaint(
+        painter: _ToolPainter(
+          tool: tool,
+          color: tokens.color.textSecondary,
+          stroke: tokens.border.glyph,
+        ),
+      ),
+    );
+  }
 }

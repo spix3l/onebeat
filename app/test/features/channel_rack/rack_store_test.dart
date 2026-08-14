@@ -204,15 +204,16 @@ void main() {
     expect(store.isVisible(store.rows.single), isTrue);
 
     store.beginPaint('kick', 0, active: true);
-    store.paintStep('kick', 1);
-    store.paintStep('kick', 1);
+    // One move can skip over several cells; the store fills the interval.
+    store.paintStep('kick', 4);
+    store.paintStep('kick', 4);
     store.paintStep('kick', 2);
     store.commitPaint();
 
     expect(client.transactionBegins, 1);
     expect(client.transactionCommits, 1);
     expect(
-      store.rows.single.steps.take(3).every((RackStep step) => step.active),
+      store.rows.single.steps.take(5).every((RackStep step) => step.active),
       isTrue,
     );
     expect(store.canUndo, isTrue);

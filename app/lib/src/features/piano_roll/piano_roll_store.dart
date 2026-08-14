@@ -362,14 +362,42 @@ class PianoRollStore extends ChangeNotifier {
     panTo(ticks, (topKey + deltaKeys).clamp(floor, maxKey));
   }
 
-  /// The last tick with anything on it — where the horizontal rail's track
-  /// ends. Padded by a bar so there is always somewhere to write next.
-  int get contentEndTicks {
-    int end = ticksPerBar * 4;
+  /// The last tick any note in this instrument's sequence ends on. 0 when there
+  /// are none.
+  int get noteEndTicks {
+    int end = 0;
     for (final SequenceNote note in notes) {
       if (note.endTicks > end) end = note.endTicks;
     }
-    return end + ticksPerBar;
+    return end;
+  }
+
+  /// What the transport loops over: the pattern's content, rounded up to a
+  /// whole bar, and never less than one bar.
+  ///
+  /// This mirrors the rule the engine applies when it sets the loop region
+  /// (`publishModel` in onebeat_abi.cpp). It is duplicated rather than read
+  /// back because the drawn playhead has to wrap on exactly the tick the audio
+  /// wraps on, and the ABI publishes the loop in beats after rounding.
+  ///
+  /// Only this instrument's notes are counted, which is right for the roll's
+  /// own playhead but will under-read once several instruments share a pattern
+  /// — see [ghostNotes], which is where the rest of the pattern lives.
+  int get loopLengthTicks {
+    int end = noteEndTicks;
+    for (final SequenceNote ghost in ghostNotes) {
+      if (ghost.endTicks > end) end = ghost.endTicks;
+    }
+    if (end <= 0) return ticksPerBar;
+    return ((end + ticksPerBar - 1) ~/ ticksPerBar) * ticksPerBar;
+  }
+
+  /// The last tick with anything on it — where the horizontal rail's track
+  /// ends. Padded by a bar so there is always somewhere to write next.
+  int get contentEndTicks {
+    final int end = noteEndTicks;
+    const int floor = ticksPerBar * 4;
+    return (end > floor ? end : floor) + ticksPerBar;
   }
 
   void zoomToSelection({required double viewportWidth}) {
@@ -575,6 +603,21 @@ class PianoRollStore extends ChangeNotifier {
     return best;
   }
 
+  /// Every note whose stem lands on the *same* lane position as the nearest
+  /// one — a chord, whose stems coincide exactly.
+  ///
+  /// The lane is one-dimensional: it has an x for time and a y for the value,
+  /// and no axis left over for pitch. So a chord is a genuinely ambiguous
+  /// target, and the lane must say which note it means rather than quietly
+  /// editing all of them.
+  List<SequenceNote> notesNearTick(int tick, int toleranceTicks) {
+    final SequenceNote? nearest = noteNearTick(tick, toleranceTicks);
+    if (nearest == null) return const <SequenceNote>[];
+    return notes
+        .where((SequenceNote note) => note.startTicks == nearest.startTicks)
+        .toList();
+  }
+
   void quantiseSelection({double strength = 1.0}) {
     if (selection.isEmpty || instrumentId.isEmpty || snapTicks <= 0) return;
     _client.quantiseNotes(
@@ -719,11 +762,17 @@ class PianoRollStore extends ChangeNotifier {
   Timer? _auditionTimer;
   int _auditionKey = -1;
 
+  /// The key currently being previewed, or null. The roll lights its row while
+  /// it sounds: a preview you can hear but not see leaves you hunting for which
+  /// row you just hit, which is the whole reason for clicking the keyboard.
+  int? get auditionKey => _auditionKey < 0 ? null : _auditionKey;
+
   /// Previews a note with an audible length: note-on now, note-off a moment
   /// later. Sending both back-to-back produced a note so short it was silent.
   void audition(int key, {double velocity = 0.8}) {
     _releaseAudition();
     _auditionKey = key;
+    notifyListeners();
     try {
       _client.auditionNoteOn(key, velocity);
     } catch (_) {
@@ -743,6 +792,9 @@ class PianoRollStore extends ChangeNotifier {
     } catch (_) {
       // Preview path stub
     }
+    // The row has to go dark again when the preview ends. Guarded because this
+    // also runs from dispose, where notifying is both pointless and illegal.
+    if (hasListeners) notifyListeners();
   }
 
   /// Ends any audition in flight and cancels its pending note-off.

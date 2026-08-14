@@ -41,60 +41,28 @@ class ObTooltip extends StatefulWidget {
 
 class _ObTooltipState extends State<ObTooltip> {
   final LayerLink _link = LayerLink();
-  OverlayEntry? _entry;
+  final OverlayPortalController _portal = OverlayPortalController();
   Timer? _timer;
 
   @override
   void dispose() {
     _timer?.cancel();
-    _remove();
     super.dispose();
-  }
-
-  void _remove() {
-    _entry?.remove();
-    _entry = null;
   }
 
   void _schedule() {
     _timer?.cancel();
     final Duration delay =
         widget.waitDuration ?? OneBeatTheme.of(context).motion.tooltipDelay;
-    _timer = Timer(delay, _show);
+    _timer = Timer(delay, () {
+      if (mounted) _portal.show();
+    });
   }
 
   void _hide() {
     _timer?.cancel();
     _timer = null;
-    _remove();
-  }
-
-  void _show() {
-    if (!mounted || _entry != null) return;
-    final OverlayState? overlay = Overlay.maybeOf(context);
-    if (overlay == null) return;
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    _entry = OverlayEntry(
-      builder: (BuildContext context) => Positioned(
-        // Anchored below the control and centred on it. `followerAnchor`
-        // does the centring, so a long label grows both ways rather than
-        // running off the right edge of a toolbar.
-        child: CompositedTransformFollower(
-          link: _link,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomCenter,
-          followerAnchor: Alignment.topCenter,
-          offset: Offset(0, tokens.spacing.xs),
-          child: _TooltipCard(
-            message: widget.message,
-            shortcut: widget.shortcut,
-            tokens: tokens,
-          ),
-        ),
-      ),
-    );
-    overlay.insert(_entry!);
+    if (_portal.isShowing) _portal.hide();
   }
 
   @override
@@ -104,7 +72,52 @@ class _ObTooltipState extends State<ObTooltip> {
       child: MouseRegion(
         onEnter: (_) => _schedule(),
         onExit: (_) => _hide(),
-        child: widget.child,
+        child: OverlayPortal(
+          controller: _portal,
+          overlayChildBuilder: (BuildContext context) {
+            final OneBeatTokens tokens = OneBeatTheme.of(context);
+            // Anchored under the control and centred on it, so a long label
+            // grows both ways rather than off the right edge of a toolbar.
+            //
+            // The `Align` is load-bearing: an overlay child is laid out against
+            // the *whole surface* with tight constraints, so without a
+            // shrink-wrap the card stretches to fill the window and the label
+            // ends up floating in the middle of the canvas. This is the same
+            // shape ObDropdown uses for the same reason.
+            // The `Positioned` is what makes the centring correct, and it is
+            // easy to lose.
+            //
+            // An overlay child is laid out with *tight* full-surface
+            // constraints. Under those, a shrink-wrapping `Align` is ignored
+            // and the follower measures the size of the window — so
+            // `followerAnchor: topCenter` shifted the card left by half the
+            // screen rather than half the card, and the tooltip appeared
+            // hundreds of pixels from the control it named. `Positioned` inside
+            // a `Stack` hands down *loose* constraints, so the card measures
+            // itself and the anchor maths is about the card.
+            return Stack(
+              children: <Widget>[
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  child: CompositedTransformFollower(
+                    link: _link,
+                    showWhenUnlinked: false,
+                    targetAnchor: Alignment.bottomCenter,
+                    followerAnchor: Alignment.topCenter,
+                    offset: Offset(0, tokens.spacing.xs),
+                    child: _TooltipCard(
+                      message: widget.message,
+                      shortcut: widget.shortcut,
+                      tokens: tokens,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+          child: widget.child,
+        ),
       ),
     );
   }
