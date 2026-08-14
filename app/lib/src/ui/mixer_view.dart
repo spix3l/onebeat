@@ -1335,8 +1335,8 @@ class _RoutingGraphCurvesPainter extends CustomPainter {
 
     // Sidechain curve: Sub Bass (i=4) -> Drums Bus (endY=80)
     final Path scPath = Path();
-    final double scStartY = 80.0 + (4 * 44.0); // token-lint-ok
-    final double scEndY = 80.0; // token-lint-ok
+    const double scStartY = 80.0 + (4 * 44.0); // token-lint-ok
+    const double scEndY = 80.0; // token-lint-ok
     scPath.moveTo(leftX, scStartY);
     scPath.cubicTo(
       leftX + 80.0, // token-lint-ok
@@ -1351,7 +1351,7 @@ class _RoutingGraphCurvesPainter extends CustomPainter {
     // Busses to Master curves
     for (int i = 0; i < 4; i++) {
       final double startY = 80.0 + (i * 44.0); // token-lint-ok
-      final double endY = 80.0; // token-lint-ok
+      const double endY = 80.0; // token-lint-ok
       final Path path = Path();
       path.moveTo(midRightX, startY);
       path.cubicTo(
