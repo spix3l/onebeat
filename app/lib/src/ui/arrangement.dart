@@ -24,6 +24,7 @@ import 'controls.dart';
 import 'engine_controller.dart';
 import 'pattern_store.dart';
 import 'piano_roll_store.dart' show GridChoice, ticksPerBar, ticksPerQuarter;
+import 'shortcuts.dart';
 
 /// The arrangement as the app uses it: transport and playhead come from the
 /// live engine, everything else from [ArrangementSurface].
@@ -143,64 +144,54 @@ class _ArrangementViewState extends State<ArrangementSurface> {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return AnimatedBuilder(
       animation: Listenable.merge(<Listenable>[_store, widget.patterns]),
-      builder: (BuildContext context, Widget? child) => Shortcuts(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-              _DuplicateClipIntent(),
-          SingleActivator(LogicalKeyboardKey.keyB, meta: true):
-              _PlaceClipIntent(),
-          SingleActivator(LogicalKeyboardKey.delete): _DeleteClipIntent(),
-          SingleActivator(LogicalKeyboardKey.backspace): _DeleteClipIntent(),
-          SingleActivator(LogicalKeyboardKey.escape): _CancelDragIntent(),
+      builder: (BuildContext context, Widget? child) => ScopedShortcuts(
+        shortcuts: <ShortcutActivator, Intent>{
+          ...shortcutsForArea(ActionArea.arrangement),
+          const SingleActivator(LogicalKeyboardKey.delete):
+              const RunActionIntent('arrangement.deleteClip'),
+          const SingleActivator(LogicalKeyboardKey.escape):
+              const CancelIntent(),
         },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            _DuplicateClipIntent: CallbackAction<_DuplicateClipIntent>(
-              onInvoke: (_) {
-                _store.duplicateSelection();
-                return null;
-              },
-            ),
-            _PlaceClipIntent: CallbackAction<_PlaceClipIntent>(
-              onInvoke: (_) {
-                _placeCurrentPattern();
-                return null;
-              },
-            ),
-            _DeleteClipIntent: CallbackAction<_DeleteClipIntent>(
-              onInvoke: (_) {
-                _store.deleteSelection();
-                return null;
-              },
-            ),
-            _CancelDragIntent: CallbackAction<_CancelDragIntent>(
-              onInvoke: (_) {
+        handlers: <String, VoidCallback>{
+          'arrangement.addLane': () =>
+              _store.addLane('Lane ${_store.lanes.length + 1}'),
+          'arrangement.placeClip': _placeCurrentPattern,
+          'arrangement.duplicateClip': _store.duplicateSelection,
+          'arrangement.deleteClip': _store.deleteSelection,
+        },
+        extraActions: <Type, Action<Intent>>{
+          CancelIntent: CallbackAction<CancelIntent>(
+            onInvoke: (_) {
+              // One layer at a time, same rule as the roll.
+              if (_store.dragKind != ClipDragKind.none) {
                 _store.cancelClipDrag();
-                return null;
-              },
-            ),
-          },
-          child: Focus(
-            focusNode: _focus,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _ArrangementToolbar(
-                  store: _store,
-                  patterns: widget.patterns,
-                  onPlace: _placeCurrentPattern,
+              } else {
+                _store.clearClipSelection();
+              }
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: _focus,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              _ArrangementToolbar(
+                store: _store,
+                patterns: widget.patterns,
+                onPlace: _placeCurrentPattern,
+              ),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Expanded(child: _buildLanesAndCanvas(tokens)),
+                    ClipInspector(store: _store, patterns: widget.patterns),
+                  ],
                 ),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      Expanded(child: _buildLanesAndCanvas(tokens)),
-                      ClipInspector(store: _store, patterns: widget.patterns),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -380,7 +371,7 @@ class _ArrangementViewState extends State<ArrangementSurface> {
   }
 
   void _onCanvasTapDown(TapDownDetails details) {
-    _focus.requestFocus();
+    FocusPolicy.takeUnlessTyping(_focus);
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ArrangementLane? lane = _laneAt(details.localPosition.dy, tokens);
     if (lane != null) _store.selectLane(lane.id);
@@ -406,7 +397,7 @@ class _ArrangementViewState extends State<ArrangementSurface> {
   }
 
   void _onCanvasPanStart(DragStartDetails details) {
-    _focus.requestFocus();
+    FocusPolicy.takeUnlessTyping(_focus);
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ArrangementClip? clip = _clipAt(details.localPosition, tokens);
     if (clip == null) return;
@@ -472,22 +463,6 @@ class _ArrangementViewState extends State<ArrangementSurface> {
       _store.scrollTicks + event.scrollDelta.dx / _store.pixelsPerTick,
     );
   }
-}
-
-class _DuplicateClipIntent extends Intent {
-  const _DuplicateClipIntent();
-}
-
-class _PlaceClipIntent extends Intent {
-  const _PlaceClipIntent();
-}
-
-class _DeleteClipIntent extends Intent {
-  const _DeleteClipIntent();
-}
-
-class _CancelDragIntent extends Intent {
-  const _CancelDragIntent();
 }
 
 class _ArrangementToolbar extends StatelessWidget {
@@ -593,7 +568,7 @@ class _LaneHeader extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: selected
-              ? tokens.color.surfaceRaised
+              ? tokens.color.surfaceOverlay
               : tokens.color.surfacePanel,
           border: Border(
             bottom: BorderSide(

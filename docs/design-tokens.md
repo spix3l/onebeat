@@ -29,16 +29,33 @@ default can smuggle in a colour that is not a token.
 
 ## Colour (PRD §8.1.1)
 
+Values are **sampled from the design screens**, not transcribed by eye. The
+screens are raster exports, so `tools/` has no automated check for this; the
+sampling was done once with PIL against `onebeat-shell.html` and
+`onebeat-piano.html` and the results are recorded here.
+
 | Role | Value | Job |
 |---|---|---|
-| `surfaceDeep` | `#131412` | the window |
-| `surfacePanel` | `#1D1F1C` | panels on the window |
-| `surfaceRaised` | `#2A2C28` | controls and cards on a panel |
+| `surfaceSunken` | `#101210` | the top bar, the status bar, input wells |
+| `surfaceDeep` | `#161814` | the canvas |
+| `surfacePanel` | `#1B1D1A` | panels and lane headers |
+| `surfaceRaised` | `#20231F` | the left rail, controls at rest |
+| `surfaceOverlay` | `#2A2D27` | hover, selected rows, popup menus |
 | `line` | `#3A3D37` | hairlines and separators |
 | `textPrimary` | `#E8E9E4` | body and values |
 | `textMuted` | `#9A9D94` | labels and secondary values |
-| `accent` | `#7C6CF0` | the single accent |
+| `accent` | `#7264E8` | the single accent |
 | `accentMuted` | `#4A417F` | selection fills, focus washes |
+
+**Five levels, not three.** The app shipped with three and the design uses five.
+The two additions matter for different reasons:
+
+- `surfaceSunken` is *darker* than the canvas. The design puts the chrome below
+  the work in depth rather than above it, which is why the top bar reads as a
+  frame rather than as a floating toolbar.
+- `surfaceOverlay` separates hover from rest. With three levels, hover had to
+  borrow the selected colour, so hovering a pattern row looked like selecting
+  it.
 
 The chrome is chromatically quiet on purpose: user clip colours are the only
 saturated thing on screen, and every screen is tested against saturated clip
@@ -46,23 +63,29 @@ colours (PRD §15.3).
 
 ### Canvas roles (OB-3-10, OB-3-12)
 
-The piano roll and the arrangement need roles the chrome does not. They stay
-inside §8.1.1's warm-neutral family; the design screens render a cooler black,
-and reconciling the two is an open owner decision recorded in the Stage 3
-closeout.
+The piano roll and the arrangement need roles the chrome does not.
+
+**The roll's canvas is deliberately cooler than the chrome.** This was initially
+read as the whole app being cool-toned and the tokens being wrong; sampling the
+screens showed the opposite. The chrome is the warm neutral §8.1.1 always
+specified — `#3A3D37` in the design is *exactly* the shipped `line` value — and
+it is the roll's canvas alone that shifts cool. That separation is the point: it
+distinguishes the thing you are editing from the tool you are editing it with,
+on the one surface users stare at longest.
 
 | Role | Value | Job |
 |---|---|---|
-| `gridLine` | `#232520` | beat lines, row separators |
-| `gridLineStrong` | `#34372F` | bar lines |
-| `rowShade` | `#191B17` | accidental pitch rows, alternating lanes |
-| `rowShadeInScale` | `#1F221B` | rows in the selected scale |
-| `noteFill` | `#50B8C6` | a note |
-| `noteSelected` | `#EDEEE8` | a selected note |
-| `noteGhost` | `#2E3128` | other instruments' notes, for context |
-| `playhead` | `#8E7DFF` | the transport cursor |
-| `canvasScrim` | `#131412` @ 55% | past the end of the pattern or arrangement |
-| `marqueeFill` | `#7C6CF0` @ 14% | lasso selection |
+| `rollCanvas` | `#1B1C20` | the piano roll's grid, cool by design |
+| `rowShade` | `#16181C` | accidental rows — *below* the canvas |
+| `rowShadeInScale` | `#232426` | in-scale rows — *above* it, so scale reads as a lift |
+| `gridLine` | `#24262A` | beat lines, row separators |
+| `gridLineStrong` | `#383B44` | bar lines |
+| `noteFill` | `#48BCD2` | a note |
+| `noteSelected` | `#E7ECF7` | a selected note |
+| `noteGhost` | `#2F3138` | other instruments' notes, for context |
+| `playhead` | `#9A8EFF` | the transport cursor |
+| `canvasScrim` | `#101210` @ 55% | past the end of the pattern or arrangement |
+| `marqueeFill` | `#7264E8` @ 14% | lasso selection |
 | `clipSelectedOutline` | `#B9AEFF` | instance highlighting (D-M6) |
 
 Two of these are derived rather than picked, and both live in `ColorTokens` so
@@ -85,12 +108,8 @@ not get a vote here.
 
 Checked as a test, not as a claim — `app/test/tokens_test.dart` computes WCAG
 relative luminance and fails the build below AA (4.5:1) for both text roles on
-all three surfaces. Measured ratios:
-
-| | `surfaceDeep` | `surfacePanel` | `surfaceRaised` |
-|---|---|---|---|
-| `textPrimary` | 14.7:1 | 13.4:1 | 10.9:1 |
-| `textMuted` | 7.0:1 | 6.4:1 | 5.2:1 |
+**all five** surfaces — text sits on every one of them, so every one is held to
+the same bar.
 
 ## Type (D10)
 

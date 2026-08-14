@@ -19,3 +19,6 @@ app/macos/Pods/
 # Test + capture artefacts
 artifacts/
 *.wav.actual
+# Golden-failure debug images. Written by `flutter test` on a mismatch and
+# useful for exactly as long as it takes to look at them.
+app/test/failures/

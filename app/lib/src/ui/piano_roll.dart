@@ -21,6 +21,7 @@ import 'controls.dart';
 import 'engine_controller.dart';
 import 'pattern_store.dart';
 import 'piano_roll_store.dart';
+import 'shortcuts.dart';
 
 /// The piano roll as the app uses it: takes the playhead from the live engine
 /// snapshot and delegates everything else to [PianoRollSurface].
@@ -103,27 +104,26 @@ class _PianoRollState extends State<PianoRollSurface> {
         if (_store.instrumentId.isEmpty) {
           return _EmptyRoll(tokens: tokens);
         }
-        return Shortcuts(
+        return ScopedShortcuts(
           shortcuts: _shortcuts,
-          child: Actions(
-            actions: _actions,
-            child: Focus(
-              focusNode: _focus,
-              autofocus: true,
-              child: Column(
+          handlers: _handlers,
+          extraActions: _navigationActions,
+          child: Focus(
+            // No autofocus. The shell holds the only one in the app; this takes
+            // focus on pointer-down inside the canvas, so switching to the roll
+            // does not silently steal the keyboard from a rename field.
+            focusNode: _focus,
+            child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  _PianoToolbar(
-                    store: _store,
-                    patterns: widget.patterns,
-                    onZoomToSelection: () => _store.zoomToSelection(
-                      viewportWidth: _canvasSize.width,
-                    ),
-                  ),
-                  Expanded(child: _buildCanvas(tokens)),
-                  _VelocityStrip(store: _store),
-                ],
-              ),
+              children: <Widget>[
+                _PianoToolbar(
+                  store: _store,
+                  patterns: widget.patterns,
+                  onZoomToSelection: _zoomToSelection,
+                ),
+                Expanded(child: _buildCanvas(tokens)),
+                _VelocityStrip(store: _store),
+              ],
             ),
           ),
         );
@@ -217,7 +217,7 @@ class _PianoRollState extends State<PianoRollSurface> {
   int _maybeSnap(int tick) => _snapOff ? tick : _store.snapDown(tick);
 
   void _onTapDown(TapDownDetails details) {
-    _focus.requestFocus();
+    FocusPolicy.takeUnlessTyping(_focus);
     final int tick = _tickAt(details.localPosition.dx);
     final int key = _keyAt(details.localPosition.dy);
     final SequenceNote? hit = _store.noteAt(tick, key);
@@ -251,7 +251,7 @@ class _PianoRollState extends State<PianoRollSurface> {
   }
 
   void _onPanStart(DragStartDetails details) {
-    _focus.requestFocus();
+    FocusPolicy.takeUnlessTyping(_focus);
     final int tick = _tickAt(details.localPosition.dx);
     final int key = _keyAt(details.localPosition.dy);
     _dragOriginTick = tick;
@@ -331,65 +331,52 @@ class _PianoRollState extends State<PianoRollSurface> {
 
   // ----- keyboard -----------------------------------------------------------
 
-  Map<ShortcutActivator, Intent> get _shortcuts =>
-      const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.keyB): _SetToolIntent(
-          PianoTool.draw,
-        ),
-        SingleActivator(LogicalKeyboardKey.keyV): _SetToolIntent(
-          PianoTool.select,
-        ),
-        SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
-        SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-            _DuplicateIntent(),
-        SingleActivator(LogicalKeyboardKey.keyJ, meta: true): _QuantiseIntent(),
-        SingleActivator(LogicalKeyboardKey.delete): _DeleteIntent(),
-        SingleActivator(LogicalKeyboardKey.backspace): _DeleteIntent(),
-        SingleActivator(LogicalKeyboardKey.escape): _CancelIntent(),
-        SingleActivator(LogicalKeyboardKey.arrowUp): _NudgeKeyIntent(1),
-        SingleActivator(LogicalKeyboardKey.arrowDown): _NudgeKeyIntent(-1),
-        SingleActivator(LogicalKeyboardKey.arrowUp, shift: true):
-            _NudgeKeyIntent(12),
-        SingleActivator(LogicalKeyboardKey.arrowDown, shift: true):
-            _NudgeKeyIntent(-12),
-        SingleActivator(LogicalKeyboardKey.arrowLeft): _NudgeTimeIntent(-1),
-        SingleActivator(LogicalKeyboardKey.arrowRight): _NudgeTimeIntent(1),
-      };
+  /// Registry-derived: the binding and the tooltip come from one declaration,
+  /// so a shortcut cannot promise something it does not do.
+  Map<ShortcutActivator, Intent> get _shortcuts => <ShortcutActivator, Intent>{
+    ...shortcutsForArea(ActionArea.pianoRoll),
+    // Navigation is not a registry action — it has no button, because a
+    // toolbar button for "nudge left" would be noise. These stay local.
+    const SingleActivator(LogicalKeyboardKey.arrowUp): const _NudgeKeyIntent(1),
+    const SingleActivator(LogicalKeyboardKey.arrowDown):
+        const _NudgeKeyIntent(-1),
+    const SingleActivator(LogicalKeyboardKey.arrowLeft):
+        const _NudgeTimeIntent(-1),
+    const SingleActivator(LogicalKeyboardKey.arrowRight):
+        const _NudgeTimeIntent(1),
+    const SingleActivator(LogicalKeyboardKey.delete): const RunActionIntent(
+      'piano.delete',
+    ),
+    const SingleActivator(LogicalKeyboardKey.escape): const CancelIntent(),
+  };
 
-  Map<Type, Action<Intent>> get _actions => <Type, Action<Intent>>{
-    _SetToolIntent: CallbackAction<_SetToolIntent>(
-      onInvoke: (_SetToolIntent intent) {
-        _store.setTool(intent.tool);
-        return null;
-      },
-    ),
-    _SelectAllIntent: CallbackAction<_SelectAllIntent>(
+  /// One entry per registry id the roll owns. The reachability test guarantees
+  /// each of these also has a visible control.
+  Map<String, VoidCallback> get _handlers => <String, VoidCallback>{
+    'piano.tool.draw': () => _store.setTool(PianoTool.draw),
+    'piano.tool.select': () => _store.setTool(PianoTool.select),
+    'piano.quantise': _store.quantiseSelection,
+    'piano.duplicate': _store.duplicateSelection,
+    'piano.delete': _store.deleteSelection,
+    'piano.selectAll': _store.selectAll,
+    'piano.transposeUp': () => _store.transposeSelection(12),
+    'piano.transposeDown': () => _store.transposeSelection(-12),
+    'piano.zoomToSelection': _zoomToSelection,
+  };
+
+  void _zoomToSelection() =>
+      _store.zoomToSelection(viewportWidth: _canvasSize.width);
+
+  Map<Type, Action<Intent>> get _navigationActions => <Type, Action<Intent>>{
+    CancelIntent: CallbackAction<CancelIntent>(
       onInvoke: (_) {
-        _store.selectAll();
-        return null;
-      },
-    ),
-    _DuplicateIntent: CallbackAction<_DuplicateIntent>(
-      onInvoke: (_) {
-        _store.duplicateSelection();
-        return null;
-      },
-    ),
-    _QuantiseIntent: CallbackAction<_QuantiseIntent>(
-      onInvoke: (_) {
-        _store.quantiseSelection();
-        return null;
-      },
-    ),
-    _DeleteIntent: CallbackAction<_DeleteIntent>(
-      onInvoke: (_) {
-        _store.deleteSelection();
-        return null;
-      },
-    ),
-    _CancelIntent: CallbackAction<_CancelIntent>(
-      onInvoke: (_) {
-        _store.cancelDrag();
+        // Escape unwinds one layer at a time: an in-flight drag first, then
+        // the selection. Never both at once, so it is always clear what it did.
+        if (_store.dragKind != PianoDragKind.none) {
+          _store.cancelDrag();
+        } else {
+          _store.clearSelection();
+        }
         return null;
       },
     ),
@@ -409,31 +396,6 @@ class _PianoRollState extends State<PianoRollSurface> {
       },
     ),
   };
-}
-
-class _SetToolIntent extends Intent {
-  const _SetToolIntent(this.tool);
-  final PianoTool tool;
-}
-
-class _SelectAllIntent extends Intent {
-  const _SelectAllIntent();
-}
-
-class _DuplicateIntent extends Intent {
-  const _DuplicateIntent();
-}
-
-class _QuantiseIntent extends Intent {
-  const _QuantiseIntent();
-}
-
-class _DeleteIntent extends Intent {
-  const _DeleteIntent();
-}
-
-class _CancelIntent extends Intent {
-  const _CancelIntent();
 }
 
 class _NudgeKeyIntent extends Intent {
@@ -724,7 +686,7 @@ class _GridPainter extends CustomPainter {
     required this.store,
     required this.patternLengthTicks,
     required this.rowHeight,
-  }) : _background = Paint()..color = tokens.color.surfaceDeep,
+  }) : _background = Paint()..color = tokens.color.rollCanvas,
        _rowShade = Paint()..color = tokens.color.rowShade,
        _rowInScale = Paint()..color = tokens.color.rowShadeInScale,
        _beatLine = Paint()

@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/ui/action_registry.dart';
 import 'package:onebeat/src/ui/arrangement_store.dart';
+import 'package:onebeat/src/ui/engine_controller.dart' show WorkspaceView;
 import 'package:onebeat/src/ui/clip_inspector.dart';
 import 'package:onebeat/src/ui/pattern_selector.dart';
 import 'package:onebeat/src/ui/pattern_store.dart';
@@ -78,6 +79,28 @@ void main() {
     );
 
     expectAreaReachable(ActionArea.clip);
+  });
+
+  testWidgets('every transport and view action is reachable from the chrome', (
+    WidgetTester tester,
+  ) async {
+    // The area that used to be exempt, and therefore the one where a
+    // keyboard-only action could hide. Undo had ⌘Z and no button, which is as
+    // unreachable as a right-click-only action to someone who does not already
+    // know it is there.
+    final Stage3Harness harness = Stage3Harness()..seedArrangement();
+
+    await tester.pumpWidget(
+      wrapForTest(
+        ShellChromeForTest(
+          patterns: harness.patterns,
+          activeView: WorkspaceView.arrangement,
+        ),
+        size: const Size(1600, 320),
+      ),
+    );
+
+    expectAreaReachable(ActionArea.transport);
   });
 
   testWidgets(

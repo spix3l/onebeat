@@ -15,11 +15,13 @@ import 'arrangement.dart';
 import 'controls.dart';
 import 'engine_controller.dart';
 import 'channel_rack.dart';
+import 'chrome.dart';
 import 'meter.dart';
 import 'pattern_selector.dart';
 import 'performance_overlay.dart';
 import 'piano_roll.dart';
 import 'plugin_list_debug.dart';
+import 'shortcuts.dart';
 import 'token_gallery.dart';
 import 'transport_readout.dart';
 
@@ -38,6 +40,7 @@ class _OneBeatShellState extends State<OneBeatShell>
   final FocusNode _rootFocus = FocusNode(debugLabel: 'shell');
   bool _showTokenGallery = false;
   bool _showPluginList = false;
+  bool _showShortcutSheet = false;
 
   @override
   void initState() {
@@ -85,113 +88,178 @@ class _OneBeatShellState extends State<OneBeatShell>
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
 
-    // Space is the transport, always. It is bound at the root of the shell and
-    // the chrome controls deliberately do not consume it, so it works no matter
-    // which control was clicked last (OB-1-11 AC).
-    return Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        SingleActivator(LogicalKeyboardKey.space): _TogglePlayIntent(),
-        SingleActivator(LogicalKeyboardKey.f8):
-            _TogglePerformanceOverlayIntent(),
-        SingleActivator(LogicalKeyboardKey.f9): _ToggleTokenGalleryIntent(),
-        SingleActivator(LogicalKeyboardKey.f10): _TogglePluginListIntent(),
-        SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
-            _UndoProjectIntent(),
-        SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
-            _RedoProjectIntent(),
+    // Global shortcuts: the transport, undo, and view switching. They live on
+    // the shell so they stay reachable from every editor — `Shortcuts` resolve
+    // up the tree, so an editor owning its own keys does not shadow these.
+    //
+    // Space is the transport, always. No control binds it, so it works no
+    // matter which one was clicked last (FR-UX-24). The typing-aware manager in
+    // ScopedShortcuts is what stops it inserting a space into a rename field.
+    return ScopedShortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        ...shortcutsForScope(ShortcutScope.global),
+        // Debug surfaces. Function keys, so they never collide with typing.
+        const SingleActivator(LogicalKeyboardKey.f8):
+            const _TogglePerformanceOverlayIntent(),
+        const SingleActivator(LogicalKeyboardKey.f9):
+            const _ToggleTokenGalleryIntent(),
+        const SingleActivator(LogicalKeyboardKey.f10):
+            const _TogglePluginListIntent(),
       },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          _TogglePlayIntent: CallbackAction<_TogglePlayIntent>(
-            onInvoke: (_) {
-              _controller.togglePlay();
-              return null;
-            },
-          ),
-          _TogglePerformanceOverlayIntent:
-              CallbackAction<_TogglePerformanceOverlayIntent>(
-                onInvoke: (_) {
-                  _controller.togglePerformanceOverlay();
-                  return null;
+      handlers: const <String, VoidCallback>{},
+      extraActions: <Type, Action<Intent>>{
+        TogglePlayIntent: CallbackAction<TogglePlayIntent>(
+          onInvoke: (_) {
+            _controller.togglePlay();
+            return null;
+          },
+        ),
+        ReturnToZeroIntent: CallbackAction<ReturnToZeroIntent>(
+          onInvoke: (_) {
+            _controller.client.seekFrames(0);
+            return null;
+          },
+        ),
+        UndoIntent: CallbackAction<UndoIntent>(
+          onInvoke: (_) {
+            _controller.undoProject();
+            return null;
+          },
+        ),
+        RedoIntent: CallbackAction<RedoIntent>(
+          onInvoke: (_) {
+            _controller.redoProject();
+            return null;
+          },
+        ),
+        ShowViewIntent: CallbackAction<ShowViewIntent>(
+          onInvoke: (ShowViewIntent intent) {
+            _controller.setView(switch (intent.index) {
+              1 => WorkspaceView.arrangement,
+              2 => WorkspaceView.rack,
+              _ => WorkspaceView.pianoRoll,
+            });
+            return null;
+          },
+        ),
+        CommandPaletteIntent: CallbackAction<CommandPaletteIntent>(
+          onInvoke: (_) {
+            setState(() => _showShortcutSheet = !_showShortcutSheet);
+            return null;
+          },
+        ),
+        _TogglePerformanceOverlayIntent:
+            CallbackAction<_TogglePerformanceOverlayIntent>(
+              onInvoke: (_) {
+                _controller.togglePerformanceOverlay();
+                return null;
+              },
+            ),
+        _ToggleTokenGalleryIntent: CallbackAction<_ToggleTokenGalleryIntent>(
+          onInvoke: (_) {
+            setState(() => _showTokenGallery = !_showTokenGallery);
+            return null;
+          },
+        ),
+        _TogglePluginListIntent: CallbackAction<_TogglePluginListIntent>(
+          onInvoke: (_) {
+            setState(() => _showPluginList = !_showPluginList);
+            return null;
+          },
+        ),
+      },
+      child: Focus(
+        // The one autofocus in the app. Editors take focus on interaction;
+        // two competing autofocus nodes is what made Space-to-play depend on
+        // build order.
+        focusNode: _rootFocus,
+        autofocus: true,
+        child: Container(
+          color: tokens.color.surfaceDeep,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              _TopBar(
+                controller: _controller,
+                onOpenShortcuts: () =>
+                    setState(() => _showShortcutSheet = true),
+              ),
+              // D-M6's notice sits directly under the chrome and above every
+              // editor: the warning belongs to the pattern being edited, not
+              // to whichever view happens to be open.
+              SharedPatternNoticeBar(
+                store: _controller.patterns,
+                onMakeUnique: (String clipId) {
+                  _controller.patterns.makeUnique(<String>[clipId]);
+                  _controller.refreshAll();
                 },
               ),
-          _ToggleTokenGalleryIntent: CallbackAction<_ToggleTokenGalleryIntent>(
-            onInvoke: (_) {
-              setState(() => _showTokenGallery = !_showTokenGallery);
-              return null;
-            },
-          ),
-          _TogglePluginListIntent: CallbackAction<_TogglePluginListIntent>(
-            onInvoke: (_) {
-              setState(() => _showPluginList = !_showPluginList);
-              return null;
-            },
-          ),
-          _UndoProjectIntent: CallbackAction<_UndoProjectIntent>(
-            onInvoke: (_) {
-              _controller.undoProject();
-              return null;
-            },
-          ),
-          _RedoProjectIntent: CallbackAction<_RedoProjectIntent>(
-            onInvoke: (_) {
-              _controller.redoProject();
-              return null;
-            },
-          ),
-        },
-        child: Focus(
-          focusNode: _rootFocus,
-          autofocus: true,
-          child: Container(
-            color: tokens.color.surfaceDeep,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _TopBar(controller: _controller),
-                // D-M6's notice sits directly under the chrome and above every
-                // editor: the warning belongs to the pattern being edited, not
-                // to whichever view happens to be open.
-                SharedPatternNoticeBar(
-                  store: _controller.patterns,
-                  onMakeUnique: (String clipId) {
-                    _controller.patterns.makeUnique(<String>[clipId]);
-                    _controller.refreshAll();
-                  },
-                ),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      if (!_showTokenGallery && !_showPluginList)
-                        PatternSelector(
-                          store: _controller.patterns,
-                          onOpenPattern: _controller.openPattern,
-                        ),
-                      Expanded(
-                        child: Stack(
-                          children: <Widget>[
-                            if (_showTokenGallery)
-                              const TokenGallery()
-                            else if (_showPluginList)
-                              PluginListDebugPanel(controller: _controller)
-                            else
-                              _buildWorkspace(),
-                            FrameTimingOverlay(controller: _controller),
-                          ],
-                        ),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    DestinationRail(
+                      destinations: _destinations,
+                      activeView: _controller.view,
+                      onSelectView: _controller.setView,
+                    ),
+                    if (!_showTokenGallery && !_showPluginList)
+                      PatternSelector(
+                        store: _controller.patterns,
+                        onOpenPattern: _controller.openPattern,
                       ),
-                    ],
-                  ),
+                    Expanded(
+                      child: Stack(
+                        children: <Widget>[
+                          if (_showTokenGallery)
+                            const TokenGallery()
+                          else if (_showPluginList)
+                            PluginListDebugPanel(controller: _controller)
+                          else
+                            _buildWorkspace(),
+                          FrameTimingOverlay(controller: _controller),
+                          if (_showShortcutSheet)
+                            ShortcutSheet(
+                              onDismiss: () =>
+                                  setState(() => _showShortcutSheet = false),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                _StatusBar(controller: _controller),
-              ],
-            ),
+              ),
+              _StatusBar(controller: _controller),
+            ],
           ),
         ),
       ),
     );
   }
+
+  /// The rail's destinations. `Packs` and `FX` have no view yet and render
+  /// disabled — an enabled tile that does nothing is worse than an honest one
+  /// that says "not yet" by being unclickable (FR-UX-13).
+  List<RailDestination> get _destinations => const <RailDestination>[
+    RailDestination(
+      actionId: 'view.playlist',
+      glyph: '▤',
+      label: 'Playlist',
+      view: WorkspaceView.arrangement,
+    ),
+    RailDestination(
+      actionId: 'view.channels',
+      glyph: '▥',
+      label: 'Channels',
+      view: WorkspaceView.rack,
+    ),
+    RailDestination(
+      actionId: 'view.pianoRoll',
+      glyph: '♪',
+      label: 'Piano',
+      view: WorkspaceView.pianoRoll,
+    ),
+  ];
 
   /// The three Stage 3 editors. All of them edit the same project through the
   /// same command bus, so switching between them is presentation only — no
@@ -216,10 +284,6 @@ class _OneBeatShellState extends State<OneBeatShell>
   };
 }
 
-class _TogglePlayIntent extends Intent {
-  const _TogglePlayIntent();
-}
-
 class _TogglePerformanceOverlayIntent extends Intent {
   const _TogglePerformanceOverlayIntent();
 }
@@ -232,18 +296,11 @@ class _TogglePluginListIntent extends Intent {
   const _TogglePluginListIntent();
 }
 
-class _UndoProjectIntent extends Intent {
-  const _UndoProjectIntent();
-}
-
-class _RedoProjectIntent extends Intent {
-  const _RedoProjectIntent();
-}
-
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.controller});
+  const _TopBar({required this.controller, required this.onOpenShortcuts});
 
   final EngineController controller;
+  final VoidCallback onOpenShortcuts;
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +309,7 @@ class _TopBar extends StatelessWidget {
       height: tokens.size.topBarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
       decoration: BoxDecoration(
-        color: tokens.color.surfacePanel,
+        color: tokens.color.surfaceSunken,
         border: Border(
           bottom: BorderSide(
             color: tokens.color.line,
@@ -262,82 +319,60 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
+          const BrandMark(version: 'v0.3 SEQUENCES'),
+          SizedBox(width: tokens.spacing.lg),
           AnimatedBuilder(
             animation: controller,
-            builder:
-                (BuildContext context, Widget? child) => Row(
-                  children: <Widget>[
-                    OneBeatButton(
-                      label: controller.snapshot.playing ? 'STOP' : 'PLAY',
-                      semanticLabel:
-                          controller.snapshot.playing
-                              ? 'Stop playback, space bar'
-                              : 'Start playback, space bar',
-                      active: controller.snapshot.playing,
-                      onPressed: controller.togglePlay,
-                    ),
-                    SizedBox(width: tokens.spacing.sm),
-                    OneBeatButton(
-                      label: 'RTZ',
-                      semanticLabel: 'Return to zero',
-                      onPressed: () => controller.client.seekFrames(0),
-                    ),
-                  ],
-                ),
+            builder: (BuildContext context, Widget? child) => TransportCluster(
+              playing: controller.snapshot.playing,
+              canUndo: controller.client.canUndoProject,
+              canRedo: controller.client.canRedoProject,
+              undoName: controller.client.undoProjectName,
+              redoName: controller.client.redoProjectName,
+              onTogglePlay: controller.togglePlay,
+              onUndo: controller.undoProject,
+              onRedo: controller.redoProject,
+              onReturnToZero: () => controller.client.seekFrames(0),
+            ),
           ),
-          SizedBox(width: tokens.spacing.xl),
+          SizedBox(width: tokens.spacing.lg),
+          // Three separate wells, as the design draws them: a value you read
+          // constantly should not have to be picked out of a strip.
           AnimatedBuilder(
             animation: controller,
-            builder:
-                (BuildContext context, Widget? child) => TempoField(
-                  tempo: controller.snapshot.tempoBpm,
-                  onChanged: controller.client.setTempo,
-                ),
-          ),
-          SizedBox(width: tokens.spacing.xs),
-          Text('BPM', style: tokens.type.label),
-          SizedBox(width: tokens.spacing.xl),
-          TransportReadout(controller: controller),
-          SizedBox(width: tokens.spacing.xl),
-          _ViewSwitcher(controller: controller),
-          const Spacer(),
-          MasterMeter.of(controller),
-        ],
-      ),
-    );
-  }
-}
-
-/// The design's view switcher: Playlist · Channels · Piano roll. Always shows
-/// all three, so the app's shape is legible before anything has been built.
-class _ViewSwitcher extends StatelessWidget {
-  const _ViewSwitcher({required this.controller});
-
-  final EngineController controller;
-
-  static const Map<WorkspaceView, String> _labels = <WorkspaceView, String>{
-    WorkspaceView.arrangement: 'PLAYLIST',
-    WorkspaceView.rack: 'CHANNELS',
-    WorkspaceView.pianoRoll: 'PIANO ROLL',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (BuildContext context, Widget? child) => Row(
-        children: <Widget>[
-          for (final MapEntry<WorkspaceView, String> entry in _labels.entries)
-            Padding(
-              padding: EdgeInsets.only(right: tokens.spacing.xs),
-              child: OneBeatButton(
-                label: entry.value,
-                semanticLabel: 'Show the ${entry.value.toLowerCase()} view',
-                active: controller.view == entry.key,
-                onPressed: () => controller.setView(entry.key),
+            builder: (BuildContext context, Widget? child) => ReadoutWell(
+              width: tokens.size.bpmFieldWidth,
+              label: 'BPM',
+              child: TempoField(
+                tempo: controller.snapshot.tempoBpm,
+                onChanged: controller.client.setTempo,
               ),
             ),
+          ),
+          SizedBox(width: tokens.spacing.sm),
+          ReadoutWell(
+            width: tokens.size.signatureWidth,
+            label: 'SIG',
+            child: Text('4/4', style: tokens.type.numeric),
+          ),
+          SizedBox(width: tokens.spacing.sm),
+          ReadoutWell(
+            width: tokens.size.clockWidth,
+            label: 'BAR · BEAT · TICK',
+            child: TransportReadout(controller: controller),
+          ),
+          SizedBox(width: tokens.spacing.lg),
+          SearchAffordance(onTap: onOpenShortcuts),
+          const Spacer(),
+          AnimatedBuilder(
+            animation: controller,
+            builder: (BuildContext context, Widget? child) => ViewSwitcher(
+              activeView: controller.view,
+              onSelect: controller.setView,
+            ),
+          ),
+          SizedBox(width: tokens.spacing.lg),
+          MasterMeter.of(controller),
         ],
       ),
     );
@@ -358,7 +393,7 @@ class _StatusBar extends StatelessWidget {
       height: tokens.size.statusBarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
       decoration: BoxDecoration(
-        color: tokens.color.surfacePanel,
+        color: tokens.color.surfaceSunken,
         border: Border(
           top: BorderSide(
             color: tokens.color.line,

@@ -64,14 +64,39 @@ happens, not just prose.
 |---|---|---|
 | Native ABI | `engine/tests/test_abi.cpp` | ABI 1.7 layout freeze; notes/patterns/lanes/clips behaviour; Make unique + undo restoring the share; argument validation. |
 | Stores | `app/test/stage3_store_test.dart` | 21 cases: gesture-per-drag, selection survival, quantise, marquee, viewport persistence, D-M6 once-per-session, usage counts, Make unique, clip transforms, lane reorder, event gate. |
-| FR-UX-17 | `app/test/action_reachability_test.dart` | Every registered action has a visible control, per editor, plus a permanent deliberate-violation case. |
+| FR-UX-17 | `app/test/action_reachability_test.dart` | Every registered action has a visible control, in all six areas including transport, plus a permanent deliberate-violation case. |
+| Keyboard | `app/test/shortcuts_test.dart` | Typing does not fire bare-key shortcuts; modified ones survive typing; focus is not stolen mid-edit; no two actions in an area share a key. |
 | Goldens | `app/test/stage3_golden_test.dart` | Piano roll and arrangement dark-theme surfaces. |
 | Perf | `app/test/stage3_paint_cost_test.dart` | 2,000-note roll and 200-clip arrangement inside the 120 Hz paint budget; painters allocate outside `paint()`. |
 | Integration | `app/test/stage3_exit_test.dart` | The v0.3 exit script against the real engine. |
 
-Full app suite: **56 tests green.** Engine suite green. `clang-format`,
+Full app suite: **70 tests green.** Engine suite green. `clang-format`,
 `clang-tidy` (Homebrew LLVM, now including `engine/src/abi`), `seam_check.sh`,
 `token_lint.py` and `flutter analyze` all clean.
+
+## Keyboard and focus
+
+The shortcut layer was rebuilt after the editors landed
+([`docs/keyboard-and-focus.md`](keyboard-and-focus.md)). Three real bugs were
+fixed, each now covered by a test that describes the symptom rather than the
+mechanism:
+
+- **Typing triggered tools.** Bare `B`/`V` still matched while a rename field
+  had focus, so naming a pattern "Bass" switched tools twice and the first
+  backspace deleted the selection. A typing-aware `ShortcutManager` suppresses
+  bare-key activators while text is being edited, and leaves modified ones alone.
+- **Two widgets both claimed the keyboard.** The shell and the piano roll each
+  had `autofocus: true`, so Space-to-play worked or not depending on build order.
+  There is now exactly one autofocus in the app.
+- **Tooltips could lie.** Display strings were hand-typed beside bindings. The
+  activator is now the source of truth and the display string is derived, so
+  they cannot drift — one entry had been claiming `⌥drag`, which is not a
+  shortcut at all.
+
+Actions also gained visible controls where they had only keys: undo and redo had
+`⌘Z` and no button, which is as unreachable as a right-click-only action to
+someone who does not already know it exists. The reachability test now covers
+the transport area too, which is where that gap had been hiding.
 
 ## Two bugs the new tests caught
 
@@ -100,19 +125,26 @@ CPU cost is measured against the 8.33 ms budget and guarded in CI (see
 ProMotion hardware, ADR-001 §Amendment's D3 reversal is the response — this is a
 strategy question, not a UI defect.
 
-### The palette diverges from the design screens
+### The palette question — asked, then answered, and my first read was wrong
 
-The design screens (`onebeat-shell.html`, `onebeat-piano.html`) render a cool
-neutral black; the shipped tokens are PRD §8.1.1's warm neutral
-(`surfaceDeep #131412`). Stage 3 aligned **layout, structure and interaction**
-with the screens — view switcher, pattern selector with usage badges, keyboard
-sidebar, scale highlighting, velocity strip, lane headers, ruler, clip inspector
-— and left the base palette alone, because §8.1.1 is normative and retinting the
-whole app is an owner decision rather than a side effect of building the piano
-roll. New canvas tokens were added inside the existing family.
+I originally reported that the design screens rendered a *cool neutral black*
+against §8.1.1's warm neutral, and asked the owner to choose. That read came
+from eyeballing a downscaled screenshot and it was **wrong**.
 
-**Owner decision needed:** adopt the design screens' cooler palette (a change to
-PRD §8.1.1 and one token block), or keep §8.1.1 and update the design screens.
+Sampling the screens properly (PIL, per-region) showed the chrome is the warm
+neutral §8.1.1 always specified — `#3A3D37` in the design is *exactly* the
+shipped `line` token. What the screens actually add is:
+
+- **two more surface levels**, not a different hue: a *sunken* `#101210` for the
+  top and status bars (chrome sits below the work in depth, not above it), and
+  an *overlay* `#2A2D27` for hover and selection, which with only three levels
+  had to share a colour — so hovering a row looked like selecting it;
+- **a cool cast on the piano roll's canvas alone** (`#1B1C20`), which separates
+  the thing you are editing from the tool you are editing it with.
+
+All of that is now implemented, and the tokens are sampled values rather than
+transcriptions. No PRD §8.1.1 change is needed; the table there was right, just
+incomplete. Recorded in [`docs/design-tokens.md`](design-tokens.md).
 
 ### Smaller follow-ups
 
@@ -130,5 +162,4 @@ PRD §8.1.1 and one token block), or keep §8.1.1 and update the design screens.
 - [ ] Owner runs the manual screen-captured demo (OB-3-15 §1).
 - [ ] Owner confirms the 120 Hz criteria on ProMotion hardware, or accepts D1a
       carrying into Stage 4.
-- [ ] Owner rules on the palette question above.
 - [ ] Stage 4 (EPIC-4) breakdown scheduled.

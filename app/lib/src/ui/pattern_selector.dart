@@ -232,7 +232,7 @@ class _PatternRowState extends State<_PatternRow> {
             color: pattern.isCurrent
                 ? tokens.color.accent
                 : _hovered
-                ? tokens.color.surfaceRaised
+                ? tokens.color.surfaceOverlay
                 : null,
             child: Row(
               children: <Widget>[

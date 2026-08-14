@@ -15,9 +15,11 @@ import 'package:flutter/widgets.dart';
 @immutable
 class ColorTokens {
   const ColorTokens({
+    required this.surfaceSunken,
     required this.surfaceDeep,
     required this.surfacePanel,
     required this.surfaceRaised,
+    required this.surfaceOverlay,
     required this.line,
     required this.textPrimary,
     required this.textMuted,
@@ -31,6 +33,7 @@ class ColorTokens {
     required this.danger,
     required this.gridLine,
     required this.gridLineStrong,
+    required this.rollCanvas,
     required this.rowShade,
     required this.rowShadeInScale,
     required this.noteFill,
@@ -42,14 +45,24 @@ class ColorTokens {
     required this.clipSelectedOutline,
   });
 
-  /// Deepest background: the window itself.
+  /// Recessed: the top bar and anything that reads as an input well. The
+  /// design screens put the chrome *below* the canvas in depth, not above it,
+  /// which is why this is darker than [surfaceDeep] rather than lighter.
+  final Color surfaceSunken;
+
+  /// The canvas: arrangement, rack and roll backgrounds.
   final Color surfaceDeep;
 
   /// Panels sitting on the deep surface.
   final Color surfacePanel;
 
-  /// Controls and cards raised above a panel.
+  /// Controls and cards raised above a panel: the left rail, toolbar wells.
   final Color surfaceRaised;
+
+  /// The topmost level: chips, hover and selected rows, and popup menus. The
+  /// design screens use five surface levels, not three, and collapsing them was
+  /// why hover states used to read as "selected".
+  final Color surfaceOverlay;
 
   /// Hairlines and separators.
   final Color line;
@@ -78,8 +91,15 @@ class ColorTokens {
   final Color gridLine;
   final Color gridLineStrong;
 
-  /// Alternating pitch-row shading, and the lighter shade for rows that are in
-  /// the selected scale (OB-3-10 §1).
+  /// The piano roll's canvas. Deliberately cooler than the chrome, which is
+  /// how the design screens separate "the thing you are editing" from "the
+  /// tool you are editing it with" — the roll is the only surface that does
+  /// this, and it is the one users stare at longest.
+  final Color rollCanvas;
+
+  /// Banding on the roll, both relative to [rollCanvas]: accidental rows sit
+  /// *below* it and in-scale rows *above* it, so the scale reads as a lift
+  /// rather than as a second colour (OB-3-10 §1).
   final Color rowShade;
   final Color rowShadeInScale;
 
@@ -215,6 +235,21 @@ class SizeTokens {
   double get viewSwitcherHeight => 34;
   double get noticeHeight => 34;
   double get swatchSize => 18;
+
+  /// The left icon rail from the design screens: a fixed column of destination
+  /// tiles down the window's left edge.
+  double get railWidth => 60;
+  double get railTileSize => 44;
+  double get railGlyphSize => 20;
+
+  /// Top-bar readouts. The design shows BPM, time signature and the
+  /// BAR·BEAT·TICK clock as three separate wells rather than one strip.
+  double get readoutHeight => 34;
+  double get bpmFieldWidth => 108;
+  double get signatureWidth => 74;
+  double get clockWidth => 208;
+  double get searchWidth => 200;
+  double get brandWidth => 148;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW
@@ -271,6 +306,17 @@ class TypeTokens {
     color: textMuted,
   );
 
+  /// The wordmark. Wide-tracked and uppercase, which is the one place in the
+  /// app where letter-spacing is a deliberate identity choice rather than a
+  /// readability one.
+  TextStyle get brand => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 1.2,
+    color: textPrimary,
+  );
+
   /// Dense chrome labels use the condensed width axis of Archivo.
   TextStyle get labelDense => label.copyWith(
     fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
@@ -315,13 +361,19 @@ class OneBeatTokens {
   static const OneBeatTokens _dark = OneBeatTokens(
     brightness: Brightness.dark,
     color: ColorTokens(
-      surfaceDeep: Color(0xFF131412),
-      surfacePanel: Color(0xFF1D1F1C),
-      surfaceRaised: Color(0xFF2A2C28),
+      // Sampled from the design screens rather than transcribed by eye. The
+      // family is the warm neutral PRD §8.1.1 always specified; what the
+      // screens add is a fifth level — a *sunken* surface for the top bar and
+      // input wells — and slightly lighter panel and raised steps.
+      surfaceSunken: Color(0xFF101210),
+      surfaceDeep: Color(0xFF161814),
+      surfacePanel: Color(0xFF1B1D1A),
+      surfaceRaised: Color(0xFF20231F),
+      surfaceOverlay: Color(0xFF2A2D27),
       line: Color(0xFF3A3D37),
       textPrimary: _textPrimaryDark,
       textMuted: _textMutedDark,
-      accent: Color(0xFF7C6CF0),
+      accent: Color(0xFF7264E8),
       accentMuted: Color(0xFF4A417F),
       meterLow: Color(0xFF4CAF6A),
       meterMid: Color(0xFFE0A83C),
@@ -333,16 +385,17 @@ class OneBeatTokens {
       // family: the design screens render a cooler black, but §8.1.1 is
       // normative and retinting the whole app is an owner decision, not a
       // side effect of building the piano roll.
-      gridLine: Color(0xFF232520),
-      gridLineStrong: Color(0xFF34372F),
-      rowShade: Color(0xFF191B17),
-      rowShadeInScale: Color(0xFF1F221B),
-      noteFill: Color(0xFF50B8C6),
-      noteSelected: Color(0xFFEDEEE8),
-      noteGhost: Color(0xFF2E3128),
-      playhead: Color(0xFF8E7DFF),
-      canvasScrim: Color(0x8C131412),
-      marqueeFill: Color(0x247C6CF0),
+      gridLine: Color(0xFF24262A),
+      gridLineStrong: Color(0xFF383B44),
+      rollCanvas: Color(0xFF1B1C20),
+      rowShade: Color(0xFF16181C),
+      rowShadeInScale: Color(0xFF232426),
+      noteFill: Color(0xFF48BCD2),
+      noteSelected: Color(0xFFE7ECF7),
+      noteGhost: Color(0xFF2F3138),
+      playhead: Color(0xFF9A8EFF),
+      canvasScrim: Color(0x8C101210),
+      marqueeFill: Color(0x247264E8),
       clipSelectedOutline: Color(0xFFB9AEFF),
     ),
     type: TypeTokens(textPrimary: _textPrimaryDark, textMuted: _textMutedDark),

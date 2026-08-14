@@ -44,8 +44,8 @@ class _OneBeatButtonState extends State<OneBeatButton> {
         widget.active && enabled
             ? tokens.color.accent
             : _hovered
-            ? tokens.color.surfaceRaised
-            : tokens.color.surfacePanel;
+            ? tokens.color.surfaceOverlay
+            : tokens.color.surfaceRaised;
     final Color foreground =
         !enabled
             ? tokens.color.textMuted
@@ -146,8 +146,8 @@ class _OneBeatToggleState extends State<OneBeatToggle> {
     final Color background = widget.value
         ? active
         : _hovered
-        ? tokens.color.surfaceRaised
-        : tokens.color.surfacePanel;
+        ? tokens.color.surfaceOverlay
+        : tokens.color.surfaceRaised;
 
     return Semantics(
       button: true,
@@ -261,7 +261,7 @@ class _OneBeatSelectState<T> extends State<OneBeatSelect<T>> {
                   ),
                   padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
                   decoration: BoxDecoration(
-                    color: tokens.color.surfaceRaised,
+                    color: tokens.color.surfaceOverlay,
                     borderRadius: tokens.radius.panelBorder,
                     border: Border.all(
                       color: tokens.color.line,
@@ -302,8 +302,8 @@ class _OneBeatSelectState<T> extends State<OneBeatSelect<T>> {
               padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
               decoration: BoxDecoration(
                 color: _hovered
-                    ? tokens.color.surfaceRaised
-                    : tokens.color.surfacePanel,
+                    ? tokens.color.surfaceOverlay
+                    : tokens.color.surfaceRaised,
                 borderRadius: tokens.radius.controlBorder,
                 border: Border.all(
                   color: tokens.color.line,
@@ -469,7 +469,7 @@ class _StepButton extends StatelessWidget {
           height: tokens.size.iconSize * 1.4,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: tokens.color.surfacePanel,
+            color: tokens.color.surfaceRaised,
             borderRadius: tokens.radius.controlBorder,
             border: Border.all(
               color: tokens.color.line,

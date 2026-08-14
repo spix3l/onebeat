@@ -5,6 +5,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/ui/arrangement.dart';
+import 'package:onebeat/src/ui/chrome.dart';
+import 'package:onebeat/src/ui/engine_controller.dart' show WorkspaceView;
 import 'package:onebeat/src/ui/arrangement_store.dart';
 import 'package:onebeat/src/ui/pattern_store.dart';
 import 'package:onebeat/src/ui/piano_roll.dart';
@@ -112,4 +114,64 @@ class _ArrangementHost extends StatelessWidget {
     positionTicks: 0,
     onOpenPattern: (_, _) {},
   );
+}
+
+
+/// The shell's chrome, assembled from the *same* widgets the shell uses.
+///
+/// Deliberately not a copy of the top bar: a reachability test that checked a
+/// lookalike would keep passing while the real chrome lost a control. What it
+/// leaves out is only the parts that need a live engine — the meter and the
+/// clock — because neither carries an action.
+class ShellChromeForTest extends StatelessWidget {
+  const ShellChromeForTest({
+    required this.patterns,
+    required this.activeView,
+    super.key,
+  });
+
+  final PatternStore patterns;
+  final WorkspaceView activeView;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        DestinationRail(
+          destinations: const <RailDestination>[
+            RailDestination(
+              actionId: 'view.playlist',
+              glyph: '▤',
+              label: 'Playlist',
+              view: WorkspaceView.arrangement,
+            ),
+            RailDestination(
+              actionId: 'view.channels',
+              glyph: '▥',
+              label: 'Channels',
+              view: WorkspaceView.rack,
+            ),
+            RailDestination(
+              actionId: 'view.pianoRoll',
+              glyph: '♪',
+              label: 'Piano',
+              view: WorkspaceView.pianoRoll,
+            ),
+          ],
+          activeView: activeView,
+          onSelectView: (_) {},
+        ),
+        TransportCluster(
+          playing: false,
+          canUndo: true,
+          canRedo: true,
+          onTogglePlay: () {},
+          onUndo: () {},
+          onRedo: () {},
+          onReturnToZero: () {},
+        ),
+        SearchAffordance(onTap: () {}),
+      ],
+    );
+  }
 }

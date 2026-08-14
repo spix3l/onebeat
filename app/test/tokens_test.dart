@@ -33,9 +33,13 @@ void main() {
 
   group('WCAG AA contrast on every surface', () {
     final Map<String, Color> surfaces = <String, Color>{
+      // All five levels the design uses, not just the three the app started
+      // with: text sits on every one of them, so every one has to clear AA.
+      'surfaceSunken': tokens.color.surfaceSunken,
       'surfaceDeep': tokens.color.surfaceDeep,
       'surfacePanel': tokens.color.surfacePanel,
       'surfaceRaised': tokens.color.surfaceRaised,
+      'surfaceOverlay': tokens.color.surfaceOverlay,
     };
 
     for (final MapEntry<String, Color> surface in surfaces.entries) {
@@ -81,9 +85,11 @@ void main() {
     const OneBeatTokens light = OneBeatTokens(
       brightness: Brightness.light,
       color: ColorTokens(
+        surfaceSunken: Color(0xFFE4E4E0),
         surfaceDeep: Color(0xFFFFFFFF),
         surfacePanel: Color(0xFFF2F2F0),
         surfaceRaised: Color(0xFFE8E8E4),
+        surfaceOverlay: Color(0xFFDCDCD6),
         line: Color(0xFFCFCFC9),
         textPrimary: Color(0xFF16170F),
         textMuted: Color(0xFF5A5C54),
@@ -97,6 +103,7 @@ void main() {
         danger: Color(0xFFB63030),
         gridLine: Color(0xFFE2E2DC),
         gridLineStrong: Color(0xFFC9C9C2),
+        rollCanvas: Color(0xFFF7F7FA),
         rowShade: Color(0xFFEDEDE8),
         rowShadeInScale: Color(0xFFE4E9DE),
         noteFill: Color(0xFF2F8C99),
