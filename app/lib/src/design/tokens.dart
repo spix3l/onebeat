@@ -207,6 +207,29 @@ class ColorTokens {
   /// has to write `Color(0x00000000)` to switch a border off (FR-UX-02).
   Color get none => const Color(0x00000000);
 
+  /// The danger family beyond the plain [danger] ink (UI-B-11, UI-C-11).
+  ///
+  /// A contained failure has to read as *contained*: the crashed extension row
+  /// and the crash card are outlined and washed, never filled. A filled red
+  /// panel says "your project is on fire", and the whole point of the copy
+  /// inside it is that nothing is.
+  Color get dangerWash => danger.withValues(alpha: 0.08);
+  Color get dangerMuted => danger.withValues(alpha: 0.45);
+
+  /// The accent at outline strength — a selected-but-not-active border, and
+  /// the tint behind a dock target while a panel is mid-drag (UI-C-12).
+  Color get accentOutline => accent.withValues(alpha: 0.7);
+
+  /// A dragged panel's ghost: the accent at the strength that still lets the
+  /// arrangement under it show through, because what you are aiming at is what
+  /// matters, not what you are holding.
+  Color get dragGhostFill => accent.withValues(alpha: 0.10);
+
+  /// The drop shadow under a floating window. Windows are the one surface in
+  /// the app that is allowed a shadow — it is what says "this is above the
+  /// document" when every other panel is flush with it.
+  Color get windowShadow => const Color(0x73000000);
+
   /// Ink on a clip. Clip fills are user identity colours and always bright, so
   /// their label is dark — the canvas colour, which is the darkest thing the
   /// eye already associates with "behind". [clipInkMuted] is the same ink at
@@ -628,6 +651,84 @@ class SizeTokens {
   double get dialogHeaderHeight => 48;
   double get menuItemHeight => 28;
   double get checkboxSize => 16;
+
+  /// Shared overlay chrome (UI-B-11), measured off `screens/workspace-window.png`
+  /// and `screens/ext-manager.png`.
+  ///
+  /// A popover is 280 wide because that is what the LAYOUTS menu needs for
+  /// `Reset to default` plus its icon gutter; the Tools menu in the extension
+  /// manager is wider because its rows carry a right-aligned shortcut.
+  double get popoverWidth => 280;
+  double get popoverWideWidth => 336;
+  double get popoverRowHeight => 32;
+  double get popoverIconGutter => 26;
+  double get popoverSectionHeight => 26;
+
+  /// A floating window's title bar, and the square icon buttons in it.
+  double get windowHeaderHeight => 38;
+  double get windowIconButton => 22;
+  double get windowShadowBlur => 32;
+  double get windowShadowOffset => 8;
+
+  /// The generic button (UI-B-11): one height for every variant, so a row of
+  /// mixed primary/secondary/danger buttons shares a baseline.
+  double get buttonHeight => 30;
+  double get buttonLargeHeight => 40;
+  double get buttonMinWidth => 72;
+
+  /// The empty state (UI-B-11 §3): the hairline icon tile above the heading,
+  /// and the prose column the body wraps inside.
+  double get emptyTileSize => 92;
+  double get emptyGlyphSize => 34;
+  double get emptyProseWidth => 640;
+
+  /// The extension manager (UI-C-11), measured off `screens/ext-manager.png`.
+  ///
+  /// The list is a fixed 334px column against a detail panel that takes the
+  /// rest — the list is a table of contents and never earns more width, and
+  /// the capability rows below it are the widest thing on the screen.
+  double get extListWidth => 334;
+  double get extRowHeight => 48;
+  double get extRowTileSize => 30;
+  double get extDetailTileSize => 44;
+
+  /// Capability and binding rows: two different rhythms on purpose. A
+  /// capability is scanned as a column of yes/no, a binding is read as a
+  /// sentence, so the binding row is the taller of the two.
+  double get extCapabilityRowHeight => 32;
+  double get extBindingRowHeight => 36;
+  double get extCapabilityMarkSize => 20;
+
+  /// The pill switch that enables an extension, and the `CRASHED` tag beside
+  /// the one that is off because it failed.
+  double get extSwitchWidth => 34;
+  double get extSwitchHeight => 18;
+  double get extSwitchKnobSize => 14;
+  double get extCrashTagWidth => 62;
+
+  /// A docked extension panel (`screens/ext-panel.png`): the header strip every
+  /// panel shares, and the parameter rows inside the extension's own surface.
+  double get panelHeaderHeight => 30;
+  double get panelGripWidth => 18;
+  double get panelParamRowHeight => 20;
+  double get panelParamLabelWidth => 70;
+  double get panelParamTrackHeight => 7;
+  double get panelListRowHeight => 42;
+  double get panelMeterWellHeight => 350;
+
+  /// Workspace overlays (UI-C-12), measured off `screens/workspace-window.png`
+  /// and `screens/workspace-drag.png`.
+  double get layoutsPillWidth => 168;
+  double get detachedWindowWidth => 668;
+  double get detachedWindowHeight => 760;
+
+  /// A dock target chip and the ghost of the panel being dragged onto it.
+  double get dockChipHeight => 22;
+  double get dockChipMinWidth => 68;
+  double get dockTabCardWidth => 220;
+  double get dockTabCardHeight => 58;
+  double get dockTabTileSize => 24;
+  double get dragGhostHeaderHeight => 26;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW
@@ -952,6 +1053,96 @@ class TypeTokens {
       numeric.copyWith(fontSize: 15, letterSpacing: -0.5);
   TextStyle get numericSmall =>
       numeric.copyWith(fontSize: 11, color: textMuted);
+
+  /// An empty state's headline (UI-B-11 §3). The largest UI type in the app —
+  /// an empty screen has one job, and this is where it says it.
+  TextStyle get emptyHeading => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 26,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.2,
+    color: textPrimary,
+  );
+
+  /// The prose under it: bigger than [body] and generously leaded, because it
+  /// is the one block of running text a user actually reads rather than scans.
+  /// Bold runs inside it take [proseStrong].
+  TextStyle get prose => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.55,
+    color: textSecondary,
+  );
+
+  TextStyle get proseStrong =>
+      prose.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
+
+  /// A popover or overlay row (UI-B-11 §6) and the dim shortcut trailing it.
+  TextStyle get menuRow => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    color: textSecondary,
+  );
+
+  TextStyle get menuRowActive =>
+      menuRow.copyWith(fontWeight: FontWeight.w600, color: textPrimary);
+
+  /// A floating window's title, and the dim `· Drums Bus selected` beside it.
+  TextStyle get windowTitle => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+  );
+
+  TextStyle get windowSubtitle => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    color: textMuted,
+  );
+
+  /// [microCaps] with the tracking a right-aligned column header needs to read
+  /// as a header rather than as a value (`WHAT IT CAN DO TO YOUR PROJECT`).
+  TextStyle get microCapsWide => microCaps.copyWith(letterSpacing: 1.4);
+
+  /// An extension's name in the list, and the dim meta line under it. The meta
+  /// mixes prose and mono (`by @luma · v1.2.0 · bound to ⇧⌘H`) — it renders as
+  /// mono throughout so the version numbers down the column line up.
+  TextStyle get extName => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+  );
+
+  TextStyle get extMeta => TextStyle(
+    fontFamily: numericFamily,
+    fontSize: 9,
+    fontWeight: FontWeight.w400,
+    fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+    color: textMuted,
+  );
+
+  /// The detail panel's title — one step up from [extName], because it names
+  /// the thing the whole lower half of the screen is describing.
+  TextStyle get extDetailName => TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+    color: textPrimary,
+  );
+
+  /// The `GROOVE FETCHER CRASHED — CONTAINED & DISABLED` line, and the
+  /// `CRASHED` tag on the row it refers to.
+  TextStyle get dangerCaps => const TextStyle(
+    fontFamily: uiFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.6,
+  );
 }
 
 /// The resolved token set for one theme.

@@ -19,8 +19,8 @@
 
 ## Acceptance criteria
 
-- [ ] Both goldens match the mockups (popover open state included in `workspace_window_dark` exactly as the PNG shows both at once).
-- [ ] No store/engine imports; analyze + token lint + tests clean.
+- [x] Both goldens match the mockups (popover open state included in `workspace_window_dark` exactly as the PNG shows both at once).
+- [x] No store/engine imports; analyze + token lint + tests clean.
 
 ## Out of scope
 
