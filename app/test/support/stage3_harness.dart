@@ -8,15 +8,14 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/core/action_registry.dart';
+import 'package:onebeat/src/core/pattern_store.dart';
 import 'package:onebeat/src/design/tokens.dart';
-import 'package:onebeat/src/ui/arrangement.dart';
-import 'package:onebeat/src/ui/chrome.dart';
-import 'package:onebeat/src/ui/icons.dart';
-import 'package:onebeat/src/ui/engine_controller.dart' show WorkspaceView;
-import 'package:onebeat/src/ui/arrangement_store.dart';
-import 'package:onebeat/src/ui/pattern_store.dart';
-import 'package:onebeat/src/ui/piano_roll.dart';
-import 'package:onebeat/src/ui/piano_roll_store.dart';
+import 'package:onebeat/src/features/piano_roll/piano_roll_binding.dart';
+import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart'
+    hide ticksPerBar, ticksPerQuarter, GridChoice;
+import 'package:onebeat/src/features/playlist/playlist_binding.dart';
+import 'package:onebeat/src/features/playlist/playlist_store.dart';
 
 import 'fake_stage3_client.dart';
 
@@ -50,11 +49,6 @@ Widget wrapForTest(Widget child, {Size size = const Size(1200, 800)}) {
 }
 
 /// Loads the app's two real font families into the test binding.
-///
-/// Without this, every glyph is the test fallback's fixed-width box, which is
-/// far wider than Archivo or MartianMono. Goldens then record blocks instead of
-/// text, and any test that asks "does this fit?" measures a font the app does
-/// not ship. Call once from `main`, before the tests.
 Future<void> loadAppFonts() async {
   TestWidgetsFlutterBinding.ensureInitialized();
   const Map<String, String> families = <String, String>{
@@ -72,12 +66,6 @@ Future<void> loadAppFonts() async {
 }
 
 /// Pumps [child] in the app chrome at a window of [size].
-///
-/// Use this rather than `pumpWidget(wrapForTest(...))`. The test surface is
-/// 800×600 by default, so a `SizedBox` asking for anything larger is simply
-/// clipped: the widget lays out into a window it never gets, and a golden
-/// records the top-left 800×600 of it with the rest of the frame blank. Every
-/// size in these tests was a lie until the view was resized to match.
 Future<void> pumpForTest(
   WidgetTester tester,
   Widget child, {
@@ -127,96 +115,22 @@ class Stage3Harness {
     patterns.refresh();
   }
 
-  Widget buildPianoRoll() => _PianoRollHost(harness: this);
+  Widget buildPianoRoll() => PianoRollBinding(client: client);
 
-  Widget buildArrangement() => _ArrangementHost(harness: this);
+  Widget buildArrangement() => PlaylistBinding(client: client);
 }
 
-/// The editors take an `EngineController` only for the snapshot and the
-/// transport. Tests that do not need either get these thin hosts, which supply
-/// a stationary playhead — a moving one would make goldens flaky.
-class _PianoRollHost extends StatelessWidget {
-  const _PianoRollHost({required this.harness});
+/// Key used to locate a control associated with a specific action ID in tests.
+Key actionKey(String actionId) => ValueKey<String>('action:$actionId');
 
-  final Stage3Harness harness;
-
-  @override
-  Widget build(BuildContext context) => PianoRollSurface(
-    store: harness.pianoRoll,
-    patterns: harness.patterns,
-    positionTicks: 0,
-  );
-}
-
-class _ArrangementHost extends StatelessWidget {
-  const _ArrangementHost({required this.harness});
-
-  final Stage3Harness harness;
-
-  @override
-  Widget build(BuildContext context) => ArrangementSurface(
-    store: harness.arrangement,
-    patterns: harness.patterns,
-    positionTicks: 0,
-    onOpenPattern: (_, _) {},
-  );
-}
-
-/// The shell's chrome, assembled from the *same* widgets the shell uses.
-///
-/// Deliberately not a copy of the top bar: a reachability test that checked a
-/// lookalike would keep passing while the real chrome lost a control. What it
-/// leaves out is only the parts that need a live engine — the meter and the
-/// clock — because neither carries an action.
-class ShellChromeForTest extends StatelessWidget {
-  const ShellChromeForTest({
-    required this.patterns,
-    required this.activeView,
-    super.key,
-  });
-
-  final PatternStore patterns;
-  final WorkspaceView activeView;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: <Widget>[
-        DestinationRail(
-          destinations: const <RailDestination>[
-            RailDestination(
-              actionId: 'view.playlist',
-              icon: OneBeatIconData.playlist,
-              label: 'Playlist',
-              view: WorkspaceView.arrangement,
-            ),
-            RailDestination(
-              actionId: 'view.channels',
-              icon: OneBeatIconData.channels,
-              label: 'Channels',
-              view: WorkspaceView.rack,
-            ),
-            RailDestination(
-              actionId: 'view.pianoRoll',
-              icon: OneBeatIconData.piano,
-              label: 'Piano',
-              view: WorkspaceView.pianoRoll,
-            ),
-          ],
-          activeView: activeView,
-          onSelectView: (_) {},
-        ),
-        TransportCluster(
-          playing: false,
-          canUndo: true,
-          canRedo: true,
-          onTogglePlay: () {},
-          onUndo: () {},
-          onRedo: () {},
-          onReturnToZero: () {},
-        ),
-        SearchAffordance(onTap: () {}),
-      ],
+/// Asserts that all actions in [area] have visible controls with corresponding keys.
+void expectAreaReachable(ActionArea area) {
+  for (final UiAction action in ActionRegistry.forArea(area)) {
+    if (action.id.isEmpty) continue;
+    expect(
+      find.byKey(actionKey(action.id)),
+      findsAtLeastNWidgets(1),
+      reason: 'Action ${action.id} in area ${area.label} must be reachable',
     );
   }
 }

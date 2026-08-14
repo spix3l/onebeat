@@ -8,8 +8,10 @@
 // calls, which is how "a drag is one undo entry" is tested at this level.
 import 'package:onebeat/src/engine/engine_client.dart';
 
-class FakeStage3Client
-    implements NoteClient, PatternClient, ArrangementClient {
+class FakeStage3Client implements EngineClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+
   FakeStage3Client() {
     patterns['pat_a'] = MutablePattern(
       id: 'pat_a',

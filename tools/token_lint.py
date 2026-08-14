@@ -5,8 +5,8 @@
 checked. This fails the build on a literal colour or a raw dimension in widget
 code, and names the line.
 
-Scope: app/lib/src/ui/**, app/lib/src/ui_kit/**, app/lib/src/core/**,
-app/lib/src/features/**, app/lib/src/stock_plugins/**, and app/lib/main.dart.
+Scope: app/lib/src/ui_kit/**, app/lib/src/core/**, app/lib/src/features/**,
+and app/lib/main.dart.
 The token definitions themselves (app/lib/src/design/) and generated code are
 exempt — they are where the numbers are allowed to live.
 
@@ -22,11 +22,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LINT_ROOTS = [
-    REPO_ROOT / "app" / "lib" / "src" / "ui",
     REPO_ROOT / "app" / "lib" / "src" / "ui_kit",
     REPO_ROOT / "app" / "lib" / "src" / "core",
     REPO_ROOT / "app" / "lib" / "src" / "features",
-    REPO_ROOT / "app" / "lib" / "src" / "stock_plugins",
     REPO_ROOT / "app" / "lib" / "main.dart",
 ]
 EXEMPT_DIRS = {"design", "generated"}

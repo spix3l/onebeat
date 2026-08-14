@@ -3,7 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
-import 'package:onebeat/src/ui/meter_state.dart';
+import 'package:onebeat/src/core/meter_state.dart';
 
 EngineSnapshot snapshotAt(int nanos, double peak) => EngineSnapshot(
   playing: true,

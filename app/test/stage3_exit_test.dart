@@ -15,10 +15,11 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/core/pattern_store.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
-import 'package:onebeat/src/ui/arrangement_store.dart';
-import 'package:onebeat/src/ui/pattern_store.dart';
-import 'package:onebeat/src/ui/piano_roll_store.dart';
+import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart'
+    hide ticksPerBar, ticksPerQuarter, GridChoice;
+import 'package:onebeat/src/features/playlist/playlist_store.dart';
 
 /// The stock instrument the repo builds. Used rather than a scanned third-party
 /// plug-in so the script is hermetic: it needs a real CLAP with a note input,

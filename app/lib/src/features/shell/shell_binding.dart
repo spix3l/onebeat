@@ -1,4 +1,4 @@
-// ShellBinding — wires the shell presentation to the core engine (UI-D-01).
+// ShellBinding — wires the shell presentation to the core engine (UI-D-01..UI-D-08).
 //
 // Owns the mapping from the engine snapshot to the ShellScreenVm. Listens to
 // the core EngineController, formats readouts, routes transport commands and
@@ -16,7 +16,11 @@ import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../browser/browser_panel.dart';
 import '../channel_rack/rack_binding.dart';
+import '../export/export_binding.dart';
+import '../mixer/mixer_binding.dart';
 import '../piano_roll/piano_roll_binding.dart';
+import '../playlist/playlist_binding.dart';
+import '../preferences/preferences_binding.dart';
 import 'menu_bar.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
@@ -24,13 +28,6 @@ import 'shell_screen_vm.dart';
 import 'side_rail.dart';
 import 'status_bar.dart';
 import 'transport_bar.dart';
-
-// TODO(UI-D-09): Temporary imports for un-migrated workspace surfaces.
-import '../../ui/arrangement.dart' as old_ui;
-import '../../ui/engine_controller.dart' as old_ui;
-import '../../ui/export_dialog.dart' as old_ui;
-import '../../ui/mixer_view.dart' as old_ui;
-import '../../ui/preferences_dialog.dart' as old_ui;
 
 class ShellBinding extends StatefulWidget {
   const ShellBinding({
@@ -54,9 +51,6 @@ class _ShellBindingState extends State<ShellBinding>
   int _activeRailIndex = 0;
   bool _showExportDialog = false;
   bool _showPreferencesDialog = false;
-
-  // TODO(UI-D-09): Bridge controller for temporary old workspace surfaces.
-  old_ui.EngineController? _oldUiController;
 
   static const List<RailItemVm> _railItems = <RailItemVm>[
     RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
@@ -88,38 +82,11 @@ class _ShellBindingState extends State<ShellBinding>
         );
     _controller.addListener(_onControllerChanged);
 
-    // TODO(UI-D-09): Initialize temporary old store bridge for embedded surfaces.
-    _initOldUiBridge();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       stdout.writeln(
         'onebeat: shell usable in ${startupStopwatch.elapsedMilliseconds} ms',
       );
     });
-  }
-
-  void _initOldUiBridge() {
-    // TODO(UI-D-09): Remove when feature stores migrate in UI-D-02..D-05.
-    try {
-      final old_ui.EngineController bridge = old_ui.EngineController(
-        client: widget.client,
-        vsync: this,
-        motion: OneBeatTokens.dark().motion,
-      );
-      _oldUiController = bridge;
-      bridge.library.load();
-      bridge.rack.load();
-      bridge.patterns.load();
-      bridge.arrangement.load();
-    } catch (_) {
-      // If store loads fail on test fakes, bridge is kept so it gets disposed.
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _controller.frameStats.syncToDisplay(View.of(context));
   }
 
   @override
@@ -128,93 +95,63 @@ class _ShellBindingState extends State<ShellBinding>
     if (widget.controller == null) {
       _controller.dispose();
     }
-    _oldUiController?.dispose();
     _rootFocus.dispose();
     super.dispose();
   }
 
   void _onControllerChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  String _formatPosition(EngineSnapshot snapshot) {
-    final int bar = snapshot.bar;
-    final int beat = snapshot.beat;
-    final int tick = snapshot.tick;
-    return '${bar.toString().padLeft(2, '0')}:'
-        '${beat.toString().padLeft(2, '0')}:'
-        '${tick.toString().padLeft(3, '0')}';
-  }
-
-  String _formatBpm(EngineSnapshot snapshot) {
-    return snapshot.tempoBpm.toStringAsFixed(2);
-  }
-
-  String _formatClock() {
-    final DateTime now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    if (mounted) setState(() {});
   }
 
   void _onRailSelect(int index) {
-    setState(() {
-      _activeRailIndex = index;
-      if (_oldUiController != null) {
-        _oldUiController!.setView(switch (index) {
-          0 => old_ui.WorkspaceView.arrangement,
-          1 => old_ui.WorkspaceView.rack,
-          2 => old_ui.WorkspaceView.pianoRoll,
-          3 => old_ui.WorkspaceView.mixer,
-          _ => old_ui.WorkspaceView.arrangement,
-        });
-      }
-    });
+    if (index >= 0 && index < _railItems.length) {
+      setState(() => _activeRailIndex = index);
+    }
   }
 
   void _onMenuTap(int index) {
     switch (index) {
       case 0: // File
-        break;
-      case 1: // Edit
-        break;
-      case 2: // Pattern
-        _onRailSelect(1);
-      case 3: // View
+        setState(() => _showExportDialog = true);
         break;
       case 4: // Tools
-        break;
-      case 5: // Mixer
-        _onRailSelect(3);
       case 6: // Window
-        break;
-      case 7: // Help
+        setState(() => _showPreferencesDialog = true);
         break;
     }
   }
 
   ShellScreenVm _buildVm() {
     final EngineSnapshot snapshot = _controller.snapshot;
-    final double leftLevel = dbToFraction(_controller.meter.left.levelDb);
-    final double rightLevel = dbToFraction(_controller.meter.right.levelDb);
 
-    final ObMenuBarVm menuBarVm = ObMenuBarVm(
-      menus: _menus,
-      clock: _formatClock(),
-      activeIndex: null,
-    );
+    final String bpmText = snapshot.tempoBpm.toStringAsFixed(2);
+    const String sigText = '4/4';
+
+    final int bar = snapshot.bar.clamp(1, 9999);
+    final int beat = snapshot.beat.clamp(1, 4);
+    final int tick = snapshot.tick.clamp(0, 959);
+    final String positionText =
+        '${bar.toString().padLeft(2, '0')}:${beat.toString().padLeft(2, '0')}:${tick.toString().padLeft(3, '0')}';
+
+    final double meterLeft = dbToFraction(_controller.meter.left.levelDb);
+    final double meterRight = dbToFraction(_controller.meter.right.levelDb);
 
     final ObTransportBarVm transportVm = ObTransportBarVm(
       title: 'ONEBEAT',
       subtitle: 'v0.3 SEQUENCES',
       playing: snapshot.playing,
       looping: snapshot.loopEnabled,
-      bpmText: _formatBpm(snapshot),
-      sigText: '4/4',
-      positionText: _formatPosition(snapshot),
-      meterLeft: leftLevel.clamp(0.0, 1.0),
-      meterRight: rightLevel.clamp(0.0, 1.0),
-      searchHint: 'Search actions',
+      bpmText: bpmText,
+      sigText: sigText,
+      positionText: positionText,
+      meterLeft: meterLeft,
+      meterRight: meterRight,
+      searchHint: 'Action, shortcut, instrument, note…',
+    );
+
+    const ObMenuBarVm menuBarVm = ObMenuBarVm(
+      menus: _menus,
+      clock: '14:02',
     );
 
     final ObSideRailVm railVm = ObSideRailVm(
@@ -223,20 +160,21 @@ class _ShellBindingState extends State<ShellBinding>
       separatorBefore: 4,
     );
 
+    final double cpuPercent = (snapshot.cpuLoad * 100.0).clamp(0.0, 100.0);
+    final double sampleRateKhz = snapshot.sampleRate / 1000.0;
+    final double latencyMs =
+        (snapshot.latencyFramesRoundTrip / snapshot.sampleRate) * 1000.0;
+
+    final String leftDetail =
+        'CoreAudio · ${sampleRateKhz.toStringAsFixed(1)} kHz · ${snapshot.blockFrames} spl · ${latencyMs.toStringAsFixed(1)} ms';
+
     final ObStatusBarVm statusVm = ObStatusBarVm(
-      tone: _controller.status.isNotEmpty
-          ? StatusTone.warning
-          : (snapshot.playing ? StatusTone.ok : StatusTone.ok),
-      primary: _controller.status.isNotEmpty
-          ? 'Notice'
-          : (snapshot.playing ? 'Playing' : 'Ready'),
+      tone: snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
+      primary: snapshot.playing ? 'Playing' : 'Ready',
       details: <String>[
-        if (_controller.status.isNotEmpty)
-          _controller.status
-        else ...<String>[
-          'Buffer ${snapshot.blockFrames}',
-          '${snapshot.latencyMilliseconds.toStringAsFixed(1)} ms',
-        ],
+        leftDetail,
+        '${cpuPercent.toStringAsFixed(0)}% CPU',
+        '${snapshot.activeVoices} voices',
       ],
       rightHint: '⌘K Search actions',
     );
@@ -314,7 +252,6 @@ class _ShellBindingState extends State<ShellBinding>
                 vm: vm,
                 workspace: _WorkspaceSlot(
                   activeRailIndex: _activeRailIndex,
-                  oldUiController: _oldUiController,
                   coreController: _controller,
                   onSelectRail: _onRailSelect,
                 ),
@@ -328,11 +265,15 @@ class _ShellBindingState extends State<ShellBinding>
                 onExport: () => setState(() => _showExportDialog = true),
               ),
               if (_showExportDialog)
-                old_ui.ExportAudioDialog(
+                ExportBinding(
+                  client: widget.client,
+                  controller: _controller,
                   onClose: () => setState(() => _showExportDialog = false),
                 ),
               if (_showPreferencesDialog)
-                old_ui.PreferencesDialog(
+                PreferencesBinding(
+                  client: widget.client,
+                  controller: _controller,
                   onClose: () => setState(() => _showPreferencesDialog = false),
                 ),
             ],
@@ -347,31 +288,23 @@ class _ShellBindingState extends State<ShellBinding>
 class _WorkspaceSlot extends StatelessWidget {
   const _WorkspaceSlot({
     required this.activeRailIndex,
-    required this.oldUiController,
     required this.coreController,
     required this.onSelectRail,
   });
 
   final int activeRailIndex;
-  final old_ui.EngineController? oldUiController;
   final core.EngineController coreController;
   final ValueChanged<int> onSelectRail;
 
   @override
   Widget build(BuildContext context) {
-    final old_ui.EngineController? bridge = oldUiController;
-    if (bridge == null) {
-      return const SizedBox.expand();
-    }
-
-    // TODO(UI-D-09): Replaced as Phase D wiring lands for each surface (UI-D-02..D-05).
     return switch (activeRailIndex) {
-      0 => old_ui.ArrangementView(
-          controller: bridge,
-          store: bridge.arrangement,
-          patterns: bridge.patterns,
-          onOpenPattern: (String patternId, String clipId) =>
-              bridge.openPattern(patternId, fromClipId: clipId),
+      0 => PlaylistBinding(
+          client: coreController.client,
+          controller: coreController,
+          onOpenPattern: (String patternId, String clipId) {
+            onSelectRail(2);
+          },
         ),
       1 => RackBinding(
           client: coreController.client,
@@ -386,7 +319,10 @@ class _WorkspaceSlot extends StatelessWidget {
           controller: coreController,
           onBackToPlaylist: () => onSelectRail(0),
         ),
-      3 => old_ui.MixerRoutingView(controller: bridge),
+      3 => MixerBinding(
+          client: coreController.client,
+          controller: coreController,
+        ),
       _ => const SizedBox.expand(),
     };
   }

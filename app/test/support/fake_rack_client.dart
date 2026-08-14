@@ -1,6 +1,9 @@
 import 'package:onebeat/src/engine/engine_client.dart';
 
-class FakeRackClient implements RackClient {
+class FakeRackClient implements EngineClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+
   RackPattern pattern = const RackPattern(
     id: 'pattern',
     name: 'Pattern 1',
@@ -54,6 +57,28 @@ class FakeRackClient implements RackClient {
 
   @override
   List<RackRow> readRackRows() => rows;
+
+  @override
+  List<PatternSummary> readPatterns() => const <PatternSummary>[];
+
+  @override
+  List<ProjectInstrument> readInstruments() => const <ProjectInstrument>[
+        ProjectInstrument(
+          id: 'kick',
+          name: 'Kick 808',
+          color: '#EF6F91',
+          order: 0,
+          pluginId: 'sampler',
+          pluginName: 'Sampler',
+          pluginVendor: 'OneBeat',
+          pluginPath: '/plugins/sampler',
+          muted: false,
+          selected: true,
+          affectedPatterns: 1,
+          affectedClips: 0,
+          affectedNotes: 0,
+        ),
+      ];
 
   @override
   void redoProject() => redoCalls++;

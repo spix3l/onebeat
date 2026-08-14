@@ -1,17 +1,4 @@
-// The shell, assembled and driven — the test that was missing (OB-3-14 §1).
-//
-// Every widget test in this suite pumped one editor at a time, so two failures
-// that make the app unusable both shipped green:
-//
-//   1. A layout exception in the top bar. Nothing under it could lay out and
-//      the app launched as a black window.
-//   2. The rail and the workspace read `controller.view` without listening to
-//      anything, so clicking a rail tile moved the top bar's switcher and left
-//      the editor behind it on the previous view.
-//
-// Neither is subtle in the running app and neither was visible to a test that
-// never built the whole tree. This builds it, against the real engine with the
-// null audio backend, and drives the rail.
+// The shell, assembled and driven (OB-3-14 §1, UI-D-01..UI-D-09).
 @Tags(<String>['integration'])
 library;
 
@@ -21,12 +8,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
-import 'package:onebeat/src/ui/action_registry.dart';
-import 'package:onebeat/src/ui/arrangement.dart';
-import 'package:onebeat/src/ui/channel_rack.dart';
-import 'package:onebeat/src/ui/mixer_view.dart';
-import 'package:onebeat/src/ui/piano_roll.dart';
-import 'package:onebeat/src/ui/shell.dart';
+import 'package:onebeat/src/features/channel_rack/rack_binding.dart';
+import 'package:onebeat/src/features/mixer/mixer_binding.dart';
+import 'package:onebeat/src/features/piano_roll/piano_roll_binding.dart';
+import 'package:onebeat/src/features/playlist/playlist_binding.dart';
+import 'package:onebeat/src/features/shell/shell_binding.dart';
+import 'package:onebeat/src/ui_kit/rail_button.dart';
 
 import 'support/stage3_harness.dart';
 
@@ -73,7 +60,7 @@ void main() {
         textDirection: TextDirection.ltr,
         child: OneBeatTheme(
           tokens: OneBeatTokens.dark(),
-          child: OneBeatShell(client: client),
+          child: ShellBinding(client: client),
         ),
       ),
     );
@@ -89,7 +76,7 @@ void main() {
       await pumpShell(tester, size: size);
       expect(tester.takeException(), isNull);
       // The playlist, as the design screens open on.
-      expect(find.byType(ArrangementView), findsOneWidget);
+      expect(find.byType(PlaylistBinding), findsOneWidget);
     });
   }
 
@@ -98,25 +85,23 @@ void main() {
   ) async {
     await pumpShell(tester, size: const Size(1440, 900));
 
-    // Each rail tile carries its action id as a key, which is how the
-    // reachability test finds them too.
-    Future<void> tapRail(String actionId) async {
-      await tester.tap(find.byKey(actionKey(actionId)));
-      await tester.pump();
-    }
+    // Rail buttons: 0=Playlist, 1=Channels, 2=Piano, 3=Mixer
+    await tester.tap(find.byType(ObRailButton).at(1));
+    await tester.pump();
+    expect(find.byType(RackBinding), findsOneWidget);
+    expect(find.byType(PlaylistBinding), findsNothing);
 
-    await tapRail('view.channels');
-    expect(find.byType(ChannelRack), findsOneWidget);
-    expect(find.byType(ArrangementView), findsNothing);
+    await tester.tap(find.byType(ObRailButton).at(2));
+    await tester.pump();
+    expect(find.byType(PianoRollBinding), findsOneWidget);
 
-    await tapRail('view.pianoRoll');
-    expect(find.byType(PianoRoll), findsOneWidget);
+    await tester.tap(find.byType(ObRailButton).at(3));
+    await tester.pump();
+    expect(find.byType(MixerBinding), findsOneWidget);
 
-    await tapRail('view.mixer');
-    expect(find.byType(MixerRoutingView), findsOneWidget);
-
-    await tapRail('view.playlist');
-    expect(find.byType(ArrangementView), findsOneWidget);
+    await tester.tap(find.byType(ObRailButton).at(0));
+    await tester.pump();
+    expect(find.byType(PlaylistBinding), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

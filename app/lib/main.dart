@@ -12,11 +12,6 @@ import 'src/design/tokens.dart';
 import 'src/engine/engine_client.dart';
 import 'src/engine/engine_library.dart';
 import 'src/features/shell/shell_binding.dart';
-import 'src/ui/shell.dart';
-
-/// Boot flag: controls whether the application launches with the new UI shell
-/// (UI-D-01) or falls back to the legacy shell until UI-D-09.
-const bool kUseNewUi = bool.fromEnvironment('OB_NEW_UI', defaultValue: true);
 
 /// Time from Dart entry to a window the user can act on. NFR-04 puts a five
 /// second ceiling on cold start with a large plug-in library, and the only way
@@ -109,9 +104,7 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
               message: _failure ?? 'The engine could not start.',
             );
           }
-          return kUseNewUi
-              ? ShellBinding(client: client)
-              : OneBeatShell(client: client);
+          return ShellBinding(client: client);
         },
       ),
     );

@@ -130,9 +130,6 @@ class _FakePianoRollEngineClient extends FakeStage3Client implements EngineClien
 
   @override
   List<RackRow> readRackRows() => const <RackRow>[];
-
-  @override
-  void noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 void main() {

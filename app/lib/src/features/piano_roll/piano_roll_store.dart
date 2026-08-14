@@ -83,9 +83,11 @@ String keyName(int key) =>
 enum PianoDragKind { none, draw, move, resize, marquee, velocity }
 
 class PianoRollStore extends ChangeNotifier {
-  PianoRollStore(this._client);
+  PianoRollStore(this._client, [this._patterns]);
 
   final EngineClient _client;
+  // ignore: unused_field
+  final Object? _patterns;
 
   /// Which instrument's sequence is being edited.
   String instrumentId = '';

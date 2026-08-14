@@ -721,6 +721,8 @@ class SizeTokens {
   double get layoutsPillWidth => 168;
   double get detachedWindowWidth => 668;
   double get detachedWindowHeight => 760;
+  double get pluginWindowWidth => 440;
+  double get pluginWindowHeight => 340;
 
   /// A dock target chip and the ghost of the panel being dragged onto it.
   double get dockChipHeight => 22;

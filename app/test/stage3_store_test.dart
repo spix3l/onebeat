@@ -4,10 +4,12 @@
 // undo entry, the D-M6 notice appears once per pattern per session, Make unique
 // diverges one clip and leaves the other alone, and clip transforms round-trip.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/core/pattern_store.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
-import 'package:onebeat/src/ui/arrangement_store.dart';
-import 'package:onebeat/src/ui/pattern_store.dart';
-import 'package:onebeat/src/ui/piano_roll_store.dart';
+import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart'
+    hide ticksPerBar, ticksPerQuarter;
+import 'package:onebeat/src/features/playlist/playlist_store.dart'
+    hide GridChoice, ticksPerBar, ticksPerQuarter;
 
 import 'support/stage3_harness.dart';
 

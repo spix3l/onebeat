@@ -7,8 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
-import 'package:onebeat/src/ui/action_registry.dart';
-import 'package:onebeat/src/ui/shortcuts.dart';
+import 'package:onebeat/src/core/action_registry.dart';
+import 'package:onebeat/src/core/shortcuts.dart';
 
 import 'support/stage3_harness.dart';
 
