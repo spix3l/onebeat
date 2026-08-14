@@ -1,13 +1,25 @@
-// ObToggleChip behaviour (visual states are on the core-controls board
-// golden).
+// ObToggleChip: behaviour + a golden of M/S on and off states.
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/ui_kit/toggle_chip.dart';
 
 import '../support/ui_harness.dart';
-import 'package:flutter/widgets.dart';
 
 void main() {
   setUpAll(loadAppFonts);
+
+  testWidgets('renders every state as the golden', (WidgetTester tester) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    await pumpUi(
+      tester,
+      _ToggleChipStates(spacing: tokens.spacing.xs),
+      size: const Size(160, 80),
+      center: true,
+    );
+    await tester.pumpAndSettle();
+    await expectLater(find.byType(_ToggleChipStates), uiGolden('toggle_chip'));
+  });
 
   testWidgets('fires onTap when tapped', (WidgetTester tester) async {
     int fired = 0;
@@ -43,4 +55,25 @@ void main() {
     expect(find.text('M'), findsOneWidget);
     expect(find.text('S'), findsOneWidget);
   });
+}
+
+class _ToggleChipStates extends StatelessWidget {
+  const _ToggleChipStates({required this.spacing});
+
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        ObToggleChip(tone: ObToggleTone.mute, on: true, onTap: () {}),
+        SizedBox(width: spacing),
+        ObToggleChip(tone: ObToggleTone.solo, on: true, onTap: () {}),
+        SizedBox(width: spacing),
+        ObToggleChip(tone: ObToggleTone.mute, on: false, onTap: () {}),
+        SizedBox(width: spacing),
+        ObToggleChip(tone: ObToggleTone.solo, on: false, onTap: () {}),
+      ],
+    );
+  }
 }

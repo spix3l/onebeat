@@ -1,12 +1,31 @@
-// ObDropdown behaviour (visual states are on the core-controls board golden).
+// ObDropdown: behaviour + a golden of the closed field and the open popover
+// menu with its checked row.
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/ui_kit/dropdown.dart';
 
 import '../support/ui_harness.dart';
-import 'package:flutter/widgets.dart';
 
 void main() {
   setUpAll(loadAppFonts);
+
+  testWidgets('renders closed and open as the golden', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    await pumpUi(
+      tester,
+      _DropdownStates(spacing: tokens.spacing.lg),
+      size: const Size(400, 200),
+      center: true,
+    );
+    await tester.pumpAndSettle();
+    // Open the second field so the popover menu is part of the golden.
+    await tester.tap(find.text('C minor').first);
+    await tester.pumpAndSettle();
+    await expectLater(find.byType(_DropdownStates), uiGolden('dropdown'));
+  });
 
   testWidgets('opens, selects and reports the choice', (
     WidgetTester tester,
@@ -54,4 +73,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Audio 1'), findsNothing);
   });
+}
+
+class _DropdownStates extends StatelessWidget {
+  const _DropdownStates({required this.spacing});
+
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const ObDropdown(
+          label: 'SNAP',
+          value: '1/4 step',
+          items: <String>['none', '1/2 step', '1/4 step'],
+        ),
+        SizedBox(width: spacing),
+        const ObDropdown(
+          label: 'SCALE',
+          value: 'C minor',
+          items: <String>['C minor', 'C major', 'chromatic'],
+        ),
+      ],
+    );
+  }
 }

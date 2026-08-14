@@ -1,7 +1,9 @@
 # `ui_kit` golden tests
 
-Component goldens live here (one file per component ticket, plus the harness
-smoke golden). Two rules keep every golden in this folder consistent:
+Component goldens live here — one test file per component, mirroring
+`lib/src/ui_kit/` one-to-one (plus the harness smoke golden). Each component's
+golden shows it in every state on a `surfaceSunken` background. Two rules keep
+every golden in this folder consistent:
 
 1. Every test starts with `setUpAll(loadAppFonts)` — real Archivo and
    Martian Mono, not the test fallback's fixed-width boxes.
