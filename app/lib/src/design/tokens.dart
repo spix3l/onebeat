@@ -344,6 +344,15 @@ class SizeTokens {
   double get railTileSize => 44;
   double get railGlyphSize => 20;
 
+  /// The hairline rule the rail draws above its last destination (UI-B-03).
+  /// Inset from both edges so it reads as a grouping mark rather than as a
+  /// second panel border.
+  double get railSeparatorWidth => 28;
+
+  /// The status bar's tone dot: bigger than a chip dot because it is the one
+  /// thing in the bar a user reads at a glance from across the desk.
+  double get statusDotSize => 8;
+
   /// Top-bar readouts. The design shows BPM, time signature and the
   /// BAR·BEAT·TICK clock as three separate wells rather than one strip.
   double get readoutHeight => 34;
@@ -523,6 +532,15 @@ class TypeTokens {
     color: textMuted,
     fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
   );
+
+  /// The rebuilt rail's caption (UI-B-01/03). One step below [railLabel]: the
+  /// mockup fits `CHANNELS` inside the 42px tile, and 9px cannot — it wraps to
+  /// `CHANNEL/S`, which is the same tell [railLabel] was written to avoid, one
+  /// size down. The old chrome keeps [railLabel] until UI-D-09 deletes it.
+  /// Tracking comes down with the size: at [railLabel]'s 0.6 the longest
+  /// caption still overruns its tile by a letter.
+  TextStyle get railCaption =>
+      railLabel.copyWith(fontSize: 8, letterSpacing: 0.3);
 
   /// Tag labels (PAT, AUD, AUTO).
   TextStyle get tag => TextStyle(
