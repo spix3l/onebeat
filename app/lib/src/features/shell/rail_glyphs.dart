@@ -1,8 +1,9 @@
 // Painted glyphs for the left rail (UI-B-03).
 //
-// The rail's five destinations carry the shapes the mockups draw: a grid for
-// the playlist, a circled query mark for the channel rack, a beamed note pair
-// for the piano roll, a slider stack for the mixer and a folder for packs.
+// The rail's project destinations carry the shapes the mockups draw: a grid
+// for the playlist, a circled query mark for the channel rack, a beamed note
+// pair for the piano roll, a slider stack for the mixer, and a folder glyph
+// retained for other shell surfaces that need one.
 // They are painted rather than typed because neither shipped family carries
 // them, and because a destination icon that changes weight with the font would
 // break the rail's rhythm.
@@ -17,8 +18,7 @@ import '../../design/tokens.dart';
 /// Which rail destination glyph to paint.
 ///
 /// [script] and [extension] are the two destinations the extension screens add
-/// to the rail (UI-C-11): `screens/ext-manager.png` reduces it to PLAYLIST,
-/// SCRIPT, EXTNS, PACKS. They are here rather than in the extensions feature
+/// to the rail (UI-C-11). They are here rather than in the extensions feature
 /// because the rail is shell chrome, and a rail whose glyphs came from two
 /// places would drift in weight the first time either was touched.
 enum ObRailGlyphKind { grid, help, note, sliders, folder, script, extension }

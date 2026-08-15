@@ -18,6 +18,7 @@ class ShellScreenVm {
     required this.rail,
     required this.status,
     this.browser,
+    this.browserWidth = 240,
   });
 
   final ObMenuBarVm? menuBar;
@@ -25,4 +26,7 @@ class ShellScreenVm {
   final ObSideRailVm rail;
   final ObBrowserPanelVm? browser;
   final ObStatusBarVm status;
+
+  /// Shell-owned width so the panel keeps its size when switching views.
+  final double browserWidth;
 }

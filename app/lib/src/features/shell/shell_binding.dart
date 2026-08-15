@@ -3,6 +3,7 @@
 // Owns the mapping from the engine snapshot to the ShellScreenVm. Listens to
 // the core EngineController, formats readouts, routes transport commands and
 // handles workspace navigation.
+import 'dart:async';
 import 'dart:io' show stdout;
 
 import 'package:flutter/services.dart';
@@ -15,6 +16,8 @@ import '../../core/shortcuts.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../browser/browser_panel.dart';
+import '../browser/sample_pack.dart';
+import '../browser/sample_pack_platform.dart';
 import '../channel_rack/rack_binding.dart';
 import '../export/export_binding.dart';
 import '../mixer/mixer_binding.dart';
@@ -28,12 +31,16 @@ import 'side_rail.dart';
 import 'status_bar.dart';
 import 'transport_bar.dart';
 
+/// The workspace index of the piano roll. It sits *past* the rail's items
+/// (Channels, Playlist, Mixer) because the piano roll is opened from a channel
+/// or a clip rather than from the rail, and the rail keeps highlighting
+/// whichever view you came from. Library-level so the shell and the workspace
+/// switch below cannot drift apart: when they did, opening the piano roll fell
+/// through to the empty default and rendered a black screen.
+const int _pianoRollIndex = 3;
+
 class ShellBinding extends StatefulWidget {
-  const ShellBinding({
-    required this.client,
-    this.controller,
-    super.key,
-  });
+  const ShellBinding({required this.client, this.controller, super.key});
 
   final EngineClient client;
   final core.EngineController? controller;
@@ -51,9 +58,16 @@ class _ShellBindingState extends State<ShellBinding>
   int _lastRailIndex = 0;
   bool _showExportDialog = false;
   bool _showPreferencesDialog = false;
+  double _browserWidth = 240;
+  String _browserSearchQuery = '';
+  double _browserScrollOffset = 0;
 
   List<BrowserNodeVm> _browserNodes = const <BrowserNodeVm>[];
+  List<SamplePack> _samplePacks = const <SamplePack>[];
+  final SamplePackPlatform _samplePackPlatform = SamplePackPlatform();
   final Map<String, bool> _browserExpanded = <String, bool>{};
+  String? _samplePackMessage;
+  AudioFileDrop? _audioFileDrop;
   int _framesSinceBrowserRefresh = 0;
   int _builtinsGeneration = -1;
   List<PluginListing> _builtins = const <PluginListing>[];
@@ -62,19 +76,17 @@ class _ShellBindingState extends State<ShellBinding>
   // The channel rack is the composition home; the arrangement is secondary.
   // Piano roll is not a rail destination — it is opened from the rack or
   // playlist and returns to wherever it was opened from (index 4, hidden).
-  static const int _pianoRollIndex = 4;
-
   static const List<RailItemVm> _railItems = <RailItemVm>[
     RailItemVm(icon: ObRailGlyphKind.help, label: 'Channels'),
     RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.sliders, label: 'Mixer'),
-    RailItemVm(icon: ObRailGlyphKind.folder, label: 'Packs'),
   ];
 
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ??
+    _controller =
+        widget.controller ??
         core.EngineController(
           client: widget.client,
           vsync: this,
@@ -89,10 +101,16 @@ class _ShellBindingState extends State<ShellBinding>
     });
 
     _browserNodes = _buildBrowserNodes();
+    _samplePackPlatform.setDropHandler(
+      onFolders: _onFoldersDropped,
+      onAudioFiles: _onAudioFilesDropped,
+    );
+    unawaited(_restoreSamplePacks());
   }
 
   @override
   void dispose() {
+    _samplePackPlatform.clearDropHandler();
     _controller.removeListener(_onControllerChanged);
     if (widget.controller == null) {
       _controller.dispose();
@@ -128,14 +146,101 @@ class _ShellBindingState extends State<ShellBinding>
 
   List<PluginListing> _readBuiltins() {
     final PluginScanStatus status = _controller.client.readPluginScanStatus();
-    if (status.pluginCount > 0 && status.listGeneration != _builtinsGeneration) {
+    if (status.pluginCount > 0 &&
+        status.listGeneration != _builtinsGeneration) {
       _builtinsGeneration = status.listGeneration;
-      _builtins = _controller.client
-          .readPluginList(status.pluginCount)
-          .where((PluginListing p) => p.isUsable)
-          .toList();
+      _builtins =
+          _controller.client
+              .readPluginList(status.pluginCount)
+              .where((PluginListing p) => p.isUsable)
+              .toList();
     }
     return _builtins;
+  }
+
+  Future<void> _restoreSamplePacks() async {
+    final List<String> paths = await _samplePackPlatform.loadFolders();
+    for (final String path in paths) {
+      await _importSamplePack(path, persist: false);
+    }
+  }
+
+  Future<void> _onAddFolder() async {
+    final String? path = await _samplePackPlatform.pickFolder();
+    if (path != null) await _importSamplePack(path);
+  }
+
+  void _onFoldersDropped(List<String> paths) {
+    unawaited(() async {
+      for (final String path in paths) {
+        await _importSamplePack(path);
+      }
+    }());
+  }
+
+  void _onAudioFilesDropped(AudioFileDrop drop) {
+    // Finder drops are routed to the active Playlist only. Dropping a file on
+    // another workspace should not silently create an arrangement clip.
+    if (_activeRailIndex != 1) return;
+    setState(() => _audioFileDrop = drop);
+  }
+
+  Future<bool> _importSamplePack(String path, {bool persist = true}) async {
+    final SamplePack? pack = await SamplePackScanner.scan(path);
+    if (!mounted) return false;
+    if (pack == null) {
+      setState(
+        () =>
+            _samplePackMessage =
+                'That folder has no supported audio files. Add a folder containing at least one WAV file.',
+      );
+      return false;
+    }
+
+    final List<SamplePack> next = <SamplePack>[
+      ..._samplePacks.where((SamplePack item) => item.path != pack.path),
+      pack,
+    ];
+    setState(() {
+      _samplePacks = next;
+      _samplePackMessage = null;
+      // Packs are part of the shared instrument browser now, so refresh its
+      // tree immediately instead of waiting for the controller heartbeat.
+      _browserNodes = _buildBrowserNodes();
+    });
+    if (persist) {
+      await _samplePackPlatform.saveFolders(
+        _samplePacks.map((SamplePack item) => item.path),
+      );
+    }
+    return true;
+  }
+
+  List<BrowserNodeVm> _buildPackNodes() {
+    return <BrowserNodeVm>[
+      for (int packIndex = 0; packIndex < _samplePacks.length; packIndex++)
+        BrowserFolderVm(
+          id: 'pack:${_samplePacks[packIndex].path}',
+          name: _samplePacks[packIndex].name,
+          count: _samplePacks[packIndex].assets.length,
+          expanded:
+              _browserExpanded['pack:${_samplePacks[packIndex].path}'] ?? true,
+          children: <BrowserNodeVm>[
+            for (
+              int assetIndex = 0;
+              assetIndex < _samplePacks[packIndex].assets.length;
+              assetIndex++
+            )
+              BrowserSampleVm(
+                id: _samplePacks[packIndex].assets[assetIndex].id,
+                name: _samplePacks[packIndex].assets[assetIndex].name,
+                color: _resolveColor('', assetIndex + packIndex),
+                previewPath: _samplePacks[packIndex].assets[assetIndex].path,
+                dragData: _samplePacks[packIndex].assets[assetIndex],
+              ),
+          ],
+        ),
+    ];
   }
 
   List<BrowserNodeVm> _buildBrowserNodes() {
@@ -176,14 +281,43 @@ class _ShellBindingState extends State<ShellBinding>
           dragData: builtinPlugins[i],
         ),
     ];
+
+    final List<BrowserNodeVm> instrumentSources = <BrowserNodeVm>[];
     if (builtins.isNotEmpty) {
-      nodes.add(
+      instrumentSources.add(
         BrowserFolderVm(
           id: 'builtins',
           name: 'Built-ins',
           count: builtins.length,
           expanded: _browserExpanded['builtins'] ?? true,
           children: builtins,
+        ),
+      );
+    }
+
+    final List<BrowserNodeVm> packNodes = _buildPackNodes();
+    if (packNodes.isNotEmpty) {
+      instrumentSources.add(
+        BrowserFolderVm(
+          id: 'sample-packs',
+          name: 'Sample Packs',
+          count: packNodes.length,
+          expanded: _browserExpanded['sample-packs'] ?? true,
+          children: packNodes,
+        ),
+      );
+    }
+
+    if (instrumentSources.isNotEmpty) {
+      // Plug-ins and samples are both things that can become rack
+      // instruments. Their source categories stay visible without creating a
+      // separate library destination in the rail.
+      nodes.add(
+        BrowserFolderVm(
+          id: 'instruments',
+          name: 'Instruments',
+          expanded: _browserExpanded['instruments'] ?? true,
+          children: instrumentSources,
         ),
       );
     }
@@ -202,7 +336,8 @@ class _ShellBindingState extends State<ShellBinding>
   }
 
   BrowserNodeVm? _findBrowserNode(String id, [List<BrowserNodeVm>? source]) {
-    for (final BrowserNodeVm node in source ?? _browserNodes) {
+    final List<BrowserNodeVm> roots = source ?? _browserNodes;
+    for (final BrowserNodeVm node in roots) {
       if (node.id == id) return node;
       final BrowserNodeVm? child = _findBrowserNode(id, node.children);
       if (child != null) return child;
@@ -223,7 +358,30 @@ class _ShellBindingState extends State<ShellBinding>
     if (mounted) setState(() {});
   }
 
+  void _onBrowserSearchChanged(String query) {
+    _browserSearchQuery = query;
+  }
+
+  void _onBrowserScrollChanged(double offset) {
+    _browserScrollOffset = offset;
+  }
+
+  void _onBrowserResize(double delta) {
+    setState(() {
+      _browserWidth = (_browserWidth + delta).clamp(180.0, 420.0).toDouble();
+    });
+  }
+
   void _onBrowserTap(String id) {
+    final BrowserNodeVm? node = _findBrowserNode(id);
+    if (node is BrowserSampleVm && node.previewPath != null) {
+      try {
+        _controller.previewSample(node.previewPath!);
+      } catch (_) {
+        // A preview failure must not interrupt browser navigation or dragging.
+      }
+      return;
+    }
     if (id.startsWith('pattern:')) {
       _controller.client.selectPattern(id.substring('pattern:'.length));
       setState(() {});
@@ -313,10 +471,11 @@ class _ShellBindingState extends State<ShellBinding>
 
     final ObSideRailVm railVm = ObSideRailVm(
       items: _railItems,
-      activeIndex: _activeRailIndex == _pianoRollIndex
-          ? _lastRailIndex
-          : _activeRailIndex,
-      separatorBefore: 3,
+      activeIndex:
+          _activeRailIndex == _pianoRollIndex
+              ? _lastRailIndex
+              : _activeRailIndex,
+      separatorBefore: null,
     );
 
     final double cpuPercent = (snapshot.cpuLoad * 100.0).clamp(0.0, 100.0);
@@ -330,18 +489,21 @@ class _ShellBindingState extends State<ShellBinding>
     final ObStatusBarVm statusVm = ObStatusBarVm(
       tone: snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
       primary: snapshot.playing ? 'Playing' : 'New project',
-      details: snapshot.playing
-          ? <String>[
-              leftDetail,
-              '${cpuPercent.toStringAsFixed(0)}% CPU',
-              '${snapshot.activeVoices} voices',
-            ]
-          : const <String>[
-              'Untitled.onebeat',
-              'Nothing saved yet — autosave starts on first edit',
-            ],
+      details:
+          snapshot.playing
+              ? <String>[
+                leftDetail,
+                '${cpuPercent.toStringAsFixed(0)}% CPU',
+                '${snapshot.activeVoices} voices',
+              ]
+              : const <String>[
+                'Untitled.onebeat',
+                'Nothing saved yet — autosave starts on first edit',
+              ],
       rightHint:
-          snapshot.playing ? '⌘K Search actions' : '⌘N new pattern · ⌘K actions',
+          snapshot.playing
+              ? '⌘K Search actions'
+              : '⌘N new pattern · ⌘K actions',
     );
 
     return ShellScreenVm(
@@ -349,16 +511,19 @@ class _ShellBindingState extends State<ShellBinding>
       transport: transportVm,
       rail: railVm,
       status: statusVm,
-      browser: (_activeRailIndex == 0 ||
-              _activeRailIndex == 1 ||
-              _activeRailIndex == 3)
-          ? ObBrowserPanelVm(
-              nodes: _activeRailIndex == 3
-                  ? const <BrowserNodeVm>[]
-                  : _browserNodes,
-              title: _activeRailIndex == 3 ? 'Packs' : 'Browser',
-            )
-          : null,
+      browserWidth: _browserWidth,
+      browser:
+          (_activeRailIndex == 0 || _activeRailIndex == 1)
+              ? ObBrowserPanelVm(
+                nodes: _browserNodes,
+                title: 'Browser',
+                emptyHeading: 'No instruments yet.',
+                emptyButtonLabel: 'Add packs',
+                searchQuery: _browserSearchQuery,
+                scrollOffset: _browserScrollOffset,
+                message: _samplePackMessage,
+              )
+              : null,
     );
   }
 
@@ -431,6 +596,7 @@ class _ShellBindingState extends State<ShellBinding>
                   onOpenPianoRoll: _openPianoRoll,
                   onOpenPattern: () => _openPianoRoll(),
                   onClosePianoRoll: _closePianoRoll,
+                  externalAudioDrop: _audioFileDrop,
                 ),
                 onRailSelect: _onRailSelect,
                 onMenuTap: _onMenuTap,
@@ -442,6 +608,10 @@ class _ShellBindingState extends State<ShellBinding>
                 onExport: () => setState(() => _showExportDialog = true),
                 onBrowserTap: _onBrowserTap,
                 onBrowserToggle: _onBrowserToggle,
+                onBrowserSearchChanged: _onBrowserSearchChanged,
+                onBrowserScrollChanged: _onBrowserScrollChanged,
+                onBrowserResize: _onBrowserResize,
+                onBrowserAddFolder: _onAddFolder,
               ),
               if (_showExportDialog)
                 ExportBinding(
@@ -472,6 +642,7 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.onOpenPianoRoll,
     required this.onOpenPattern,
     required this.onClosePianoRoll,
+    this.externalAudioDrop,
   });
 
   final int activeRailIndex;
@@ -480,34 +651,36 @@ class _WorkspaceSlot extends StatelessWidget {
   final ValueChanged<String> onOpenPianoRoll;
   final VoidCallback onOpenPattern;
   final VoidCallback onClosePianoRoll;
+  final AudioFileDrop? externalAudioDrop;
 
   @override
   Widget build(BuildContext context) {
     return switch (activeRailIndex) {
       0 => RackBinding(
-          client: coreController.client,
-          controller: coreController,
-          onBrowsePlugins: () => onSelectRail(3),
-          onOpenMixer: () => onSelectRail(2),
-          onOpenPianoRoll: onOpenPianoRoll,
-        ),
+        client: coreController.client,
+        controller: coreController,
+        onBrowsePlugins: () => onSelectRail(0),
+        onOpenMixer: () => onSelectRail(2),
+        onOpenPianoRoll: onOpenPianoRoll,
+      ),
       1 => PlaylistBinding(
-          client: coreController.client,
-          controller: coreController,
-          onOpenPattern: (String patternId, String clipId) {
-            coreController.client.selectPattern(patternId);
-            onOpenPattern();
-          },
-        ),
+        client: coreController.client,
+        controller: coreController,
+        onOpenPattern: (String patternId, String clipId) {
+          coreController.client.selectPattern(patternId);
+          onOpenPattern();
+        },
+        externalAudioDrop: externalAudioDrop,
+      ),
       2 => MixerBinding(
-          client: coreController.client,
-          controller: coreController,
-        ),
-      4 => PianoRollBinding(
-          client: coreController.client,
-          controller: coreController,
-          onBackToPlaylist: onClosePianoRoll,
-        ),
+        client: coreController.client,
+        controller: coreController,
+      ),
+      _pianoRollIndex => PianoRollBinding(
+        client: coreController.client,
+        controller: coreController,
+        onBackToPlaylist: onClosePianoRoll,
+      ),
       _ => const SizedBox.expand(),
     };
   }
@@ -572,31 +745,35 @@ class _PlatformMenuHost extends StatelessWidget {
           label: 'Edit',
           menus: <PlatformMenuItem>[
             PlatformMenuItem(
-              label: controller.client.canUndoProject &&
-                      controller.client.undoProjectName.isNotEmpty
-                  ? 'Undo ${controller.client.undoProjectName}'
-                  : 'Undo',
+              label:
+                  controller.client.canUndoProject &&
+                          controller.client.undoProjectName.isNotEmpty
+                      ? 'Undo ${controller.client.undoProjectName}'
+                      : 'Undo',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyZ,
                 meta: true,
               ),
-              onSelected: controller.client.canUndoProject
-                  ? controller.undoProject
-                  : null,
+              onSelected:
+                  controller.client.canUndoProject
+                      ? controller.undoProject
+                      : null,
             ),
             PlatformMenuItem(
-              label: controller.client.canRedoProject &&
-                      controller.client.redoProjectName.isNotEmpty
-                  ? 'Redo ${controller.client.redoProjectName}'
-                  : 'Redo',
+              label:
+                  controller.client.canRedoProject &&
+                          controller.client.redoProjectName.isNotEmpty
+                      ? 'Redo ${controller.client.redoProjectName}'
+                      : 'Redo',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyZ,
                 meta: true,
                 shift: true,
               ),
-              onSelected: controller.client.canRedoProject
-                  ? controller.redoProject
-                  : null,
+              onSelected:
+                  controller.client.canRedoProject
+                      ? controller.redoProject
+                      : null,
             ),
           ],
         ),

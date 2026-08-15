@@ -29,6 +29,10 @@ class ShellScreen extends StatelessWidget {
     this.onBrowserTap,
     this.onBrowserToggle,
     this.onBrowserSearchTap,
+    this.onBrowserSearchChanged,
+    this.onBrowserScrollChanged,
+    this.onBrowserResize,
+    this.onBrowserAddFolder,
     super.key,
   });
 
@@ -48,6 +52,10 @@ class ShellScreen extends StatelessWidget {
   final ValueChanged<String>? onBrowserTap;
   final ValueChanged<String>? onBrowserToggle;
   final VoidCallback? onBrowserSearchTap;
+  final ValueChanged<String>? onBrowserSearchChanged;
+  final ValueChanged<double>? onBrowserScrollChanged;
+  final ValueChanged<double>? onBrowserResize;
+  final VoidCallback? onBrowserAddFolder;
 
   @override
   Widget build(BuildContext context) {
@@ -77,13 +85,19 @@ class ShellScreen extends StatelessWidget {
                 ObSideRail(vm: vm.rail, onSelect: onRailSelect),
                 if (vm.browser != null) ...<Widget>[
                   SizedBox(width: tokens.spacing.sm),
-                  _ShellPanel(
-                    child: ObBrowserPanel(
-                      vm: vm.browser!,
-                      onTap: onBrowserTap,
-                      onToggle: onBrowserToggle,
-                      onSearchTap: onBrowserSearchTap,
-                    ),
+                  _ResizableBrowserPanel(
+                    vm: vm.browser!,
+                    onTap: onBrowserTap,
+                    onToggle: onBrowserToggle,
+                    onSearchTap: onBrowserSearchTap,
+                    onSearchChanged: onBrowserSearchChanged,
+                    onScrollChanged: onBrowserScrollChanged,
+                    width: vm.browserWidth,
+                    onResize: onBrowserResize,
+                    // Sample packs live in the shared instrument browser,
+                    // so the import action belongs here rather than on a
+                    // dedicated Packs destination.
+                    onAddFolder: onBrowserAddFolder,
                   ),
                 ],
                 SizedBox(width: tokens.spacing.sm),
@@ -101,6 +115,106 @@ class ShellScreen extends StatelessWidget {
       child: overlay == null
           ? frame
           : Stack(children: <Widget>[frame, overlay]),
+    );
+  }
+}
+
+/// The browser is a docked surface, but unlike the workspace it has a user
+/// controlled width. The shell owns that state and passes it in, rather than
+/// treating resizing as browser content.
+class _ResizableBrowserPanel extends StatefulWidget {
+  const _ResizableBrowserPanel({
+    required this.vm,
+    required this.width,
+    this.onTap,
+    this.onToggle,
+    this.onSearchTap,
+    this.onSearchChanged,
+    this.onScrollChanged,
+    this.onResize,
+    this.onAddFolder,
+  });
+
+  final ObBrowserPanelVm vm;
+  final double width;
+  final ValueChanged<String>? onTap;
+  final ValueChanged<String>? onToggle;
+  final VoidCallback? onSearchTap;
+  final ValueChanged<String>? onSearchChanged;
+  final ValueChanged<double>? onScrollChanged;
+  final ValueChanged<double>? onResize;
+  final VoidCallback? onAddFolder;
+
+  @override
+  State<_ResizableBrowserPanel> createState() => _ResizableBrowserPanelState();
+}
+
+class _ResizableBrowserPanelState extends State<_ResizableBrowserPanel> {
+  static const double _minWidth = 180;
+  static const double _maxWidth = 420;
+  late double _width;
+
+  @override
+  void initState() {
+    super.initState();
+    _width = widget.width;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ResizableBrowserPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.width != oldWidget.width && widget.width != _width) {
+      _width = widget.width;
+    }
+  }
+
+  void _resize(DragUpdateDetails details) {
+    final double next =
+        (_width + details.delta.dx).clamp(_minWidth, _maxWidth).toDouble();
+    setState(() => _width = next);
+    widget.onResize?.call(details.delta.dx);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SizedBox(
+          width: _width,
+          child: _ShellPanel(
+            child: ObBrowserPanel(
+              vm: widget.vm,
+              width: _width,
+              onTap: widget.onTap,
+              onToggle: widget.onToggle,
+              onSearchTap: widget.onSearchTap,
+              onSearchChanged: widget.onSearchChanged,
+              onScrollChanged: widget.onScrollChanged,
+              onAddFolder: widget.onAddFolder,
+            ),
+          ),
+        ),
+        MouseRegion(
+          cursor: SystemMouseCursors.resizeLeftRight,
+          child: GestureDetector(
+            key: const Key('browser-resize-handle'),
+            behavior: HitTestBehavior.opaque,
+            onPanUpdate: _resize,
+            child: SizedBox(
+              width: tokens.spacing.xs,
+              child: Center(
+                child: Container(
+                  width: tokens.border.hairline,
+                  height: double.infinity,
+                  color: tokens.color.lineStrong,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

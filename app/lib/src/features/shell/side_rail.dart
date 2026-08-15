@@ -1,9 +1,8 @@
 // ObSideRail — the left destination rail (UI-B-03).
 //
-// A column of destinations down the window's left edge: PLAYLIST, CHANNELS,
-// PIANO, MIXER, then a hairline and PACKS. The separator is the whole point of
-// the ordering — the first four are places in the project, PACKS is a place in
-// the library, and the rule says so without a second heading.
+// A column of project destinations down the window's left edge. Library
+// content such as plug-ins and sample packs is shown in the browser panel
+// alongside the project, rather than treated as a separate destination.
 //
 // Presentational only: the rail knows which index is active and reports taps.
 // Which view that index means is the shell's business (UI-C-01).
@@ -45,8 +44,7 @@ class ObSideRailVm {
   /// which is what a detached-window layout shows.
   final int activeIndex;
 
-  /// Index the grouping hairline is drawn above; null draws none. The mockups
-  /// put it before PACKS.
+  /// Index the grouping hairline is drawn above; null draws none.
   final int? separatorBefore;
 }
 
@@ -97,7 +95,7 @@ class ObSideRail extends StatelessWidget {
   }
 }
 
-/// The inset hairline that groups the project destinations away from PACKS.
+/// An optional inset hairline for grouping rail destinations.
 class _RailSeparator extends StatelessWidget {
   const _RailSeparator({required this.tokens});
 
