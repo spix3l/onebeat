@@ -50,6 +50,8 @@ List<String> _candidatePaths() {
   for (int depth = 0; depth < 4; depth++) {
     candidates.add('${dir.path}/build/$_libraryFileName');
     candidates.add('${dir.path}/build/RelWithDebInfo/$_libraryFileName');
+    candidates.add('${dir.path}/engine/build/$_libraryFileName');
+    candidates.add('${dir.path}/engine/build/RelWithDebInfo/$_libraryFileName');
     dir = dir.parent;
   }
   return candidates;

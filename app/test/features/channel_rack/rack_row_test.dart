@@ -25,7 +25,7 @@ const RackToolbarVm _toolbar = RackToolbarVm(
   channelType: 'Sampler',
   group: 'All',
   snap: '1/4',
-  caption: '16 steps · loop',
+  steps: 16,
 );
 
 /// The border colour of step [index] as rendered — the one part of the cell
@@ -203,6 +203,29 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('1/16'));
     expect(fired, <String>['snap:1/16']);
+  });
+
+  testWidgets('the step-length control offers 16/32/64 and reports the choice', (
+    WidgetTester tester,
+  ) async {
+    final List<int> lengths = <int>[];
+    await pumpUi(
+      tester,
+      ObRackToolbar(vm: _toolbar, onSteps: lengths.add),
+      size: const Size(demoRackRowWidth, 200),
+    );
+
+    // The current length is what the control shows.
+    expect(find.text('16'), findsOneWidget);
+
+    await tester.tap(find.text('16'));
+    await tester.pump();
+    // Exactly the lengths the ABI accepts, no more.
+    expect(find.text('32'), findsOneWidget);
+    expect(find.text('64'), findsOneWidget);
+
+    await tester.tap(find.text('32'));
+    expect(lengths, <int>[32]);
   });
 
   testWidgets('the footer names the action it performs', (

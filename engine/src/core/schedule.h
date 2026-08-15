@@ -26,7 +26,8 @@ enum class EventType : uint16_t {
   NoteOff = 1,         // value unused
   TempoChange = 2,     // value = bpm
   ParamValue = 3,      // reserved = ParamId, value is the absolute value
-  ParamModulation = 4  // reserved = ParamId, value is a non-destructive offset
+  ParamModulation = 4, // reserved = ParamId, value is a non-destructive offset
+  AudioStart = 5       // starts the whole sample loaded on `instrument`
 };
 
 // POD, 24 bytes, sorted by `frame`. Deliberately cache-friendly: a block scan
@@ -118,6 +119,12 @@ class ScheduleBuilder {
                                       int64_t frame) {
     events_.push_back(ScheduleEvent{
         frame, instrument, static_cast<uint16_t>(EventType::ParamModulation), -1, amount, param});
+    return *this;
+  }
+
+  ScheduleBuilder& addAudioStart(InstrumentId instrument, int64_t frame) {
+    events_.push_back(ScheduleEvent{frame, instrument, static_cast<uint16_t>(EventType::AudioStart),
+                                    -1, 1.0F, 0});
     return *this;
   }
 

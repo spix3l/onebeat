@@ -168,7 +168,9 @@ class Engine final : public audio_io::RenderCallback {
   // Sample loading has no place in a format-agnostic interface, so it stays on
   // the concrete built-in.
   Sampler& sampler() { return channels_[0]->instrument.sampler(); }
-  Sampler& channelSampler(int index) { return channels_[static_cast<size_t>(index)]->instrument.sampler(); }
+  Sampler& channelSampler(int index) {
+    return channels_[static_cast<size_t>(index)]->instrument.sampler();
+  }
   Transport& transportForTests() { return transport_; }
   Diagnostics& diagnostics() { return diagnostics_; }
   rt::RtLog& rtLog() { return rt_log_; }
@@ -233,8 +235,8 @@ class Engine final : public audio_io::RenderCallback {
 
   // Renders one channel into the scratch buffer and mixes it into `output` at
   // `offset` with that channel's gain and constant-power pan.
-  void renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output, int offset,
-                     int num_frames, const Schedule* schedule, int64_t chunk_start,
+  void renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
+                     int offset, int num_frames, const Schedule* schedule, int64_t chunk_start,
                      const plugin::EventList* block_events,
                      bool release_all) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
@@ -307,6 +309,10 @@ class Engine final : public audio_io::RenderCallback {
   std::atomic<uint64_t> xruns_{0};
   std::atomic<bool> running_{false};
   std::atomic<bool> housekeeping_active_{false};
+  // Replacing a schedule while playing must reconcile voices from the old
+  // arrangement. The audio thread consumes this flag at the next block and
+  // releases those voices before rendering the new schedule.
+  std::atomic<bool> schedule_changed_{false};
 
   std::thread housekeeping_;
   std::mutex work_mutex_;

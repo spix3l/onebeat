@@ -135,7 +135,9 @@ typedef enum ob_command_type {
   OB_CMD_PLUGIN_PARAM_VALUE = 12,   /* i64_a = ParamId, f64_a = value */
   OB_CMD_PLUGIN_PARAM_END = 13,     /* i64_a = ParamId */
   OB_CMD_SET_INSTRUMENT_GAIN = 14,  /* f64_a = linear gain, 0..2 */
-  OB_CMD_SET_INSTRUMENT_PAN = 15    /* f64_a = pan -1..1 */
+  OB_CMD_SET_INSTRUMENT_PAN = 15,   /* f64_a = pan -1..1 */
+  OB_CMD_PREVIEW_NOTE_ON = 16,     /* i64_a = midi note, f64_a = velocity */
+  OB_CMD_PREVIEW_NOTE_OFF = 17     /* i64_a = midi note */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).

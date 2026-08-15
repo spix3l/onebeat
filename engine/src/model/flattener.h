@@ -38,6 +38,10 @@ struct FlattenResult {
   // is assigned in ULID order, so it is stable for a given model and the
   // caller can bind engine voices to it.
   std::map<InstrumentId, core::InstrumentId> instrument_index;
+  // Audio clips have no model Instrument, so they receive deterministic sampler
+  // channels immediately after the instrument channels. The ABI uses this map
+  // to build the matching channel rack before publishing the schedule.
+  std::map<ClipId, core::InstrumentId> audio_channel_index;
 
   int64_t length_frames = 0;
   size_t event_count = 0;

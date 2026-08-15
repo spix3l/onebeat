@@ -36,7 +36,10 @@ void main() {
           SizedBox.fromSize(
             size: _panel,
             child: ObBrowserPanel(
-              vm: ObBrowserPanelVm(nodes: demoBrowserSamples, selectedId: 'sub'),
+              vm: ObBrowserPanelVm(
+                nodes: demoBrowserSamples,
+                selectedId: 'sub',
+              ),
             ),
           ),
         ],
@@ -58,10 +61,7 @@ void main() {
     await pumpUi(
       tester,
       ObBrowserPanel(
-        vm: ObBrowserPanelVm(
-          nodes: demoBrowserTree,
-          selectedId: 'soft-keys',
-        ),
+        vm: ObBrowserPanelVm(nodes: demoBrowserTree, selectedId: 'soft-keys'),
       ),
       size: _panel,
     );
@@ -254,17 +254,25 @@ void main() {
     expect(addFolderClicked, isTrue);
   });
 
-  testWidgets('sample rows carry a waveform mark', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('sample rows carry a waveform mark', (WidgetTester tester) async {
     await pumpUi(
       tester,
-      ObBrowserPanel(
-        vm: ObBrowserPanelVm(nodes: demoBrowserSamples),
-      ),
+      ObBrowserPanel(vm: ObBrowserPanelVm(nodes: demoBrowserSamples)),
       size: _panel,
     );
     expect(find.byType(BrowserSampleRow), findsNWidgets(8));
+  });
+
+  test('sample preview availability is independent from drag data', () {
+    const BrowserSampleVm sample = BrowserSampleVm(
+      id: 'kick',
+      name: 'Kick 808',
+      color: Color(0xfff05a47),
+      previewPath: '/tmp/Kick.wav',
+    );
+
+    expect(sample.previewPath, '/tmp/Kick.wav');
+    expect(sample.dragData, isNull);
   });
 
   testWidgets('empty browser nodes render empty state with add folder button', (

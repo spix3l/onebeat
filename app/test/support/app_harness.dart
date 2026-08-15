@@ -23,29 +23,38 @@ import 'fake_engine_client.dart';
 /// directionality. Deliberately not `MaterialApp` — the app has no Material in
 /// it, and a test that added some would be testing a different widget tree.
 Widget wrapForTest(Widget child, {Size size = const Size(1200, 800)}) {
-  return Directionality(
-    textDirection: TextDirection.ltr,
-    child: OneBeatTheme(
-      tokens: OneBeatTokens.dark(),
-      child: MediaQuery(
-        data: MediaQueryData(size: size),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: size.width,
-            height: size.height,
-            // The shell sits on the deep surface, so the harness does too —
-            // otherwise a golden's unpainted regions read as white and hide
-            // whether the widget actually covers its own bounds.
-            child: ColoredBox(
-              color: OneBeatTokens.dark().color.surfaceDeep,
-              // The real app's `WidgetsApp` provides the root `Overlay` that
-              // dropdown menus and popovers render into; mirror it here so a
-              // binding test can open one without a missing-overlay assert.
-              child: Overlay(
-                initialEntries: <OverlayEntry>[
-                  OverlayEntry(builder: (BuildContext context) => child),
-                ],
+  return Localizations(
+    // Alongside the `Overlay` below, the other thing the real app's
+    // `WidgetsApp` provides: widgets that announce themselves to assistive
+    // tech assert on it. The reorderable rack lanes are the first to need it.
+    locale: const Locale('en', 'US'),
+    delegates: const <LocalizationsDelegate<Object>>[
+      DefaultWidgetsLocalizations.delegate,
+    ],
+    child: Directionality(
+      textDirection: TextDirection.ltr,
+      child: OneBeatTheme(
+        tokens: OneBeatTokens.dark(),
+        child: MediaQuery(
+          data: MediaQueryData(size: size),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: size.width,
+              height: size.height,
+              // The shell sits on the deep surface, so the harness does too —
+              // otherwise a golden's unpainted regions read as white and hide
+              // whether the widget actually covers its own bounds.
+              child: ColoredBox(
+                color: OneBeatTokens.dark().color.surfaceDeep,
+                // The real app's `WidgetsApp` provides the root `Overlay` that
+                // dropdown menus and popovers render into; mirror it here so a
+                // binding test can open one without a missing-overlay assert.
+                child: Overlay(
+                  initialEntries: <OverlayEntry>[
+                    OverlayEntry(builder: (BuildContext context) => child),
+                  ],
+                ),
               ),
             ),
           ),
@@ -65,9 +74,7 @@ Future<void> loadAppFonts() async {
   };
   for (final MapEntry<String, String> family in families.entries) {
     final FontLoader loader = FontLoader(family.key)
-      ..addFont(
-        File(family.value).readAsBytes().then(ByteData.sublistView),
-      );
+      ..addFont(File(family.value).readAsBytes().then(ByteData.sublistView));
     await loader.load();
   }
 }

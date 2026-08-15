@@ -47,30 +47,27 @@ const ObTransportBarVm demoTransportBar = ObTransportBarVm(
   searchHint: 'Search actions',
 );
 
-/// The reduced rail the extension screens draw: PLAYLIST, SCRIPT, EXTNS, then
-/// the grouping hairline and PACKS.
+/// The reduced rail the extension screens draw: PLAYLIST, SCRIPT, EXTNS.
 const ObSideRailVm demoExtensionsRail = ObSideRailVm(
   items: <RailItemVm>[
     RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.script, label: 'Script'),
     RailItemVm(icon: ObRailGlyphKind.extension, label: 'Extns'),
-    RailItemVm(icon: ObRailGlyphKind.folder, label: 'Packs'),
   ],
   activeIndex: 2,
-  separatorBefore: 3,
+  separatorBefore: null,
 );
 
-/// The full rail: the workspace screens keep every destination.
+/// The full rail: the workspace screens keep every project destination.
 const ObSideRailVm demoWorkspaceRail = ObSideRailVm(
   items: <RailItemVm>[
     RailItemVm(icon: ObRailGlyphKind.grid, label: 'Playlist'),
     RailItemVm(icon: ObRailGlyphKind.help, label: 'Channels'),
     RailItemVm(icon: ObRailGlyphKind.note, label: 'Piano'),
     RailItemVm(icon: ObRailGlyphKind.sliders, label: 'Mixer'),
-    RailItemVm(icon: ObRailGlyphKind.folder, label: 'Packs'),
   ],
   activeIndex: 3,
-  separatorBefore: 4,
+  separatorBefore: null,
 );
 
 /// Wraps [content] in the app's chrome at the mockups' 1600×1000.

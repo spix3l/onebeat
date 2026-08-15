@@ -28,6 +28,11 @@ struct ResolvedParam {
   float value = 0.0F;
 };
 
+struct ResolvedAudio {
+  Ticks start = 0;
+  core::InstrumentId channel = 0;
+};
+
 // Swing delays odd sixteenths by up to half a step. Only notes exactly on the
 // sixteenth grid move: an off-grid piano-roll edit must not be silently
 // quantised merely because the pattern has swing.
@@ -156,6 +161,12 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   for (const auto& [id, instrument] : project.instruments()) {
     result.instrument_index.emplace(id, next_index++);
   }
+  // Audio clips are independent sources rather than rack Instruments. Give
+  // every clip a stable channel after the project instruments so overlapping
+  // songs and repeated clips do not replace one another's sample.
+  for (const auto& [clip_id, clip] : project.clips()) {
+    if (clip.audio() != nullptr) result.audio_channel_index.emplace(clip_id, next_index++);
+  }
 
   const core::TimeMap time_map(options.sample_rate, project.transport().tempo);
   const auto toFrames = [&time_map](Ticks ticks) {
@@ -175,6 +186,7 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   notes.reserve(note_estimate * (project.clips().empty() ? 1 : 2));
 
   std::vector<ResolvedParam> params;
+  std::vector<ResolvedAudio> audio_starts;
   std::vector<std::pair<Ticks, Ticks>> occurrences;
   Ticks end_ticks = 0;
 
@@ -226,6 +238,17 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
         continue;
       }
 
+      if (clip->audio() != nullptr) {
+        const auto channel = result.audio_channel_index.find(clip_id);
+        if (channel == result.audio_channel_index.end()) continue;
+        ++result.clips_flattened;
+        // The sampler is a one-shot voice: note-on starts at source frame zero
+        // and naturally stops at the decoded file's end. `clip.length` still
+        // determines arrangement width and transport range.
+        audio_starts.push_back(ResolvedAudio{clip->start, channel->second});
+        continue;
+      }
+
       if (const AutomationSource* source = clip->automation()) {
         // Structural (scope §4): the points a curve is made of become the
         // parameter events of OB-2-09. Stage 4 adds interpolation between
@@ -240,15 +263,13 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
                                          source->parameter, point.value});
         }
       }
-      // Audio clips have no note or parameter events; they arrive with the
-      // audio engine in Stage 9 and are skipped rather than half-handled.
     }
   }
 
   resolveOverlaps(notes);
 
   core::ScheduleBuilder builder;
-  builder.reserve((notes.size() * 2) + params.size());
+  builder.reserve((notes.size() * 2) + params.size() + audio_starts.size());
   for (const ResolvedNote& note : notes) {
     const int64_t start_frame = toFrames(note.start);
     const int64_t end_frame = toFrames(note.end);
@@ -264,6 +285,9 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   });
   for (const ResolvedParam& param : params) {
     builder.addParamValue(param.instrument, param.parameter, param.value, toFrames(param.position));
+  }
+  for (const ResolvedAudio& audio : audio_starts) {
+    builder.addAudioStart(audio.channel, toFrames(audio.start));
   }
 
   result.length_frames = toFrames(end_ticks);

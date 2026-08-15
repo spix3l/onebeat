@@ -1,6 +1,10 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/playlist/playlist_binding.dart';
+import 'package:onebeat/src/features/playlist/playlist_canvas.dart';
 import 'package:onebeat/src/features/playlist/playlist_screen.dart';
 import 'package:onebeat/src/features/playlist/playlist_store.dart';
 
@@ -75,6 +79,51 @@ void main() {
     expect(store.clips.length, 1);
     expect(store.clips.first.patternId, 'pat_a');
     expect(store.selectedClipIds.contains(store.clips.first.id), isTrue);
+  });
+
+  testWidgets('placing on an empty row creates a second playlist lane',
+      (WidgetTester tester) async {
+    await pumpForTest(
+      tester,
+      PlaylistBinding(client: fakeClient, store: store),
+    );
+
+    final RenderBox canvas = tester.renderObject(find.byType(PlaylistCanvas));
+    final double laneHeight = OneBeatTokens.dark().size.playlistLaneHeight;
+    await tester.tapAt(canvas.localToGlobal(Offset(20, laneHeight + 12)));
+    await tester.pump();
+
+    expect(store.lanes, hasLength(2));
+    expect(store.clips, hasLength(1));
+    expect(store.clips.single.laneId, isNot('lane_a'));
+  });
+
+  testWidgets('dragging a playlist clip moves it on the grid', (
+    WidgetTester tester,
+  ) async {
+    fakeClient.addClip(
+      'lane_a',
+      patternId: 'pat_a',
+      startTicks: 0,
+      lengthTicks: 3840,
+    );
+    store.refresh();
+
+    await pumpForTest(
+      tester,
+      PlaylistBinding(client: fakeClient, store: store),
+    );
+
+    await tester.drag(
+      find.text('Verse Drums'),
+      const Offset(140, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+
+    expect(store.clips.single.startTicks, greaterThan(0));
+    expect(fakeClient.gestureBegins, 1);
+    expect(fakeClient.gestureCommits, 1);
   });
 
   testWidgets('dual-instance: 2 clips of same pattern update name together', (

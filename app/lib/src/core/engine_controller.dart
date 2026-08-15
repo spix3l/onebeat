@@ -3,6 +3,8 @@
 // Everything the UI shows in real time (meter, clock, voice count, xruns) comes
 // from the *same* snapshot, so nothing can disagree with anything else on
 // screen.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -30,6 +32,9 @@ class EngineController extends ChangeNotifier {
   EngineSnapshot snapshot = const EngineSnapshot.empty();
   String status = '';
   bool showPerformanceOverlay = false;
+  bool _previewAfterSampleLoad = false;
+  Timer? _samplePreviewTimer;
+  static const int _samplePreviewKey = 60;
 
   void _onFrame(Duration _) {
     snapshot = client.readSnapshot();
@@ -44,8 +49,18 @@ class EngineController extends ChangeNotifier {
           status = 'Output device changed to "${event.text}".';
         case evtError:
           status = event.text;
+          _previewAfterSampleLoad = false;
         case evtSampleLoaded:
           status = 'Loaded "${event.text}".';
+          if (_previewAfterSampleLoad) {
+            _previewAfterSampleLoad = false;
+            client.previewNoteOn(_samplePreviewKey, 0.8);
+            _samplePreviewTimer?.cancel();
+            _samplePreviewTimer = Timer(motion.settled, () {
+              client.previewNoteOff(_samplePreviewKey);
+              _samplePreviewTimer = null;
+            });
+          }
       }
     }
     notifyListeners();
@@ -88,6 +103,22 @@ class EngineController extends ChangeNotifier {
 
   void setTempo(double bpm) => client.setTempo(bpm);
 
+  /// Loads [path] into the non-project preview voice, then auditions middle C
+  /// as soon as the worker reports that decoding has completed. A sample click
+  /// must never add a channel or play the previously loaded sample by accident.
+  void previewSample(String path) {
+    _samplePreviewTimer?.cancel();
+    _samplePreviewTimer = null;
+    client.previewNoteOff(_samplePreviewKey);
+    _previewAfterSampleLoad = true;
+    try {
+      client.loadSample(path);
+    } catch (_) {
+      _previewAfterSampleLoad = false;
+      rethrow;
+    }
+  }
+
   void togglePerformanceOverlay() {
     showPerformanceOverlay = !showPerformanceOverlay;
     frameStats.reset();
@@ -108,6 +139,10 @@ class EngineController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _samplePreviewTimer?.cancel();
+    if (_previewAfterSampleLoad || _samplePreviewTimer != null) {
+      client.previewNoteOff(_samplePreviewKey);
+    }
     _ticker.dispose();
     frameStats.dispose();
     super.dispose();

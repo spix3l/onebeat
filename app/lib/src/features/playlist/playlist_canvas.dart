@@ -16,6 +16,7 @@ class PlaylistVm {
     required this.clips,
     required this.pxPerBar,
     this.playheadBar16ths,
+    this.laneCountOverride,
     this.headerTitle = 'Playlist',
     this.headerRight = '',
   });
@@ -32,17 +33,21 @@ class PlaylistVm {
   /// a playhead nobody believes.
   final int? playheadBar16ths;
 
+  /// The model's lanes include empty rows, so the binding can provide the
+  /// actual count instead of deriving it only from clips already placed.
+  final int? laneCountOverride;
+
   final String headerTitle;
 
   /// `Untitled.onebeat · 124 BPM · 4/4`.
   final String headerRight;
 
   /// The lane count the canvas has to make room for.
-  int get laneCount =>
-      clips.isEmpty
-          ? 0
-          : clips.map((ClipVm c) => c.lane).reduce((int a, int b) => a > b ? a : b) +
-              1;
+  int get laneCount {
+    if (laneCountOverride != null) return laneCountOverride!;
+    if (clips.isEmpty) return 0;
+    return clips.map((ClipVm c) => c.lane).reduce((int a, int b) => a > b ? a : b) + 1;
+  }
 }
 
 class PlaylistCanvas extends StatelessWidget {

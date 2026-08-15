@@ -1,8 +1,11 @@
+// ignore_for_file: prefer_const_constructors
+
 // Playlist canvas (UI-B-08): the golden of the arrangement body, and the tap
 // callbacks the golden cannot show.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
+import 'package:onebeat/src/features/browser/sample_pack.dart';
 import 'package:onebeat/src/features/playlist/clip_card.dart';
 import 'package:onebeat/src/features/playlist/playlist_canvas.dart';
 import 'package:onebeat/src/features/playlist/timeline_ruler.dart';
@@ -113,6 +116,47 @@ void main() {
       (decoration.border! as Border).top.color,
       OneBeatTokens.dark().color.clipSelectedOutline,
     );
+  });
+
+  testWidgets('a sample drag reports its canvas position', (
+    WidgetTester tester,
+  ) async {
+    final List<(Object, double, int)> drops = <(Object, double, int)>[];
+    const SampleAsset sample = SampleAsset(
+      id: 'sample:kick.wav',
+      name: 'kick.wav',
+      path: '/Samples/kick.wav',
+    );
+    await pumpUi(
+      tester,
+      SizedBox(
+        width: 600,
+        height: 500,
+        child: PlaylistCanvas(
+          vm: PlaylistVm(clips: <ClipVm>[], pxPerBar: 100),
+          onDrop: (Object data, double bar, int lane) =>
+              drops.add((data, bar, lane)),
+        ),
+      ),
+      size: const Size(600, 500),
+    );
+
+    final DragTarget<Object> target = tester.widget(
+      find.byType(DragTarget<Object>),
+    );
+    // Flutter's test details constructor is intentionally non-const.
+    target.onAcceptWithDetails!(
+      DragTargetDetails<Object>(
+        data: sample,
+        offset: const Offset(200, 20),
+      ),
+    );
+    await tester.pump();
+
+    expect(drops, hasLength(1));
+    expect(drops.single.$1, same(sample));
+    expect(drops.single.$2, closeTo(2.0, 0.05));
+    expect(drops.single.$3, 0);
   });
 
   test('the vm reports how many lanes the canvas has to make room for', () {

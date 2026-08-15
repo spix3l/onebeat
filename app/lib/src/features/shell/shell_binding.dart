@@ -386,16 +386,6 @@ class _ShellBindingState extends State<ShellBinding>
       _controller.client.selectPattern(id.substring('pattern:'.length));
       setState(() {});
       _browserNodes = _buildBrowserNodes();
-    } else if (id.startsWith('plugin:')) {
-      final String path = id.substring('plugin:'.length);
-      for (final PluginListing p in _readBuiltins()) {
-        if (p.path == path) {
-          _controller.client.addPluginByPath(p.path, p.id);
-          setState(() {});
-          _browserNodes = _buildBrowserNodes();
-          return;
-        }
-      }
     }
   }
 

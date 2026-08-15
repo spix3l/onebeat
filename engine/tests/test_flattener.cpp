@@ -21,6 +21,7 @@ using onebeat::core::Schedule;
 using onebeat::core::ScheduleEvent;
 using onebeat::model::ArrangementLane;
 using onebeat::model::ArrangementLaneId;
+using onebeat::model::AudioSource;
 using onebeat::model::AutomationPoint;
 using onebeat::model::AutomationSource;
 using onebeat::model::ChangeField;
@@ -265,6 +266,28 @@ TEST_SUITE("unit") {
       CHECK(events[1].frame == TicksPerBarFourFour * FramesPerTick);
       CHECK(notesAreBalanced(*result.schedule));
     }
+  }
+
+  TEST_CASE("Audio clips become one-shot starts on dedicated channels") {
+    Scene scene;
+    AudioSource source;
+    source.path = "/tmp/song.wav";
+    source.destination = scene.project.masterTrack();
+    const ClipId audio = scene.project.createClip(
+        scene.lane, source, TicksPerBarFourFour * 2, TicksPerBarFourFour * 8);
+
+    const FlattenResult result = run(scene.project);
+    REQUIRE(result.schedule != nullptr);
+    REQUIRE(result.audio_channel_index.count(audio) == 1);
+    CHECK(result.audio_channel_index.at(audio) == 1U);  // after Scene's instrument
+    CHECK(result.clips_flattened == 1);
+    CHECK(result.length_frames == TicksPerBarFourFour * 10 * FramesPerTick);
+
+    const std::vector<ScheduleEvent> events = eventsOf(*result.schedule);
+    REQUIRE(events.size() == 1);
+    CHECK(events[0].type == static_cast<uint16_t>(EventType::AudioStart));
+    CHECK(events[0].instrument == 1U);
+    CHECK(events[0].frame == TicksPerBarFourFour * 2 * FramesPerTick);
   }
 
   TEST_CASE("Transpose shifts only the clip it is on") {

@@ -350,6 +350,13 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
+  if (schedule_changed_.exchange(false, std::memory_order_acq_rel) && transport_.playing()) {
+    // A moved/deleted clip must not leave the voice that belonged to its old
+    // position playing after the model has been replaced. Releasing at the
+    // block boundary keeps the update sample-safe and click-free. Do not cancel
+    // a manual audition while stopped: the schedule is unrelated to that voice.
+    block_events.push(plugin::PluginEvent::allNotesOff(0));
+  }
 
   const AudioBufferView& output = context.output;
   output.clear();
@@ -474,7 +481,8 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
       const bool is_broadcast_release =
           event.type == static_cast<uint16_t>(plugin::EventType::NoteOff) &&
           event.key == plugin::AnyKey;
-      if (is_audition || is_broadcast_release) {
+      const bool is_preview = (event.flags & plugin::EventFlagDontRecord) != 0;
+      if (is_broadcast_release || (is_preview ? index == 0 : is_audition)) {
         events.push(event);
       }
     }
@@ -494,6 +502,12 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
         case EventType::NoteOn:
           events.push(
               plugin::PluginEvent::noteOn(time, event.note, static_cast<double>(event.value)));
+          break;
+        case EventType::AudioStart:
+          // Audio clips are one-shot samples; MIDI C3 is the sampler's neutral
+          // rate and the voice ends when the decoded source reaches EOF.
+          events.push(plugin::PluginEvent::noteOn(time, Sampler::RootNote,
+                                                  static_cast<double>(event.value)));
           break;
         case EventType::NoteOff:
           events.push(plugin::PluginEvent::noteOff(time, event.note));
@@ -671,6 +685,20 @@ void Engine::applyCommand(const ob_command& command,
     case OB_CMD_NOTE_OFF:
       block_events.push(plugin::PluginEvent::noteOff(0, static_cast<int16_t>(command.i64_a)));
       break;
+    case OB_CMD_PREVIEW_NOTE_ON: {
+      plugin::PluginEvent event =
+          plugin::PluginEvent::noteOn(0, static_cast<int16_t>(command.i64_a), command.f64_a);
+      event.flags = plugin::EventFlagDontRecord;
+      block_events.push(event);
+      break;
+    }
+    case OB_CMD_PREVIEW_NOTE_OFF: {
+      plugin::PluginEvent event =
+          plugin::PluginEvent::noteOff(0, static_cast<int16_t>(command.i64_a));
+      event.flags = plugin::EventFlagDontRecord;
+      block_events.push(event);
+      break;
+    }
     case OB_CMD_ALL_NOTES_OFF:
       block_events.push(plugin::PluginEvent::allNotesOff(0));
       break;
@@ -678,14 +706,12 @@ void Engine::applyCommand(const ob_command& command,
       master_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
       break;
     case OB_CMD_SET_INSTRUMENT_GAIN:
-      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]
-          ->gain.store(std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F),
-                       std::memory_order_release);
+      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]->gain.store(
+          std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F), std::memory_order_release);
       break;
     case OB_CMD_SET_INSTRUMENT_PAN:
-      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]
-          ->pan.store(std::clamp(static_cast<float>(command.f64_a), -1.0F, 1.0F),
-                      std::memory_order_release);
+      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]->pan.store(
+          std::clamp(static_cast<float>(command.f64_a), -1.0F, 1.0F), std::memory_order_release);
       break;
     case OB_CMD_PLUGIN_PARAM_BEGIN:
       block_events.push(
@@ -803,6 +829,10 @@ bool Engine::pushEvent(const ob_event& event) noexcept {
 void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
   const uint64_t generation = schedule->generation();
   const int32_t count = schedule->eventCount();
+  // Set this before publication: if the audio callback races the swap, either
+  // it releases voices against the old schedule before the next block, or it
+  // sees the new schedule and releases them in the same block.
+  schedule_changed_.store(true, std::memory_order_release);
   schedule_.publish(std::move(schedule));
   ob_event event{};
   event.type = OB_EVT_SCHEDULE_PUBLISHED;
@@ -993,8 +1023,8 @@ void Engine::onDeviceNotification(audio_io::DeviceNotification notification,
         plugin::PluginInstance& voice = channelInstrument(index);
         voice.deactivate();
         if (!voice.configure(setup) || !voice.activate()) {
-          diagnostics_.logf(LogLevel::Error, "plugin",
-                            "channel %d rejected the new device format", index);
+          diagnostics_.logf(LogLevel::Error, "plugin", "channel %d rejected the new device format",
+                            index);
         }
       }
     }

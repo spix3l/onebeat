@@ -361,6 +361,7 @@ class SizeTokens {
   double get sliderHeight => 18;
   double get stockPianoControlSize => 72;
   double get stockPianoKeyboardHeight => 150;
+
   /// The compact title strip above the rack controls. The workspace gutters
   /// provide the breathing room; this row only needs to hold its title and tabs.
   double get rackHeaderHeight => 34;
@@ -439,7 +440,11 @@ class SizeTokens {
   double get pianoNoteInset => 1;
   double get pianoNoteRadius => 2;
   double get pianoToolbarHeight => 44;
-  double get pianoResizeHandleWidth => 6;
+
+  /// The grab zone at a note's right edge. Wide enough to hit without aiming;
+  /// the roll additionally caps it at a third of the note so a short note is
+  /// still mostly draggable rather than all handle.
+  double get pianoResizeHandleWidth => 8;
 
   /// The rebuilt piano roll (UI-B-07), measured off `screens/piano-roll.png`.
   /// [pianoRowHeight] (14) survives unchanged — the mockup's octave spans 168px
@@ -451,7 +456,11 @@ class SizeTokens {
 
   /// A note bar inside its 14px row, and the radius that keeps it from
   /// reading as a hard-edged block at this size.
-  double get prNoteHeight => 8;
+  ///
+  /// Nearly fills the row, leaving a hairline of banding above and below. At 8
+  /// the bar was a thin stripe floating in the middle of its row: hard to aim
+  /// at, and hard to read as occupying a pitch at all.
+  double get prNoteHeight => 16;
 
   /// Black keys are this fraction of the column wide, and the C-label plate
   /// this tall.
@@ -960,6 +969,7 @@ class TypeTokens {
     fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
     color: clipInkMuted,
   );
+
   /// Tag labels (PAT, AUD, AUTO).
   TextStyle get tag => TextStyle(
     fontFamily: uiFamily,
@@ -1003,11 +1013,8 @@ class TypeTokens {
   /// design gives the values a user glances at most often. Tightened because
   /// MartianMono runs wide, and at the default line height the value + unit
   /// stack does not fit a 44px box.
-  TextStyle get readoutValue => numeric.copyWith(
-    fontSize: 21,
-    letterSpacing: -0.5,
-    height: 1.15,
-  );
+  TextStyle get readoutValue =>
+      numeric.copyWith(fontSize: 21, letterSpacing: -0.5, height: 1.15);
 
   /// The unit label under a readout value — [microCaps] on the same tightened
   /// leading so the pair stacks inside the box.
@@ -1353,8 +1360,8 @@ class OneBeatTheme extends InheritedWidget {
   final OneBeatTokens tokens;
 
   static OneBeatTokens of(BuildContext context) {
-    final OneBeatTheme? theme =
-        context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
+    final OneBeatTheme? theme = context
+        .dependOnInheritedWidgetOfExactType<OneBeatTheme>();
     assert(
       theme != null,
       'No OneBeatTheme found. Wrap the app in OneBeatTheme.',

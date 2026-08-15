@@ -55,11 +55,27 @@ void main() {
     tester.view.physicalSize = Size(size.width * ratio, size.height * ratio);
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: OneBeatTheme(
-          tokens: OneBeatTokens.dark(),
-          child: ShellBinding(client: client),
+      // The `Localizations` and `Overlay` the real app gets from `WidgetsApp`.
+      // The rack's reorderable lanes assert on both — the overlay is where a
+      // dragged lane floats while it is being moved.
+      Localizations(
+        locale: const Locale('en', 'US'),
+        delegates: const <LocalizationsDelegate<Object>>[
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: OneBeatTheme(
+            tokens: OneBeatTokens.dark(),
+            child: Overlay(
+              initialEntries: <OverlayEntry>[
+                OverlayEntry(
+                  builder: (BuildContext context) =>
+                      ShellBinding(client: client),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -84,7 +100,7 @@ void main() {
   ) async {
     await pumpShell(tester, size: const Size(1440, 900));
 
-    // Rail buttons: 0=Channels, 1=Playlist, 2=Mixer, 3=Packs
+    // Rail buttons: 0=Channels, 1=Playlist, 2=Mixer
     await tester.tap(find.byType(ObRailButton).at(1));
     await tester.pump();
     expect(find.byType(PlaylistBinding), findsOneWidget);

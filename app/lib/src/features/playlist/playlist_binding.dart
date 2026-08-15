@@ -160,6 +160,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     final PlaylistVm canvasVm = PlaylistVm(
       clips: clipVms,
       pxPerBar: pxPerBar,
+      laneCountOverride: _store.lanes.length,
       playheadBar16ths: playhead16ths,
       headerTitle: 'Playlist',
       headerRight:
@@ -227,6 +228,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
         (OneBeatTokens.dark().size.playlistPxPerBar * _store.horizontalZoom);
     final int lane =
         (local.dy / OneBeatTokens.dark().size.playlistLaneHeight).floor();
+    _ensureLane(lane);
     for (final String path in drop.paths) {
       final String extension = path.split('.').last.toLowerCase();
       if (!SamplePackScanner.supportedExtensions.contains(extension)) continue;
@@ -287,11 +289,16 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     _dragPixels = Offset.zero;
   }
 
+  void _ensureLane(int laneIndex) {
+    if (laneIndex < 0) return;
+    while (_store.lanes.length <= laneIndex) {
+      _store.addLane('Track ${_store.lanes.length + 1}');
+    }
+  }
+
   void _onSampleDrop(Object data, double bar, int lane) {
     if (data is! SampleAsset) return;
-    if (_store.lanes.isEmpty) {
-      _store.addLane('Track 1');
-    }
+    _ensureLane(lane);
     if (_store.lanes.isEmpty) return;
 
     final int targetLaneIndex = lane.clamp(0, _store.lanes.length - 1);
@@ -322,9 +329,8 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       return;
     }
 
-    if (_store.lanes.isEmpty) {
-      _store.addLane('Track 1');
-    }
+    _ensureLane(lane);
+    if (_store.lanes.isEmpty) return;
 
     final int targetLaneIndex = lane.clamp(0, _store.lanes.length - 1);
     final ArrangementLane targetLane = _store.lanes[targetLaneIndex];

@@ -1105,14 +1105,8 @@ class EngineClient
   ) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
-        _bindings.ob_engine_notes_set_velocity(
-          _engine,
-          id,
-          buffer,
-          count,
-          velocity,
-        ),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings
+        .ob_engine_notes_set_velocity(_engine, id, buffer, count, velocity),
   );
 
   @override
@@ -1143,14 +1137,8 @@ class EngineClient
   }) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
-        _bindings.ob_engine_notes_duplicate(
-          _engine,
-          id,
-          buffer,
-          count,
-          deltaTicks,
-        ),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings
+        .ob_engine_notes_duplicate(_engine, id, buffer, count, deltaTicks),
   );
 
   @override
@@ -1159,6 +1147,12 @@ class EngineClient
 
   @override
   void auditionNoteOff(int key) => noteOff(key);
+
+  /// Auditions the sample-preview slot rather than the selected rack channel.
+  void previewNoteOn(int key, double velocity) =>
+      _post(cmdPreviewNoteOn, i64: key, f64a: velocity.clamp(0.0, 1.0));
+
+  void previewNoteOff(int key) => _post(cmdPreviewNoteOff, i64: key);
 
   // The rack's transaction calls under their general name: natively there is
   // one gesture mechanism and both editors use it.
@@ -1199,13 +1193,15 @@ class EngineClient
   @override
   void selectPattern(String patternId) => _withNativeString(
     patternId,
-    (Pointer<Char> native) => _bindings.ob_engine_pattern_select(_engine, native),
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_pattern_select(_engine, native),
   );
 
   @override
   void createPattern(String name) => _withNativeString(
     name,
-    (Pointer<Char> native) => _bindings.ob_engine_pattern_create(_engine, native),
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_pattern_create(_engine, native),
   );
 
   @override
@@ -1234,7 +1230,8 @@ class EngineClient
   @override
   void removePattern(String patternId) => _withNativeString(
     patternId,
-    (Pointer<Char> native) => _bindings.ob_engine_pattern_remove(_engine, native),
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_pattern_remove(_engine, native),
   );
 
   @override
@@ -1323,11 +1320,15 @@ class EngineClient
   );
 
   @override
-  void setLaneSoloed(String laneId, {required bool soloed}) => _withNativeString(
-    laneId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_lane_set_soloed(_engine, native, soloed ? 1 : 0),
-  );
+  void setLaneSoloed(String laneId, {required bool soloed}) =>
+      _withNativeString(
+        laneId,
+        (Pointer<Char> native) => _bindings.ob_engine_lane_set_soloed(
+          _engine,
+          native,
+          soloed ? 1 : 0,
+        ),
+      );
 
   @override
   void setLaneCollapsed(String laneId, {required bool collapsed}) =>
@@ -1994,6 +1995,8 @@ const int cmdSetTempo = 5;
 const int cmdSetLoop = 6;
 const int cmdNoteOn = 7;
 const int cmdNoteOff = 8;
+const int cmdPreviewNoteOn = 16;
+const int cmdPreviewNoteOff = 17;
 const int cmdAllNotesOff = 9;
 const int cmdSetMasterGain = 10;
 const int cmdPluginParamBegin = 11;

@@ -206,6 +206,12 @@ class _FakeRackEngineClient implements EngineClient {
   int duplicateCalls = 0;
   int deleteCalls = 0;
 
+  /// Every reorder the binding asked for, as (instrumentId, newOrder).
+  final List<(String, int)> reorders = <(String, int)>[];
+
+  @override
+  void reorderInstrument(String id, int order) => reorders.add((id, order));
+
   @override
   void setInstrumentMuted(String id, {required bool muted}) {
     instruments = instruments
@@ -665,6 +671,69 @@ void main() {
     await tester.pump();
 
     expect(client.instruments.first.muted, isTrue);
+  });
+
+  testWidgets('dragging a lane by its name reorders the channel', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // The name block is the drag handle. Grab the first lane's name and drag it
+    // down past the second lane.
+    final Rect firstRow = tester.getRect(find.byType(ObRackRow).first);
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Kick 808')),
+    );
+    // The handle uses an immediate drag recognizer, so one pump to let it
+    // claim the pointer, then a move past the touch slop.
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    await gesture.moveBy(Offset(0, firstRow.height * 1.2));
+    await tester.pump();
+    await gesture.up();
+    // Plain pumps, not pumpAndSettle: the binding drives a continuous
+    // playhead ticker, so the tree never goes quiet.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // The kick was first; it is now second.
+    expect(client.reorders, <(String, int)>[('kick', 1)]);
+  });
+
+  testWidgets('dragging across the step cells paints instead of reordering', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // A vertical drag starting on a step cell must not move the lane: the grid
+    // is a paint surface, and only the name block is a handle.
+    final Rect cell = tester.getRect(find.byType(ObStepGrid).first);
+    final TestGesture gesture = await tester.startGesture(cell.center);
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 120));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(client.reorders, isEmpty);
   });
 
   testWidgets('right-clicking a lane offers duplicate and delete', (

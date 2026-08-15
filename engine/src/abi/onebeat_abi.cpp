@@ -96,6 +96,10 @@ struct ob_engine {
   std::optional<onebeat::model::InstrumentId> selected_instrument;
   std::optional<onebeat::model::PatternId> current_pattern;
   std::map<onebeat::model::InstrumentId, onebeat::model::Ticks> rack_grids;
+  // Dense channels assigned by the flattener to arrangement audio clips. Kept
+  // between publishes so a transport-only update rebuilds the same rack even
+  // when the schedule itself did not become dirty.
+  std::map<onebeat::model::ClipId, onebeat::core::InstrumentId> audio_channel_indices;
   std::string undo_name_cache;
   std::string redo_name_cache;
   // Where the project last came from or went to. Kept so that a save can carry
@@ -216,7 +220,7 @@ void growPatternToFit(ob_engine& handle) {
  * channel's notes to the wrong voice. */
 void syncChannels(ob_engine& handle) {
   std::vector<onebeat::core::Engine::ChannelDesc> channels;
-  channels.reserve(handle.project.instruments().size());
+  channels.reserve(handle.project.instruments().size() + handle.audio_channel_indices.size());
   int index = 0;
   for (const auto& [id, instrument] : handle.project.instruments()) {
     onebeat::core::Engine::ChannelDesc desc;
@@ -233,6 +237,25 @@ void syncChannels(ob_engine& handle) {
     }
     ++index;
   }
+
+  // The flattener assigns audio clips in project clip-map order, immediately
+  // after instruments. Reproduce that order here so each AudioStart event hits
+  // the channel whose worker thread loaded its corresponding file.
+  for (const auto& [clip_id, channel_index] : handle.audio_channel_indices) {
+    const onebeat::model::Clip* clip = handle.project.findClip(clip_id);
+    const onebeat::model::AudioSource* audio = clip == nullptr ? nullptr : clip->audio();
+    if (audio == nullptr) continue;
+    onebeat::core::Engine::ChannelDesc desc;
+    desc.sample_path = audio->path;
+    desc.gain = audio->gain;
+    desc.muted = clip->muted;
+    if (channel_index != static_cast<onebeat::core::InstrumentId>(channels.size())) {
+      // This should only be possible after a malformed model/map mismatch; do
+      // not silently route a song to the wrong sampler if it ever happens.
+      continue;
+    }
+    channels.push_back(std::move(desc));
+  }
   handle.engine->setChannels(std::move(channels));
 }
 
@@ -240,27 +263,40 @@ void publishModel(ob_engine& handle) {
   /* Before the flatten, so the schedule is built from the grown pattern rather
    * than from the one that was too short to hold the edit just made. */
   growPatternToFit(handle);
+  onebeat::model::FlattenResult flattened =
+      handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
+  if (flattened.schedule != nullptr) {
+    handle.audio_channel_indices = std::move(flattened.audio_channel_index);
+  }
   /* Every model edit that can change what a channel sounds like — adding an
    * instrument, loading a sample, gain, pan, mute, reordering — reaches the
    * engine through here, for the same reason the schedule does. */
   syncChannels(handle);
-  onebeat::model::FlattenResult flattened =
-      handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
   if (flattened.schedule != nullptr) {
     handle.engine->publishSchedule(std::move(flattened.schedule));
   }
+
+  // The transport must cover the complete arrangement, not just the current
+  // piano-roll pattern. In particular, a long audio clip must not be cut back
+  // to the default one-bar loop while the song is playing.
   double loop_end_beats = 4.0;
   const onebeat::model::Pattern* pattern = currentPattern(handle);
   if (pattern != nullptr) {
-    /* The pattern's own length, which growPatternToFit has already made big
-     * enough to hold every note in it. Looping over the *content* instead would
-     * turn the rack's 16/32/64-step control into a setting with no audible
-     * effect, and would cut a deliberately empty tail out of the bar. */
-    loop_end_beats = static_cast<double>(pattern->length) /
-                     static_cast<double>(onebeat::model::TicksPerQuarter);
-  } else if (flattened.length_frames > 0) {
     loop_end_beats =
-        handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames);
+        std::max(loop_end_beats, static_cast<double>(pattern->length) /
+                                     static_cast<double>(onebeat::model::TicksPerQuarter));
+  }
+  for (const auto& [clip_id, clip] : handle.project.clips()) {
+    (void)clip_id;
+    if (clip.audio() == nullptr) continue;
+    const double clip_end = static_cast<double>(clip.start + clip.length) /
+                            static_cast<double>(onebeat::model::TicksPerQuarter);
+    loop_end_beats = std::max(loop_end_beats, clip_end);
+  }
+  if (flattened.length_frames > 0) {
+    loop_end_beats = std::max(
+        loop_end_beats,
+        handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames));
   }
   ob_command loop{};
   loop.type = OB_CMD_SET_LOOP;
@@ -1369,7 +1405,7 @@ ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_nam
 }
 
 ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_name,
-                                               const char* utf8_sample_path) {
+                                          const char* utf8_sample_path) {
   if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0' ||
       utf8_sample_path == nullptr || utf8_sample_path[0] == '\0') {
     return fail(OB_ERR_INVALID_ARGUMENT, "A sample name and path are required.");
@@ -1410,10 +1446,8 @@ ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_na
   }
 }
 
-ob_status ob_engine_instrument_replace_sample(ob_engine* engine,
-                                               const char* utf8_instrument_id,
-                                               const char* utf8_name,
-                                               const char* utf8_sample_path) {
+ob_status ob_engine_instrument_replace_sample(ob_engine* engine, const char* utf8_instrument_id,
+                                              const char* utf8_name, const char* utf8_sample_path) {
   if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0' ||
       utf8_sample_path == nullptr || utf8_sample_path[0] == '\0') {
     return fail(OB_ERR_INVALID_ARGUMENT, "A sample name and path are required.");
@@ -1436,10 +1470,9 @@ ob_status ob_engine_instrument_replace_sample(ob_engine* engine,
     plugin.name = utf8_name;
     plugin.vendor = "OneBeat";
     plugin.path_hint = utf8_sample_path;
-    const ob_status status = executeModel(
-        *engine,
-        onebeat::model::replaceInstrument(engine->project, *id, plugin),
-        "The sample instrument could not be replaced.");
+    const ob_status status =
+        executeModel(*engine, onebeat::model::replaceInstrument(engine->project, *id, plugin),
+                     "The sample instrument could not be replaced.");
     if (status != OB_OK) return status;
     engine->selected_instrument = *id;
     engine->has_instance = false;
@@ -2218,9 +2251,9 @@ ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_
 
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
-  out_info->flags =
-      (clip.muted ? OB_CLIP_FLAG_MUTED : 0U) | (clip.transforms.loop ? OB_CLIP_FLAG_LOOP : 0U) |
-      (clip.audio() != nullptr ? OB_CLIP_FLAG_AUDIO : 0U);
+  out_info->flags = (clip.muted ? OB_CLIP_FLAG_MUTED : 0U) |
+                    (clip.transforms.loop ? OB_CLIP_FLAG_LOOP : 0U) |
+                    (clip.audio() != nullptr ? OB_CLIP_FLAG_AUDIO : 0U);
   out_info->start_ticks = clip.start;
   out_info->length_ticks = clip.length;
   out_info->window_start_ticks = clip.transforms.window_start;
@@ -2285,7 +2318,8 @@ ob_status ob_engine_audio_clip_add(ob_engine* engine, const char* utf8_lane_id,
                                    const char* utf8_sample_path, int64_t start_ticks) {
   if (engine == nullptr || utf8_sample_path == nullptr || utf8_sample_path[0] == '\0' ||
       start_ticks < 0) {
-    return fail(OB_ERR_INVALID_ARGUMENT, "An audio clip needs a sample path and non-negative start.");
+    return fail(OB_ERR_INVALID_ARGUMENT,
+                "An audio clip needs a sample path and non-negative start.");
   }
   const auto lane = laneId(utf8_lane_id);
   if (!lane || engine->project.findLane(*lane) == nullptr) {

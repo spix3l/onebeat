@@ -1,6 +1,10 @@
 #include <array>
 #include <cmath>
+#include <memory>
+#include <vector>
 
+#include "core/sampler.h"
+#include "core/wav_loader.h"
 #include "doctest.h"
 #include "test_helpers.h"
 #include "testing/offline_driver.h"
@@ -193,6 +197,150 @@ TEST_SUITE("engine") {
     CHECK(captured[1].frame == 64);
     CHECK(captured[2].frame == 128);
     CHECK(captured[3].frame == 128 + 64);
+  }
+
+  // The rack. Before these, the engine hosted one instrument and every lane
+  // played whichever sample was loaded last — a kick and a hi-hat both sounding
+  // like the clap that happened to be added most recently.
+  TEST_CASE("Each channel plays its own sample, not the one loaded last") {
+    // Two flat samples at different levels, so which channel produced the audio
+    // is readable straight off the peak.
+    const auto plateau = [](float level) {
+      auto data = std::make_unique<onebeat::core::SampleData>();
+      data->channels = 1;
+      data->sample_rate = 48000.0;
+      data->frames = 48000;
+      data->name = "plateau";
+      data->samples.assign(static_cast<size_t>(data->frames), level);
+      return data;
+    };
+
+    // One note per channel, a beat apart, at the sampler's root note so neither
+    // is resampled.
+    const auto schedule = [](double sample_rate) {
+      onebeat::core::ScheduleBuilder builder;
+      const auto beat = static_cast<int64_t>(sample_rate / 2.0);  // 120 BPM
+      builder.addNote(0, onebeat::core::Sampler::RootNote, 1.0F, 0, beat / 2);
+      builder.addNote(1, onebeat::core::Sampler::RootNote, 1.0F, beat, beat / 2);
+      return builder.setLengthFrames(beat * 2).build(sample_rate, 1);
+    };
+
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    // Two channels in the rack, then a distinguishable sample in each.
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+    engine->channelSampler(0).setSample(plateau(0.5F));
+    engine->channelSampler(1).setSample(plateau(0.25F));
+    engine->channelSampler(0).collectRetiredSamples(false);
+    engine->channelSampler(1).collectRetiredSamples(false);
+
+    engine->publishSchedule(schedule(48000.0));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    // Frames 0..12000: only channel 0's note is sounding.
+    const auto first = renderOffline(*engine, 12000, 128);
+    CHECK(first.peak() == doctest::Approx(0.5F).epsilon(0.02));
+
+    // Frames 12000..24000: the gap, which carries channel 0's release tail.
+    // Rendered and discarded so the next window starts clean.
+    renderOffline(*engine, 12000, 128);
+
+    // Frames 24000..36000: only channel 1's note. If the channels shared one
+    // sampler this would read 0.5 — the whole bug in one assertion.
+    const auto second = renderOffline(*engine, 12000, 128);
+    CHECK(second.peak() == doctest::Approx(0.25F).epsilon(0.02));
+  }
+
+  TEST_CASE("An audio-start event plays the loaded sample as a full one-shot") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+
+    auto sample = std::make_unique<onebeat::core::SampleData>();
+    sample->channels = 1;
+    sample->sample_rate = 48000.0;
+    sample->frames = 48000;
+    sample->name = "song";
+    sample->samples.assign(static_cast<size_t>(sample->frames), 0.25F);
+    engine->channelSampler(1).setSample(std::move(sample));
+    engine->channelSampler(1).collectRetiredSamples(false);
+
+    onebeat::core::ScheduleBuilder builder;
+    builder.addAudioStart(1, 0);
+    engine->publishSchedule(builder.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    const auto result = renderOffline(*engine, 48000, 128);
+    CHECK(result.peak() == doctest::Approx(0.25F).epsilon(0.02));
+    CHECK(result.rms() > 0.20F);
+  }
+
+  TEST_CASE("Replacing a schedule releases voices from clips that were moved") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+
+    auto sample = std::make_unique<onebeat::core::SampleData>();
+    sample->channels = 1;
+    sample->sample_rate = 48000.0;
+    sample->frames = 48000 * 4;
+    sample->name = "moving-song";
+    sample->samples.assign(static_cast<size_t>(sample->frames), 0.25F);
+    engine->channelSampler(1).setSample(std::move(sample));
+    engine->channelSampler(1).collectRetiredSamples(false);
+
+    onebeat::core::ScheduleBuilder old_schedule;
+    old_schedule.addAudioStart(1, 0);
+    engine->publishSchedule(old_schedule.setLengthFrames(48000 * 4).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    CHECK(renderOffline(*engine, 1024, 128).peak() > 0.20F);
+
+    // A move/edit publishes a replacement schedule while transport is already
+    // running. The old song must not continue from its previous position.
+    onebeat::core::ScheduleBuilder moved_schedule;
+    engine->publishSchedule(moved_schedule.setLengthFrames(48000 * 4).build(48000.0, 2));
+    // Let the sampler's click-safe release fade finish before measuring the
+    // replacement schedule. The old voice must not remain at full level.
+    renderOffline(*engine, 512, 128);
+    const auto after_move = renderOffline(*engine, 2048, 128);
+    CHECK(after_move.peak() < 0.05F);
+  }
+
+  TEST_CASE("A channel's notes do not sound on any other channel") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    // Channel 0 silent, channel 1 audible. A note addressed to channel 0 must
+    // then produce nothing at all.
+    rack[0].muted = true;
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+
+    auto sample = std::make_unique<onebeat::core::SampleData>();
+    sample->channels = 1;
+    sample->sample_rate = 48000.0;
+    sample->frames = 48000;
+    sample->name = "plateau";
+    sample->samples.assign(48000, 0.5F);
+    engine->channelSampler(0).setSample(std::move(sample));
+    engine->channelSampler(0).collectRetiredSamples(false);
+
+    onebeat::core::ScheduleBuilder builder;
+    builder.addNote(0, onebeat::core::Sampler::RootNote, 1.0F, 0, 12000);
+    engine->publishSchedule(builder.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    CHECK(renderOffline(*engine, 12000, 128).isSilent());
   }
 
 }  // TEST_SUITE

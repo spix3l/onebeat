@@ -27,9 +27,7 @@ Future<void> loadAppFonts() async {
   };
   for (final MapEntry<String, String> family in families.entries) {
     final FontLoader loader = FontLoader(family.key)
-      ..addFont(
-        File(family.value).readAsBytes().then(ByteData.sublistView),
-      );
+      ..addFont(File(family.value).readAsBytes().then(ByteData.sublistView));
     await loader.load();
   }
 }
@@ -66,18 +64,28 @@ Future<void> pumpUi(
 
   final Widget content = OneBeatTheme(
     tokens: tokens,
-    child: Directionality(
-      textDirection: TextDirection.ltr,
-      child: MediaQuery(
-        data: MediaQueryData(
-          size: size,
-          devicePixelRatio: 1.0,
-          disableAnimations: true,
-        ),
-        child: Overlay(
-          initialEntries: <OverlayEntry>[
-            OverlayEntry(builder: (BuildContext context) => entry),
-          ],
+    child: Localizations(
+      // The real app runs under `WidgetsApp`, which supplies these. Widgets
+      // that announce themselves to assistive tech — the reorderable rack lanes
+      // are the first — assert on their presence, so the harness has to stand
+      // in the same place the app does.
+      locale: const Locale('en', 'US'),
+      delegates: const <LocalizationsDelegate<Object>>[
+        DefaultWidgetsLocalizations.delegate,
+      ],
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: MediaQuery(
+          data: MediaQueryData(
+            size: size,
+            devicePixelRatio: 1.0,
+            disableAnimations: true,
+          ),
+          child: Overlay(
+            initialEntries: <OverlayEntry>[
+              OverlayEntry(builder: (BuildContext context) => entry),
+            ],
+          ),
         ),
       ),
     ),
