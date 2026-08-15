@@ -284,10 +284,7 @@ class ColorTokens {
   /// "off" must never look the same.
   List<Color> stepGradient(double velocity) {
     final double unit = 0.4 + 0.6 * velocity.clamp(0.0, 1.0);
-    return <Color>[
-      Color.lerp(accentMuted, accentDeep, unit)!,
-      Color.lerp(accentMuted, accent, unit)!,
-    ];
+    return <Color>[Color.lerp(accentMuted, accentDeep, unit)!, Color.lerp(accentMuted, accent, unit)!];
   }
 }
 
@@ -401,6 +398,11 @@ class SizeTokens {
   double get inspectorLampSize => 18;
   double get inspectorLampDotSize => 8;
 
+  /// The channel's step-divisor select. Wide enough for the `GRID` prefix,
+  /// `1/16` and the chevron — squeezed narrower it shows a chevron over an
+  /// ellipsis, which is a control you cannot read.
+  double get inspectorGridFieldWidth => 104;
+
   /// The two-octave keyboard at the strip's right edge.
   double get inspectorKeyboardWidth => 166;
   double get inspectorKeyboardHeight => 54;
@@ -427,6 +429,7 @@ class SizeTokens {
 
   /// The mono route chip at the lane's right edge (`→ D1`).
   double get rackRouteChipWidth => 42;
+  double get rackCompactBreakpoint => 900;
 
   /// The accent bar down the left edge of the selected lane.
   double get rackSelectedEdgeWidth => 3;
@@ -845,23 +848,13 @@ class TypeTokens {
     color: textPrimary,
   );
 
-  TextStyle get body => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 13,
-    fontWeight: FontWeight.w400,
-    color: textPrimary,
-  );
+  TextStyle get body => TextStyle(fontFamily: uiFamily, fontSize: 13, fontWeight: FontWeight.w400, color: textPrimary);
 
   /// Row names and running prose — [body] at the middle weight.
   TextStyle get bodySecondary => body.copyWith(color: textSecondary);
 
-  TextStyle get label => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w500,
-    letterSpacing: 0.4,
-    color: textMuted,
-  );
+  TextStyle get label =>
+      TextStyle(fontFamily: uiFamily, fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0.4, color: textMuted);
 
   /// The wordmark. Wide-tracked and uppercase, which is the one place in the
   /// app where letter-spacing is a deliberate identity choice rather than a
@@ -875,9 +868,7 @@ class TypeTokens {
   );
 
   /// Dense chrome labels use the condensed width axis of Archivo.
-  TextStyle get labelDense => label.copyWith(
-    fontVariations: const <FontVariation>[FontVariation('wdth', 87)],
-  );
+  TextStyle get labelDense => label.copyWith(fontVariations: const <FontVariation>[FontVariation('wdth', 87)]);
 
   /// Rail tile captions. The rail is 60px wide and the captions have to fit on
   /// one line inside it — a wrapped "CHANNEL/S" is the tell that this style was
@@ -903,12 +894,8 @@ class TypeTokens {
   /// (UI-B-04). Smaller than [body] because the mockup's browser rows are
   /// 24px tall — at 13px the names would fill the row edge to edge and the
   /// list would lose the rhythm that makes it scannable.
-  TextStyle get listRow => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    color: textSecondary,
-  );
+  TextStyle get listRow =>
+      TextStyle(fontFamily: uiFamily, fontSize: 11, fontWeight: FontWeight.w400, color: textSecondary);
 
   /// The selected row: same size, more weight, full-strength ink. Weight
   /// rather than size, so selection never reflows the list.
@@ -954,29 +941,16 @@ class TypeTokens {
   /// A channel lane's name, and the instrument caption under it (UI-B-05).
   /// Two sizes and two colours in a 46px lane: the name is what you scan for,
   /// the type is what you check once.
-  TextStyle get rackName => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
+  TextStyle get rackName =>
+      TextStyle(fontFamily: uiFamily, fontSize: 12, fontWeight: FontWeight.w600, color: textPrimary);
 
-  TextStyle get rackCaption => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 10,
-    fontWeight: FontWeight.w400,
-    color: textMuted,
-  );
+  TextStyle get rackCaption =>
+      TextStyle(fontFamily: uiFamily, fontSize: 10, fontWeight: FontWeight.w400, color: textMuted);
 
   /// A playlist clip's name and the duration under it (UI-B-08). Both take
   /// the dark ink roles rather than a text colour: they sit on a bright
   /// identity fill, not on a surface.
-  TextStyle get clipName => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w600,
-    color: clipInk,
-  );
+  TextStyle get clipName => TextStyle(fontFamily: uiFamily, fontSize: 12, fontWeight: FontWeight.w600, color: clipInk);
 
   TextStyle get clipDuration => TextStyle(
     fontFamily: numericFamily,
@@ -987,21 +961,11 @@ class TypeTokens {
   );
 
   /// Tag labels (PAT, AUD, AUTO).
-  TextStyle get tag => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 9,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-    color: textPrimary,
-  );
+  TextStyle get tag =>
+      TextStyle(fontFamily: uiFamily, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: textPrimary);
 
   /// Menu bar items.
-  TextStyle get menu => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w400,
-    color: textMuted,
-  );
+  TextStyle get menu => TextStyle(fontFamily: uiFamily, fontSize: 12, fontWeight: FontWeight.w400, color: textMuted);
 
   /// Top chrome (UI-B-02). The `OneBeat` wordmark in the menu bar — smaller
   /// and quieter than [brand], which is the title-block treatment.
@@ -1045,21 +1009,12 @@ class TypeTokens {
   );
 
   /// Breadcrumbs in piano roll and inspectors.
-  TextStyle get breadcrumb => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-  );
+  TextStyle get breadcrumb =>
+      TextStyle(fontFamily: uiFamily, fontSize: 12, fontWeight: FontWeight.w500, color: textPrimary);
 
   /// Knob labels and values.
-  TextStyle get knobLabel => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 9,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.5,
-    color: textMuted,
-  );
+  TextStyle get knobLabel =>
+      TextStyle(fontFamily: uiFamily, fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: textMuted);
 
   /// Micro caps in MartianMono: the `VOL`/`PAN` captions under knobs and the
   /// `SNAP`/`SCALE` prefixes inside dropdown fields. Mono so a column of them
@@ -1072,20 +1027,12 @@ class TypeTokens {
     color: textMuted,
   );
 
-  TextStyle get knobValue => TextStyle(
-    fontFamily: numericFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
+  TextStyle get knobValue =>
+      TextStyle(fontFamily: numericFamily, fontSize: 11, fontWeight: FontWeight.w600, color: textPrimary);
 
   /// Dialog and modal titles.
-  TextStyle get dialogTitle => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
+  TextStyle get dialogTitle =>
+      TextStyle(fontFamily: uiFamily, fontSize: 16, fontWeight: FontWeight.w600, color: textPrimary);
 
   /// All numerics: tabular figures, fixed width, no jitter as values change.
   TextStyle get numeric => TextStyle(
@@ -1119,40 +1066,23 @@ class TypeTokens {
   /// The prose under it: bigger than [body] and generously leaded, because it
   /// is the one block of running text a user actually reads rather than scans.
   /// Bold runs inside it take [proseStrong].
-  TextStyle get prose => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 14,
-    fontWeight: FontWeight.w400,
-    height: 1.55,
-    color: textSecondary,
-  );
+  TextStyle get prose =>
+      TextStyle(fontFamily: uiFamily, fontSize: 14, fontWeight: FontWeight.w400, height: 1.55, color: textSecondary);
 
   TextStyle get proseStrong => prose.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
 
   /// A popover or overlay row (UI-B-11 §6) and the dim shortcut trailing it.
-  TextStyle get menuRow => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 13,
-    fontWeight: FontWeight.w400,
-    color: textSecondary,
-  );
+  TextStyle get menuRow =>
+      TextStyle(fontFamily: uiFamily, fontSize: 13, fontWeight: FontWeight.w400, color: textSecondary);
 
   TextStyle get menuRowActive => menuRow.copyWith(fontWeight: FontWeight.w600, color: textPrimary);
 
   /// A floating window's title, and the dim `· Drums Bus selected` beside it.
-  TextStyle get windowTitle => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 13,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-  );
+  TextStyle get windowTitle =>
+      TextStyle(fontFamily: uiFamily, fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary);
 
-  TextStyle get windowSubtitle => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 12,
-    fontWeight: FontWeight.w400,
-    color: textMuted,
-  );
+  TextStyle get windowSubtitle =>
+      TextStyle(fontFamily: uiFamily, fontSize: 12, fontWeight: FontWeight.w400, color: textMuted);
 
   /// [microCaps] with the tracking a right-aligned column header needs to read
   /// as a header rather than as a value (`WHAT IT CAN DO TO YOUR PROJECT`).
@@ -1161,12 +1091,8 @@ class TypeTokens {
   /// An extension's name in the list, and the dim meta line under it. The meta
   /// mixes prose and mono (`by @luma · v1.2.0 · bound to ⇧⌘H`) — it renders as
   /// mono throughout so the version numbers down the column line up.
-  TextStyle get extName => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 13,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-  );
+  TextStyle get extName =>
+      TextStyle(fontFamily: uiFamily, fontSize: 13, fontWeight: FontWeight.w700, color: textPrimary);
 
   TextStyle get extMeta => TextStyle(
     fontFamily: numericFamily,
@@ -1178,21 +1104,13 @@ class TypeTokens {
 
   /// The detail panel's title — one step up from [extName], because it names
   /// the thing the whole lower half of the screen is describing.
-  TextStyle get extDetailName => TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 18,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-  );
+  TextStyle get extDetailName =>
+      TextStyle(fontFamily: uiFamily, fontSize: 18, fontWeight: FontWeight.w700, color: textPrimary);
 
   /// The `GROOVE FETCHER CRASHED — CONTAINED & DISABLED` line, and the
   /// `CRASHED` tag on the row it refers to.
-  TextStyle get dangerCaps => const TextStyle(
-    fontFamily: uiFamily,
-    fontSize: 11,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.6,
-  );
+  TextStyle get dangerCaps =>
+      const TextStyle(fontFamily: uiFamily, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6);
 }
 
 /// The resolved token set for one theme.
@@ -1389,10 +1307,7 @@ class OneBeatTheme extends InheritedWidget {
 
   static OneBeatTokens of(BuildContext context) {
     final OneBeatTheme? theme = context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
-    assert(
-      theme != null,
-      'No OneBeatTheme found. Wrap the app in OneBeatTheme.',
-    );
+    assert(theme != null, 'No OneBeatTheme found. Wrap the app in OneBeatTheme.');
     return theme!.tokens;
   }
 

@@ -2,14 +2,23 @@ import 'package:flutter/foundation.dart';
 
 import '../../engine/engine_client.dart';
 
+enum PlaylistTool { select, draw, paint, delete, mute, slice, slip }
+
+@immutable
+class PlaylistTimeSelection {
+  const PlaylistTimeSelection(this.startTick, this.endTick);
+
+  final int startTick;
+  final int endTick;
+
+  int get lowTick => startTick < endTick ? startTick : endTick;
+  int get highTick => startTick < endTick ? endTick : startTick;
+  bool contains(int tick) => tick >= lowTick && tick <= highTick;
+}
+
 @immutable
 class PlaylistMarquee {
-  const PlaylistMarquee(
-    this.startTick,
-    this.startLane,
-    this.endTick,
-    this.endLane,
-  );
+  const PlaylistMarquee(this.startTick, this.startLane, this.endTick, this.endLane);
 
   final int startTick;
   final int startLane;

@@ -33,11 +33,7 @@ const int ticksPerBar = GridChoice.ticksPerBar;
 
 @immutable
 class PlaylistInsertItem {
-  const PlaylistInsertItem({
-    required this.id,
-    this.patternId = '',
-    this.audioPath = '',
-  });
+  const PlaylistInsertItem({required this.id, this.patternId = '', this.audioPath = ''});
 
   final String id;
   final String patternId;
@@ -69,6 +65,8 @@ class PlaylistStore extends ChangeNotifier {
   double horizontalZoom = 1.0;
   double scrollTicks = 0.0;
   double scrollLanes = 0.0;
+  PlaylistTool tool = PlaylistTool.select;
+  PlaylistTimeSelection? timeSelection;
 
   ClipDragKind dragKind = ClipDragKind.none;
   PlaylistMarquee? marquee;
@@ -150,6 +148,23 @@ class PlaylistStore extends ChangeNotifier {
 
   void setSnap(GridChoice value) {
     snap = value;
+    notifyListeners();
+  }
+
+  void setTool(PlaylistTool value) {
+    if (tool == value) return;
+    tool = value;
+    notifyListeners();
+  }
+
+  void setTimeSelection(int startTick, int endTick) {
+    timeSelection = PlaylistTimeSelection(startTick < 0 ? 0 : startTick, endTick < 0 ? 0 : endTick);
+    notifyListeners();
+  }
+
+  void clearTimeSelection() {
+    if (timeSelection == null) return;
+    timeSelection = null;
     notifyListeners();
   }
 
@@ -342,12 +357,7 @@ class PlaylistStore extends ChangeNotifier {
     selectedPatternId = pattern.id;
 
     final int start = snapTick(startTicks);
-    _client.addClip(
-      laneId,
-      patternId: pattern.id,
-      startTicks: start,
-      lengthTicks: pattern.lengthTicks,
-    );
+    _client.addClip(laneId, patternId: pattern.id, startTicks: start, lengthTicks: pattern.lengthTicks);
     refresh();
 
     for (final ArrangementClip clip in clipsOnLane(laneId)) {
@@ -372,9 +382,7 @@ class PlaylistStore extends ChangeNotifier {
 
   void deleteSelection() {
     if (selectedClipIds.isEmpty) return;
-    _client.beginGesture(
-      selectedClipIds.length == 1 ? 'Delete clip' : 'Delete clips',
-    );
+    _client.beginGesture(selectedClipIds.length == 1 ? 'Delete clip' : 'Delete clips');
     for (final String id in selectedClipIds.toList()) {
       _client.removeClip(id);
     }
@@ -399,10 +407,7 @@ class PlaylistStore extends ChangeNotifier {
   }
 
   void setClipWindowStart(String clipId, int windowStartTicks) {
-    _client.setClipWindowStart(
-      clipId,
-      windowStartTicks < 0 ? 0 : windowStartTicks,
-    );
+    _client.setClipWindowStart(clipId, windowStartTicks < 0 ? 0 : windowStartTicks);
     refresh();
   }
 
@@ -440,9 +445,7 @@ class PlaylistStore extends ChangeNotifier {
       ..clear()
       ..addAll(
         clips
-            .where(
-              (ArrangementClip clip) => marquee!.contains(clip, laneIndexes[clip.laneId] ?? 0),
-            )
+            .where((ArrangementClip clip) => marquee!.contains(clip, laneIndexes[clip.laneId] ?? 0))
             .map((ArrangementClip clip) => clip.id),
       );
     notifyListeners();
@@ -497,10 +500,7 @@ class PlaylistStore extends ChangeNotifier {
 
   void updateClipOffset(String clipId, int windowStartTicks) {
     if (dragKind != ClipDragKind.offset) return;
-    _client.setClipWindowStart(
-      clipId,
-      windowStartTicks < 0 ? 0 : windowStartTicks,
-    );
+    _client.setClipWindowStart(clipId, windowStartTicks < 0 ? 0 : windowStartTicks);
     refresh();
   }
 

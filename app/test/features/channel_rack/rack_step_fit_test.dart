@@ -3,7 +3,6 @@
 // is not a rhythm you can write.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
-import 'package:onebeat/src/features/channel_rack/channel_rack_screen.dart';
 import 'package:onebeat/src/features/channel_rack/rack_row.dart';
 
 void main() {
@@ -69,6 +68,27 @@ void main() {
       expect(fitted.rackStepGroupGap % 1, 0);
     }
   });
+
+  group('a lane bound to the rack width', () {
+    test('fits more steps than the pattern has into the same span', () {
+      final double shared = rackGridWidth(base, 16);
+      final SizeTokens fitted = fitRackStepsToWidth(base, 128, shared);
+      expect(rackGridWidth(fitted, 128), lessThanOrEqualTo(shared));
+    });
+
+    test('drops the gaps rather than overflow when even the smallest cell will not fit', () {
+      final double shared = rackGridWidth(base, 16);
+      final SizeTokens fitted = fitRackStepsToWidth(base, 512, shared);
+      expect(rackGridWidth(fitted, 512), lessThanOrEqualTo(shared));
+      expect(fitted.rackStepGap, 0);
+    });
+
+    test('keeps the design size when the lane matches the pattern', () {
+      final double shared = rackGridWidth(base, 16);
+      expect(fitRackStepsToWidth(base, 16, shared).rackStepCell, base.rackStepCell);
+    });
+  });
+
 }
 
 /// The fitted tokens for an exact cell size, reached through the public entry
@@ -81,4 +101,5 @@ SizeTokens _cellOf(double cell) {
     if (fitted.rackStepCell == cell) return fitted;
   }
   fail('no width produces a $cell px cell');
+
 }

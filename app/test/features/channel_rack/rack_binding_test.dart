@@ -8,6 +8,7 @@
 // 5. Playing step updates from snapshot.
 // 6. Channel inspector updates on row selection.
 import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
@@ -179,6 +180,29 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void selectInstrument(String id) => selectedInstruments.add(id);
 
+  /// Every transport-facing call the binding made, in order, so a test can
+  /// assert that an action left the transport alone.
+  final List<String> transportCalls = <String>[];
+
+  @override
+  void play() => transportCalls.add('play');
+
+  @override
+  void stop() => transportCalls.add('stop');
+
+  @override
+  void seekFrames(int frames) => transportCalls.add('seek:$frames');
+
+  @override
+  void playPatternPreview(String patternId) => transportCalls.add('preview:$patternId');
+
+  @override
+  void playPatternChannelPreview(String patternId, String instrumentId) =>
+      transportCalls.add('channelPreview:$patternId:$instrumentId');
+
+  @override
+  void stopPatternPreview() => transportCalls.add('previewStop');
+
   @override
   bool get canUndoProject => transactionCommits > undoCalls;
 
@@ -261,32 +285,30 @@ class _FakeRackEngineClient implements EngineClient {
   /// muting a lane cannot silently clear its solo, the way two hand-written
   /// copies of this rebuild did.
   void _setFlags(String id, {bool? muted, bool? soloed}) {
-    instruments =
-        instruments
-            .map(
-              (ProjectInstrument inst) =>
-                  inst.id == id
-                      ? ProjectInstrument(
-                        id: inst.id,
-                        name: inst.name,
-                        color: inst.color,
-                        order: inst.order,
-                        pluginId: inst.pluginId,
-                        pluginName: inst.pluginName,
-                        pluginVendor: inst.pluginVendor,
-                        pluginPath: inst.pluginPath,
-                        muted: muted ?? inst.muted,
-                        soloed: soloed ?? inst.soloed,
-                        selected: inst.selected,
-                        affectedPatterns: inst.affectedPatterns,
-                        affectedClips: inst.affectedClips,
-                        affectedNotes: inst.affectedNotes,
-                        gain: inst.gain,
-                        pan: inst.pan,
-                      )
-                      : inst,
-            )
-            .toList();
+    instruments = instruments
+        .map(
+          (ProjectInstrument inst) => inst.id == id
+              ? ProjectInstrument(
+                  id: inst.id,
+                  name: inst.name,
+                  color: inst.color,
+                  order: inst.order,
+                  pluginId: inst.pluginId,
+                  pluginName: inst.pluginName,
+                  pluginVendor: inst.pluginVendor,
+                  pluginPath: inst.pluginPath,
+                  muted: muted ?? inst.muted,
+                  soloed: soloed ?? inst.soloed,
+                  selected: inst.selected,
+                  affectedPatterns: inst.affectedPatterns,
+                  affectedClips: inst.affectedClips,
+                  affectedNotes: inst.affectedNotes,
+                  gain: inst.gain,
+                  pan: inst.pan,
+                )
+              : inst,
+        )
+        .toList();
   }
 
   @override
@@ -304,48 +326,45 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void renameInstrument(String id, String name) {
     renames.add((id, name));
-    instruments =
-        instruments
-            .map(
-              (ProjectInstrument inst) =>
-                  inst.id == id
-                      ? ProjectInstrument(
-                        id: inst.id,
-                        name: name,
-                        color: inst.color,
-                        order: inst.order,
-                        pluginId: inst.pluginId,
-                        pluginName: inst.pluginName,
-                        pluginVendor: inst.pluginVendor,
-                        pluginPath: inst.pluginPath,
-                        muted: inst.muted,
-                        selected: inst.selected,
-                        affectedPatterns: inst.affectedPatterns,
-                        affectedClips: inst.affectedClips,
-                        affectedNotes: inst.affectedNotes,
-                      )
-                      : inst,
-            )
-            .toList();
+    instruments = instruments
+        .map(
+          (ProjectInstrument inst) => inst.id == id
+              ? ProjectInstrument(
+                  id: inst.id,
+                  name: name,
+                  color: inst.color,
+                  order: inst.order,
+                  pluginId: inst.pluginId,
+                  pluginName: inst.pluginName,
+                  pluginVendor: inst.pluginVendor,
+                  pluginPath: inst.pluginPath,
+                  muted: inst.muted,
+                  selected: inst.selected,
+                  affectedPatterns: inst.affectedPatterns,
+                  affectedClips: inst.affectedClips,
+                  affectedNotes: inst.affectedNotes,
+                )
+              : inst,
+        )
+        .toList();
   }
 
   @override
   void selectPattern(String patternId) {
-    patterns =
-        patterns
-            .map(
-              (PatternSummary p) => PatternSummary(
-                id: p.id,
-                name: p.name,
-                color: p.color,
-                lengthTicks: p.lengthTicks,
-                swing: p.swing,
-                usageCount: p.usageCount,
-                noteCount: p.noteCount,
-                isCurrent: p.id == patternId,
-              ),
-            )
-            .toList();
+    patterns = patterns
+        .map(
+          (PatternSummary p) => PatternSummary(
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            lengthTicks: p.lengthTicks,
+            swing: p.swing,
+            usageCount: p.usageCount,
+            noteCount: p.noteCount,
+            isCurrent: p.id == patternId,
+          ),
+        )
+        .toList();
     final PatternSummary selected = patterns.firstWhere((PatternSummary p) => p.id == patternId);
     pattern = RackPattern(
       id: selected.id,
@@ -400,24 +419,22 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void recolorPattern(String patternId, String color) {
     patternRecolorCalls++;
-    patterns =
-        patterns
-            .map(
-              (PatternSummary p) =>
-                  p.id == patternId
-                      ? PatternSummary(
-                        id: p.id,
-                        name: p.name,
-                        color: color,
-                        lengthTicks: p.lengthTicks,
-                        swing: p.swing,
-                        usageCount: p.usageCount,
-                        noteCount: p.noteCount,
-                        isCurrent: p.isCurrent,
-                      )
-                      : p,
-            )
-            .toList();
+    patterns = patterns
+        .map(
+          (PatternSummary p) => p.id == patternId
+              ? PatternSummary(
+                  id: p.id,
+                  name: p.name,
+                  color: color,
+                  lengthTicks: p.lengthTicks,
+                  swing: p.swing,
+                  usageCount: p.usageCount,
+                  noteCount: p.noteCount,
+                  isCurrent: p.isCurrent,
+                )
+              : p,
+        )
+        .toList();
   }
 
   @override
@@ -585,6 +602,29 @@ void main() {
     expect(find.byType(MiniKeyboard), findsOneWidget);
   });
 
+  testWidgets('selecting a lane during a pattern preview leaves the transport alone', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    // Space starts the pattern preview: every lane of the current pattern.
+    await tester.tap(find.text('Kick 808'));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(client.transportCalls, <String>['stop', 'preview:pat_1']);
+
+    // Picking another lane while it plays only moves the inspector. It must not
+    // re-scope the preview to that channel — which silenced every other lane
+    // and restarted playback from the top.
+    await tester.tap(find.text('Snare'));
+    await tester.pump();
+
+    expect(client.selectedInstruments, <String>['kick', 'snare']);
+    expect(client.transportCalls, <String>['stop', 'preview:pat_1']);
+  });
+
   testWidgets('Add channel creates a visible empty lane without opening the inspector', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
@@ -602,7 +642,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
-    await pumpForTest(tester, RackBinding(client: client, store: store), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, store: store),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     // Step 1 of Kick 808 is initially inactive (index 1)
@@ -640,7 +684,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
-    await pumpForTest(tester, RackBinding(client: client, store: store), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, store: store),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     final Rect grid = tester.getRect(find.byType(ObStepGrid).first);
@@ -806,7 +854,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final List<String> opened = <String>[];
 
-    await pumpForTest(tester, RackBinding(client: client, onOpenSampler: opened.add), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenSampler: opened.add),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     // A sample lane selects on the first tap and opens its built-in editor on
@@ -824,7 +876,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     // Two taps inside the double-tap window: the lane's instrument is handed
@@ -886,6 +942,40 @@ void main() {
     expect(client.deleteCalls, 1);
   });
 
+  /// The lane's own settings live in its menu, not on the lane: 92px of every
+  /// row for a setting you visit once was the wrong trade, and the select was
+  /// too narrow at that size to read its own value.
+  testWidgets('the lane menu sets the channel step grid', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    await rightClickRow(tester, 'Kick 808');
+    expect(find.text('STEP GRID'), findsOneWidget);
+    await tester.tap(find.text('1/32'));
+    await tester.pump();
+
+    expect(client.rows.firstWhere((RackRow row) => row.instrumentId == 'kick').gridTicks, 120);
+  });
+
+  testWidgets('the lane menu clears a sequence, and offers it only when there is one', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    await rightClickRow(tester, 'Kick 808');
+    expect(find.text('Clear steps'), findsOneWidget);
+    await tester.tap(find.text('Clear steps'));
+    await tester.pump();
+    expect(client.rows.firstWhere((RackRow row) => row.instrumentId == 'kick').hasSequence, isFalse);
+
+    // Nothing left to clear, so the row is gone rather than shown dead.
+    await rightClickRow(tester, 'Kick 808');
+    expect(find.text('Clear steps'), findsNothing);
+  });
+
   testWidgets('a step fill from the context menu fills the channel grid', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
@@ -909,7 +999,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     await rightClickRow(tester, 'Reese');
@@ -925,7 +1019,11 @@ void main() {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
     await tester.pump();
 
     // A sample lane's inspector has no window to open.
@@ -1046,5 +1144,18 @@ void main() {
     final ObPopoverMenu reopened = tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
     final ObMenuRowVm cleared = reopened.vm.rows.firstWhere((ObMenuRowVm row) => row.label == 'Solo');
     expect(cleared.checked, isFalse);
+  });
+
+  testWidgets('narrow binding does not emit a flex overflow', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+    final List<FlutterErrorDetails> errors = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = errors.add;
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(688, 724));
+    await tester.pump();
+    FlutterError.onError = previous;
+
+    expect(errors.where((FlutterErrorDetails error) => error.exceptionAsString().contains('overflowed')), isEmpty);
   });
 }

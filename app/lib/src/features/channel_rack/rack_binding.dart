@@ -337,10 +337,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type:
-              inst?.pluginId == _kSamplePluginId
-                  ? 'Sampler'
-                  : (inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel'),
+          type: inst?.pluginId == _kSamplePluginId
+              ? 'Sampler'
+              : (inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel'),
 
           color: color,
           steps: stepVms,
@@ -352,8 +351,6 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           previewNotes: _previewNotesFor(row), // Sample lanes open the built-in sampler; hosted lanes open their
           // plug-in editor. Empty lanes remain non-openable.
           hostsPlugin: inst != null && inst.pluginId.isNotEmpty,
-          gridLabel: _gridLabel(row.gridTicks),
-          hasSequence: row.hasSequence,
         ),
       );
     }
@@ -382,6 +379,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         hostsPlugin:
             selectedInst != null && selectedInst.pluginId.isNotEmpty && selectedInst.pluginId != _kSamplePluginId,
         hostsSampler: selectedInst?.pluginId == _kSamplePluginId,
+        gridLabel: _gridLabel(_store.rowFor(selectedId)?.gridTicks ?? 240),
       );
     }
 
@@ -390,8 +388,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final RackRow? velocityRow = velocityInstrument == null ? null : _store.rowFor(velocityInstrument);
     final RackStep? selectedStep =
         velocityRow != null && velocityStep != null && velocityStep < velocityRow.steps.length
-            ? velocityRow.steps[velocityStep]
-            : null;
+        ? velocityRow.steps[velocityStep]
+        : null;
 
     final RackToolbarVm toolbarVm = RackToolbarVm(
       channelType: 'Sampler',
@@ -412,8 +410,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       playingStep: playingStep,
       playingTick: playingTick,
       inspector: inspectorVm,
-      sharedPatternNotice:
-          _patternStore.notice == null ? null : SharedPatternNoticeVm(message: _patternStore.notice!.message),
+      sharedPatternNotice: _patternStore.notice == null
+          ? null
+          : SharedPatternNoticeVm(message: _patternStore.notice!.message),
       canUndo: _store.canUndo,
       canRedo: _store.canRedo,
     );
@@ -473,17 +472,19 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _store.nudgeVelocity(delta);
   }
 
-  void _onGridChanged(int rowIndex, String label) {
-    final List<RackRow> visible = _store.visibleRows;
-    if (rowIndex < 0 || rowIndex >= visible.length) return;
-    _store.setGrid(visible[rowIndex].instrumentId, _gridTicks(label));
+  void _setGrid(String instrumentId, String label) => _store.setGrid(instrumentId, _gridTicks(label));
+
+  /// The grid select in the inspector acts on whatever lane is selected — the
+  /// inspector has no other subject.
+  void _onInspectorGrid(String label) {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    _setGrid(id, label);
   }
 
-  void _onRemoveSequence(int rowIndex) {
-    final List<RackRow> visible = _store.visibleRows;
-    if (rowIndex < 0 || rowIndex >= visible.length) return;
+  void _removeSequence(String instrumentId) {
     _noteEditStarted();
-    _store.removeSequence(visible[rowIndex].instrumentId);
+    _store.removeSequence(instrumentId);
   }
 
   void _onStepTap(int rowIndex, int stepIndex) {
@@ -494,6 +495,10 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     }
   }
 
+  /// Selection is silent: it points the inspector at a lane and nothing more.
+  /// It must not touch the transport — narrowing a running preview to the
+  /// clicked channel silenced every other lane and restarted playback from the
+  /// top, and hearing one channel on its own is what solo is for.
   void _onSelectRow(int rowIndex) {
     FocusPolicy.take(_focus);
     final List<RackRow> visible = _store.visibleRows;
@@ -501,10 +506,6 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       final String instrumentId = visible[rowIndex].instrumentId;
       widget.client.selectInstrument(instrumentId);
       _store.selectInstrument(instrumentId);
-      final RackPattern? pattern = _store.pattern;
-      if (_controller.patternPreviewing && pattern != null) {
-        _controller.playPatternChannelPreview(pattern.id, visible[rowIndex].instrumentId);
-      }
     }
   }
 
@@ -685,106 +686,105 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _hideContextMenu();
     final OverlayState overlay = Overlay.of(context);
     _contextMenuEntry = OverlayEntry(
-      builder:
-          (BuildContext overlayContext) => Stack(
-            children: <Widget>[
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _hideContextMenu,
-                  child: const SizedBox.expand(),
-                ),
-              ),
-              Positioned(
-                left: details.globalPosition.dx,
-                top: details.globalPosition.dy,
-                child: ObPopoverMenu(
-                  vm: const ObPopoverMenuVm(
-                    sections: <ObMenuSectionVm>[
-                      ObMenuSectionVm(
-                        rows: <ObMenuRowVm>[
-                          ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
-                          ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
-                          ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
-                          ObMenuRowVm(label: 'Time signature', icon: ObKitGlyphKind.note),
-                          ObMenuRowVm(label: 'Group', icon: ObKitGlyphKind.grid),
-                          ObMenuRowVm(label: 'Move earlier', icon: ObKitGlyphKind.chevronRight),
-                          ObMenuRowVm(label: 'Move later', icon: ObKitGlyphKind.chevronRight),
-                          ObMenuRowVm(label: 'Select next empty', icon: ObKitGlyphKind.chevronRight),
-                          ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
-                        ],
-                      ),
+      builder: (BuildContext overlayContext) => Stack(
+        children: <Widget>[
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _hideContextMenu,
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Positioned(
+            left: details.globalPosition.dx,
+            top: details.globalPosition.dy,
+            child: ObPopoverMenu(
+              vm: const ObPopoverMenuVm(
+                sections: <ObMenuSectionVm>[
+                  ObMenuSectionVm(
+                    rows: <ObMenuRowVm>[
+                      ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
+                      ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+                      ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
+                      ObMenuRowVm(label: 'Time signature', icon: ObKitGlyphKind.note),
+                      ObMenuRowVm(label: 'Group', icon: ObKitGlyphKind.grid),
+                      ObMenuRowVm(label: 'Move earlier', icon: ObKitGlyphKind.chevronRight),
+                      ObMenuRowVm(label: 'Move later', icon: ObKitGlyphKind.chevronRight),
+                      ObMenuRowVm(label: 'Select next empty', icon: ObKitGlyphKind.chevronRight),
+                      ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
                     ],
                   ),
-                  onSelect: (int index) {
-                    _hideContextMenu();
-                    switch (index) {
-                      case 0:
-                        _beginPatternRename(patternId);
-                      case 1:
-                        _patternStore.duplicate(patternId);
-                        _store.refresh();
-                      case 2:
-                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                          (PatternSummary? item) => item?.id == patternId,
-                          orElse: () => null,
-                        );
-                        if (pattern != null) {
-                          _patternStore.recolor(patternId, _nextPatternColor(pattern.color));
-                          _store.refresh();
-                        }
-                      case 3:
-                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                          (PatternSummary? item) => item?.id == patternId,
-                          orElse: () => null,
-                        );
-                        if (pattern != null) {
-                          final String next = _nextPatternTimeSignature(pattern);
-                          final List<String> nextParts = next.split('/');
-                          _patternStore.setTimeSignature(
-                            patternId,
-                            int.parse(nextParts[0]),
-                            int.parse(nextParts[1]),
-                          );
-                          _store.refresh();
-                        }
-                      case 4:
-                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                          (PatternSummary? item) => item?.id == patternId,
-                          orElse: () => null,
-                        );
-                        if (pattern != null) {
-                          _patternStore.setGroup(patternId, _nextPatternGroup(pattern.group));
-                          _store.refresh();
-                        }
-                      case 5:
-                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                          (PatternSummary? item) => item?.id == patternId,
-                          orElse: () => null,
-                        );
-                        if (pattern != null) {
-                          _patternStore.reorder(patternId, math.max(0, pattern.order - 1));
-                          _store.refresh();
-                        }
-                      case 6:
-                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                          (PatternSummary? item) => item?.id == patternId,
-                          orElse: () => null,
-                        );
-                        if (pattern != null) {
-                          _patternStore.reorder(patternId, pattern.order + 1);
-                          _store.refresh();
-                        }
-                      case 7:
-                        _selectNextEmptyPattern();
-                      case 8:
-                        _requestDeletePattern(patternId);
-                    }
-                  },
-                ),
+                ],
               ),
-            ],
+              onSelect: (int index) {
+                _hideContextMenu();
+                switch (index) {
+                  case 0:
+                    _beginPatternRename(patternId);
+                  case 1:
+                    _patternStore.duplicate(patternId);
+                    _store.refresh();
+                  case 2:
+                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                      (PatternSummary? item) => item?.id == patternId,
+                      orElse: () => null,
+                    );
+                    if (pattern != null) {
+                      _patternStore.recolor(patternId, _nextPatternColor(pattern.color));
+                      _store.refresh();
+                    }
+                  case 3:
+                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                      (PatternSummary? item) => item?.id == patternId,
+                      orElse: () => null,
+                    );
+                    if (pattern != null) {
+                      final String next = _nextPatternTimeSignature(pattern);
+                      final List<String> nextParts = next.split('/');
+                      _patternStore.setTimeSignature(
+                        patternId,
+                        int.parse(nextParts[0]),
+                        int.parse(nextParts[1]),
+                      );
+                      _store.refresh();
+                    }
+                  case 4:
+                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                      (PatternSummary? item) => item?.id == patternId,
+                      orElse: () => null,
+                    );
+                    if (pattern != null) {
+                      _patternStore.setGroup(patternId, _nextPatternGroup(pattern.group));
+                      _store.refresh();
+                    }
+                  case 5:
+                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                      (PatternSummary? item) => item?.id == patternId,
+                      orElse: () => null,
+                    );
+                    if (pattern != null) {
+                      _patternStore.reorder(patternId, math.max(0, pattern.order - 1));
+                      _store.refresh();
+                    }
+                  case 6:
+                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                      (PatternSummary? item) => item?.id == patternId,
+                      orElse: () => null,
+                    );
+                    if (pattern != null) {
+                      _patternStore.reorder(patternId, pattern.order + 1);
+                      _store.refresh();
+                    }
+                  case 7:
+                    _selectNextEmptyPattern();
+                  case 8:
+                    _requestDeletePattern(patternId);
+                }
+              },
+            ),
           ),
+        ],
+      ),
     );
     overlay.insert(_contextMenuEntry!);
   }
@@ -825,6 +825,12 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final bool isSample = inst?.pluginId == _kSamplePluginId;
 
     final bool soloed = _store.instrumentFor(instrumentId)?.soloed ?? false;
+    // The lane's own settings, off the lane: the divisor its steps sit on, and
+    // the action that empties it. Both are things you decide about a channel
+    // once, not controls you reach for while writing a rhythm, so they cost the
+    // lane no width and the rack no column.
+    final String gridLabel = _gridLabel(_store.rowFor(instrumentId)?.gridTicks ?? 240);
+    final bool hasSequence = _store.rowFor(instrumentId)?.hasSequence ?? false;
 
     // The channel rows, with their actions in the same order. The flat index
     // the menu reports is this list, then the step fills, then delete.
@@ -852,6 +858,25 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       () => _toggleSolo(instrumentId),
     ];
 
+    // The divisors, then — only for a lane that has something to clear — the
+    // clear action. A row that would do nothing is left out rather than shown
+    // dead: the menu is built per lane, so it can simply not offer it.
+    const List<String> gridLabels = <String>['1/8', '1/16', '1/32'];
+    final List<ObMenuRowVm> gridRows = <ObMenuRowVm>[
+      for (final String label in gridLabels)
+        ObMenuRowVm(
+          label: label,
+          checkable: true,
+          checked: label == gridLabel,
+          tone: label == gridLabel ? ObMenuRowTone.active : ObMenuRowTone.normal,
+        ),
+      if (hasSequence) const ObMenuRowVm(label: 'Clear steps', icon: ObKitGlyphKind.trash),
+    ];
+    for (final String label in gridLabels) {
+      actions.add(() => _setGrid(instrumentId, label));
+    }
+    if (hasSequence) actions.add(() => _removeSequence(instrumentId));
+
     final OverlayState overlay = Overlay.of(context);
     _contextMenuEntry = OverlayEntry(
       builder: (BuildContext overlayContext) {
@@ -872,6 +897,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                 vm: ObPopoverMenuVm(
                   sections: <ObMenuSectionVm>[
                     ObMenuSectionVm(rows: actionRows),
+                    ObMenuSectionVm(header: 'Step grid', separated: true, rows: gridRows),
                     const ObMenuSectionVm(
                       header: 'Step actions',
                       separated: true,
@@ -1059,8 +1085,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
               onInspectorOpenSampler: _onInspectorOpenSampler,
               onInspectorRouteTap: widget.onOpenMixer,
               onGroup: _onShowFilter,
-              onGridChanged: _onGridChanged,
-              onRemoveSequence: _onRemoveSequence,
+              onInspectorGrid: _onInspectorGrid,
               onDismissSharedPatternNotice: _patternStore.dismissNotice,
               onInspectorKeyPress: (int note) => _store.auditionNote(note),
               onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
@@ -1102,16 +1127,15 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
             ),
             if (_showRenameDialog)
               RenameChannelDialog(
-                initialName:
-                    _renamePattern
-                        ? (_store.patterns
-                                .cast<PatternSummary?>()
-                                .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
-                                ?.name ??
-                            '')
-                        : renameId == null
-                        ? ''
-                        : (_store.instrumentFor(renameId)?.name ?? ''),
+                initialName: _renamePattern
+                    ? (_store.patterns
+                              .cast<PatternSummary?>()
+                              .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
+                              ?.name ??
+                          '')
+                    : renameId == null
+                    ? ''
+                    : (_store.instrumentFor(renameId)?.name ?? ''),
                 onSubmit: _submitRename,
                 onClose: _closeRenameDialog,
                 title: _renamePattern ? 'Rename pattern' : 'Rename channel',

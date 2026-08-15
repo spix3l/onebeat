@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 import '../../ui_kit/button.dart';
+import '../../ui_kit/dropdown.dart';
 import '../../ui_kit/fx_chip.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/knob.dart';
@@ -47,6 +48,7 @@ class ChannelInspectorVm {
     this.soloed = false,
     this.hostsPlugin = false,
     this.hostsSampler = false,
+    this.gridLabel = '1/16',
   });
 
   final String name;
@@ -84,6 +86,12 @@ class ChannelInspectorVm {
 
   final bool muted;
   final bool soloed;
+
+  /// The divisor this channel's steps sit on (`1/16`). Per channel, not per
+  /// pattern: a hat lane can run at 1/32 under a 1/16 kick. It lives here
+  /// rather than on the lane because it is a setting you visit, not a control
+  /// you reach for while writing a rhythm.
+  final String gridLabel;
 }
 
 class ObChannelInspector extends StatelessWidget {
@@ -99,6 +107,7 @@ class ObChannelInspector extends StatelessWidget {
     this.onAddFx,
     this.onRouteTap,
     this.onKeyPress,
+    this.onGrid,
     super.key,
   });
 
@@ -120,6 +129,9 @@ class ObChannelInspector extends StatelessWidget {
 
   /// Fired with a MIDI note number when a key is pressed.
   final ValueChanged<int>? onKeyPress;
+
+  /// Fired with the new divisor label for the selected channel.
+  final ValueChanged<String>? onGrid;
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +178,19 @@ class ObChannelInspector extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          if (onGrid != null) ...<Widget>[
+            ObTooltip(
+              message: 'Step grid for this channel',
+              child: ObDropdown(
+                label: 'Grid',
+                value: vm.gridLabel,
+                items: const <String>['1/8', '1/16', '1/32'],
+                width: tokens.size.inspectorGridFieldWidth,
+                onSelected: onGrid,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.lg),
+          ],
           _KnobReadout(
             value: vm.vol,
             valueText: vm.volText,

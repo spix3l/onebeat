@@ -97,62 +97,74 @@ class ObRackToolbar extends StatelessWidget {
       height: tokens.size.rackToolbarBarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
+        border: Border(
+          bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
+        ),
       ),
-      child: Row(
-        children: <Widget>[
-          if (onGroup != null) ...<Widget>[
-            ObDropdown(
-              label: 'Show',
-              value: vm.group,
-              items: vm.groups,
-              width: tokens.size.rackSnapFieldWidth,
-              onSelected: onGroup,
-            ),
-            SizedBox(width: tokens.spacing.sm),
-          ],
-          if (onSnap != null) ...<Widget>[
-            ObDropdown(
-              label: 'Snap',
-              value: vm.snap,
-              items: vm.snapLabels,
-              width: tokens.size.rackSnapFieldWidth,
-              onSelected: onSnap,
-            ),
-            SizedBox(width: tokens.spacing.md),
-          ],
-          const Spacer(),
-          if (onSwing != null)
-            _RackNudgeControl(
-              label: 'SWING',
-              value: '${(vm.swing * 100).round()}%',
-              onMinus: () => onSwing!((vm.swing - 0.05).clamp(0.0, 1.0)),
-              onPlus: () => onSwing!((vm.swing + 0.05).clamp(0.0, 1.0)),
-            ),
-          if (onVelocityDelta != null) ...<Widget>[
-            SizedBox(width: tokens.spacing.md),
-            _RackNudgeControl(
-              label: 'VEL ${vm.velocityStep == null ? '—' : vm.velocityStep! + 1}',
-              value: vm.velocity == null ? '—' : '${(vm.velocity! / 16383 * 100).round()}%',
-              onMinus: () => onVelocityDelta!(-512),
-              onPlus: () => onVelocityDelta!(512),
-            ),
-          ],
-          SizedBox(width: tokens.spacing.md),
-          ObDropdown(
-            label: 'Steps',
-            value: '${vm.steps}',
-            items: vm.stepItems,
-            width: tokens.size.rackSnapFieldWidth,
-            onSelected:
-                onSteps == null
+      child: Builder(
+        builder: (BuildContext context) {
+          final bool compact =
+              onGroup != null || onSnap != null || onSwing != null || onVelocityDelta != null || onSteps != null;
+          final Widget row = Row(
+            children: <Widget>[
+              if (onGroup != null) ...<Widget>[
+                ObDropdown(
+                  label: 'Show',
+                  value: vm.group,
+                  items: vm.groups,
+                  width: tokens.size.rackSnapFieldWidth,
+                  onSelected: onGroup,
+                ),
+                SizedBox(width: tokens.spacing.sm),
+              ],
+              if (onSnap != null) ...<Widget>[
+                ObDropdown(
+                  label: 'Snap',
+                  value: vm.snap,
+                  items: vm.snapLabels,
+                  width: tokens.size.rackSnapFieldWidth,
+                  onSelected: onSnap,
+                ),
+                SizedBox(width: tokens.spacing.md),
+              ],
+              if (compact) SizedBox(width: tokens.spacing.lg) else const Spacer(),
+              if (onSwing != null)
+                _RackNudgeControl(
+                  label: 'SWING',
+                  value: '${(vm.swing * 100).round()}%',
+                  onMinus: () => onSwing!((vm.swing - 0.05).clamp(0.0, 1.0)),
+                  onPlus: () => onSwing!((vm.swing + 0.05).clamp(0.0, 1.0)),
+                ),
+              if (onVelocityDelta != null) ...<Widget>[
+                SizedBox(width: tokens.spacing.md),
+                _RackNudgeControl(
+                  label: 'VEL ${vm.velocityStep == null ? '—' : vm.velocityStep! + 1}',
+                  value: vm.velocity == null ? '—' : '${(vm.velocity! / 16383 * 100).round()}%',
+                  onMinus: () => onVelocityDelta!(-512),
+                  onPlus: () => onVelocityDelta!(512),
+                ),
+              ],
+              SizedBox(width: tokens.spacing.md),
+              ObDropdown(
+                label: 'Steps',
+                value: '${vm.steps}',
+                items: vm.stepItems,
+                width: tokens.size.rackSnapFieldWidth,
+                onSelected: onSteps == null
                     ? null
                     : (String value) {
-                      final int? parsed = int.tryParse(value);
-                      if (parsed != null) onSteps!(parsed);
-                    },
-          ),
-        ],
+                        final int? parsed = int.tryParse(value);
+                        if (parsed != null) onSteps!(parsed);
+                      },
+              ),
+            ],
+          );
+          return compact
+              ? ClipRect(
+                  child: OverflowBox(alignment: Alignment.centerLeft, maxWidth: double.infinity, child: row),
+                )
+              : row;
+        },
       ),
     );
   }
@@ -201,11 +213,16 @@ class ObRackHeader extends StatelessWidget {
       height: size.rackColumnHeaderHeight,
       decoration: BoxDecoration(
         color: tokens.color.surfaceColumnHead,
-        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
+        border: Border(
+          bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
+        ),
       ),
       child: Row(
         children: <Widget>[
-          SizedBox(width: tokens.spacing.md),
+          // The lane draws a selection edge inside its left border, so its
+          // content starts that much further right than the caption strip's
+          // would; matching it here keeps `1` over cell one.
+          SizedBox(width: size.rackSelectedEdgeWidth + tokens.spacing.md),
           // `PWR` names the power column but is wider than it; it takes the
           // whole power-plus-chip block so the caption fits without pushing
           // `CHANNEL` off the name column.
@@ -213,7 +230,10 @@ class ObRackHeader extends StatelessWidget {
             width: size.rackPowerSize + tokens.spacing.sm + size.rackColorChipSize + tokens.spacing.md,
             child: Text('PWR', style: style, maxLines: 1),
           ),
-          SizedBox(width: size.rackNameWidth, child: Text('CHANNEL', style: style, maxLines: 1)),
+          SizedBox(
+            width: size.rackNameWidth,
+            child: Text('CHANNEL', style: style, maxLines: 1),
+          ),
           // One number per column, centred on the cell it names.
           for (int i = 0; i < stepCount; i++) ...<Widget>[
             if (i > 0) SizedBox(width: i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap),
@@ -223,9 +243,15 @@ class ObRackHeader extends StatelessWidget {
             ),
           ],
           SizedBox(width: tokens.spacing.md),
-          SizedBox(width: size.knobSmall, child: Text('VOL', style: style, textAlign: TextAlign.center, maxLines: 1)),
+          SizedBox(
+            width: size.knobSmall,
+            child: Text('VOL', style: style, textAlign: TextAlign.center, maxLines: 1),
+          ),
           SizedBox(width: tokens.spacing.sm),
-          SizedBox(width: size.knobSmall, child: Text('PAN', style: style, textAlign: TextAlign.center, maxLines: 1)),
+          SizedBox(
+            width: size.knobSmall,
+            child: Text('PAN', style: style, textAlign: TextAlign.center, maxLines: 1),
+          ),
           SizedBox(width: tokens.spacing.sm),
           SizedBox(
             width: size.rackRouteChipWidth,

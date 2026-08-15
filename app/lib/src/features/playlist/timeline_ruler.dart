@@ -15,13 +15,7 @@ import 'playlist_store.dart';
 
 /// `PLAYLIST` on the left, the project's own line on the right.
 class PlaylistHeader extends StatelessWidget {
-  const PlaylistHeader({
-    required this.title,
-    required this.right,
-    this.snap = '1 bar',
-    this.onSnapChanged,
-    super.key,
-  });
+  const PlaylistHeader({required this.title, required this.right, this.snap = '1 bar', this.onSnapChanged, super.key});
 
   final String title;
 
@@ -39,24 +33,12 @@ class PlaylistHeader extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: Row(
         children: <Widget>[
-          Text(
-            title.toUpperCase(),
-            style: tokens.type.sectionHeader.copyWith(
-              color: tokens.color.textSecondary,
-            ),
-          ),
+          Text(title.toUpperCase(), style: tokens.type.sectionHeader.copyWith(color: tokens.color.textSecondary)),
           const Spacer(),
           ObDropdown(
             label: 'Snap',
             value: snap,
-            items: const <String>[
-              '4 bars',
-              '1 bar',
-              '1/4',
-              '1/8',
-              '1/16',
-              'Off',
-            ],
+            items: const <String>['4 bars', '1 bar', '1/4', '1/8', '1/16', 'Off'],
             width: tokens.size.dropdownWidth,
             onSelected: onSnapChanged,
           ),
@@ -69,23 +51,19 @@ class PlaylistHeader extends StatelessWidget {
 }
 
 class PlaylistRuler extends StatelessWidget {
-  const PlaylistRuler({
-    required this.pxPerBar,
-    this.scrollTicks = 0,
-    this.labelEvery,
-    super.key,
-  });
+  const PlaylistRuler({required this.pxPerBar, this.scrollTicks = 0, this.labelEvery, this.onSeekBar, super.key});
 
   final double pxPerBar;
   final double scrollTicks;
 
   /// How often a bar is numbered; defaults to the token the mockup uses.
   final int? labelEvery;
+  final ValueChanged<double>? onSeekBar;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    return SizedBox(
+    final Widget ruler = SizedBox(
       height: tokens.size.playlistRulerHeight,
       child: CustomPaint(
         painter: PlaylistRulerPainter(
@@ -98,6 +76,15 @@ class PlaylistRuler extends StatelessWidget {
         ),
         child: const SizedBox.expand(),
       ),
+    );
+    if (onSeekBar == null) return ruler;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown:
+          (TapDownDetails details) => onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
+      onHorizontalDragUpdate:
+          (DragUpdateDetails details) => onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
+      child: ruler,
     );
   }
 }
@@ -119,9 +106,10 @@ class PlaylistRulerPainter extends CustomPainter {
   final double lineWidth;
   final TextStyle style;
 
-  late final Paint _rule = Paint()
-    ..color = line
-    ..strokeWidth = lineWidth;
+  late final Paint _rule =
+      Paint()
+        ..color = line
+        ..strokeWidth = lineWidth;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
   @override
@@ -134,16 +122,9 @@ class PlaylistRulerPainter extends CustomPainter {
       _text
         ..text = TextSpan(text: '${bar + 1}', style: style)
         ..layout();
-      _text.paint(
-        canvas,
-        Offset(x + lineWidth * 2, (size.height - _text.height) / 2),
-      );
+      _text.paint(canvas, Offset(x + lineWidth * 2, (size.height - _text.height) / 2));
     }
-    canvas.drawLine(
-      Offset(0, size.height),
-      Offset(size.width, size.height),
-      _rule,
-    );
+    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), _rule);
   }
 
   @override

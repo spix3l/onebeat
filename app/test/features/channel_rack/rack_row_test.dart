@@ -4,6 +4,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
+import 'package:onebeat/src/features/channel_rack/channel_rack_screen.dart';
+import 'package:onebeat/src/features/channel_rack/channel_rack_screen_vm.dart';
 import 'package:onebeat/src/features/channel_rack/rack_row.dart';
 import 'package:onebeat/src/features/channel_rack/rack_toolbar.dart';
 import 'package:onebeat/src/ui_kit/knob.dart';
@@ -14,25 +16,12 @@ import 'fixture.dart';
 /// Kick (a plain lit pattern), Soft Keys (selected), Shaker (powered off),
 /// Hats (velocity-shaded) — the four states the ticket asks the board to
 /// show, all under the same playing column.
-final List<RackRowVm> _board = <RackRowVm>[
-  demoRackRows[0],
-  demoRackRows[4],
-  demoRackRows[6],
-  demoRackRows[2],
-];
+final List<RackRowVm> _board = <RackRowVm>[demoRackRows[0], demoRackRows[4], demoRackRows[6], demoRackRows[2]];
 
-const RackToolbarVm _toolbar = RackToolbarVm(
-  channelType: 'Sampler',
-  group: 'All',
-  snap: '1/4',
-  steps: 16,
-);
+const RackToolbarVm _toolbar = RackToolbarVm(channelType: 'Sampler', group: 'All', snap: '1/4', steps: 16);
 
 BoxDecoration _cellDecoration(WidgetTester tester, int index) {
-  final Finder cells = find.descendant(
-    of: find.byType(ObStepGrid),
-    matching: find.byType(Container),
-  );
+  final Finder cells = find.descendant(of: find.byType(ObStepGrid), matching: find.byType(Container));
   final Container cell = tester.widget(cells.at(index));
   return cell.decoration! as BoxDecoration;
 }
@@ -44,9 +33,7 @@ Color? _cellBorder(WidgetTester tester, int index) => (_cellDecoration(tester, i
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('the lane board and the chrome render as the golden', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the lane board and the chrome render as the golden', (WidgetTester tester) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
     await pumpUi(
       tester,
@@ -59,9 +46,7 @@ void main() {
             child: Column(
               key: const Key('rows'),
               mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                for (final RackRowVm row in _board) ObRackRow(vm: row, playingStep: demoPlayingStep),
-              ],
+              children: <Widget>[for (final RackRowVm row in _board) ObRackRow(vm: row, playingStep: demoPlayingStep)],
             ),
           ),
           const SizedBox(
@@ -78,13 +63,59 @@ void main() {
           ),
         ],
       ),
-      size: Size(
-        demoRackRowWidth * 2,
-        tokens.size.rackLaneHeight * 4,
-      ),
+      size: Size(demoRackRowWidth * 2, tokens.size.rackLaneHeight * 4),
     );
     await tester.pumpAndSettle();
     await expectLater(find.byKey(const Key('rack')), uiGolden('rack_row'));
+  });
+
+  testWidgets('narrow rack rows do not emit overflow errors', (WidgetTester tester) async {
+    final List<FlutterErrorDetails> errors = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = errors.add;
+
+    await pumpUi(
+      tester,
+      ChannelRackScreen(vm: ChannelRackScreenVm(toolbar: _toolbar, rows: <RackRowVm>[demoRackRows.first])),
+      size: const Size(688, 724),
+    );
+    FlutterError.onError = previous;
+
+    expect(errors.where((FlutterErrorDetails error) => error.exceptionAsString().contains('overflowed')), isEmpty);
+  });
+
+  /// A lane on a finer divisor holds more steps than the pattern's own grid,
+  /// and used to paint them at the pattern's pitch — a 128-step lane drew a
+  /// strip four times the width of the window it was in.
+  testWidgets('a lane with more steps than the pattern fits the shared grid width', (WidgetTester tester) async {
+    final List<FlutterErrorDetails> errors = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = errors.add;
+
+    final RackRowVm coarse = demoRackRows.first;
+    final RackRowVm fine = RackRowVm(
+      name: 'Hats 1/128',
+      type: 'Sampler',
+      color: coarse.color,
+      steps: List<StepVm>.filled(128, const StepVm.off()),
+      vol: 0.5,
+      pan: 0.5,
+      route: '→ D1',
+    );
+
+    await pumpUi(
+      tester,
+      ChannelRackScreen(vm: ChannelRackScreenVm(toolbar: _toolbar, rows: <RackRowVm>[coarse, fine])),
+      size: const Size(1200, 400),
+    );
+    FlutterError.onError = previous;
+
+    expect(errors.where((FlutterErrorDetails error) => error.exceptionAsString().contains('overflowed')), isEmpty);
+    final List<Rect> grids = tester.widgetList<ObStepGrid>(find.byType(ObStepGrid)).map((ObStepGrid grid) {
+      return tester.getRect(find.byWidget(grid));
+    }).toList();
+    expect(grids, hasLength(2));
+    expect(grids[1].width, closeTo(grids[0].width, 0.5));
   });
 
   testWidgets('tapping a step reports its index', (WidgetTester tester) async {
@@ -100,21 +131,12 @@ void main() {
     final Finder grid = find.byType(ObStepGrid);
     final Rect box = tester.getRect(grid);
     final double pitch = tokens.size.rackStepCell + tokens.size.rackStepGap;
-    await tester.tapAt(
-      Offset(box.left + tokens.size.rackStepCell / 2, box.center.dy),
-    );
-    await tester.tapAt(
-      Offset(
-        box.left + pitch * 2 + tokens.size.rackStepCell / 2,
-        box.center.dy,
-      ),
-    );
+    await tester.tapAt(Offset(box.left + tokens.size.rackStepCell / 2, box.center.dy));
+    await tester.tapAt(Offset(box.left + pitch * 2 + tokens.size.rackStepCell / 2, box.center.dy));
     expect(tapped, <int>[0, 2]);
   });
 
-  testWidgets('row, power and route taps fire their callbacks', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('row, power and route taps fire their callbacks', (WidgetTester tester) async {
     final List<String> fired = <String>[];
     final OneBeatTokens tokens = OneBeatTokens.dark();
     await pumpUi(
@@ -153,9 +175,7 @@ void main() {
     expect(volumes.last, greaterThan(demoRackRows[0].vol));
   });
 
-  testWidgets('the playing column rings its cell, lit or not', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the playing column rings its cell, lit or not', (WidgetTester tester) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
     // Kick 808 is dark at step 7, so the ring here proves the column is
     // outlined rather than merely lit.
@@ -164,29 +184,18 @@ void main() {
       ObRackRow(vm: demoRackRows[0], playingStep: demoPlayingStep),
       size: Size(demoRackRowWidth, tokens.size.rackLaneHeight),
     );
-    expect(
-      _cellBorder(tester, demoPlayingStep),
-      tokens.color.textSecondary,
-    );
+    expect(_cellBorder(tester, demoPlayingStep), tokens.color.textSecondary);
     expect(_cellBorder(tester, 0), tokens.color.accentBright);
     expect(_cellBorder(tester, 1), tokens.color.surfaceWell);
   });
 
-  testWidgets('a stopped transport rings nothing', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('a stopped transport rings nothing', (WidgetTester tester) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
-    await pumpUi(
-      tester,
-      ObRackRow(vm: demoRackRows[0]),
-      size: Size(demoRackRowWidth, tokens.size.rackLaneHeight),
-    );
+    await pumpUi(tester, ObRackRow(vm: demoRackRows[0]), size: Size(demoRackRowWidth, tokens.size.rackLaneHeight));
     expect(_cellBorder(tester, demoPlayingStep), tokens.color.surfaceWell);
   });
 
-  testWidgets('toolbar dropdowns and buttons report their changes', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('toolbar dropdowns and buttons report their changes', (WidgetTester tester) async {
     final List<String> fired = <String>[];
     await pumpUi(
       tester,
@@ -203,9 +212,7 @@ void main() {
     expect(fired, <String>['snap:1/16']);
   });
 
-  testWidgets('the step-length control offers 16/32/64 and reports the choice', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the step-length control offers 16/32/64 and reports the choice', (WidgetTester tester) async {
     final List<int> lengths = <int>[];
     await pumpUi(
       tester,
@@ -226,22 +233,14 @@ void main() {
     expect(lengths, <int>[32]);
   });
 
-  testWidgets('the footer names the action it performs', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the footer names the action it performs', (WidgetTester tester) async {
     int added = 0;
-    await pumpUi(
-      tester,
-      ObRackFooter(onAddChannel: () => added++),
-      size: const Size(demoRackRowWidth, 60),
-    );
+    await pumpUi(tester, ObRackFooter(onAddChannel: () => added++), size: const Size(demoRackRowWidth, 60));
     await tester.tap(find.text('Add channel'));
     expect(added, 1);
   });
 
-  testWidgets('a dense 64-step rack builds without exceptions', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('a dense 64-step rack builds without exceptions', (WidgetTester tester) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
     final List<RackRowVm> rows = List<RackRowVm>.generate(
       8,
@@ -254,28 +253,21 @@ void main() {
         route: 'Master',
         steps: List<StepVm>.generate(
           16,
-          (int step) => StepVm(
-            on: step % 4 == row % 4,
-            velocity: (8192 + (step * 97) % 8191) / 16383.0,
-          ),
+          (int step) => StepVm(on: step % 4 == row % 4, velocity: (8192 + (step * 97) % 8191) / 16383.0),
         ),
       ),
     );
 
     await pumpUi(
       tester,
-      Column(
-        children: rows.map((RackRowVm vm) => ObRackRow(vm: vm)).toList(),
-      ),
+      Column(children: rows.map((RackRowVm vm) => ObRackRow(vm: vm)).toList()),
       size: const Size(1200, 800),
     );
 
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('rest cells band by beat, every four steps', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('rest cells band by beat, every four steps', (WidgetTester tester) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
     // Sixteen steps, one lit: the banding is a property of the empty ones.
     final RackRowVm row = RackRowVm(
@@ -285,16 +277,10 @@ void main() {
       vol: 0.8,
       pan: 0.5,
       route: 'Master',
-      steps: <StepVm>[
-        for (int i = 0; i < 16; i++) i == 9 ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
-      ],
+      steps: <StepVm>[for (int i = 0; i < 16; i++) i == 9 ? const StepVm(on: true, velocity: 1) : const StepVm.off()],
     );
 
-    await pumpUi(
-      tester,
-      ObRackRow(vm: row),
-      size: const Size(1200, 200),
-    );
+    await pumpUi(tester, ObRackRow(vm: row), size: const Size(1200, 200));
 
     // Beats 1 and 3 lifted, 2 and 4 recessed — a bar you can count without
     // counting.
@@ -306,11 +292,7 @@ void main() {
         reason: 'step ${step + 1} sits on the wrong band',
       );
     }
-    expect(
-      tokens.color.stepRestLifted,
-      isNot(tokens.color.stepRest),
-      reason: 'a band you cannot see is not a band',
-    );
+    expect(tokens.color.stepRestLifted, isNot(tokens.color.stepRest), reason: 'a band you cannot see is not a band');
 
     // A lit cell is the accent gradient whatever band it lands on.
     final BoxDecoration lit = _cellDecoration(tester, 9);

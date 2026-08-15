@@ -1,6 +1,7 @@
 // Store-level behaviour for ArrangementStore: lane changes touch only the
 // lane, clip transforms round-trip, and the selection stays coherent.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/features/playlist/playlist_selection.dart';
 import 'package:onebeat/src/features/playlist/playlist_store.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 
@@ -74,9 +75,7 @@ void main() {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final ArrangementStore store = harness.arrangement;
     final ArrangementClip clip = store.clips.first;
-    final int lane = store.lanes.indexWhere(
-      (ArrangementLane candidate) => candidate.id == clip.laneId,
-    );
+    final int lane = store.lanes.indexWhere((ArrangementLane candidate) => candidate.id == clip.laneId);
 
     store
       ..beginMarquee(clip.startTicks, lane)
@@ -94,11 +93,7 @@ void main() {
     final String laneId = store.lanes.first.id;
     final int before = store.clips.length;
 
-    store.placeItem(
-      const PlaylistInsertItem(id: 'pattern:pat_a', patternId: 'pat_a'),
-      laneId,
-      1920,
-    );
+    store.placeItem(const PlaylistInsertItem(id: 'pattern:pat_a', patternId: 'pat_a'), laneId, 1920);
 
     expect(store.clips.length, before + 1);
     expect(store.clips.last.patternId, 'pat_a');
@@ -139,9 +134,21 @@ void main() {
     expect(store.lanes.first.muted, isTrue);
     // The clips are untouched: muting a lane gates its events, it does not
     // edit what is on it.
-    expect(
-      store.clipsOnLane(lane.id).every((ArrangementClip clip) => !clip.muted),
-      isTrue,
-    );
+    expect(store.clipsOnLane(lane.id).every((ArrangementClip clip) => !clip.muted), isTrue);
+  });
+
+  test('tool and timeline selection state are explicit and cancellable', () {
+    final EditorHarness harness = EditorHarness()..seedArrangement();
+    final PlaylistStore store = harness.arrangement;
+
+    store.setTool(PlaylistTool.slice);
+    store.setTimeSelection(3840, 960);
+
+    expect(store.tool, PlaylistTool.slice);
+    expect(store.timeSelection!.lowTick, 960);
+    expect(store.timeSelection!.highTick, 3840);
+
+    store.clearTimeSelection();
+    expect(store.timeSelection, isNull);
   });
 }

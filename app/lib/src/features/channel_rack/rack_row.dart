@@ -12,7 +12,6 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
-import '../../ui_kit/dropdown.dart';
 import '../../ui_kit/knob.dart';
 
 /// One step cell.
@@ -56,10 +55,6 @@ class RackRowVm {
     this.selected = false,
     this.previewNotes,
     this.hostsPlugin = false,
-    this.gridLabel = '1/16',
-    this.hasSequence = true,
-    this.onGrid,
-    this.onRemoveSequence,
   });
 
   final String name;
@@ -91,12 +86,6 @@ class RackRowVm {
   /// plug-in window — and only these lanes pay for the double-tap recognizer
   /// delaying their single-click select by the double-tap window.
   final bool hostsPlugin;
-
-  /// The visible per-row divisor, independent of the pattern length.
-  final String gridLabel;
-  final bool hasSequence;
-  final ValueChanged<String>? onGrid;
-  final VoidCallback? onRemoveSequence;
 }
 
 class ObRackRow extends StatelessWidget {
@@ -115,13 +104,22 @@ class ObRackRow extends StatelessWidget {
     this.onVol,
     this.onPan,
     this.onRouteTap,
-    this.onGrid,
-    this.onRemoveSequence,
     this.reorderIndex,
+    this.gridWidth,
     super.key,
   });
 
   final RackRowVm vm;
+
+  /// The width every lane's grid occupies, whatever it holds.
+  ///
+  /// Lanes do not agree about how many steps they have — a lane at a finer
+  /// divisor covers the same bar in more of them — but they must agree about
+  /// how much of the window that bar takes, or a fine lane runs off the right
+  /// edge of a window sized for the coarse ones. The rack passes one width and
+  /// each lane fits its own cells into it. Null sizes the lane to its own
+  /// steps, which is what a lane rendered on its own wants.
+  final double? gridWidth;
 
   /// This lane's position in the rack, when the rack is reorderable. Non-null
   /// makes the name block a drag handle. The handle is the *name*, not the
@@ -151,13 +149,12 @@ class ObRackRow extends StatelessWidget {
   final ValueChanged<double>? onVol;
   final ValueChanged<double>? onPan;
   final VoidCallback? onRouteTap;
-  final ValueChanged<String>? onGrid;
-  final VoidCallback? onRemoveSequence;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
+    final double width = gridWidth ?? rackGridWidth(tokens.size, vm.steps.length);
 
     return _RackGestureLayer(
       onPointerDown: onPointerDown,
@@ -190,17 +187,18 @@ class ObRackRow extends StatelessWidget {
               decoration: BoxDecoration(color: vm.color, borderRadius: tokens.radius.controlBorder),
             ),
             SizedBox(width: tokens.spacing.md),
-            _NameBlock(vm: vm, reorderIndex: reorderIndex, onGrid: onGrid, onRemoveSequence: onRemoveSequence),
+            _NameBlock(vm: vm, reorderIndex: reorderIndex),
             if (vm.previewNotes != null)
               RackPianoPreview(
                 notes: vm.previewNotes!,
                 color: vm.color,
-                stepCount: vm.steps.length,
+                width: width,
                 playingTick: playingTick,
               )
             else
               ObStepGrid(
                 steps: vm.steps,
+                width: width,
                 playingStep: playingStep,
                 onStepTap: onStepTap,
                 onPointerDownStep: onPointerDownStep,
@@ -284,12 +282,10 @@ class _RackGestureLayerState extends State<_RackGestureLayer> {
 /// The lane's name and instrument caption, and — when the rack is reorderable
 /// — the grip the lane is dragged by.
 class _NameBlock extends StatelessWidget {
-  const _NameBlock({required this.vm, this.reorderIndex, this.onGrid, this.onRemoveSequence});
+  const _NameBlock({required this.vm, this.reorderIndex});
 
   final RackRowVm vm;
   final int? reorderIndex;
-  final ValueChanged<String>? onGrid;
-  final VoidCallback? onRemoveSequence;
 
   @override
   Widget build(BuildContext context) {
@@ -301,25 +297,7 @@ class _NameBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(vm.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackName),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: Text(vm.type, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackCaption),
-              ),
-              if (onGrid != null) ...<Widget>[
-                ObDropdown(
-                  label: '',
-                  value: vm.gridLabel,
-                  items: const <String>['1/8', '1/16', '1/32'],
-                  width: 52,
-                  onSelected: onGrid,
-                ),
-                if (onRemoveSequence != null) SizedBox(width: tokens.spacing.xs),
-              ],
-              if (onRemoveSequence != null)
-                _SequenceButton(enabled: vm.hasSequence, width: 28, compact: true, onTap: onRemoveSequence),
-            ],
-          ),
+          Text(vm.type, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackCaption),
         ],
       ),
     );
@@ -341,6 +319,7 @@ class _NameBlock extends StatelessWidget {
 class ObStepGrid extends StatelessWidget {
   const ObStepGrid({
     required this.steps,
+    this.width,
     this.playingStep,
     this.onStepTap,
     this.onPointerDownStep,
@@ -350,6 +329,11 @@ class ObStepGrid extends StatelessWidget {
   });
 
   final List<StepVm> steps;
+
+  /// The width the cells must fit into, whatever their number. Null draws them
+  /// at the token pitch and takes whatever width that comes to.
+  final double? width;
+
   final int? playingStep;
   final ValueChanged<int>? onStepTap;
   final void Function(PointerDownEvent event, int stepIndex)? onPointerDownStep;
@@ -361,7 +345,15 @@ class ObStepGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final OneBeatTokens outer = OneBeatTheme.of(context);
+    // A lane at a finer divisor holds more steps than the rack was measured
+    // for; it shrinks its own cells to the shared width rather than running
+    // off the edge of it. Republished so the cells, the hit-test below and
+    // anything the cells build all read the same pitch.
+    final double? target = width;
+    final OneBeatTokens tokens = target == null
+        ? outer
+        : outer.withSize(fitRackStepsToWidth(outer.size, steps.length, target));
     final bool painting = onPointerDownStep != null || onPointerMoveStep != null;
     final List<Widget> cells = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
@@ -381,23 +373,27 @@ class ObStepGrid extends StatelessWidget {
         ),
       );
     }
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown:
-          onPointerDownStep == null
-              ? null
-              : (PointerDownEvent event) {
+    return OneBeatTheme(
+      tokens: tokens,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: onPointerDownStep == null
+            ? null
+            : (PointerDownEvent event) {
                 final int? step = _stepAt(event.localPosition, tokens.size);
                 if (step != null) onPointerDownStep!(event, step);
               },
-      onPointerMove:
-          onPointerMoveStep == null
-              ? null
-              : (PointerMoveEvent event) {
+        onPointerMove: onPointerMoveStep == null
+            ? null
+            : (PointerMoveEvent event) {
                 final int? step = _stepAt(event.localPosition, tokens.size);
                 if (step != null) onPointerMoveStep!(event, step);
               },
-      child: Row(children: <Widget>[for (final Widget cell in cells) cell]),
+        child: SizedBox(
+          width: target,
+          child: Row(children: <Widget>[for (final Widget cell in cells) cell]),
+        ),
+      ),
     );
   }
 
@@ -419,10 +415,25 @@ class ObStepGrid extends StatelessWidget {
 /// The compact piano-roll preview a melody channel shows in place of its step
 /// grid: the same notes as the piano roll, scaled into one strip.
 class RackPianoPreview extends StatelessWidget {
-  const RackPianoPreview({required this.notes, required this.color, this.stepCount = 16, this.playingTick, super.key});
+  const RackPianoPreview({
+    required this.notes,
+    required this.color,
+    this.width,
+    this.stepCount = 16,
+    this.playingTick,
+    super.key,
+  });
 
   final List<RackPreviewNoteVm> notes;
   final Color color;
+
+  /// The shared grid width. The preview scales its notes into whatever it is
+  /// given, so it takes the width directly rather than a step count it would
+  /// only convert — the count it used to take was the lane's own, which is how
+  /// a fine lane came to paint a strip wider than the window.
+  final double? width;
+
+  /// The step count to size by when no [width] is given.
   final int stepCount;
 
   /// The loop-wrapped transport tick, drawn as a read head over the notes.
@@ -432,7 +443,7 @@ class RackPianoPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return SizedBox(
-      width: rackGridWidth(tokens.size, stepCount),
+      width: width ?? rackGridWidth(tokens.size, stepCount),
       height: tokens.size.rackStepCell,
       child: CustomPaint(
         painter: _RackPianoPreviewPainter(
@@ -459,6 +470,104 @@ double rackGridWidth(SizeTokens size, int count) {
     width += size.rackStepCell;
   }
   return width;
+}
+
+/// The smallest step cell the rack will draw of its own accord.
+///
+/// Below this a cell stops being a target you can hit and starts being a
+/// texture, and scrolling is the better answer.
+const double _minRackStepCell = 16;
+
+/// The smallest cell a lane will shrink to when it is *given* a width.
+///
+/// A lane at a fine divisor has no say in how wide the rack is — the rack is
+/// sized for the pattern's own grid — so the alternative to a cell this small
+/// is a lane that overflows the window. Below the hittable size it reads as a
+/// density strip, which is honest: that lane is edited in the piano roll.
+const double _minBoundStepCell = 2;
+
+/// Step sizes that fit [stepCount] cells into [available], never larger than
+/// the design's own.
+///
+/// A 32-step pattern at the full 30px pitch is wider than most windows, and the
+/// horizontal scroll that answered it hid half the bar — you cannot write a
+/// rhythm you have to scroll to see. So the grid gives up pitch before it gives
+/// up being whole, down to [_minRackStepCell]; past that the scroll returns.
+SizeTokens fitRackSteps(SizeTokens base, int stepCount, double available) =>
+    _fitRackSteps(base, stepCount, available, _minRackStepCell) ?? _RackStepSizes(base, _minRackStepCell);
+
+/// Step sizes that fit [stepCount] cells into exactly [width], however many
+/// there are.
+///
+/// This is the promise a lane makes to the rack: whatever divisor it is on, its
+/// cells occupy the width every other lane occupies. When even the smallest
+/// banded cell will not fit, the gaps go — a lane that dense is a texture, and
+/// a texture that fits beats a grid that overflows.
+SizeTokens fitRackStepsToWidth(SizeTokens base, int stepCount, double width) {
+  if (stepCount <= 0 || width <= 0) return base;
+  return _fitRackSteps(base, stepCount, width, _minBoundStepCell) ?? _RackDenseStepSizes(width / stepCount);
+}
+
+/// The first whole-pixel cell size at or below the base that fits, or null when
+/// none down to [floor] does.
+///
+/// A whole number of pixels per cell is what keeps the cells crisp and the gaps
+/// even; solving for a fractional cell and rounding afterwards does neither.
+SizeTokens? _fitRackSteps(SizeTokens base, int stepCount, double available, double floor) {
+  if (stepCount <= 0 || available <= 0) return base;
+  if (rackGridWidth(base, stepCount) <= available) return base;
+  for (double cell = base.rackStepCell - 1; cell >= floor; cell--) {
+    final SizeTokens candidate = _RackStepSizes(base, cell);
+    if (rackGridWidth(candidate, stepCount) <= available) return candidate;
+  }
+  return null;
+}
+
+/// [SizeTokens] with the step grid rescaled — the gaps follow the cell, so the
+/// beat grouping stays legible at every size.
+class _RackStepSizes extends SizeTokens {
+  const _RackStepSizes(this._base, this._cell);
+
+  final SizeTokens _base;
+  final double _cell;
+
+  double get _scale => _cell / _base.rackStepCell;
+
+  @override
+  double get rackStepCell => _cell;
+
+  @override
+  double get rackStepGap {
+    final double scaled = (_base.rackStepGap * _scale).floorToDouble();
+    return scaled < 2 ? 2 : scaled;
+  }
+
+  @override
+  double get rackStepGroupGap {
+    final double scaled = (_base.rackStepGroupGap * _scale).floorToDouble();
+    // Always visibly wider than the plain gap: the group break is the only
+    // thing telling you where the beat is.
+    final double floor = rackStepGap + 2;
+    return scaled < floor ? floor : scaled;
+  }
+}
+
+/// The last resort: cells packed edge to edge at whatever fraction of a pixel
+/// the width allows. No gaps, so the arithmetic is exact and the lane cannot
+/// overflow by a rounding error.
+class _RackDenseStepSizes extends SizeTokens {
+  const _RackDenseStepSizes(this._cell);
+
+  final double _cell;
+
+  @override
+  double get rackStepCell => _cell;
+
+  @override
+  double get rackStepGap => 0;
+
+  @override
+  double get rackStepGroupGap => 0;
 }
 
 class _RackPianoPreviewPainter extends CustomPainter {
@@ -511,10 +620,9 @@ class _RackPianoPreviewPainter extends CustomPainter {
     final Color? head = playheadColor;
     if (tick != null && head != null && end > 0) {
       final double x = (tick / end) * size.width;
-      final Paint headPaint =
-          Paint()
-            ..color = head
-            ..strokeWidth = playheadWidth;
+      final Paint headPaint = Paint()
+        ..color = head
+        ..strokeWidth = playheadWidth;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), headPaint);
     }
   }
@@ -555,14 +663,13 @@ class _StepCell extends StatelessWidget {
           height: side,
           decoration: BoxDecoration(
             color: step.on ? null : (lifted ? color.stepRestLifted : color.stepRest),
-            gradient:
-                step.on
-                    ? LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: color.stepGradient(step.velocity),
-                    )
-                    : null,
+            gradient: step.on
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: color.stepGradient(step.velocity),
+                  )
+                : null,
             // The corner follows the cell. r8 on the design's 30px square is a
             // rounded square; the same 8 on a shrunk cell is a circle, and a
             // grid of circles stops reading as a row of steps.
@@ -625,12 +732,11 @@ class _PowerGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
     // A ring broken at the top, with the stem through the break.
@@ -651,41 +757,6 @@ class _PowerGlyphPainter extends CustomPainter {
 /// Half the break in the power glyph's ring, in radians. Named so the gap
 /// stays symmetric about the stem.
 const double _arcGap = 0.9;
-
-/// The mono destination chip at the lane's right edge.
-class _SequenceButton extends StatelessWidget {
-  const _SequenceButton({required this.enabled, this.width, this.compact = false, this.onTap});
-
-  final bool enabled;
-  final double? width;
-  final bool compact;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: width ?? tokens.size.rackRouteChipWidth,
-        height: tokens.size.tagHeight,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tokens.color.surfaceRaised,
-          borderRadius: BorderRadius.all(tokens.radius.md),
-          border: Border.all(color: tokens.color.line, width: tokens.border.hairline),
-        ),
-        child: Text(
-          compact ? '−' : '− PAT',
-          style: tokens.type.numericSmall.copyWith(
-            color: enabled ? tokens.color.textSecondary : tokens.color.textMuted,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _RouteChip extends StatefulWidget {
   const _RouteChip({required this.label, this.onTap});

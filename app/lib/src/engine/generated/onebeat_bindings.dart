@@ -1745,13 +1745,21 @@ class OneBeatBindings {
     int denominator,
   ) {
     return ob_status.fromValue(
-      _ob_engine_pattern_set_time_signature(engine, utf8_pattern_id, numerator, denominator),
+      _ob_engine_pattern_set_time_signature(
+        engine,
+        utf8_pattern_id,
+        numerator,
+        denominator,
+      ),
     );
   }
 
-  late final _ob_engine_pattern_set_time_signaturePtr = _lookup<
-    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32)>
-  >('ob_engine_pattern_set_time_signature');
+  late final _ob_engine_pattern_set_time_signaturePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32)
+        >
+      >('ob_engine_pattern_set_time_signature');
   late final _ob_engine_pattern_set_time_signature = _ob_engine_pattern_set_time_signaturePtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int, int)>();
 
@@ -1760,12 +1768,19 @@ class OneBeatBindings {
     ffi.Pointer<ffi.Char> utf8_pattern_id,
     int order,
   ) {
-    return ob_status.fromValue(_ob_engine_pattern_reorder(engine, utf8_pattern_id, order));
+    return ob_status.fromValue(
+      _ob_engine_pattern_reorder(
+        engine,
+        utf8_pattern_id,
+        order,
+      ),
+    );
   }
 
-  late final _ob_engine_pattern_reorderPtr = _lookup<
-    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>
-  >('ob_engine_pattern_reorder');
+  late final _ob_engine_pattern_reorderPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>>(
+        'ob_engine_pattern_reorder',
+      );
   late final _ob_engine_pattern_reorder = _ob_engine_pattern_reorderPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
 
@@ -1774,12 +1789,21 @@ class OneBeatBindings {
     ffi.Pointer<ffi.Char> utf8_pattern_id,
     ffi.Pointer<ffi.Char> utf8_group,
   ) {
-    return ob_status.fromValue(_ob_engine_pattern_set_group(engine, utf8_pattern_id, utf8_group));
+    return ob_status.fromValue(
+      _ob_engine_pattern_set_group(
+        engine,
+        utf8_pattern_id,
+        utf8_group,
+      ),
+    );
   }
 
-  late final _ob_engine_pattern_set_groupPtr = _lookup<
-    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>
-  >('ob_engine_pattern_set_group');
+  late final _ob_engine_pattern_set_groupPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+        >
+      >('ob_engine_pattern_set_group');
   late final _ob_engine_pattern_set_group = _ob_engine_pattern_set_groupPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
 

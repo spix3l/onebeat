@@ -31,6 +31,7 @@ class PlaylistScreen extends StatelessWidget {
     this.onDrop,
     this.onScroll,
     this.onPanZoom,
+    this.onSeekBar,
     this.onSnapChanged,
     this.onStartChanged,
     this.onLengthChanged,
@@ -39,6 +40,9 @@ class PlaylistScreen extends StatelessWidget {
     this.onMuteToggle,
     this.onTransposeChanged,
     this.onMakeUnique,
+    this.onLaneMute,
+    this.onLaneSolo,
+    this.onLaneCollapse,
     super.key,
   });
 
@@ -62,6 +66,7 @@ class PlaylistScreen extends StatelessWidget {
   final void Function(Object data, double bar, int lane)? onDrop;
   final ValueChanged<Offset>? onScroll;
   final ValueChanged<Offset>? onPanZoom;
+  final ValueChanged<double>? onSeekBar;
   final ValueChanged<String>? onSnapChanged;
   final ValueChanged<int>? onStartChanged;
   final ValueChanged<int>? onLengthChanged;
@@ -70,6 +75,9 @@ class PlaylistScreen extends StatelessWidget {
   final VoidCallback? onMuteToggle;
   final ValueChanged<int>? onTransposeChanged;
   final VoidCallback? onMakeUnique;
+  final ValueChanged<String>? onLaneMute;
+  final ValueChanged<String>? onLaneSolo;
+  final ValueChanged<String>? onLaneCollapse;
 
   @override
   Widget build(BuildContext context) {
@@ -90,40 +98,55 @@ class PlaylistScreen extends StatelessWidget {
                   snap: vm.canvas.snapTicks == 0 ? 'Off' : _snapLabel(vm.canvas.snapTicks),
                   onSnapChanged: onSnapChanged,
                 ),
-                Container(
-                  height: tokens.border.hairline,
-                  color: tokens.color.line,
+                Container(height: tokens.border.hairline, color: tokens.color.line),
+                Row(
+                  children: <Widget>[
+                    SizedBox(width: tokens.size.laneHeaderWidth),
+                    Expanded(
+                      child: PlaylistRuler(
+                        pxPerBar: vm.canvas.pxPerBar,
+                        scrollTicks: vm.canvas.scrollTicks,
+                        onSeekBar: onSeekBar,
+                      ),
+                    ),
+                  ],
                 ),
-                PlaylistRuler(
-                  pxPerBar: vm.canvas.pxPerBar,
-                  scrollTicks: vm.canvas.scrollTicks,
-                ),
-                Container(
-                  height: tokens.border.hairline,
-                  color: tokens.color.line,
-                ),
+                Container(height: tokens.border.hairline, color: tokens.color.line),
                 Expanded(
-                  child: PlaylistCanvas(
-                    key: canvasKey,
-                    vm: vm.canvas,
-                    onClipTap: onClipTap,
-                    onClipDoubleTap: onClipDoubleTap,
-                    onClipPanStart: onClipPanStart,
-                    onClipPanUpdate: onClipPanUpdate,
-                    onClipPanEnd: onClipPanEnd,
-                    onClipPanCancel: onClipPanCancel,
-                    onClipResizeStart: onClipResizeStart,
-                    onClipResizeUpdate: onClipResizeUpdate,
-                    onClipResizeEnd: onClipResizeEnd,
-                    onClipResizeCancel: onClipResizeCancel,
-                    onBackgroundPanStart: onBackgroundPanStart,
-                    onBackgroundPanUpdate: onBackgroundPanUpdate,
-                    onBackgroundPanEnd: onBackgroundPanEnd,
-                    onBackgroundPanCancel: onBackgroundPanCancel,
-                    onBackgroundTap: onBackgroundTap,
-                    onDrop: onDrop,
-                    onScroll: onScroll,
-                    onPanZoom: onPanZoom,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      PlaylistLaneHeaders(
+                        lanes: vm.canvas.lanes,
+                        onMute: onLaneMute,
+                        onSolo: onLaneSolo,
+                        onCollapse: onLaneCollapse,
+                      ),
+                      Expanded(
+                        child: PlaylistCanvas(
+                          key: canvasKey,
+                          vm: vm.canvas,
+                          onClipTap: onClipTap,
+                          onClipDoubleTap: onClipDoubleTap,
+                          onClipPanStart: onClipPanStart,
+                          onClipPanUpdate: onClipPanUpdate,
+                          onClipPanEnd: onClipPanEnd,
+                          onClipPanCancel: onClipPanCancel,
+                          onClipResizeStart: onClipResizeStart,
+                          onClipResizeUpdate: onClipResizeUpdate,
+                          onClipResizeEnd: onClipResizeEnd,
+                          onClipResizeCancel: onClipResizeCancel,
+                          onBackgroundPanStart: onBackgroundPanStart,
+                          onBackgroundPanUpdate: onBackgroundPanUpdate,
+                          onBackgroundPanEnd: onBackgroundPanEnd,
+                          onBackgroundPanCancel: onBackgroundPanCancel,
+                          onBackgroundTap: onBackgroundTap,
+                          onDrop: onDrop,
+                          onScroll: onScroll,
+                          onPanZoom: onPanZoom,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -139,6 +162,77 @@ class PlaylistScreen extends StatelessWidget {
             onTransposeChanged: onTransposeChanged,
             onMakeUnique: onMakeUnique,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class PlaylistLaneHeaders extends StatelessWidget {
+  const PlaylistLaneHeaders({required this.lanes, this.onMute, this.onSolo, this.onCollapse, super.key});
+
+  final List<PlaylistLaneVm> lanes;
+  final ValueChanged<String>? onMute;
+  final ValueChanged<String>? onSolo;
+  final ValueChanged<String>? onCollapse;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return SizedBox(
+      width: tokens.size.laneHeaderWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          for (final PlaylistLaneVm lane in lanes)
+            SizedBox(
+              height: tokens.size.playlistLaneHeight,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
+                decoration: BoxDecoration(
+                  color: tokens.color.surfacePanel,
+                  border: Border(
+                    right: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
+                    bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    GestureDetector(
+                      onTap: onCollapse == null ? null : () => onCollapse!(lane.id),
+                      child: Text(lane.collapsed ? '>' : 'v', style: tokens.type.label),
+                    ),
+                    SizedBox(width: tokens.spacing.xs),
+                    Container(
+                      width: tokens.size.swatchSize,
+                      height: tokens.size.swatchSize,
+                      decoration: BoxDecoration(color: lane.color, borderRadius: BorderRadius.all(tokens.radius.sm)),
+                    ),
+                    SizedBox(width: tokens.spacing.xs),
+                    Expanded(child: Text(lane.name, overflow: TextOverflow.ellipsis, style: tokens.type.label)),
+                    GestureDetector(
+                      onTap: onMute == null ? null : () => onMute!(lane.id),
+                      child: Text(
+                        'M',
+                        style: tokens.type.tag.copyWith(
+                          color: lane.muted ? tokens.color.danger : tokens.color.textMuted,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: tokens.spacing.xs),
+                    GestureDetector(
+                      onTap: onSolo == null ? null : () => onSolo!(lane.id),
+                      child: Text(
+                        'S',
+                        style: tokens.type.tag.copyWith(
+                          color: lane.soloed ? tokens.color.warning : tokens.color.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -184,22 +278,15 @@ class _PlaylistInspectorPanel extends StatelessWidget {
       padding: EdgeInsets.all(tokens.spacing.md),
       decoration: BoxDecoration(
         color: tokens.color.surfacePanel,
-        border: Border(
-          left: BorderSide(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
-        ),
+        border: Border(left: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
       ),
       child: SingleChildScrollView(
-        child: vm.isEmpty
-            ? const _EmptyInspectorContent()
-            : (vm.isMulti
-                  ? _MultiInspectorContent(
-                      count: vm.selectedCount,
-                      onMakeUnique: onMakeUnique,
-                    )
-                  : _SingleClipInspectorContent(
+        child:
+            vm.isEmpty
+                ? const _EmptyInspectorContent()
+                : (vm.isMulti
+                    ? _MultiInspectorContent(count: vm.selectedCount, onMakeUnique: onMakeUnique)
+                    : _SingleClipInspectorContent(
                       vm: vm,
                       onStartChanged: onStartChanged,
                       onLengthChanged: onLengthChanged,
@@ -248,16 +335,9 @@ class _MultiInspectorContent extends StatelessWidget {
       children: <Widget>[
         Text('$count CLIPS', style: tokens.type.label),
         SizedBox(height: tokens.spacing.md),
-        ObButton(
-          label: 'Make unique',
-          onTap: onMakeUnique,
-          width: double.infinity,
-        ),
+        ObButton(label: 'Make unique', onTap: onMakeUnique, width: double.infinity),
         SizedBox(height: tokens.spacing.sm),
-        Text(
-          'Clones selected pattern-clips so edits do not affect other copies.',
-          style: tokens.type.label,
-        ),
+        Text('Clones selected pattern-clips so edits do not affect other copies.', style: tokens.type.label),
       ],
     );
   }
@@ -298,19 +378,10 @@ class _SingleClipInspectorContent extends StatelessWidget {
             Container(
               width: tokens.size.swatchSize,
               height: tokens.size.swatchSize,
-              decoration: BoxDecoration(
-                color: vm.color,
-                borderRadius: BorderRadius.all(tokens.radius.sm),
-              ),
+              decoration: BoxDecoration(color: vm.color, borderRadius: BorderRadius.all(tokens.radius.sm)),
             ),
             SizedBox(width: tokens.spacing.sm),
-            Expanded(
-              child: Text(
-                vm.name,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.type.title,
-              ),
-            ),
+            Expanded(child: Text(vm.name, overflow: TextOverflow.ellipsis, style: tokens.type.title)),
           ],
         ),
         SizedBox(height: tokens.spacing.xs),
@@ -343,10 +414,7 @@ class _SingleClipInspectorContent extends StatelessWidget {
             GestureDetector(
               onTap: onLoopToggle == null ? null : () => onLoopToggle!(!vm.loop),
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: tokens.spacing.xs,
-                  vertical: tokens.spacing.xxs,
-                ),
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xs, vertical: tokens.spacing.xxs),
                 decoration: BoxDecoration(
                   color: vm.loop ? tokens.color.accentWash : tokens.color.surfaceWell,
                   borderRadius: BorderRadius.all(tokens.radius.sm),
@@ -357,9 +425,7 @@ class _SingleClipInspectorContent extends StatelessWidget {
                 ),
                 child: Text(
                   vm.loop ? 'LOOP' : 'HOLD',
-                  style: tokens.type.tag.copyWith(
-                    color: vm.loop ? tokens.color.accentBright : tokens.color.textMuted,
-                  ),
+                  style: tokens.type.tag.copyWith(color: vm.loop ? tokens.color.accentBright : tokens.color.textMuted),
                 ),
               ),
             ),
@@ -369,11 +435,7 @@ class _SingleClipInspectorContent extends StatelessWidget {
         Row(
           children: <Widget>[
             Expanded(child: Text('Mute', style: tokens.type.label)),
-            ObToggleChip(
-              tone: ObToggleTone.mute,
-              on: vm.muted,
-              onTap: onMuteToggle,
-            ),
+            ObToggleChip(tone: ObToggleTone.mute, on: vm.muted, onTap: onMuteToggle),
           ],
         ),
         if (!vm.isAudio) ...<Widget>[
@@ -385,16 +447,9 @@ class _SingleClipInspectorContent extends StatelessWidget {
             onPlus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose + 1),
           ),
           SizedBox(height: tokens.spacing.xs),
-          Text(
-            'Non-destructive: the pattern is untouched.',
-            style: tokens.type.label,
-          ),
+          Text('Non-destructive: the pattern is untouched.', style: tokens.type.label),
           SizedBox(height: tokens.spacing.md),
-          ObButton(
-            label: 'Make unique',
-            onTap: onMakeUnique,
-            width: double.infinity,
-          ),
+          ObButton(label: 'Make unique', onTap: onMakeUnique, width: double.infinity),
           SizedBox(height: tokens.spacing.xs),
           Text(
             vm.isShared ? 'Creates a unique clone of this pattern.' : 'This clip already has the pattern to itself.',
@@ -414,21 +469,13 @@ class _InspectorDivider extends StatelessWidget {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(vertical: tokens.spacing.md),
-      child: Container(
-        height: tokens.border.hairline,
-        color: tokens.color.line,
-      ),
+      child: Container(height: tokens.border.hairline, color: tokens.color.line),
     );
   }
 }
 
 class _InspectorStepperRow extends StatelessWidget {
-  const _InspectorStepperRow({
-    required this.label,
-    required this.value,
-    this.onMinus,
-    this.onPlus,
-  });
+  const _InspectorStepperRow({required this.label, required this.value, this.onMinus, this.onPlus});
 
   final String label;
   final String value;
@@ -443,32 +490,20 @@ class _InspectorStepperRow extends StatelessWidget {
       children: <Widget>[
         Expanded(child: Text(label, style: tokens.type.label)),
         Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: tokens.spacing.sm,
-            vertical: tokens.spacing.xxs,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm, vertical: tokens.spacing.xxs),
           decoration: BoxDecoration(
             color: tokens.color.surfaceDeep,
             borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: tokens.color.line,
-              width: tokens.border.hairline,
-            ),
+            border: Border.all(color: tokens.color.line, width: tokens.border.hairline),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              GestureDetector(
-                onTap: onMinus,
-                child: Text('−', style: tokens.type.numeric),
-              ),
+              GestureDetector(onTap: onMinus, child: Text('−', style: tokens.type.numeric)),
               SizedBox(width: tokens.spacing.sm),
               Text(value, style: tokens.type.numeric),
               SizedBox(width: tokens.spacing.sm),
-              GestureDetector(
-                onTap: onPlus,
-                child: Text('+', style: tokens.type.numeric),
-              ),
+              GestureDetector(onTap: onPlus, child: Text('+', style: tokens.type.numeric)),
             ],
           ),
         ),

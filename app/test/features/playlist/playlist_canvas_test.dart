@@ -23,10 +23,7 @@ class _Body extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        PlaylistHeader(
-          title: demoPlaylist.headerTitle,
-          right: demoPlaylist.headerRight,
-        ),
+        PlaylistHeader(title: demoPlaylist.headerTitle, right: demoPlaylist.headerRight),
         PlaylistRuler(pxPerBar: demoPlaylist.pxPerBar),
         Expanded(child: PlaylistCanvas(vm: demoPlaylist)),
       ],
@@ -37,39 +34,23 @@ class _Body extends StatelessWidget {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('the arrangement body renders as the golden', (
-    WidgetTester tester,
-  ) async {
-    await pumpUi(
-      tester,
-      const _Body(key: Key('body')),
-      size: const Size(1600, 860),
-    );
+  testWidgets('the arrangement body renders as the golden', (WidgetTester tester) async {
+    await pumpUi(tester, const _Body(key: Key('body')), size: const Size(1600, 860));
     await tester.pumpAndSettle();
     await expectLater(find.byKey(const Key('body')), uiGolden('playlist_body'));
   });
 
   testWidgets('tapping a clip reports its id', (WidgetTester tester) async {
     final List<int> tapped = <int>[];
-    await pumpUi(
-      tester,
-      PlaylistCanvas(vm: demoPlaylist, onClipTap: tapped.add),
-      size: const Size(1600, 700),
-    );
+    await pumpUi(tester, PlaylistCanvas(vm: demoPlaylist, onClipTap: tapped.add), size: const Size(1600, 700));
     await tester.tap(find.text('Vocal Chop'));
     await tester.tap(find.text('Riser'));
     expect(tapped, <int>[7, 8]);
   });
 
-  testWidgets('double tapping a clip reports its id', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('double tapping a clip reports its id', (WidgetTester tester) async {
     final List<int> opened = <int>[];
-    await pumpUi(
-      tester,
-      PlaylistCanvas(vm: demoPlaylist, onClipDoubleTap: opened.add),
-      size: const Size(1600, 700),
-    );
+    await pumpUi(tester, PlaylistCanvas(vm: demoPlaylist, onClipDoubleTap: opened.add), size: const Size(1600, 700));
 
     await tester.tap(find.text('Vocal Chop'));
     await tester.pump(const Duration(milliseconds: 50));
@@ -78,17 +59,12 @@ void main() {
     expect(opened, <int>[7]);
   });
 
-  testWidgets('tapping empty canvas reports a bar and a lane', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('tapping empty canvas reports a bar and a lane', (WidgetTester tester) async {
     final List<(double, int)> taps = <(double, int)>[];
     final OneBeatTokens tokens = OneBeatTokens.dark();
     await pumpUi(
       tester,
-      PlaylistCanvas(
-        vm: demoPlaylist,
-        onBackgroundTap: (double bar, int lane) => taps.add((bar, lane)),
-      ),
+      PlaylistCanvas(vm: demoPlaylist, onBackgroundTap: (double bar, int lane) => taps.add((bar, lane))),
       size: const Size(1600, 700),
     );
     // Lane 6 is empty in the fixture, so nothing intercepts the tap.
@@ -99,9 +75,7 @@ void main() {
     expect(taps.single.$2, 6);
   });
 
-  testWidgets('a selected clip outlines instead of changing its fill', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('a selected clip outlines instead of changing its fill', (WidgetTester tester) async {
     final ClipVm selected = ClipVm(
       id: 1,
       name: 'Intro Kick',
@@ -118,28 +92,30 @@ void main() {
       size: const Size(400, 100),
     );
     final Container card = tester.widget(
-      find.descendant(
-        of: find.byType(ObClipCard),
-        matching: find.byType(Container),
-      ),
+      find.descendant(of: find.byType(ObClipCard), matching: find.byType(Container)),
     );
     final BoxDecoration decoration = card.decoration! as BoxDecoration;
     expect(decoration.color, channelColors[0].withValues(alpha: 0.58));
-    expect(
-      (decoration.border! as Border).top.color,
-      OneBeatTokens.dark().color.clipSelectedOutline,
-    );
+    expect((decoration.border! as Border).top.color, OneBeatTokens.dark().color.clipSelectedOutline);
   });
 
-  testWidgets('a sample drag reports its canvas position', (
-    WidgetTester tester,
-  ) async {
-    final List<(Object, double, int)> drops = <(Object, double, int)>[];
-    const SampleAsset sample = SampleAsset(
-      id: 'sample:kick.wav',
-      name: 'kick.wav',
-      path: '/Samples/kick.wav',
+  testWidgets('the ruler reports seek positions including horizontal scroll', (WidgetTester tester) async {
+    final List<double> seeks = <double>[];
+    await pumpUi(
+      tester,
+      PlaylistRuler(pxPerBar: 100, scrollTicks: ticksPerBar.toDouble(), onSeekBar: seeks.add),
+      size: const Size(400, 40),
     );
+
+    await tester.tapAt(const Offset(200, 10));
+
+    expect(seeks, hasLength(1));
+    expect(seeks.single, closeTo(3.0, 0.01));
+  });
+
+  testWidgets('a sample drag reports its canvas position', (WidgetTester tester) async {
+    final List<(Object, double, int)> drops = <(Object, double, int)>[];
+    const SampleAsset sample = SampleAsset(id: 'sample:kick.wav', name: 'kick.wav', path: '/Samples/kick.wav');
     await pumpUi(
       tester,
       SizedBox(
@@ -153,13 +129,9 @@ void main() {
       size: const Size(600, 500),
     );
 
-    final DragTarget<Object> target = tester.widget(
-      find.byType(DragTarget<Object>),
-    );
+    final DragTarget<Object> target = tester.widget(find.byType(DragTarget<Object>));
     // Flutter's test details constructor is intentionally non-const.
-    target.onAcceptWithDetails!(
-      DragTargetDetails<Object>(data: sample, offset: const Offset(200, 20)),
-    );
+    target.onAcceptWithDetails!(DragTargetDetails<Object>(data: sample, offset: const Offset(200, 20)));
     await tester.pump();
 
     expect(drops, hasLength(1));
@@ -168,42 +140,29 @@ void main() {
     expect(drops.single.$3, 0);
   });
 
-  testWidgets(
-    'pattern browser items are accepted by the playlist drop target',
-    (WidgetTester tester) async {
-      const PlaylistInsertItem item = PlaylistInsertItem(
-        id: 'pattern:pat_a',
-        patternId: 'pat_a',
-      );
-      final List<(Object, double, int)> drops = <(Object, double, int)>[];
-      await pumpUi(
-        tester,
-        PlaylistCanvas(
-          vm: const PlaylistVm(clips: <ClipVm>[], pxPerBar: 100),
-          onDrop: (Object data, double bar, int lane) => drops.add((data, bar, lane)),
-        ),
-        size: const Size(600, 500),
-      );
+  testWidgets('pattern browser items are accepted by the playlist drop target', (WidgetTester tester) async {
+    const PlaylistInsertItem item = PlaylistInsertItem(id: 'pattern:pat_a', patternId: 'pat_a');
+    final List<(Object, double, int)> drops = <(Object, double, int)>[];
+    await pumpUi(
+      tester,
+      PlaylistCanvas(
+        vm: const PlaylistVm(clips: <ClipVm>[], pxPerBar: 100),
+        onDrop: (Object data, double bar, int lane) => drops.add((data, bar, lane)),
+      ),
+      size: const Size(600, 500),
+    );
 
-      final DragTarget<Object> target = tester.widget(
-        find.byType(DragTarget<Object>),
-      );
-      final DragTargetDetails<Object> details = DragTargetDetails<Object>(
-        data: item,
-        offset: const Offset(200, 20),
-      );
-      expect(target.onWillAcceptWithDetails!(details), isTrue);
-      target.onAcceptWithDetails!(details);
+    final DragTarget<Object> target = tester.widget(find.byType(DragTarget<Object>));
+    final DragTargetDetails<Object> details = DragTargetDetails<Object>(data: item, offset: const Offset(200, 20));
+    expect(target.onWillAcceptWithDetails!(details), isTrue);
+    target.onAcceptWithDetails!(details);
 
-      expect(drops.single.$1, same(item));
-      expect(drops.single.$2, closeTo(2.0, 0.05));
-      expect(drops.single.$3, 0);
-    },
-  );
+    expect(drops.single.$1, same(item));
+    expect(drops.single.$2, closeTo(2.0, 0.05));
+    expect(drops.single.$3, 0);
+  });
 
-  testWidgets('pattern clips render an instrument note preview', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('pattern clips render an instrument note preview', (WidgetTester tester) async {
     final ClipVm pattern = ClipVm(
       id: 10,
       name: 'Bass Pattern',
@@ -225,17 +184,13 @@ void main() {
     );
 
     expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget is CustomPaint && widget.painter is PatternPreviewPainter,
-      ),
+      find.byWidgetPredicate((Widget widget) => widget is CustomPaint && widget.painter is PatternPreviewPainter),
       findsOneWidget,
     );
     expect(find.textContaining('Sub Bass'), findsOneWidget);
   });
 
-  testWidgets('audio clips render a waveform painter', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('audio clips render a waveform painter', (WidgetTester tester) async {
     final ClipVm audio = ClipVm(
       id: 9,
       name: 'loop.wav',
@@ -254,9 +209,7 @@ void main() {
     );
 
     expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget is CustomPaint && widget.painter is AudioWaveformPainter,
-      ),
+      find.byWidgetPredicate((Widget widget) => widget is CustomPaint && widget.painter is AudioWaveformPainter),
       findsOneWidget,
     );
   });

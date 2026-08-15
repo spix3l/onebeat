@@ -26,8 +26,6 @@ class ChannelRackScreen extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
-    this.onGridChanged,
-    this.onRemoveSequence,
     this.onAddChannel,
     this.onCreatePattern,
     this.onRowSecondaryTapDown,
@@ -53,6 +51,7 @@ class ChannelRackScreen extends StatelessWidget {
     this.onInspectorAddFx,
     this.onInspectorRouteTap,
     this.onInspectorKeyPress,
+    this.onInspectorGrid,
     this.onPointerDownStep,
     this.onPointerMoveStep,
     this.onPointerUpStep,
@@ -73,8 +72,6 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
-  final void Function(int rowIndex, String grid)? onGridChanged;
-  final ValueChanged<int>? onRemoveSequence;
   final VoidCallback? onAddChannel;
   final VoidCallback? onCreatePattern;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
@@ -103,6 +100,9 @@ class ChannelRackScreen extends StatelessWidget {
   final VoidCallback? onInspectorAddFx;
   final VoidCallback? onInspectorRouteTap;
   final ValueChanged<int>? onInspectorKeyPress;
+
+  /// Sets the selected channel's step divisor.
+  final ValueChanged<String>? onInspectorGrid;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
   final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)? onPointerMoveStep;
   final VoidCallback? onPointerUpStep;
@@ -147,7 +147,12 @@ class ChannelRackScreen extends StatelessWidget {
                 final OneBeatTokens rackTokens = currentTokens.withSize(
                   fitRackSteps(currentTokens.size, vm.stepCount, constraints.maxWidth - chrome),
                 );
-                final double contentWidth = chrome + rackGridWidth(rackTokens.size, vm.stepCount);
+                // One width for every lane. The pattern's own grid sets it;
+                // lanes on a finer divisor fit their extra cells inside it
+                // rather than widening the rack, so the bar ends in the same
+                // place on every row and nothing runs off the window.
+                final double gridWidth = rackGridWidth(rackTokens.size, vm.stepCount);
+                final double contentWidth = chrome + gridWidth;
                 return OneBeatTheme(
                   tokens: rackTokens,
                   child: SingleChildScrollView(
@@ -170,8 +175,7 @@ class ChannelRackScreen extends StatelessWidget {
                               onVolChanged: onVolChanged,
                               onPanChanged: onPanChanged,
                               onRouteTap: onRouteTap,
-                              onGridChanged: onGridChanged,
-                              onRemoveSequence: onRemoveSequence,
+                              gridWidth: gridWidth,
                               onAddChannel: onAddChannel,
                               onRowSecondaryTapDown: onRowSecondaryTapDown,
                               onDropInstrument: onDropInstrument,
@@ -204,6 +208,7 @@ class ChannelRackScreen extends StatelessWidget {
               onAddFx: onInspectorAddFx,
               onRouteTap: onInspectorRouteTap,
               onKeyPress: onInspectorKeyPress,
+              onGrid: onInspectorGrid,
             ),
         ],
       ),
@@ -232,61 +237,6 @@ double _rackChromeWidth(OneBeatTokens tokens) {
       tokens.spacing.sm +
       size.rackRouteChipWidth +
       tokens.spacing.md;
-}
-
-/// The smallest step cell the rack will draw.
-///
-/// Below this a cell stops being a target you can hit and starts being a
-/// texture, and scrolling is the better answer.
-const double _minRackStepCell = 16;
-
-/// Step sizes that fit [stepCount] cells into [available], never larger than
-/// the design's own.
-///
-/// A 32-step pattern at the full 30px pitch is wider than most windows, and the
-/// horizontal scroll that answered it hid half the bar — you cannot write a
-/// rhythm you have to scroll to see. So the grid gives up pitch before it gives
-/// up being whole, down to [_minRackStepCell]; past that the scroll returns.
-SizeTokens fitRackSteps(SizeTokens base, int stepCount, double available) {
-  if (stepCount <= 0 || available <= 0) return base;
-  if (rackGridWidth(base, stepCount) <= available) return base;
-  // Walk down a pixel at a time and take the first size that fits. A whole
-  // number of pixels per cell is what keeps the cells crisp and the gaps even;
-  // solving for a fractional cell and rounding afterwards does neither.
-  for (double cell = base.rackStepCell - 1; cell >= _minRackStepCell; cell--) {
-    final SizeTokens candidate = _RackStepSizes(base, cell);
-    if (rackGridWidth(candidate, stepCount) <= available) return candidate;
-  }
-  return _RackStepSizes(base, _minRackStepCell);
-}
-
-/// [SizeTokens] with the step grid rescaled — the gaps follow the cell, so the
-/// beat grouping stays legible at every size.
-class _RackStepSizes extends SizeTokens {
-  const _RackStepSizes(this._base, this._cell);
-
-  final SizeTokens _base;
-  final double _cell;
-
-  double get _scale => _cell / _base.rackStepCell;
-
-  @override
-  double get rackStepCell => _cell;
-
-  @override
-  double get rackStepGap {
-    final double scaled = (_base.rackStepGap * _scale).floorToDouble();
-    return scaled < 2 ? 2 : scaled;
-  }
-
-  @override
-  double get rackStepGroupGap {
-    final double scaled = (_base.rackStepGroupGap * _scale).floorToDouble();
-    // Always visibly wider than the plain gap: the group break is the only
-    // thing telling you where the beat is.
-    final double floor = rackStepGap + 2;
-    return scaled < floor ? floor : scaled;
-  }
 }
 
 class _SharedPatternNotice extends StatelessWidget {
@@ -348,28 +298,39 @@ class _ChannelRackHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: color.surfacePanel,
-        border: Border(bottom: BorderSide(color: color.line, width: tokens.border.hairline)),
+        border: Border(
+          bottom: BorderSide(color: color.line, width: tokens.border.hairline),
+        ),
       ),
-      child: Row(
-        children: <Widget>[
-          Text(title, style: tokens.type.title),
-          SizedBox(width: tokens.spacing.lg),
-          for (final PatternTabVm pattern in patterns) ...<Widget>[
-            _PatternTab(
-              tab: pattern,
-              onTap: onSelectPattern == null ? null : () => onSelectPattern!(pattern.id),
-              onSecondaryTapDown:
-                  onPatternSecondaryTapDown == null
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool compact = constraints.maxWidth < tokens.size.rackCompactBreakpoint;
+          final Widget row = Row(
+            children: <Widget>[
+              Text(title, style: tokens.type.title),
+              if (compact) SizedBox(width: tokens.spacing.lg) else const Spacer(),
+              for (final PatternTabVm pattern in patterns) ...<Widget>[
+                _PatternTab(
+                  tab: pattern,
+                  onTap: onSelectPattern == null ? null : () => onSelectPattern!(pattern.id),
+                  onSecondaryTapDown: onPatternSecondaryTapDown == null
                       ? null
                       : (TapDownDetails details) => onPatternSecondaryTapDown!(pattern.id, details),
-            ),
-            SizedBox(width: tokens.spacing.xs),
-          ],
-          const Spacer(),
-          _NewPatternButton(onTap: onCreatePattern),
-          SizedBox(width: tokens.spacing.xs),
-          _AddChannelAccentButton(onTap: onAddChannel),
-        ],
+                ),
+                SizedBox(width: tokens.spacing.xs),
+              ],
+              SizedBox(width: tokens.spacing.lg),
+              _NewPatternButton(onTap: onCreatePattern),
+              SizedBox(width: tokens.spacing.xs),
+              _AddChannelAccentButton(onTap: onAddChannel),
+            ],
+          );
+          return compact
+              ? ClipRect(
+                  child: OverflowBox(alignment: Alignment.centerLeft, maxWidth: double.infinity, child: row),
+                )
+              : row;
+        },
       ),
     );
   }
@@ -509,8 +470,7 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
-    this.onGridChanged,
-    this.onRemoveSequence,
+    required this.gridWidth,
     this.onAddChannel,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
@@ -532,8 +492,9 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
-  final void Function(int rowIndex, String grid)? onGridChanged;
-  final ValueChanged<int>? onRemoveSequence;
+
+  /// The width every lane's grid occupies — see [ObRackRow.gridWidth].
+  final double gridWidth;
   final VoidCallback? onAddChannel;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
@@ -593,30 +554,28 @@ class _RackRowsScrollArea extends StatelessWidget {
                 // onReorderItem, not onReorder: it hands back a newIndex that
                 // already accounts for the dragged row being lifted out.
                 onReorderItem: onReorderRow ?? (int _, int _) {},
-                itemBuilder:
-                    (BuildContext context, int i) => _RackRowItem(
-                      key: ValueKey<String>('rack-row-${rows[i].name}-$i'),
-                      index: i,
-                      row: rows[i],
-                      reorderable: onReorderRow != null,
-                      playingStep: playingStep,
-                      playingTick: playingTick,
-                      onSelectRow: onSelectRow,
-                      onRowDoubleTap: onRowDoubleTap,
-                      onTogglePower: onTogglePower,
-                      onStepTap: onStepTap,
-                      onVolChanged: onVolChanged,
-                      onPanChanged: onPanChanged,
-                      onRouteTap: onRouteTap,
-                      onGridChanged: onGridChanged,
-                      onRemoveSequence: onRemoveSequence,
-                      onSecondaryTapDown: onRowSecondaryTapDown,
-                      onDropInstrument: onDropInstrument,
-                      onPointerDownStep: onPointerDownStep,
-                      onPointerMoveStep: onPointerMoveStep,
-                      onPointerUpStep: onPointerUpStep,
-                      onPointerCancelStep: onPointerCancelStep,
-                    ),
+                itemBuilder: (BuildContext context, int i) => _RackRowItem(
+                  key: ValueKey<String>('rack-row-${rows[i].name}-$i'),
+                  index: i,
+                  row: rows[i],
+                  reorderable: onReorderRow != null,
+                  playingStep: playingStep,
+                  playingTick: playingTick,
+                  onSelectRow: onSelectRow,
+                  onRowDoubleTap: onRowDoubleTap,
+                  onTogglePower: onTogglePower,
+                  onStepTap: onStepTap,
+                  onVolChanged: onVolChanged,
+                  onPanChanged: onPanChanged,
+                  onRouteTap: onRouteTap,
+                  gridWidth: gridWidth,
+                  onSecondaryTapDown: onRowSecondaryTapDown,
+                  onDropInstrument: onDropInstrument,
+                  onPointerDownStep: onPointerDownStep,
+                  onPointerMoveStep: onPointerMoveStep,
+                  onPointerUpStep: onPointerUpStep,
+                  onPointerCancelStep: onPointerCancelStep,
+                ),
               ),
             ),
           ],
@@ -641,8 +600,7 @@ class _RackRowItem extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
-    this.onGridChanged,
-    this.onRemoveSequence,
+    required this.gridWidth,
     this.onSecondaryTapDown,
     this.onDropInstrument,
     this.onPointerDownStep,
@@ -663,8 +621,7 @@ class _RackRowItem extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
-  final void Function(int rowIndex, String grid)? onGridChanged;
-  final ValueChanged<int>? onRemoveSequence;
+  final double gridWidth;
   final void Function(int rowIndex, TapDownDetails details)? onSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
@@ -699,31 +656,28 @@ class _RackRowItem extends StatelessWidget {
               // Selection is driven by the row's raw pointer-down handler so
               // it is immediate even when a double-click editor is available.
               onTap: null,
-              onPointerDown:
-                  onSelectRow == null
-                      ? null
-                      : (PointerDownEvent event) {
-                        if (event.buttons == 1) onSelectRow!(index);
-                      },
+              onPointerDown: onSelectRow == null
+                  ? null
+                  : (PointerDownEvent event) {
+                      if (event.buttons == 1) onSelectRow!(index);
+                    },
               // Only hosted plug-in lanes use a double-tap recognizer.
               onDoubleTap: row.hostsPlugin && onRowDoubleTap != null ? () => onRowDoubleTap!(index) : null,
-              onSecondaryTapDown:
-                  onSecondaryTapDown == null ? null : (TapDownDetails details) => onSecondaryTapDown!(index, details),
+              onSecondaryTapDown: onSecondaryTapDown == null
+                  ? null
+                  : (TapDownDetails details) => onSecondaryTapDown!(index, details),
               onPower: onTogglePower == null ? null : () => onTogglePower!(index),
               onStepTap: onStepTap == null ? null : (int step) => onStepTap!(index, step),
-              onPointerDownStep:
-                  onPointerDownStep == null
-                      ? null
-                      : (PointerDownEvent event, int step) => onPointerDownStep!(event, index, step),
-              onPointerMoveStep:
-                  onPointerMoveStep == null
-                      ? null
-                      : (PointerMoveEvent event, int step) => onPointerMoveStep!(event, index, step),
+              onPointerDownStep: onPointerDownStep == null
+                  ? null
+                  : (PointerDownEvent event, int step) => onPointerDownStep!(event, index, step),
+              onPointerMoveStep: onPointerMoveStep == null
+                  ? null
+                  : (PointerMoveEvent event, int step) => onPointerMoveStep!(event, index, step),
               onVol: onVolChanged == null ? null : (double val) => onVolChanged!(index, val),
               onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
               onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
-              onGrid: onGridChanged == null ? null : (String grid) => onGridChanged!(index, grid),
-              onRemoveSequence: onRemoveSequence == null ? null : () => onRemoveSequence!(index),
+              gridWidth: gridWidth,
             ),
           ),
         );

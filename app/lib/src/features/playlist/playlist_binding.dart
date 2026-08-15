@@ -64,11 +64,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     if (widget.controller != null) {
       _controller = widget.controller!;
     } else {
-      _controller = core.EngineController(
-        client: widget.client,
-        vsync: this,
-        motion: OneBeatTokens.dark().motion,
-      );
+      _controller = core.EngineController(client: widget.client, vsync: this, motion: OneBeatTokens.dark().motion);
       _ownsController = true;
     }
 
@@ -197,16 +193,13 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       final List<String> names = <String>[];
       for (final ProjectInstrument instrument
           in selected == null ? const <ProjectInstrument>[] : <ProjectInstrument>[selected]) {
-        final List<SequenceNote> sequence = widget.client.readNotes(
-          instrument.id,
-        );
+        final List<SequenceNote> sequence = widget.client.readNotes(instrument.id);
         if (sequence.isEmpty) continue;
         if (instrument.name.isNotEmpty) names.add(instrument.name);
         for (final SequenceNote note in sequence) {
           if (notes.length >= 96) break;
-          final double patternLength = current.lengthTicks <= 0
-              ? ticksPerBar.toDouble()
-              : current.lengthTicks.toDouble();
+          final double patternLength =
+              current.lengthTicks <= 0 ? ticksPerBar.toDouble() : current.lengthTicks.toDouble();
           notes.add(
             ClipPreviewNoteVm(
               x: note.startTicks / patternLength,
@@ -280,6 +273,18 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
         })(),
     ];
 
+    final List<PlaylistLaneVm> laneVms = <PlaylistLaneVm>[
+      for (final ArrangementLane lane in _store.lanes)
+        PlaylistLaneVm(
+          id: lane.id,
+          name: lane.name,
+          color: _resolveColor(_store.lanes.indexOf(lane), lane.color),
+          muted: lane.muted,
+          soloed: lane.soloed,
+          collapsed: lane.collapsed,
+        ),
+    ];
+
     int? playhead16ths;
     final EngineSnapshot snapshot = _controller.snapshot;
     if (snapshot.playing) {
@@ -288,17 +293,19 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
 
     final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final PlaylistMarquee? marquee = _store.marquee;
-    final Rect? marqueeRect = marquee == null
-        ? null
-        : Rect.fromLTRB(
-            (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-            (marquee.lowLane - _store.scrollLanes) * tokens.size.playlistLaneHeight,
-            (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-            (marquee.highLane + 1 - _store.scrollLanes) * tokens.size.playlistLaneHeight,
-          );
+    final Rect? marqueeRect =
+        marquee == null
+            ? null
+            : Rect.fromLTRB(
+              (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+              (marquee.lowLane - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+              (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+              (marquee.highLane + 1 - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+            );
 
     final PlaylistVm canvasVm = PlaylistVm(
       clips: clipVms,
+      lanes: laneVms,
       pxPerBar: pxPerBar,
       laneCountOverride: _store.lanes.length,
       playheadBar16ths: playhead16ths,
@@ -312,9 +319,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
 
     ClipInspectorVm inspectorVm = const ClipInspectorVm(selectedCount: 0);
     if (_store.selectedClipIds.length > 1) {
-      inspectorVm = ClipInspectorVm(
-        selectedCount: _store.selectedClipIds.length,
-      );
+      inspectorVm = ClipInspectorVm(selectedCount: _store.selectedClipIds.length);
     } else if (_store.selectedClipIds.length == 1) {
       final ArrangementClip? clip = _store.selectedClip;
       if (clip != null) {
@@ -324,9 +329,10 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           clipId: clip.id,
           name: clip.name,
           color: _resolveColor(laneIndex, clip.color),
-          usageText: clip.isAudio
-              ? 'Audio file · full source duration'
-              : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
+          usageText:
+              clip.isAudio
+                  ? 'Audio file · full source duration'
+                  : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
           isShared: !clip.isAudio && clip.isShared,
           isAudio: clip.isAudio,
           startBar: (clip.startTicks / ticksPerBar).round(),
@@ -416,11 +422,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     for (final String path in drop.paths) {
       final String extension = path.split('.').last.toLowerCase();
       if (!SamplePackScanner.supportedExtensions.contains(extension)) continue;
-      _onSampleDrop(
-        SampleAsset(id: 'sample:$path', name: path.split('/').last, path: path),
-        bar,
-        lane,
-      );
+      _onSampleDrop(SampleAsset(id: 'sample:$path', name: path.split('/').last, path: path), bar, lane);
     }
   }
 
@@ -448,9 +450,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     _dragPixels += details.delta;
     final OneBeatTokens tokens = OneBeatTokens.dark();
     final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
-    final int deltaTicks = _store.snapDelta(
-      (_dragPixels.dx / pxPerBar * ticksPerBar).round(),
-    );
+    final int deltaTicks = _store.snapDelta((_dragPixels.dx / pxPerBar * ticksPerBar).round());
     _store.updateClipResize(_resizingClipId, _resizeOriginLength + deltaTicks);
   }
 
@@ -503,10 +503,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
 
   void _onPlaylistPanZoom(Offset delta) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    _store.panBy(
-      deltaTicks: -delta.dx / _store.pixelsPerTick,
-      deltaLanes: -delta.dy / tokens.size.playlistLaneHeight,
-    );
+    _store.panBy(deltaTicks: -delta.dx / _store.pixelsPerTick, deltaLanes: -delta.dy / tokens.size.playlistLaneHeight);
   }
 
   void _onSnapChanged(String label) {
@@ -518,6 +515,10 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     }
   }
 
+  void _onPlaylistSeek(double bar) {
+    widget.client.seekBeats(bar * 4.0);
+  }
+
   void _onClipPanUpdate(int hashId, DragUpdateDetails details) {
     if (_store.dragKind == ClipDragKind.marquee) {
       _updateMarquee(_canvasLocalFromGlobal(details.globalPosition));
@@ -527,9 +528,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     _dragPixels += details.delta;
     final OneBeatTokens tokens = OneBeatTokens.dark();
     final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
-    final int deltaTicks = _store.snapDelta(
-      (_dragPixels.dx / pxPerBar * ticksPerBar).round(),
-    );
+    final int deltaTicks = _store.snapDelta((_dragPixels.dx / pxPerBar * ticksPerBar).round());
     if (_store.lanes.isEmpty) return;
     final int laneIndex = (_dragStartLane + (_dragPixels.dy / tokens.size.playlistLaneHeight).round()).clamp(
       0,
@@ -575,11 +574,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       _ensureLane(lane);
       if (_store.lanes.isEmpty) return;
       final int targetLane = lane.clamp(0, _store.lanes.length - 1);
-      _store.placeItem(
-        data,
-        _store.lanes[targetLane].id,
-        (bar * ticksPerBar).round(),
-      );
+      _store.placeItem(data, _store.lanes[targetLane].id, (bar * ticksPerBar).round());
       return;
     }
     _onSampleDrop(data, bar, lane);
@@ -697,6 +692,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           onDrop: _onPlaylistDrop,
           onScroll: _onPlaylistScroll,
           onPanZoom: _onPlaylistPanZoom,
+          onSeekBar: _onPlaylistSeek,
           onSnapChanged: _onSnapChanged,
           onStartChanged: (int bar) {
             final ArrangementClip? clip = _store.selectedClip;
@@ -736,6 +732,27 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           },
           onMakeUnique: () {
             _store.makeClipsUnique(_store.selectedClipIds.toList());
+          },
+          onLaneMute: (String laneId) {
+            final ArrangementLane? lane = _store.lanes.cast<ArrangementLane?>().firstWhere(
+              (ArrangementLane? value) => value?.id == laneId,
+              orElse: () => null,
+            );
+            if (lane != null) _store.toggleLaneMute(lane);
+          },
+          onLaneSolo: (String laneId) {
+            final ArrangementLane? lane = _store.lanes.cast<ArrangementLane?>().firstWhere(
+              (ArrangementLane? value) => value?.id == laneId,
+              orElse: () => null,
+            );
+            if (lane != null) _store.toggleLaneSolo(lane);
+          },
+          onLaneCollapse: (String laneId) {
+            final ArrangementLane? lane = _store.lanes.cast<ArrangementLane?>().firstWhere(
+              (ArrangementLane? value) => value?.id == laneId,
+              orElse: () => null,
+            );
+            if (lane != null) _store.toggleLaneCollapsed(lane);
           },
         ),
       ),
