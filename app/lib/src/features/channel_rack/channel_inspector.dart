@@ -142,98 +142,107 @@ class ObChannelInspector extends StatelessWidget {
       height: tokens.size.inspectorHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xl),
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: color.lineStrong,
-            width: tokens.border.hairline,
-          ),
-        ),
+        border: Border(top: BorderSide(color: color.lineStrong, width: tokens.border.hairline)),
       ),
-      child: Row(
-        children: <Widget>[
-          _IdentityTile(color: vm.color),
-          SizedBox(width: tokens.spacing.md),
-          Column(
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool compact = constraints.maxWidth < 1180;
+          final Widget identity = Expanded(
+            child: Row(
+              children: <Widget>[
+                _IdentityTile(color: vm.color),
+                SizedBox(width: tokens.spacing.md),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(vm.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.title),
+                      SizedBox(height: tokens.spacing.xxs),
+                      Text(vm.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.label),
+                    ],
+                  ),
+                ),
+                if ((vm.hostsPlugin && onOpenPlugin != null) || (vm.hostsSampler && onOpenSampler != null)) ...<Widget>[
+                  SizedBox(width: tokens.spacing.md),
+                  ObTooltip(
+                    message: vm.hostsSampler ? 'Open sampler' : 'Open plugin window',
+                    child: ObButton(
+                      label: vm.hostsSampler ? 'Open sampler' : 'Open plugin',
+                      icon: vm.hostsSampler ? ObKitGlyphKind.waveform : ObKitGlyphKind.keyboard,
+                      tone: ObButtonTone.secondary,
+                      onTap: vm.hostsSampler ? onOpenSampler : onOpenPlugin,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+
+          final Widget controls = Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(vm.name, maxLines: 1, style: tokens.type.title),
-              SizedBox(height: tokens.spacing.xxs),
-              Text(vm.subtitle, maxLines: 1, style: tokens.type.label),
+              if (onGrid != null) ...<Widget>[
+                ObTooltip(
+                  message: 'Step grid for this channel',
+                  child: ObDropdown(
+                    label: 'Grid',
+                    value: vm.gridLabel,
+                    items: const <String>['1/8', '1/16', '1/32'],
+                    width: tokens.size.inspectorGridFieldWidth,
+                    onSelected: onGrid,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.lg),
+              ],
+              _KnobReadout(value: vm.vol, valueText: vm.volText, label: 'VOL', onChanged: onVol),
+              SizedBox(width: tokens.spacing.lg),
+              _KnobReadout(value: vm.pan, valueText: vm.panText, label: 'PAN', onChanged: onPan),
+              SizedBox(width: tokens.spacing.lg),
+              ObTooltip(
+                message: 'Mute channel',
+                child: _ToggleStack(tone: ObToggleTone.mute, on: vm.muted, onTap: onMute),
+              ),
+              SizedBox(width: tokens.spacing.sm),
+              ObTooltip(
+                message: 'Solo channel',
+                child: _ToggleStack(tone: ObToggleTone.solo, on: vm.soloed, onTap: onSolo),
+              ),
+              SizedBox(width: tokens.spacing.xl),
+              _RouteArrow(color: color.textMuted, stroke: tokens.border.glyph),
+              SizedBox(width: tokens.spacing.sm),
+              ObFxChip(label: vm.route, dotColor: color.none, mono: true, onTap: onRouteTap),
             ],
-          ),
-          // Only a plug-in channel has a window to open, so the action appears
-          // exactly when it can do something — next to the channel's name,
-          // which is where the eye is when you want to open what it runs.
-          if ((vm.hostsPlugin && onOpenPlugin != null) || (vm.hostsSampler && onOpenSampler != null)) ...<Widget>[
-            SizedBox(width: tokens.spacing.md),
-            ObTooltip(
-              message: vm.hostsSampler ? 'Open sampler' : 'Open plugin window',
-              child: ObButton(
-                label: vm.hostsSampler ? 'Open sampler' : 'Open plugin',
-                icon: vm.hostsSampler ? ObKitGlyphKind.waveform : ObKitGlyphKind.keyboard,
-                tone: ObButtonTone.secondary,
-                onTap: vm.hostsSampler ? onOpenSampler : onOpenPlugin,
-              ),
-            ),
-          ],
-          const Spacer(),
-          if (onGrid != null) ...<Widget>[
-            ObTooltip(
-              message: 'Step grid for this channel',
-              child: ObDropdown(
-                label: 'Grid',
-                value: vm.gridLabel,
-                items: const <String>['1/8', '1/16', '1/32'],
-                width: tokens.size.inspectorGridFieldWidth,
-                onSelected: onGrid,
-              ),
-            ),
-            SizedBox(width: tokens.spacing.lg),
-          ],
-          _KnobReadout(
-            value: vm.vol,
-            valueText: vm.volText,
-            label: 'VOL',
-            onChanged: onVol,
-          ),
-          SizedBox(width: tokens.spacing.lg),
-          _KnobReadout(
-            value: vm.pan,
-            valueText: vm.panText,
-            label: 'PAN',
-            onChanged: onPan,
-          ),
-          SizedBox(width: tokens.spacing.lg),
-          ObTooltip(
-            message: 'Mute channel',
-            child: _ToggleStack(
-              tone: ObToggleTone.mute,
-              on: vm.muted,
-              onTap: onMute,
-            ),
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          ObTooltip(
-            message: 'Solo channel',
-            child: _ToggleStack(
-              tone: ObToggleTone.solo,
-              on: vm.soloed,
-              onTap: onSolo,
-            ),
-          ),
-          SizedBox(width: tokens.spacing.xl),
-          _RouteArrow(color: color.textMuted, stroke: tokens.border.glyph),
-          SizedBox(width: tokens.spacing.sm),
-          ObFxChip(
-            label: vm.route,
-            dotColor: color.none,
-            mono: true,
-            onTap: onRouteTap,
-          ),
-          const Spacer(),
-          MiniKeyboard(onKeyPress: onKeyPress),
-        ],
+          );
+
+          if (compact) {
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Row(children: <Widget>[identity]),
+                SizedBox(height: tokens.spacing.xs),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    controls,
+                    SizedBox(width: tokens.spacing.lg),
+                    MiniKeyboard(onKeyPress: onKeyPress),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: <Widget>[
+              identity,
+              SizedBox(width: tokens.spacing.lg),
+              controls,
+              SizedBox(width: tokens.spacing.lg),
+              MiniKeyboard(onKeyPress: onKeyPress),
+            ],
+          );
+        },
       ),
     );
   }
@@ -252,16 +261,8 @@ class _IdentityTile extends StatelessWidget {
     return Container(
       width: side,
       height: side,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.all(tokens.radius.xl),
-      ),
-      child: CustomPaint(
-        painter: _NoteGlyphPainter(
-          color: tokens.color.textPrimary,
-          stroke: tokens.border.emphasis,
-        ),
-      ),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.all(tokens.radius.xl)),
+      child: CustomPaint(painter: _NoteGlyphPainter(color: tokens.color.textPrimary, stroke: tokens.border.emphasis)),
     );
   }
 }
@@ -269,12 +270,7 @@ class _IdentityTile extends StatelessWidget {
 /// A knob over its value and its caption. The value is above the caption
 /// because the number is what changes; the caption only says what it means.
 class _KnobReadout extends StatelessWidget {
-  const _KnobReadout({
-    required this.value,
-    required this.valueText,
-    required this.label,
-    this.onChanged,
-  });
+  const _KnobReadout({required this.value, required this.valueText, required this.label, this.onChanged});
 
   final double value;
   final String valueText;
@@ -322,19 +318,13 @@ class _ToggleStack extends StatelessWidget {
           decoration: BoxDecoration(
             color: color.surfaceWell,
             borderRadius: BorderRadius.all(tokens.radius.sm),
-            border: Border.all(
-              color: color.lineStrong,
-              width: tokens.border.hairline,
-            ),
+            border: Border.all(color: color.lineStrong, width: tokens.border.hairline),
           ),
           alignment: Alignment.center,
           child: Container(
             width: tokens.size.inspectorLampDotSize,
             height: tokens.size.inspectorLampDotSize,
-            decoration: BoxDecoration(
-              color: on ? lit : color.textMuted,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: on ? lit : color.textMuted, shape: BoxShape.circle),
           ),
         ),
       ],
@@ -354,9 +344,7 @@ class _RouteArrow extends StatelessWidget {
     return SizedBox(
       width: side,
       height: side,
-      child: CustomPaint(
-        painter: _ArrowPainter(color: color, stroke: stroke),
-      ),
+      child: CustomPaint(painter: _ArrowPainter(color: color, stroke: stroke)),
     );
   }
 }
@@ -367,12 +355,7 @@ class _RouteArrow extends StatelessWidget {
 /// a strip, and they make it obvious the preview is a summary rather than the
 /// actual sample.
 class WaveformPainter extends CustomPainter {
-  WaveformPainter({
-    required this.samples,
-    required this.color,
-    required this.barPitch,
-    required this.barWidth,
-  });
+  WaveformPainter({required this.samples, required this.color, required this.barPitch, required this.barWidth});
 
   final List<double> samples;
   final Color color;
@@ -381,10 +364,11 @@ class WaveformPainter extends CustomPainter {
 
   // Allocated once: `paint` runs on every frame the strip is on screen and
   // must not allocate.
-  late final Paint _bar = Paint()
-    ..color = color
-    ..strokeWidth = barWidth
-    ..strokeCap = StrokeCap.round;
+  late final Paint _bar =
+      Paint()
+        ..color = color
+        ..strokeWidth = barWidth
+        ..strokeCap = StrokeCap.round;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -418,12 +402,7 @@ class WaveformPainter extends CustomPainter {
 /// gesture detectors: black keys overlap their neighbours, and a widget per
 /// key would need the same arithmetic to decide who won anyway.
 class MiniKeyboard extends StatelessWidget {
-  const MiniKeyboard({
-    this.baseNote = 60,
-    this.octaves = 2,
-    this.onKeyPress,
-    super.key,
-  });
+  const MiniKeyboard({this.baseNote = 60, this.octaves = 2, this.onKeyPress, super.key});
 
   /// MIDI note of the leftmost white key. 60 is middle C.
   final int baseNote;
@@ -435,13 +414,7 @@ class MiniKeyboard extends StatelessWidget {
 
   /// Semitone offsets of the black keys, paired with the index of the white
   /// key they sit after.
-  static const List<(int, int)> blackSemitones = <(int, int)>[
-    (1, 0),
-    (3, 1),
-    (6, 3),
-    (8, 4),
-    (10, 5),
-  ];
+  static const List<(int, int)> blackSemitones = <(int, int)>[(1, 0), (3, 1), (6, 3), (8, 4), (10, 5)];
 
   int get _whiteCount => whiteSemitones.length * octaves;
 
@@ -473,9 +446,10 @@ class MiniKeyboard extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: onKeyPress == null
-          ? null
-          : (TapDownDetails details) => onKeyPress!(noteAt(details.localPosition.dx, width, height)),
+      onTapDown:
+          onKeyPress == null
+              ? null
+              : (TapDownDetails details) => onKeyPress!(noteAt(details.localPosition.dx, width, height)),
       child: SizedBox(
         width: width,
         height: height,
@@ -527,18 +501,16 @@ class _KeyboardPainter extends CustomPainter {
 
   late final Paint _whitePaint = Paint()..color = white;
   late final Paint _blackPaint = Paint()..color = black;
-  late final Paint _linePaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = stroke
-    ..color = line;
+  late final Paint _linePaint =
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = line;
 
   @override
   void paint(Canvas canvas, Size size) {
     final double whiteWidth = size.width / whiteCount;
-    final RRect body = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      radius,
-    );
+    final RRect body = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), radius);
     canvas.drawRRect(body, _whitePaint);
     for (int i = 1; i < whiteCount; i++) {
       final double x = i * whiteWidth;
@@ -548,12 +520,7 @@ class _KeyboardPainter extends CustomPainter {
     for (final int after in blacks) {
       final double centre = (after + 1) * whiteWidth;
       canvas.drawRect(
-        Rect.fromLTWH(
-          centre - blackWidth / 2,
-          0,
-          blackWidth,
-          size.height * blackHeightRatio,
-        ),
+        Rect.fromLTWH(centre - blackWidth / 2, 0, blackWidth, size.height * blackHeightRatio),
         _blackPaint,
       );
     }
@@ -576,28 +543,17 @@ class _NoteGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
     final double w = size.width;
     final double h = size.height;
-    canvas.drawLine(
-      Offset(w * 0.40, h * 0.62),
-      Offset(w * 0.40, h * 0.33),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.66, h * 0.56),
-      Offset(w * 0.66, h * 0.28),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.40, h * 0.33),
-      Offset(w * 0.66, h * 0.28),
-      paint,
-    );
+    canvas.drawLine(Offset(w * 0.40, h * 0.62), Offset(w * 0.40, h * 0.33), paint);
+    canvas.drawLine(Offset(w * 0.66, h * 0.56), Offset(w * 0.66, h * 0.28), paint);
+    canvas.drawLine(Offset(w * 0.40, h * 0.33), Offset(w * 0.66, h * 0.28), paint);
     canvas.drawCircle(Offset(w * 0.34, h * 0.64), w * 0.07, paint);
     canvas.drawCircle(Offset(w * 0.60, h * 0.58), w * 0.07, paint);
   }
@@ -614,19 +570,16 @@ class _ArrowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color;
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = color;
     final double w = size.width;
     final double h = size.height;
-    canvas.drawLine(
-      Offset(w * 0.16, h * 0.5),
-      Offset(w * 0.84, h * 0.5),
-      paint,
-    );
+    canvas.drawLine(Offset(w * 0.16, h * 0.5), Offset(w * 0.84, h * 0.5), paint);
     canvas.drawLine(Offset(w * 0.6, h * 0.3), Offset(w * 0.84, h * 0.5), paint);
     canvas.drawLine(Offset(w * 0.6, h * 0.7), Offset(w * 0.84, h * 0.5), paint);
   }

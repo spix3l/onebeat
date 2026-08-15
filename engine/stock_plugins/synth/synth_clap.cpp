@@ -52,7 +52,7 @@ void handleEvent(SynthPlugin& synth, const clap_event_header_t* header) {
 #ifdef OB_STOCK_ORGAN
       // Organ patches should release like a keyboard instrument, not inherit
       // the synth's long pad tail and delay feedback.
-      synth.engine.setParameter(onebeat::stock::synth::ParamRelease, 0.18);
+      synth.engine.setParameter(onebeat::stock::synth::ParamRelease, 0.0);
       synth.engine.setParameter(onebeat::stock::synth::ParamDelay, 0.0);
 #endif
     } else {

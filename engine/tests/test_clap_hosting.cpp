@@ -276,7 +276,7 @@ TEST_SUITE("engine") {
     rig.render({PluginEvent::noteOff(0, 60)});
 
     float final_tail = 0.0F;
-    for (int block = 0; block < 500; ++block) final_tail = rig.render({});
+    for (int block = 0; block < 40; ++block) final_tail = rig.render({});
     CHECK(final_tail < 0.001F);
   }
 
