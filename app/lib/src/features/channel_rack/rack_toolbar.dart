@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 import '../../ui_kit/dropdown.dart';
+import '../../core/snap_grid.dart';
 
 /// The dropdown row above the grid.
 @immutable
@@ -21,7 +22,7 @@ class RackToolbarVm {
     required this.steps,
     this.channelTypes = const <String>['Sampler', 'Synth', 'Audio clip'],
     this.groups = const <String>['All', 'Drums', 'Music'],
-    this.snaps = const <String>['1/4', '1/8', '1/16', 'None'],
+    this.snaps,
   });
 
   final String channelType;
@@ -39,7 +40,9 @@ class RackToolbarVm {
 
   final List<String> channelTypes;
   final List<String> groups;
-  final List<String> snaps;
+  final List<String>? snaps;
+
+  List<String> get snapLabels => snaps ?? SnapGridChoice.rackLabels;
 }
 
 class ObRackToolbar extends StatelessWidget {
@@ -100,15 +103,12 @@ class ObRackToolbar extends StatelessWidget {
           ObDropdown(
             label: 'Snap',
             value: vm.snap,
-            items: vm.snaps,
+            items: vm.snapLabels,
             width: tokens.size.rackSnapFieldWidth,
             onSelected: onSnap,
           ),
           SizedBox(width: tokens.spacing.md),
-          _IconButton(
-            kind: RackToolKind.mixer,
-            onTap: onMixerTap,
-          ),
+          _IconButton(kind: RackToolKind.mixer, onTap: onMixerTap),
           SizedBox(width: tokens.spacing.sm),
           _IconButton(
             kind: RackToolKind.add,
@@ -116,10 +116,8 @@ class ObRackToolbar extends StatelessWidget {
             onTap: onAddChannel,
           ),
           SizedBox(width: tokens.spacing.sm),
-          _IconButton(
-            kind: RackToolKind.automation,
-            onTap: onAutomationTap,
-          ),
+          _IconButton(kind: RackToolKind.automation, onTap: onAutomationTap),
+          SizedBox(width: tokens.spacing.sm),
           const Spacer(),
           ObDropdown(
             label: 'Steps',
@@ -128,12 +126,13 @@ class ObRackToolbar extends StatelessWidget {
               for (final int option in RackToolbarVm.stepOptions) '$option',
             ],
             width: tokens.size.rackSnapFieldWidth,
-            onSelected: onSteps == null
-                ? null
-                : (String value) {
-                    final int? parsed = int.tryParse(value);
-                    if (parsed != null) onSteps!(parsed);
-                  },
+            onSelected:
+                onSteps == null
+                    ? null
+                    : (String value) {
+                      final int? parsed = int.tryParse(value);
+                      if (parsed != null) onSteps!(parsed);
+                    },
           ),
           SizedBox(width: tokens.spacing.sm),
           Text('· loop', maxLines: 1, style: tokens.type.numericSmall),
@@ -191,8 +190,7 @@ class ObRackHeader extends StatelessWidget {
           for (int i = 0; i < stepCount; i++) ...<Widget>[
             if (i > 0)
               SizedBox(
-                width:
-                    i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap,
+                width: i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap,
               ),
             SizedBox(
               width: size.rackStepCell,
@@ -278,10 +276,7 @@ class ObRackFooter extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.surfaceRaised,
           borderRadius: tokens.radius.panelBorder,
-          border: Border.all(
-            color: color.line,
-            width: tokens.border.hairline,
-          ),
+          border: Border.all(color: color.line, width: tokens.border.hairline),
         ),
         child: Row(
           children: <Widget>[

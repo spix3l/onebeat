@@ -25,6 +25,7 @@ import 'shortcuts.dart';
 /// Which editor an action lives in. Also what the reachability test iterates.
 enum ActionArea {
   transport('Transport'),
+  project('Project'),
   pattern('Pattern'),
   rack('Channel rack'),
   pianoRoll('Piano roll'),
@@ -174,6 +175,55 @@ abstract final class ActionRegistry {
       intent: const CommandPaletteIntent(),
       scope: ShortcutScope.global,
       description: 'Every action in this registry, by name.',
+    ),
+
+    // ----- project files (OB-3-05 §4) ---------------------------------------
+    // Global, and deliberately the shortcuts every Mac app uses: ⌘S is the one
+    // binding a user presses without deciding to. `pattern.create` keeps ⌘N —
+    // patterns are what this app makes, and it is editor-scoped, so the two
+    // never contend for the same keystroke.
+    UiAction(
+      id: 'project.save',
+      label: 'Save',
+      area: ActionArea.project,
+      activator: _meta(LogicalKeyboardKey.keyS),
+      intent: const SaveProjectIntent(),
+      scope: ShortcutScope.global,
+      description:
+          'Writes the .obt bundle in place. The first save asks where, because '
+          'a project that has never been written has nowhere to go.',
+    ),
+    UiAction(
+      id: 'project.saveAs',
+      label: 'Save as…',
+      area: ActionArea.project,
+      activator: _metaShift(LogicalKeyboardKey.keyS),
+      intent: const SaveProjectAsIntent(),
+      scope: ShortcutScope.global,
+      description:
+          'Writes a copy under a new name and adopts it, so the title and the '
+          'file cannot disagree afterwards.',
+    ),
+    UiAction(
+      id: 'project.open',
+      label: 'Open…',
+      area: ActionArea.project,
+      activator: _meta(LogicalKeyboardKey.keyO),
+      intent: const OpenProjectIntent(),
+      scope: ShortcutScope.global,
+      description:
+          'Replaces the session. A file that cannot be read leaves the project '
+          'you already have exactly as it was.',
+    ),
+    const UiAction(
+      id: 'project.rename',
+      label: 'Rename project…',
+      area: ActionArea.project,
+      intent: RenameProjectIntent(),
+      scope: ShortcutScope.global,
+      description:
+          'Renames the project and, once it has been saved, the bundle on '
+          'disk with it.',
     ),
 
     // ----- pattern management (OB-3-11) -------------------------------------

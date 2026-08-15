@@ -288,8 +288,42 @@ abstract interface class ArrangementClient implements EditGestureClient {
   void setClipTranspose(String clipId, int semitones);
 }
 
+/// The project file seam (OB-3-05 §4): where the project lives, what it is
+/// called, and whether it still matches what was written.
+///
+/// A separate interface because the whole of ⌘S, ⌘O and Rename is expressible
+/// through it, which is what lets [ProjectStore] be tested without an engine,
+/// a dylib or an audio device.
+abstract interface class ProjectFileClient {
+  /// The bundle the project was last saved to or opened from; empty for a
+  /// project that has never been written.
+  String get projectPath;
+
+  /// `meta.name` — the user-facing name, which is not the file name. An
+  /// unsaved project has a name and no path.
+  String get projectName;
+
+  /// Renames the project. An edit like any other: it undoes, and it dirties.
+  /// Renaming the bundle on disk is [ProjectStore]'s job, not the engine's.
+  void setProjectName(String name);
+
+  /// True when the project differs from what was last saved or opened.
+  ///
+  /// Walks the project to answer, so poll it at the rate a human notices —
+  /// [ProjectStore] does — rather than calling it every frame.
+  bool get isProjectModified;
+
+  void saveProject(String path);
+  void openProject(String path);
+}
+
 class EngineClient
-    implements RackClient, NoteClient, PatternClient, ArrangementClient {
+    implements
+        RackClient,
+        NoteClient,
+        PatternClient,
+        ArrangementClient,
+        ProjectFileClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -1465,6 +1499,7 @@ class EngineClient
 
   /// Writes the project bundle. Distinct from [saveSession], which is the v0.2
   /// scratch file holding one hosted plug-in's opaque chunk.
+  @override
   void saveProject(String path) => _withNativeString(
     path,
     (Pointer<Char> native) => _bindings.ob_engine_project_save(_engine, native),
@@ -1472,10 +1507,30 @@ class EngineClient
 
   /// Replaces the whole project. On failure the open project is untouched, so
   /// an unreadable file costs nothing but the attempt.
+  @override
   void openProject(String path) => _withNativeString(
     path,
     (Pointer<Char> native) => _bindings.ob_engine_project_open(_engine, native),
   );
+
+  @override
+  String get projectPath =>
+      _bindings.ob_engine_project_path(_engine).cast<Utf8>().toDartString();
+
+  @override
+  String get projectName =>
+      _bindings.ob_engine_project_name(_engine).cast<Utf8>().toDartString();
+
+  @override
+  void setProjectName(String name) => _withNativeString(
+    name,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_project_set_name(_engine, native),
+  );
+
+  @override
+  bool get isProjectModified =>
+      _bindings.ob_engine_project_is_modified(_engine) != 0;
 
   /// The canonical `project.json` bytes as the project stands. Byte-identical
   /// for a given model on any machine, which is what makes it usable as a

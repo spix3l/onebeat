@@ -146,6 +146,9 @@ change.
 | `ob_engine_instance_editor_open`, `ob_engine_instance_editor_close` | main/UI | briefly (helper window) |
 | `ob_engine_session_save`, `ob_engine_session_load` | main/UI | yes (filesystem + state) |
 | `ob_engine_instrument_*`, `ob_engine_project_*` | main/UI | briefly (model edit + flatten/publish where applicable) |
+| `ob_engine_project_save`, `ob_engine_project_open` | main/UI | yes (filesystem) |
+| `ob_engine_project_path`, `ob_engine_project_name` | main/UI | no |
+| `ob_engine_project_json`, `ob_engine_project_is_modified` | main/UI | no, but both write the whole project to a string: poll them, do not call them per frame |
 | `ob_engine_rack_pattern`, `ob_engine_rack_row_count`, `ob_engine_rack_row_at` | main/UI | no |
 | `ob_engine_rack_set_row_grid` | main/UI | no |
 | `ob_engine_rack_set_length`, `ob_engine_rack_set_swing`, `ob_engine_rack_toggle_step`, `ob_engine_rack_set_step_velocity`, `ob_engine_rack_remove_sequence` | main/UI | briefly (model edit + flatten/publish) |

@@ -12,31 +12,16 @@ import 'package:flutter/foundation.dart';
 
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
+import '../../core/snap_grid.dart';
 import 'pr_toolbar.dart';
 
 /// Ticks per quarter note. Mirrors the model's constant; musical time is
 /// integer ticks everywhere (ADR-004 §3).
-const int ticksPerQuarter = 960;
+const int ticksPerQuarter = SnapGridChoice.ticksPerQuarter;
 const int ticksPerBar = ticksPerQuarter * 4;
 
 /// A snap resolution. Triplets are a third of the plain division.
-@immutable
-class GridChoice {
-  const GridChoice(this.label, this.ticks);
-
-  final String label;
-  final int ticks;
-
-  static const List<GridChoice> all = <GridChoice>[
-    GridChoice('1/4', ticksPerQuarter),
-    GridChoice('1/8', ticksPerQuarter ~/ 2),
-    GridChoice('1/8T', ticksPerQuarter ~/ 3),
-    GridChoice('1/16', ticksPerQuarter ~/ 4),
-    GridChoice('1/16T', ticksPerQuarter ~/ 6),
-    GridChoice('1/32', ticksPerQuarter ~/ 8),
-    GridChoice('Off', 0),
-  ];
-}
+typedef GridChoice = SnapGridChoice;
 
 /// The scale used for row highlighting. Intervals are semitones from the root.
 @immutable
@@ -186,7 +171,9 @@ class PianoRollStore extends ChangeNotifier {
     try {
       patterns = _client.readPatterns();
       if (patterns.isNotEmpty) {
-        final PatternSummary? current = patterns.cast<PatternSummary?>().firstWhere(
+        final PatternSummary? current = patterns
+            .cast<PatternSummary?>()
+            .firstWhere(
               (PatternSummary? p) => p?.isCurrent ?? false,
               orElse: () => patterns.first,
             );
@@ -199,7 +186,9 @@ class PianoRollStore extends ChangeNotifier {
     try {
       instruments = _client.readInstruments();
       if (instrumentId.isEmpty && instruments.isNotEmpty) {
-        final ProjectInstrument? sel = instruments.cast<ProjectInstrument?>().firstWhere(
+        final ProjectInstrument? sel = instruments
+            .cast<ProjectInstrument?>()
+            .firstWhere(
               (ProjectInstrument? inst) => inst?.selected ?? false,
               orElse: () => instruments.first,
             );
@@ -471,13 +460,7 @@ class PianoRollStore extends ChangeNotifier {
     if (instrumentId.isEmpty) return;
     final int start = snapDown(tick);
     final int noteLength = length ?? defaultNoteLength;
-    _client.addNote(
-      instrumentId,
-      start,
-      noteLength,
-      key,
-      velocity: velocity,
-    );
+    _client.addNote(instrumentId, start, noteLength, key, velocity: velocity);
     lastNoteLength = noteLength;
     refresh();
     final SequenceNote? created = noteAt(start, key);
@@ -553,16 +536,17 @@ class PianoRollStore extends ChangeNotifier {
       if (note.startTicks < lowest) lowest = note.startTicks;
     }
     _clipboardTick = lowest;
-    _clipboard = selection
-        .map(
-          (SequenceNote note) =>
-              note.copyWith(startTicks: note.startTicks - lowest),
-        )
-        .toList()
-      ..sort((SequenceNote a, SequenceNote b) {
-        final int byTick = a.startTicks.compareTo(b.startTicks);
-        return byTick != 0 ? byTick : a.key.compareTo(b.key);
-      });
+    _clipboard =
+        selection
+            .map(
+              (SequenceNote note) =>
+                  note.copyWith(startTicks: note.startTicks - lowest),
+            )
+            .toList()
+          ..sort((SequenceNote a, SequenceNote b) {
+            final int byTick = a.startTicks.compareTo(b.startTicks);
+            return byTick != 0 ? byTick : a.key.compareTo(b.key);
+          });
     notifyListeners();
   }
 
@@ -624,9 +608,10 @@ class PianoRollStore extends ChangeNotifier {
     if (selection.isEmpty || instrumentId.isEmpty) return;
     final int clamped = velocity.clamp(1, 16383);
     _client.setNoteVelocity(instrumentId, selection.toList(), clamped);
-    final List<SequenceNote> updated = selection
-        .map((SequenceNote note) => note.copyWith(velocity: clamped))
-        .toList();
+    final List<SequenceNote> updated =
+        selection
+            .map((SequenceNote note) => note.copyWith(velocity: clamped))
+            .toList();
     selection
       ..clear()
       ..addAll(updated);
@@ -709,14 +694,15 @@ class PianoRollStore extends ChangeNotifier {
   }
 
   void _shiftSelection({int deltaTicks = 0, int semitones = 0}) {
-    final List<SequenceNote> moved = selection
-        .map(
-          (SequenceNote note) => note.copyWith(
-            startTicks: note.startTicks + deltaTicks,
-            key: note.key + semitones,
-          ),
-        )
-        .toList();
+    final List<SequenceNote> moved =
+        selection
+            .map(
+              (SequenceNote note) => note.copyWith(
+                startTicks: note.startTicks + deltaTicks,
+                key: note.key + semitones,
+              ),
+            )
+            .toList();
     selection
       ..clear()
       ..addAll(moved);
@@ -763,15 +749,15 @@ class PianoRollStore extends ChangeNotifier {
     final int step = lengthDelta - _dragLengthDelta;
     if (step == 0) return;
     _client.resizeNotes(instrumentId, selection.toList(), lengthDelta: step);
-    final List<SequenceNote> resized = selection
-        .map(
-          (SequenceNote note) => note.copyWith(
-            lengthTicks: note.lengthTicks + step < 1
-                ? 1
-                : note.lengthTicks + step,
-          ),
-        )
-        .toList();
+    final List<SequenceNote> resized =
+        selection
+            .map(
+              (SequenceNote note) => note.copyWith(
+                lengthTicks:
+                    note.lengthTicks + step < 1 ? 1 : note.lengthTicks + step,
+              ),
+            )
+            .toList();
     selection
       ..clear()
       ..addAll(resized);
@@ -808,12 +794,7 @@ class PianoRollStore extends ChangeNotifier {
   void updateMarquee(int tick, int key) {
     final MarqueeSelection? current = marquee;
     if (dragKind != PianoDragKind.marquee || current == null) return;
-    marquee = MarqueeSelection(
-      current.startTick,
-      current.startKey,
-      tick,
-      key,
-    );
+    marquee = MarqueeSelection(current.startTick, current.startKey, tick, key);
     selection
       ..clear()
       ..addAll(notes.where((SequenceNote note) => marquee!.contains(note)));
@@ -869,7 +850,10 @@ class PianoRollStore extends ChangeNotifier {
     } catch (_) {
       // Preview path stub
     }
-    _auditionTimer = Timer(OneBeatTokens.dark().motion.settled, _releaseAudition);
+    _auditionTimer = Timer(
+      OneBeatTokens.dark().motion.settled,
+      _releaseAudition,
+    );
   }
 
   void _releaseAudition() {

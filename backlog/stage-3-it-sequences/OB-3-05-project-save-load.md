@@ -41,13 +41,32 @@ the file) and `engine/src/model/project_io.{h,cpp}` (writer, forgiving loader,
 `Residue` preservation, SHA-256 sidecars, atomic bundle swap). Every acceptance
 criterion above is covered by `engine/tests/test_project_io.cpp`.
 
-**Not done, and waiting on `OB-3-09`'s model-backed app:**
+**Scope §4 — most of it done (15 August 2026), on ABI 1.11.**
 
-- **Scope §4 in full** — New/Open/Save/Save As, the dirty flag from the command
-  bus, native dialogs, the recent-projects list and the `.obt` bundle
-  association. None of it can exist before the app can hold a project, which is
-  the ABI wiring `OB-3-09` brings. This is the same dependency that keeps
-  `OB-3-03` open.
+Open (⌘O), Save (⌘S), Save As (⇧⌘S) and Rename reach the writer through four
+added ABI calls — `ob_engine_project_path`, `_name`, `_set_name` and
+`_is_modified` — plus `app/lib/src/features/project/`: `ProjectStore` (the
+decisions), `ProjectFilePlatform` (the panels) and `RenameProjectDialog`. The
+native panels live in `macos/Runner/Features/Projects/ProjectFileBridge.swift`,
+and `.obt` is now an exported UTI with `LSTypeIsPackage`, so Finder treats a
+bundle as one document.
+
+Two decisions worth recording:
+
+- **The dirty flag is a comparison, not a counter.** `ob_engine_project_is_modified`
+  hashes the canonical bytes and compares them with the last save, because an
+  edit count cannot answer the question the user is asking: undoing back to the
+  last save leaves nothing to write. It walks the project, so the shell polls it
+  every 20 frames rather than every frame.
+- **Rename moves the bundle.** The project is written under the new name and the
+  old bundle removed afterwards — never the other way round, so an interruption
+  leaves two projects rather than none. A name already taken in that folder is
+  refused before anything changes.
+
+**Still not done:**
+
+- **New project** and the **recent-projects list**. The File menu holds
+  Open/Save/Save As/Rename/Export and nothing else.
 - **The host half of scope §3** — the format carries everything OB-2-10's
   missing-plugin placeholder needs (`plugin.id`, `name`, `vendor`, `path_hint`)
   and the loader reports a sidecar that is missing or fails its checksum, but

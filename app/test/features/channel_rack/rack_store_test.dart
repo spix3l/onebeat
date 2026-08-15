@@ -183,16 +183,19 @@ class _FakeStoreEngineClient implements EngineClient {
 }
 
 void main() {
-  test('refresh leaves the inspector selection empty until a lane is chosen', () {
-    final _FakeStoreEngineClient client = _FakeStoreEngineClient();
-    final RackStore store = RackStore(client)..load();
-    addTearDown(store.dispose);
+  test(
+    'refresh leaves the inspector selection empty until a lane is chosen',
+    () {
+      final _FakeStoreEngineClient client = _FakeStoreEngineClient();
+      final RackStore store = RackStore(client)..load();
+      addTearDown(store.dispose);
 
-    expect(store.selectedInstrumentId, isNull);
+      expect(store.selectedInstrumentId, isNull);
 
-    store.selectInstrument('kick');
-    expect(store.selectedInstrumentId, 'kick');
-  });
+      store.selectInstrument('kick');
+      expect(store.selectedInstrumentId, 'kick');
+    },
+  );
 
   test('paint drag is one transaction and paints each crossed step once', () {
     final _FakeStoreEngineClient client = _FakeStoreEngineClient();
@@ -229,6 +232,24 @@ void main() {
     expect(store.pattern!.baseStepCount, 32);
   });
 
+  test('adds notes at an interval without removing existing notes', () {
+    final _FakeStoreEngineClient client = _FakeStoreEngineClient();
+    final RackStore store = RackStore(client)..load();
+    addTearDown(store.dispose);
+
+    store.toggleStep('kick', 3);
+    store.addNotesEvery('kick', 4);
+
+    expect(
+      store.rows.single.steps
+          .asMap()
+          .entries
+          .where((MapEntry<int, RackStep> entry) => entry.value.active)
+          .map((MapEntry<int, RackStep> entry) => entry.key),
+      containsAll(<int>[0, 3, 4, 8, 12]),
+    );
+  });
+
   test('remove sequence clears the notes but keeps the channel', () {
     final _FakeStoreEngineClient client = _FakeStoreEngineClient();
     final RackStore store = RackStore(client)..load();
@@ -243,51 +264,54 @@ void main() {
     expect(store.rows, hasLength(1));
   });
 
-  test('refreshIfInstrumentsChanged picks up an externally added instrument', () {
-    final _FakeStoreEngineClient client = _FakeStoreEngineClient();
-    client.instruments = <ProjectInstrument>[];
-    client.rows = <RackRow>[];
-    final RackStore store = RackStore(client)..load();
-    addTearDown(store.dispose);
+  test(
+    'refreshIfInstrumentsChanged picks up an externally added instrument',
+    () {
+      final _FakeStoreEngineClient client = _FakeStoreEngineClient();
+      client.instruments = <ProjectInstrument>[];
+      client.rows = <RackRow>[];
+      final RackStore store = RackStore(client)..load();
+      addTearDown(store.dispose);
 
-    expect(store.instruments, isEmpty);
+      expect(store.instruments, isEmpty);
 
-    // The shell seeds the default channel outside the store.
-    client.instruments = <ProjectInstrument>[
-      const ProjectInstrument(
-        id: 'piano',
-        name: 'OneBeat Piano',
-        color: '#6C8CFF',
-        order: 0,
-        pluginId: 'com.onebeat.piano',
-        pluginName: 'OneBeat Piano',
-        pluginVendor: 'OneBeat',
-        pluginPath: '@bundled/OneBeatPiano.clap',
-        muted: false,
-        selected: true,
-        affectedPatterns: 0,
-        affectedClips: 0,
-        affectedNotes: 0,
-      ),
-    ];
-    client.rows = <RackRow>[
-      RackRow(
-        instrumentId: 'piano',
-        gridTicks: 240,
-        hasSequence: false,
-        offGridCount: 0,
-        noteCount: 0,
-        steps: List<RackStep>.filled(
-          16,
-          const RackStep(active: false, velocity: 0),
+      // The shell seeds the default channel outside the store.
+      client.instruments = <ProjectInstrument>[
+        const ProjectInstrument(
+          id: 'piano',
+          name: 'OneBeat Piano',
+          color: '#6C8CFF',
+          order: 0,
+          pluginId: 'com.onebeat.piano',
+          pluginName: 'OneBeat Piano',
+          pluginVendor: 'OneBeat',
+          pluginPath: '@bundled/OneBeatPiano.clap',
+          muted: false,
+          selected: true,
+          affectedPatterns: 0,
+          affectedClips: 0,
+          affectedNotes: 0,
         ),
-      ),
-    ];
+      ];
+      client.rows = <RackRow>[
+        RackRow(
+          instrumentId: 'piano',
+          gridTicks: 240,
+          hasSequence: false,
+          offGridCount: 0,
+          noteCount: 0,
+          steps: List<RackStep>.filled(
+            16,
+            const RackStep(active: false, velocity: 0),
+          ),
+        ),
+      ];
 
-    store.refreshIfInstrumentsChanged();
-    expect(store.instruments, hasLength(1));
-    expect(store.rows, hasLength(1));
-  });
+      store.refreshIfInstrumentsChanged();
+      expect(store.instruments, hasLength(1));
+      expect(store.rows, hasLength(1));
+    },
+  );
 
   test('an empty channel is a row, so it survives a rebuild of the store', () {
     final _FakeStoreEngineClient client = _FakeStoreEngineClient();

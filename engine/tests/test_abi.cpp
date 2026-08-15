@@ -15,14 +15,15 @@
 #include "abi/onebeat_abi.h"
 #include "doctest.h"
 #include "test_helpers.h"
+#include "testing/offline_driver.h"
 
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.10.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.11.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.10.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.11.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -622,6 +623,89 @@ TEST_SUITE("abi") {
     ob_engine_destroy(engine);
   }
 
+  // The rack used to host one plug-in at a time, on whichever lane was
+  // selected: adding an instrument to a rack of samples silently took the
+  // selected sample's voice — the hi-hat started playing the piano — and
+  // deleting the plug-in gave it back.
+  TEST_CASE("A plug-in instrument gets its own lane and leaves the samples alone") {
+    namespace fs = std::filesystem;
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const fs::path scratch =
+        fs::path("/tmp/onebeat-tests") / ("rack-hosting-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    onebeat::testing::RenderResult tone;
+    tone.left.assign(4800, 0.25F);
+    tone.right.assign(4800, 0.25F);
+    const std::string kick_path = (scratch / "kick.wav").string();
+    const std::string hihat_path = (scratch / "hihat.wav").string();
+    REQUIRE(onebeat::testing::writeWav(tone, kick_path));
+    REQUIRE(onebeat::testing::writeWav(tone, hihat_path));
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.use_null_device = 1;
+    config.block_frames = 128;
+    const std::string log_directory = (scratch / "logs").string();
+    config.log_directory = log_directory.c_str();
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    REQUIRE(ob_engine_instrument_add_sample(engine, "Kick", kick_path.c_str()) == OB_OK);
+    REQUIRE(ob_engine_instrument_add_sample(engine, "Hihat", hihat_path.c_str()) == OB_OK);
+    ob_instrument_info kick{};
+    ob_instrument_info hihat{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &kick) == OB_OK);
+    REQUIRE(ob_engine_instrument_at(engine, 1, &hihat) == OB_OK);
+    const std::string kick_id = kick.id;
+    const std::string hihat_id = hihat.id;
+
+    // The hi-hat is the lane the user was working on when they added the
+    // instrument, which is the lane the old code handed to the plug-in.
+    REQUIRE(ob_engine_instrument_select(engine, hihat_id.c_str()) == OB_OK);
+    const std::string bundle = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE_MESSAGE(
+        ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK,
+        ob_last_error_message());
+
+    REQUIRE(ob_engine_instrument_count(engine) == 3);
+    ob_instrument_info lane{};
+    REQUIRE(ob_engine_instrument_at(engine, 1, &lane) == OB_OK);
+    CHECK(std::string(lane.id) == hihat_id);
+    CHECK(std::string(lane.plugin_id) == "onebeat.sample");
+    CHECK(std::string(lane.plugin_path) == hihat_path);
+    REQUIRE(ob_engine_instrument_at(engine, 2, &lane) == OB_OK);
+    CHECK(std::string(lane.plugin_id) == "dev.onebeat.test.synth");
+    const std::string synth_id = lane.id;
+
+    // The instance surface follows the selection, and the plug-in outlives a
+    // trip through the sample lanes rather than being torn down by it.
+    CHECK(ob_engine_instance_count(engine) == 1);
+    REQUIRE(ob_engine_instrument_select(engine, kick_id.c_str()) == OB_OK);
+    CHECK(ob_engine_instance_count(engine) == 0);
+    REQUIRE(ob_engine_instrument_select(engine, synth_id.c_str()) == OB_OK);
+    REQUIRE(ob_engine_instance_count(engine) == 1);
+    ob_instance_info instance{};
+    REQUIRE(ob_engine_instance_at(engine, 0, &instance) == OB_OK);
+    CHECK(std::string(instance.name) == "OneBeat Test Synth");
+    CHECK(instance.param_count == 1);
+
+    // Deleting a lane above it renumbers the rack. The plug-in follows its own
+    // instrument down, so its parameters still answer on the new channel.
+    REQUIRE(ob_engine_instrument_remove(engine, kick_id.c_str()) == OB_OK);
+    REQUIRE(ob_engine_instrument_count(engine) == 2);
+    REQUIRE(ob_engine_instrument_select(engine, synth_id.c_str()) == OB_OK);
+    REQUIRE(ob_engine_instance_count(engine) == 1);
+    ob_param_info param{};
+    REQUIRE_MESSAGE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK,
+                    ob_last_error_message());
+    CHECK(std::string(param.name) == "Gain");
+
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
+  }
+
   TEST_CASE("Scratch sessions preserve an opaque chunk through a missing placeholder") {
     namespace fs = std::filesystem;
     REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
@@ -656,6 +740,83 @@ TEST_SUITE("abi") {
     CHECK(std::string(missing.name) == "OneBeat Test Synth");
     REQUIRE(ob_engine_session_save(engine, session.c_str()) == OB_OK);
     CHECK(fs::file_size(session) == state_hash_before);
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
+  }
+
+  // What ⌘S, ⌘O and Rename need from the engine, and nothing more: where the
+  // project lives, what it is called, and whether it has changed since it was
+  // last written (OB-3-05 §4).
+  TEST_CASE("The project's path, name and dirty flag cross the C surface") {
+    namespace fs = std::filesystem;
+    const fs::path scratch =
+        fs::path("/tmp/onebeat-tests") / ("project-abi-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/project-abi";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    // A project nobody has touched is not a project with unsaved changes.
+    CHECK(std::string(ob_engine_project_path(engine)).empty());
+    CHECK(std::string(ob_engine_project_name(engine)) == "Untitled");
+    CHECK(ob_engine_project_is_modified(engine) == 0);
+
+    REQUIRE_MESSAGE(ob_engine_project_set_name(engine, "Night Drive") == OB_OK,
+                    ob_last_error_message());
+    CHECK(std::string(ob_engine_project_name(engine)) == "Night Drive");
+    CHECK(ob_engine_project_is_modified(engine) == 1);
+
+    // Renaming is an edit like any other, so it undoes — and undoing back to
+    // the last save leaves nothing to write.
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);
+    CHECK(std::string(ob_engine_project_name(engine)) == "Untitled");
+    CHECK(ob_engine_project_is_modified(engine) == 0);
+    REQUIRE(ob_engine_project_redo(engine) == OB_OK);
+    CHECK(std::string(ob_engine_project_name(engine)) == "Night Drive");
+
+    const fs::path bundle = scratch / "Night Drive.obt";
+    REQUIRE_MESSAGE(ob_engine_project_save(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    CHECK(fs::exists(bundle / "project.json"));
+    CHECK(std::string(ob_engine_project_path(engine)) == bundle.string());
+    CHECK(ob_engine_project_is_modified(engine) == 0);
+
+    // An edit after the save is visible; the same edit undone is not.
+    REQUIRE(ob_engine_rack_set_swing(engine, 0.25) == OB_OK);
+    CHECK(ob_engine_project_is_modified(engine) == 1);
+
+    REQUIRE_MESSAGE(ob_engine_project_save(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    CHECK(ob_engine_project_is_modified(engine) == 0);
+
+    // Opening restores the name, the edit and the path, and lands clean.
+    REQUIRE(ob_engine_project_set_name(engine, "Something Else") == OB_OK);
+    REQUIRE(ob_engine_rack_set_swing(engine, 0.0) == OB_OK);
+    REQUIRE_MESSAGE(ob_engine_project_open(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    CHECK(std::string(ob_engine_project_name(engine)) == "Night Drive");
+    CHECK(std::string(ob_engine_project_path(engine)) == bundle.string());
+    CHECK(ob_engine_project_is_modified(engine) == 0);
+    ob_rack_pattern_info reopened{};
+    reopened.struct_size = sizeof(reopened);
+    REQUIRE(ob_engine_rack_pattern(engine, &reopened) == OB_OK);
+    CHECK(reopened.swing == doctest::Approx(0.25));
+
+    // A rename with no name is a caller error, not a project called "".
+    CHECK(ob_engine_project_set_name(engine, "") == OB_ERR_INVALID_ARGUMENT);
+    CHECK(std::string(ob_engine_project_name(engine)) == "Night Drive");
+    CHECK(ob_engine_project_set_name(nullptr, "x") == OB_ERR_INVALID_ARGUMENT);
+    CHECK(std::string(ob_engine_project_path(nullptr)).empty());
+    CHECK(std::string(ob_engine_project_name(nullptr)).empty());
+    CHECK(ob_engine_project_is_modified(nullptr) == 0);
+
     ob_engine_destroy(engine);
     fs::remove_all(scratch);
   }

@@ -90,12 +90,14 @@ Engine::Engine(EngineConfig config) : config_(std::move(config)) {
 }
 
 plugin::PluginInstance& Engine::channelInstrument(int index) noexcept OB_NONBLOCKING {
-  if (index == hosted_channel_ && hosted_instrument_ != nullptr) return *hosted_instrument_;
+  const std::unique_ptr<plugin::PluginInstance>& hosted = hosted_[static_cast<size_t>(index)];
+  if (hosted != nullptr) return *hosted;
   return channels_[static_cast<size_t>(index)]->instrument;
 }
 
 const plugin::PluginInstance& Engine::channelInstrument(int index) const noexcept OB_NONBLOCKING {
-  if (index == hosted_channel_ && hosted_instrument_ != nullptr) return *hosted_instrument_;
+  const std::unique_ptr<plugin::PluginInstance>& hosted = hosted_[static_cast<size_t>(index)];
+  if (hosted != nullptr) return *hosted;
   return channels_[static_cast<size_t>(index)]->instrument;
 }
 
@@ -222,10 +224,22 @@ std::string Engine::deviceName() const {
   return device_ != nullptr ? device_->deviceName() : std::string("No device");
 }
 
-bool Engine::installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance,
+namespace {
+
+bool isRackChannel(int channel) noexcept {
+  return channel >= 0 && channel < MaxRackChannels;
+}
+
+}  // namespace
+
+bool Engine::installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance, int channel,
                                      std::string& error) {
   if (instance == nullptr) {
     error = "The hosted plug-in instance is missing.";
+    return false;
+  }
+  if (!isRackChannel(channel)) {
+    error = "The channel the plug-in was loaded onto does not exist.";
     return false;
   }
   plugin::ProcessSetup setup;
@@ -239,97 +253,142 @@ bool Engine::installHostedInstrument(std::unique_ptr<plugin::PluginInstance> ins
 
   const bool resume = isRunning();
   if (resume) stop();
-  if (hosted_instrument_ != nullptr) hosted_instrument_->deactivate();
-  hosted_instrument_ = std::move(instance);
-  // The hosted voice takes over the audition channel — the one the user has
-  // selected — which is the channel every hosted-plug-in call site means.
-  hosted_channel_ = audition_channel_.load(std::memory_order_acquire);
-  channels_[static_cast<size_t>(hosted_channel_)]->active.store(true, std::memory_order_release);
+  std::unique_ptr<plugin::PluginInstance>& slot = hosted_[static_cast<size_t>(channel)];
+  if (slot != nullptr) slot->deactivate();
+  // The hosted voice takes over the channel its own instrument owns, and only
+  // that one: the lanes either side keep the samplers they were given.
+  slot = std::move(instance);
+  channels_[static_cast<size_t>(channel)]->active.store(true, std::memory_order_release);
   if (resume && !start(error)) return false;
   return true;
 }
 
-bool Engine::restoreBuiltinInstrument(std::string& error) {
-  if (hosted_instrument_ == nullptr) return true;
+bool Engine::restoreBuiltinInstrument(int channel, std::string& error) {
+  if (!isRackChannel(channel) || hosted_[static_cast<size_t>(channel)] == nullptr) return true;
   const bool resume = isRunning();
   if (resume) stop();
-  hosted_instrument_->deactivate();
-  hosted_instrument_.reset();
-  hosted_channel_ = 0;
+  std::unique_ptr<plugin::PluginInstance>& slot = hosted_[static_cast<size_t>(channel)];
+  slot->deactivate();
+  slot.reset();
+  if (resume && !start(error)) return false;
+  return true;
+}
+
+bool Engine::hasHostedInstrument(int channel) const noexcept {
+  return isRackChannel(channel) && hosted_[static_cast<size_t>(channel)] != nullptr;
+}
+
+bool Engine::remapHostedInstruments(const std::vector<int>& destination, std::string& error) {
+  bool moves_anything = false;
+  for (size_t channel = 0; channel < destination.size() && channel < hosted_.size(); ++channel) {
+    if (hosted_[channel] == nullptr) continue;
+    if (destination[channel] != static_cast<int>(channel)) moves_anything = true;
+  }
+  // Channels past the end of the mapping keep what they hold: a caller that
+  // describes only the rack's first N lanes is not asking to silence the rest.
+  if (!moves_anything) return true;
+
+  const bool resume = isRunning();
+  if (resume) stop();
+  std::array<std::unique_ptr<plugin::PluginInstance>, MaxRackChannels> moved;
+  for (size_t channel = 0; channel < hosted_.size(); ++channel) {
+    if (hosted_[channel] == nullptr) continue;
+    const int target =
+        channel < destination.size() ? destination[channel] : static_cast<int>(channel);
+    if (!isRackChannel(target)) {
+      // Dropped: the instrument that owned this plug-in is gone.
+      hosted_[channel]->deactivate();
+      hosted_[channel].reset();
+      continue;
+    }
+    moved[static_cast<size_t>(target)] = std::move(hosted_[channel]);
+  }
+  hosted_ = std::move(moved);
+  for (size_t channel = 0; channel < hosted_.size(); ++channel) {
+    if (hosted_[channel] != nullptr) {
+      channels_[channel]->active.store(true, std::memory_order_release);
+    }
+  }
   if (resume && !start(error)) return false;
   return true;
 }
 
 bool Engine::createSandboxedInstrument(const std::string& bundle_path, const std::string& plugin_id,
-                                       const std::string& helper_path, std::string& error) {
+                                       const std::string& helper_path, int channel,
+                                       std::string& error) {
   auto instance = std::make_unique<plugin::sandbox::SandboxedPluginProxy>(
       &host_bridge_, bundle_path, plugin_id, helper_path);
-  if (!installHostedInstrument(std::move(instance), error)) return false;
-  return true;
+  return installHostedInstrument(std::move(instance), channel, error);
 }
 
 bool Engine::installMissingInstrument(const std::string& name, const std::vector<uint8_t>& state,
-                                      std::string& error) {
-  return installHostedInstrument(
-      std::make_unique<plugin::MissingPlugin>(&host_bridge_, name, state), error);
+                                      int channel, std::string& error) {
+  return installHostedInstrument(std::make_unique<plugin::MissingPlugin>(&host_bridge_, name, state),
+                                 channel, error);
 }
 
-uint32_t Engine::hostedParamCount() const {
-  return hosted_instrument_ != nullptr ? hosted_instrument_->paramCount() : 0;
+plugin::PluginInstance* Engine::hostedAt(int channel) const noexcept {
+  return isRackChannel(channel) ? hosted_[static_cast<size_t>(channel)].get() : nullptr;
 }
 
-bool Engine::hostedParamInfo(uint32_t index, plugin::ParamInfo& out) const {
-  return hosted_instrument_ != nullptr && hosted_instrument_->paramInfo(index, out);
+uint32_t Engine::hostedParamCount(int channel) const {
+  const plugin::PluginInstance* hosted = hostedAt(channel);
+  return hosted != nullptr ? hosted->paramCount() : 0;
 }
 
-bool Engine::hostedParamValue(plugin::ParamId param, double& out) const {
-  return hosted_instrument_ != nullptr && hosted_instrument_->paramValue(param, out);
+bool Engine::hostedParamInfo(int channel, uint32_t index, plugin::ParamInfo& out) const {
+  const plugin::PluginInstance* hosted = hostedAt(channel);
+  return hosted != nullptr && hosted->paramInfo(index, out);
 }
 
-bool Engine::saveHostedState(std::vector<uint8_t>& out) const {
-  if (hosted_instrument_ == nullptr) return false;
+bool Engine::hostedParamValue(int channel, plugin::ParamId param, double& out) const {
+  const plugin::PluginInstance* hosted = hostedAt(channel);
+  return hosted != nullptr && hosted->paramValue(param, out);
+}
+
+bool Engine::saveHostedState(int channel, std::vector<uint8_t>& out) const {
+  const plugin::PluginInstance* hosted = hostedAt(channel);
+  if (hosted == nullptr) return false;
   plugin::MemoryStateWriter writer;
-  if (!hosted_instrument_->saveState(writer)) return false;
+  if (!hosted->saveState(writer)) return false;
   out = writer.bytes();
   return true;
 }
 
-std::string Engine::hostedError() const {
-  const auto* proxy =
-      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+std::string Engine::hostedError(int channel) const {
+  const auto* proxy = dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   return proxy != nullptr ? proxy->lastError() : std::string();
 }
 
-bool Engine::loadHostedState(const std::vector<uint8_t>& bytes) {
-  if (hosted_instrument_ == nullptr) return false;
+bool Engine::loadHostedState(int channel, const std::vector<uint8_t>& bytes) {
+  plugin::PluginInstance* hosted = hostedAt(channel);
+  if (hosted == nullptr) return false;
   plugin::MemoryStateReader reader(bytes);
-  return hosted_instrument_->loadState(reader);
+  return hosted->loadState(reader);
 }
 
-bool Engine::hostedHasEditor() const {
-  const auto* proxy =
-      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+bool Engine::hostedHasEditor(int channel) const {
+  const auto* proxy = dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   return proxy != nullptr && proxy->hasEditor();
 }
 
-bool Engine::hostedHealthy() const {
-  const auto* proxy =
-      dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+bool Engine::hostedHealthy(int channel) const {
+  const auto* proxy = dynamic_cast<const plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   return proxy == nullptr || proxy->healthy();
 }
 
-bool Engine::restartHostedInstrument() {
-  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+bool Engine::restartHostedInstrument(int channel) {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   return proxy != nullptr && proxy->restartHost();
 }
 
-bool Engine::openHostedEditor() {
-  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+bool Engine::openHostedEditor(int channel) {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   return proxy != nullptr && proxy->openEditor();
 }
 
-void Engine::closeHostedEditor() {
-  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hosted_instrument_.get());
+void Engine::closeHostedEditor(int channel) {
+  auto* proxy = dynamic_cast<plugin::sandbox::SandboxedPluginProxy*>(hostedAt(channel));
   if (proxy != nullptr) proxy->closeEditor();
 }
 

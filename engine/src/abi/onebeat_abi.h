@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 10
+#define OB_ABI_VERSION_MINOR 11
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -818,6 +818,34 @@ OB_API ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path
  * (docs/project-format.md §6), which is what makes it usable as a
  * save/reopen equality check. Engine-owned, valid until the next call. */
 OB_API const char* ob_engine_project_json(ob_engine* engine);
+
+/* Main/UI thread. Never blocks. The bundle the project was last saved to or
+ * opened from, empty for a project that has never been written. This is what
+ * lets ⌘S save in place and Save As default to the right folder, without the UI
+ * keeping a second copy of a fact the engine already owns. Engine-owned, valid
+ * until the next save or open. */
+OB_API const char* ob_engine_project_path(ob_engine* engine);
+
+/* Main/UI thread. Never blocks. `meta.name` — the user-facing project name,
+ * which is *not* derived from the file name: an unsaved project has a name and
+ * no path. Engine-owned, valid until the next call that changes the name. */
+OB_API const char* ob_engine_project_name(ob_engine* engine);
+
+/* Main/UI thread. May block briefly. Renames the project. This is an edit like
+ * any other — it goes through the command bus, so it undoes, and it marks the
+ * project modified. Renaming the *bundle on disk* is the caller's business:
+ * the engine owns the model, not the file system. */
+OB_API ob_status ob_engine_project_set_name(ob_engine* engine, const char* utf8_name);
+
+/* Main/UI thread. 1 when the project differs from what was last saved or
+ * opened, 0 when it matches.
+ *
+ * Compared by canonical bytes rather than counted by edits, because an edit
+ * count cannot answer the question the user is actually asking: undoing back to
+ * the last save leaves nothing to save, and an edit counter would still claim
+ * there is. The comparison is memoised against the model revision, so calling
+ * this every frame costs a load and a compare. */
+OB_API int32_t ob_engine_project_is_modified(ob_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -221,16 +221,23 @@ class PrNoteGrid extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTapUp:
           onAddNote == null && onSelectNote == null ? null : _handleTap,
-      child: CustomPaint(
-        painter: PrGridPainter(
-          vm: vm,
-          color: tokens.color,
-          noteHeight: tokens.size.prNoteHeight,
-          noteRadius: tokens.radius.xs,
-          lineWidth: tokens.border.hairline,
-          playheadWidth: tokens.size.playheadWidth,
+      // The roll sits against the key column, and a note that starts before the
+      // visible area has a negative x. Without a clip the painter would draw it
+      // straight over the keys — the one thing a piano roll must never do. The
+      // same clip keeps the painter's last (partial) row from spilling into the
+      // velocity lane below.
+      child: ClipRect(
+        child: CustomPaint(
+          painter: PrGridPainter(
+            vm: vm,
+            color: tokens.color,
+            noteHeight: tokens.size.prNoteHeight,
+            noteRadius: tokens.radius.xs,
+            lineWidth: tokens.border.hairline,
+            playheadWidth: tokens.size.playheadWidth,
+          ),
+          child: const SizedBox.expand(),
         ),
-        child: const SizedBox.expand(),
       ),
     );
   }

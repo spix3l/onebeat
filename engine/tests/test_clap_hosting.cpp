@@ -149,7 +149,7 @@ TEST_SUITE("engine") {
     CHECK(rig.plugin->audioPortCount(PortDirection::Input) == 0);
     CHECK(rig.plugin->audioPortCount(PortDirection::Output) == 1);
     CHECK(rig.plugin->notePortCount(PortDirection::Input) == 1);
-    CHECK(rig.plugin->paramCount() == 7);
+    CHECK(rig.plugin->paramCount() == 18);
     CHECK(rig.plugin->latencyFrames() == 0);
     CHECK(rig.plugin->guiExtension() == nullptr);
 
@@ -157,7 +157,12 @@ TEST_SUITE("engine") {
     for (int block = 0; block < 8; ++block) CHECK(rig.render({}) > 0.001F);
     CHECK(rig.render({PluginEvent::noteOff(0, 60)}) > 0.0001F);
 
-    rig.render({PluginEvent::paramValue(0, 100, 0.83), PluginEvent::paramValue(0, 104, 0.41)});
+    // Test preset switching & ADSR envelope rendering
+    rig.render({PluginEvent::paramValue(0, 107, 0.2)});  // Rhodes preset
+    CHECK(rig.render({PluginEvent::noteOn(0, 64, 0.9)}) > 0.01F);
+
+    rig.render({PluginEvent::paramValue(0, 100, 0.83), PluginEvent::paramValue(0, 104, 0.41),
+                PluginEvent::paramValue(0, 108, 0.15)});
     MemoryStateWriter saved;
     REQUIRE(rig.plugin->saveState(saved));
     CHECK(saved.bytes().size() > 2 * sizeof(double));

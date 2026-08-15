@@ -56,12 +56,10 @@ class RackStore extends ChangeNotifier {
   void refreshIfInstrumentsChanged() {
     final List<ProjectInstrument> now = _client.readInstruments();
     if (now.length == instruments.length) {
-      final Set<String> nowIds = now
-          .map((ProjectInstrument inst) => inst.id)
-          .toSet();
-      final Set<String> cachedIds = instruments
-          .map((ProjectInstrument inst) => inst.id)
-          .toSet();
+      final Set<String> nowIds =
+          now.map((ProjectInstrument inst) => inst.id).toSet();
+      final Set<String> cachedIds =
+          instruments.map((ProjectInstrument inst) => inst.id).toSet();
       if (nowIds.length == cachedIds.length && nowIds.containsAll(cachedIds)) {
         return;
       }
@@ -79,7 +77,9 @@ class RackStore extends ChangeNotifier {
     for (final RackRow row in rows) {
       if (!row.hasSequence) continue;
       try {
-        notesByInstrument[row.instrumentId] = _client.readNotes(row.instrumentId);
+        notesByInstrument[row.instrumentId] = _client.readNotes(
+          row.instrumentId,
+        );
       } catch (_) {
         // Stub if readNotes is unavailable.
       }
@@ -89,7 +89,9 @@ class RackStore extends ChangeNotifier {
     // current instrument. Keeping it null until a lane is clicked prevents the
     // inspector from occupying the rack before the user has selected anything.
     if (selectedInstrumentId != null &&
-        !instruments.any((ProjectInstrument inst) => inst.id == selectedInstrumentId)) {
+        !instruments.any(
+          (ProjectInstrument inst) => inst.id == selectedInstrumentId,
+        )) {
       selectedInstrumentId = null;
     }
 
@@ -136,6 +138,22 @@ class RackStore extends ChangeNotifier {
     refresh();
   }
 
+  /// Ensures a note exists at every [interval]th step without removing notes
+  /// that are already present.
+  void addNotesEvery(String instrumentId, int interval) {
+    if (interval <= 0) return;
+    final RackRow? row = rowFor(instrumentId);
+    if (row == null) return;
+
+    _client.beginRackGesture('Add note every $interval steps');
+    for (int step = 0; step < row.steps.length; step += interval) {
+      if (!row.steps[step].active) _client.toggleRackStep(instrumentId, step);
+    }
+    _client.commitRackGesture();
+    selectedInstrumentId = instrumentId;
+    refresh();
+  }
+
   void beginPaint(String instrumentId, int step, {required bool active}) {
     if (_painting) abortPaint();
     _painting = true;
@@ -157,7 +175,7 @@ class RackStore extends ChangeNotifier {
 
     final int previous = _lastPaintStep ?? step;
     final int direction = step >= previous ? 1 : -1;
-    for (int index = previous;; index += direction) {
+    for (int index = previous; ; index += direction) {
       _paintSingleStep(instrumentId, index);
       if (index == step) break;
     }

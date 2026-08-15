@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens.dart';
 import '../../ui_kit/dropdown.dart';
 import '../../ui_kit/tooltip.dart';
+import '../../core/snap_grid.dart';
 
 /// The editing tools.
 ///
@@ -49,7 +50,7 @@ class PrToolbarVm {
     this.tool = PrTool.pencil,
     this.patterns = const <String>['Main Groove', 'Bass Motif'],
     this.scales = const <String>['C min', 'C maj', 'A min', 'Chromatic'],
-    this.snaps = const <String>['1/4', '1/8', '1/16', 'None'],
+    this.snaps,
     this.backLabel = 'Back to playlist',
   });
 
@@ -62,7 +63,9 @@ class PrToolbarVm {
   final PrTool tool;
   final List<String> patterns;
   final List<String> scales;
-  final List<String> snaps;
+  final List<String>? snaps;
+
+  List<String> get snapLabels => snaps ?? SnapGridChoice.labels;
   final String backLabel;
 }
 
@@ -103,10 +106,7 @@ class PrToolbar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: color.line,
-            width: tokens.border.hairline,
-          ),
+          bottom: BorderSide(color: color.line, width: tokens.border.hairline),
         ),
       ),
       child: Row(
@@ -127,8 +127,7 @@ class PrToolbar extends StatelessWidget {
                     i == vm.crumbs.length - 1
                         ? color.textMuted
                         : (i == 0 ? color.textPrimary : color.textSecondary),
-                fontWeight:
-                    i == 0 ? FontWeight.w600 : FontWeight.w500,
+                fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
@@ -164,7 +163,7 @@ class PrToolbar extends StatelessWidget {
           ObDropdown(
             label: 'Snap',
             value: vm.snap,
-            items: vm.snaps,
+            items: vm.snapLabels,
             onSelected: onSnap,
           ),
           SizedBox(width: tokens.spacing.sm),
@@ -373,11 +372,7 @@ class _BackButtonState extends State<_BackButton> {
 }
 
 class _ToolPainter extends CustomPainter {
-  _ToolPainter({
-    required this.tool,
-    required this.color,
-    required this.stroke,
-  });
+  _ToolPainter({required this.tool, required this.color, required this.stroke});
 
   final PrTool tool;
   final Color color;
@@ -441,16 +436,13 @@ class _ToolPainter extends CustomPainter {
         // large enough that it cannot fill in.
         final Rect marquee = Rect.fromLTRB(x(0.0), y(0.06), x(1.0), y(0.94));
         const double arm = 0.32;
-        for (final (Offset corner, double dx, double dy) in <(
-          Offset,
-          double,
-          double,
-        )>[
-          (marquee.topLeft, 1, 1),
-          (marquee.topRight, -1, 1),
-          (marquee.bottomLeft, 1, -1),
-          (marquee.bottomRight, -1, -1),
-        ]) {
+        for (final (Offset corner, double dx, double dy)
+            in <(Offset, double, double)>[
+              (marquee.topLeft, 1, 1),
+              (marquee.topRight, -1, 1),
+              (marquee.bottomLeft, 1, -1),
+              (marquee.bottomRight, -1, -1),
+            ]) {
           canvas
             ..drawLine(
               corner,
@@ -547,8 +539,16 @@ class _CrossPainter extends CustomPainter {
           ..color = color;
     final double w = size.width;
     final double h = size.height;
-    canvas.drawLine(Offset(w * 0.32, h * 0.32), Offset(w * 0.68, h * 0.68), line);
-    canvas.drawLine(Offset(w * 0.68, h * 0.32), Offset(w * 0.32, h * 0.68), line);
+    canvas.drawLine(
+      Offset(w * 0.32, h * 0.32),
+      Offset(w * 0.68, h * 0.68),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.68, h * 0.32),
+      Offset(w * 0.32, h * 0.68),
+      line,
+    );
   }
 
   @override
@@ -572,8 +572,16 @@ class _NotePainter extends CustomPainter {
     final double w = size.width;
     final double h = size.height;
     canvas.drawLine(Offset(w * 0.4, h * 0.66), Offset(w * 0.4, h * 0.32), line);
-    canvas.drawLine(Offset(w * 0.68, h * 0.6), Offset(w * 0.68, h * 0.26), line);
-    canvas.drawLine(Offset(w * 0.4, h * 0.32), Offset(w * 0.68, h * 0.26), line);
+    canvas.drawLine(
+      Offset(w * 0.68, h * 0.6),
+      Offset(w * 0.68, h * 0.26),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.4, h * 0.32),
+      Offset(w * 0.68, h * 0.26),
+      line,
+    );
     canvas.drawCircle(Offset(w * 0.33, h * 0.68), w * 0.08, line);
     canvas.drawCircle(Offset(w * 0.61, h * 0.62), w * 0.08, line);
   }

@@ -429,6 +429,54 @@ class FakeEngineClient implements EngineClient {
   @override
   void setClipTranspose(String clipId, int semitones) =>
       clips[clipId]?.transpose = semitones;
+
+  // ----- project files ------------------------------------------------------
+  // Written out rather than left to noSuchMethod: these return values, and a
+  // null String from the catch-all is a type error at the call site rather
+  // than a useful default.
+
+  /// Where the fake project has been written, and what it is called. Public so
+  /// a test can arrange "already saved" or assert what a save did.
+  String savedPath = '';
+  String name = 'Untitled';
+  bool modified = false;
+  int saves = 0;
+  int opens = 0;
+
+  /// Set to throw from the next [saveProject] or [openProject], which is how
+  /// the failure paths are exercised without a broken file on disk.
+  EngineException? failure;
+
+  @override
+  String get projectPath => savedPath;
+
+  @override
+  String get projectName => name;
+
+  @override
+  bool get isProjectModified => modified;
+
+  @override
+  void setProjectName(String value) {
+    name = value;
+    modified = true;
+  }
+
+  @override
+  void saveProject(String path) {
+    if (failure case final EngineException error) throw error;
+    saves++;
+    savedPath = path;
+    modified = false;
+  }
+
+  @override
+  void openProject(String path) {
+    if (failure case final EngineException error) throw error;
+    opens++;
+    savedPath = path;
+    modified = false;
+  }
 }
 
 class MutablePattern {

@@ -130,6 +130,7 @@ class ObBrowserPanel extends StatefulWidget {
     required this.vm,
     this.width,
     this.onTap,
+    this.onDoubleTap,
     this.onToggle,
     this.onSearchTap,
     this.onSearchChanged,
@@ -146,6 +147,9 @@ class ObBrowserPanel extends StatefulWidget {
 
   /// Fired with the tapped node's id.
   final ValueChanged<String>? onTap;
+
+  /// Fired when a leaf is double-clicked, used to open a plug-in editor.
+  final ValueChanged<String>? onDoubleTap;
 
   /// Fired with a folder or pattern's id when its disclosure is toggled.
   final ValueChanged<String>? onToggle;
@@ -357,6 +361,10 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
       final bool selected = node.id == widget.vm.selectedId;
       final VoidCallback? tap =
           widget.onTap == null ? null : () => widget.onTap!(node.id);
+      final VoidCallback? doubleTap =
+          widget.onDoubleTap == null
+              ? null
+              : () => widget.onDoubleTap!(node.id);
       final VoidCallback? toggle =
           widget.onToggle == null ? null : () => widget.onToggle!(node.id);
       switch (node) {
@@ -401,6 +409,7 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
                 depth: depth,
                 selected: selected,
                 onTap: tap,
+                onDoubleTap: doubleTap,
               ),
             ),
           );
@@ -494,6 +503,7 @@ class _Row extends StatefulWidget {
     required this.accentSelection,
     required this.children,
     this.onTap,
+    this.onDoubleTap,
   });
 
   final int depth;
@@ -507,6 +517,7 @@ class _Row extends StatefulWidget {
 
   final List<Widget> children;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
 
   @override
   State<_Row> createState() => _RowState();
@@ -538,6 +549,7 @@ class _RowState extends State<_Row> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
+        onDoubleTap: widget.onDoubleTap,
         child: Padding(
           // The indent sits outside the fill, so a selected child's pill
           // starts where its name does rather than reaching back under its
@@ -688,6 +700,7 @@ class BrowserSampleRow extends StatelessWidget {
     required this.depth,
     this.selected = false,
     this.onTap,
+    this.onDoubleTap,
     super.key,
   });
 
@@ -695,6 +708,7 @@ class BrowserSampleRow extends StatelessWidget {
   final int depth;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -704,6 +718,7 @@ class BrowserSampleRow extends StatelessWidget {
       selected: selected,
       accentSelection: false,
       onTap: onTap,
+      onDoubleTap: onDoubleTap,
       children: <Widget>[
         Container(
           width: tokens.size.browserDotSize,

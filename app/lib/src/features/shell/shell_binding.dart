@@ -24,7 +24,10 @@ import '../mixer/mixer_binding.dart';
 import '../piano_roll/piano_roll_binding.dart';
 import '../playlist/playlist_binding.dart';
 import '../playlist/playlist_store.dart';
+import '../plugins/plugin_binding.dart';
 import '../preferences/preferences_binding.dart';
+import '../project/project_store.dart';
+import '../project/rename_project_dialog.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
 import 'shell_screen_vm.dart';
@@ -71,8 +74,14 @@ class _ShellBindingState extends State<ShellBinding>
   AudioFileDrop? _audioFileDrop;
   PlaylistInsertItem? _lastPlaylistItem;
   int _framesSinceBrowserRefresh = 0;
+  int _framesSinceProjectRefresh = 0;
+  bool _showRenameDialog = false;
+  late final ProjectStore _project;
   int _builtinsGeneration = -1;
   List<PluginListing> _builtins = const <PluginListing>[];
+  HostedInstance? _openPlugin;
+  List<HostedParameter> _openPluginParameters = const <HostedParameter>[];
+  String? _openPluginTrackId;
 
   // The channel rack is the composition home; the arrangement is secondary.
   // Piano roll is not a rail destination — it is opened from the rack or
@@ -94,6 +103,10 @@ class _ShellBindingState extends State<ShellBinding>
           motion: OneBeatTokens.dark().motion,
         );
     _controller.addListener(_onControllerChanged);
+    // The controller's client, not the widget's: when a test supplies its own
+    // controller those can differ, and the project must be the one the rest of
+    // the shell is reading.
+    _project = ProjectStore(_controller.client)..addListener(_onProjectChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       stdout.writeln(
@@ -112,6 +125,8 @@ class _ShellBindingState extends State<ShellBinding>
   @override
   void dispose() {
     _samplePackPlatform.clearDropHandler();
+    _project.removeListener(_onProjectChanged);
+    _project.dispose();
     _controller.removeListener(_onControllerChanged);
     if (widget.controller == null) {
       _controller.dispose();
@@ -381,12 +396,91 @@ class _ShellBindingState extends State<ShellBinding>
     }
   }
 
+  void _onBrowserDoubleTap(String id) {
+    final BrowserNodeVm? node = _findBrowserNode(id);
+    final Object? data = node is BrowserSampleVm ? node.dragData : null;
+    if (data is! PluginListing) return;
+
+    final List<ProjectInstrument> instruments =
+        _controller.client.readInstruments();
+    ProjectInstrument? instrument;
+    for (final ProjectInstrument candidate in instruments) {
+      if (candidate.pluginId == data.id) {
+        instrument = candidate;
+        break;
+      }
+    }
+    if (instrument == null) {
+      for (final ProjectInstrument candidate in instruments) {
+        if (candidate.selected) {
+          instrument = candidate;
+          break;
+        }
+      }
+    }
+    final HostedInstance? hosted = _controller.client.readHostedInstance();
+    if (hosted == null) return;
+    if (instrument != null && hosted.pluginId != data.id) return;
+
+    setState(() {
+      _openPlugin = hosted;
+      _openPluginTrackId = instrument?.id ?? '';
+      _openPluginParameters = _controller.client.readParameters(hosted);
+    });
+  }
+
+  void _closePlugin() {
+    setState(() {
+      _openPlugin = null;
+      _openPluginParameters = const <HostedParameter>[];
+      _openPluginTrackId = null;
+    });
+  }
+
   void _onControllerChanged() {
     if (++_framesSinceBrowserRefresh >= 20) {
       _framesSinceBrowserRefresh = 0;
       _browserNodes = _buildBrowserNodes();
     }
+    // Answering "is this saved?" walks the whole project, so it is asked on a
+    // human cadence rather than per frame. A third of a second of staleness in
+    // an edited marker is invisible; a project walk every frame is not.
+    if (++_framesSinceProjectRefresh >= 20) {
+      _framesSinceProjectRefresh = 0;
+      _project.refresh();
+    }
     if (mounted) setState(() {});
+  }
+
+  void _onProjectChanged() {
+    if (mounted) setState(() {});
+  }
+
+  // ----- project files (OB-3-05 §4) -----------------------------------------
+
+  Future<void> _saveProject() async {
+    await _project.save();
+    _project.refresh();
+  }
+
+  Future<void> _saveProjectAs() async {
+    await _project.saveAs();
+    _project.refresh();
+  }
+
+  Future<void> _openProject() async {
+    await _project.open();
+    if (!mounted) return;
+    // A different project means different patterns, instruments and packs in
+    // the tree; the 20-frame refresh would show the old one until it came round.
+    _browserNodes = _buildBrowserNodes();
+    setState(() {});
+  }
+
+  Future<void> _renameProject(String name) async {
+    setState(() => _showRenameDialog = false);
+    await _project.rename(name);
+    _project.refresh();
   }
 
   void _onRailSelect(int index) {
@@ -467,24 +561,39 @@ class _ShellBindingState extends State<ShellBinding>
     final String leftDetail =
         'CoreAudio · ${sampleRateKhz.toStringAsFixed(1)} kHz · ${snapshot.blockFrames} spl · ${latencyMs.toStringAsFixed(1)} ms';
 
+    // The project line is the same in both states: whether the transport is
+    // running has nothing to do with whether the work is safe on disk, and the
+    // status bar was previously claiming a file name it had made up.
+    final String projectDetail =
+        _project.hasFile
+            ? _project.displayName
+            : '${_project.displayName} · not saved yet';
+
     final ObStatusBarVm statusVm = ObStatusBarVm(
-      tone: snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
-      primary: snapshot.playing ? 'Playing' : 'New project',
+      tone:
+          _project.message.isNotEmpty || snapshot.xrunCount > 0
+              ? StatusTone.warning
+              : StatusTone.ok,
+      primary: snapshot.playing ? 'Playing' : _project.name,
       details:
           snapshot.playing
               ? <String>[
+                projectDetail,
                 leftDetail,
                 '${cpuPercent.toStringAsFixed(0)}% CPU',
                 '${snapshot.activeVoices} voices',
               ]
-              : const <String>[
-                'Untitled.onebeat',
-                'Nothing saved yet — autosave starts on first edit',
+              : <String>[
+                projectDetail,
+                if (_project.message.isNotEmpty)
+                  _project.message
+                else
+                  'Press ⌘S to save',
               ],
       rightHint:
           snapshot.playing
               ? '⌘K Search actions'
-              : '⌘N new pattern · ⌘K actions',
+              : '⌘S save · ⌘K actions',
     );
 
     return ShellScreenVm(
@@ -514,8 +623,13 @@ class _ShellBindingState extends State<ShellBinding>
 
     return _PlatformMenuHost(
       controller: _controller,
+      project: _project,
       onOpenExport: () => setState(() => _showExportDialog = true),
       onOpenPreferences: () => setState(() => _showPreferencesDialog = true),
+      onSaveProject: () => unawaited(_saveProject()),
+      onSaveProjectAs: () => unawaited(_saveProjectAs()),
+      onOpenProject: () => unawaited(_openProject()),
+      onRenameProject: () => setState(() => _showRenameDialog = true),
       onSelectRail: _onRailSelect,
       child: ScopedShortcuts(
         shortcuts: shortcutsForScope(ShortcutScope.global),
@@ -548,6 +662,30 @@ class _ShellBindingState extends State<ShellBinding>
           RedoIntent: CallbackAction<RedoIntent>(
             onInvoke: (_) {
               _controller.redoProject();
+              return null;
+            },
+          ),
+          SaveProjectIntent: CallbackAction<SaveProjectIntent>(
+            onInvoke: (_) {
+              unawaited(_saveProject());
+              return null;
+            },
+          ),
+          SaveProjectAsIntent: CallbackAction<SaveProjectAsIntent>(
+            onInvoke: (_) {
+              unawaited(_saveProjectAs());
+              return null;
+            },
+          ),
+          OpenProjectIntent: CallbackAction<OpenProjectIntent>(
+            onInvoke: (_) {
+              unawaited(_openProject());
+              return null;
+            },
+          ),
+          RenameProjectIntent: CallbackAction<RenameProjectIntent>(
+            onInvoke: (_) {
+              setState(() => _showRenameDialog = true);
               return null;
             },
           ),
@@ -589,6 +727,7 @@ class _ShellBindingState extends State<ShellBinding>
                 onRedo: _controller.redoProject,
                 onExport: () => setState(() => _showExportDialog = true),
                 onBrowserTap: _onBrowserTap,
+                onBrowserDoubleTap: _onBrowserDoubleTap,
                 onBrowserToggle: _onBrowserToggle,
                 onBrowserSearchChanged: _onBrowserSearchChanged,
                 onBrowserScrollChanged: _onBrowserScrollChanged,
@@ -606,6 +745,47 @@ class _ShellBindingState extends State<ShellBinding>
                   client: widget.client,
                   controller: _controller,
                   onClose: () => setState(() => _showPreferencesDialog = false),
+                ),
+              if (_showRenameDialog)
+                RenameProjectDialog(
+                  initialName: _project.name,
+                  currentFileName: _project.hasFile ? _project.path : '',
+                  onSubmit: (String name) => unawaited(_renameProject(name)),
+                  onClose: () => setState(() => _showRenameDialog = false),
+                ),
+              if (_openPlugin case final HostedInstance plugin)
+                PluginBinding(
+                  client: widget.client,
+                  trackId: _openPluginTrackId ?? '',
+                  pluginName: plugin.name,
+                  trackName:
+                      _openPluginTrackId?.isNotEmpty == true
+                          ? (_controller.client
+                              .readInstruments()
+                              .firstWhere(
+                                (ProjectInstrument item) =>
+                                    item.id == _openPluginTrackId,
+                                orElse:
+                                    () => const ProjectInstrument(
+                                      id: '',
+                                      name: 'Instrument',
+                                      color: '',
+                                      order: 0,
+                                      pluginId: '',
+                                      pluginName: '',
+                                      pluginVendor: '',
+                                      pluginPath: '',
+                                      muted: false,
+                                      selected: false,
+                                      affectedPatterns: 0,
+                                      affectedClips: 0,
+                                      affectedNotes: 0,
+                                    ),
+                              )
+                              .name)
+                          : 'Instrument',
+                  parameters: _openPluginParameters,
+                  onClose: _closePlugin,
                 ),
             ],
           ),
@@ -675,15 +855,25 @@ class _WorkspaceSlot extends StatelessWidget {
 class _PlatformMenuHost extends StatelessWidget {
   const _PlatformMenuHost({
     required this.controller,
+    required this.project,
     required this.onOpenExport,
     required this.onOpenPreferences,
+    required this.onSaveProject,
+    required this.onSaveProjectAs,
+    required this.onOpenProject,
+    required this.onRenameProject,
     required this.onSelectRail,
     required this.child,
   });
 
   final core.EngineController controller;
+  final ProjectStore project;
   final VoidCallback onOpenExport;
   final VoidCallback onOpenPreferences;
+  final VoidCallback onSaveProject;
+  final VoidCallback onSaveProjectAs;
+  final VoidCallback onOpenProject;
+  final VoidCallback onRenameProject;
   final ValueChanged<int> onSelectRail;
   final Widget child;
 
@@ -711,6 +901,48 @@ class _PlatformMenuHost extends StatelessWidget {
         PlatformMenu(
           label: 'File',
           menus: <PlatformMenuItem>[
+            // The shortcuts here and in the action registry are the same
+            // bindings twice over — the menu is what macOS handles while a
+            // native panel is up, the registry is what the app handles. The
+            // shortcut sheet reads the registry, so it stays the source of
+            // truth for what a user is told.
+            PlatformMenuItemGroup(
+              members: <PlatformMenuItem>[
+                PlatformMenuItem(
+                  label: 'Open…',
+                  shortcut: const SingleActivator(
+                    LogicalKeyboardKey.keyO,
+                    meta: true,
+                  ),
+                  onSelected: onOpenProject,
+                ),
+              ],
+            ),
+            PlatformMenuItemGroup(
+              members: <PlatformMenuItem>[
+                PlatformMenuItem(
+                  label: project.hasFile ? 'Save' : 'Save…',
+                  shortcut: const SingleActivator(
+                    LogicalKeyboardKey.keyS,
+                    meta: true,
+                  ),
+                  onSelected: onSaveProject,
+                ),
+                PlatformMenuItem(
+                  label: 'Save as…',
+                  shortcut: const SingleActivator(
+                    LogicalKeyboardKey.keyS,
+                    meta: true,
+                    shift: true,
+                  ),
+                  onSelected: onSaveProjectAs,
+                ),
+                PlatformMenuItem(
+                  label: 'Rename project…',
+                  onSelected: onRenameProject,
+                ),
+              ],
+            ),
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
                 PlatformMenuItem(

@@ -2507,6 +2507,64 @@ class OneBeatBindings {
       >('ob_engine_project_json');
   late final _ob_engine_project_json = _ob_engine_project_jsonPtr
       .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
+  ffi.Pointer<ffi.Char> ob_engine_project_path(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_project_path(engine);
+  }
+
+  late final _ob_engine_project_pathPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)
+        >
+      >('ob_engine_project_path');
+  late final _ob_engine_project_path = _ob_engine_project_pathPtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
+  ffi.Pointer<ffi.Char> ob_engine_project_name(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_project_name(engine);
+  }
+
+  late final _ob_engine_project_namePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)
+        >
+      >('ob_engine_project_name');
+  late final _ob_engine_project_name = _ob_engine_project_namePtr
+      .asFunction<ffi.Pointer<ffi.Char> Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_project_set_name(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+  ) {
+    return ob_status.fromValue(_ob_engine_project_set_name(engine, utf8_name));
+  }
+
+  late final _ob_engine_project_set_namePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_project_set_name');
+  late final _ob_engine_project_set_name = _ob_engine_project_set_namePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+      >();
+
+  int ob_engine_project_is_modified(ffi.Pointer<ob_engine> engine) {
+    return _ob_engine_project_is_modified(engine);
+  }
+
+  late final _ob_engine_project_is_modifiedPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+        'ob_engine_project_is_modified',
+      );
+  late final _ob_engine_project_is_modified = _ob_engine_project_is_modifiedPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
 }
 
 enum ob_status {
@@ -3216,11 +3274,11 @@ final class ob_clip_info extends ffi.Struct {
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 10;
+const int OB_ABI_VERSION_MINOR = 11;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 68096;
+const int OB_ABI_VERSION_PACKED = 68352;
 
 const int OB_SNAPSHOT_VERSION = 1;
 

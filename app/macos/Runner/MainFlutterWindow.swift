@@ -3,6 +3,7 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow, NSDraggingDestination {
   private var samplePackBridge: SamplePackBridge?
+  private var projectFileBridge: ProjectFileBridge?
 
   override func awakeFromNib() {
     // The app draws its own top bar, exactly as the design screens do: the
@@ -23,6 +24,10 @@ class MainFlutterWindow: NSWindow, NSDraggingDestination {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     samplePackBridge = SamplePackBridge(
+      messenger: flutterViewController.engine.binaryMessenger,
+      window: self
+    )
+    projectFileBridge = ProjectFileBridge(
       messenger: flutterViewController.engine.binaryMessenger,
       window: self
     )

@@ -30,6 +30,7 @@
 		A20000010000000000000001 /* SamplePackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000010000000000000001 /* SamplePackStore.swift */; };
 		A20000020000000000000002 /* SamplePackFolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000002 /* SamplePackFolderPicker.swift */; };
 		A20000030000000000000003 /* SamplePackBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000030000000000000003 /* SamplePackBridge.swift */; };
+		A20000040000000000000004 /* ProjectFileBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000040000000000000004 /* ProjectFileBridge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +77,7 @@
 		A10000010000000000000001 /* SamplePackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamplePackStore.swift; sourceTree = "<group>"; };
 		A10000020000000000000002 /* SamplePackFolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamplePackFolderPicker.swift; sourceTree = "<group>"; };
 		A10000030000000000000003 /* SamplePackBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SamplePackBridge.swift; sourceTree = "<group>"; };
+		A10000040000000000000004 /* ProjectFileBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFileBridge.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
@@ -175,9 +177,18 @@
 			path = SamplePacks;
 			sourceTree = "<group>";
 		};
+		A30200000000000000000001 /* Projects */ = {
+			isa = PBXGroup;
+			children = (
+				A10000040000000000000004 /* ProjectFileBridge.swift */,
+			);
+			path = Projects;
+			sourceTree = "<group>";
+		};
 		A30000000000000000000001 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				A30200000000000000000001 /* Projects */,
 				A30100000000000000000001 /* SamplePacks */,
 			);
 			path = Features;
@@ -390,6 +401,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
+				A20000040000000000000004 /* ProjectFileBridge.swift in Sources */,
 				A20000030000000000000003 /* SamplePackBridge.swift in Sources */,
 				A20000020000000000000002 /* SamplePackFolderPicker.swift in Sources */,
 				A20000010000000000000001 /* SamplePackStore.swift in Sources */,

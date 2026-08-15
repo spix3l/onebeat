@@ -255,6 +255,62 @@ TEST_SUITE("engine") {
     CHECK(second.peak() == doctest::Approx(0.25F).epsilon(0.02));
   }
 
+  // Hosting used to take over whichever channel was selected, so loading a
+  // plug-in on a new lane replaced the voice of the lane the user had been
+  // working on: the hi-hat started playing the piano.
+  TEST_CASE("A hosted plug-in takes its own channel, not the selected one") {
+    const auto plateau = [](float level) {
+      auto data = std::make_unique<onebeat::core::SampleData>();
+      data->channels = 1;
+      data->sample_rate = 48000.0;
+      data->frames = 48000;
+      data->name = "plateau";
+      data->samples.assign(static_cast<size_t>(data->frames), level);
+      return data;
+    };
+
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    // Two sample lanes and a third lane for the plug-in.
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(3);
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+    engine->channelSampler(0).setSample(plateau(0.5F));
+    engine->channelSampler(1).setSample(plateau(0.25F));
+    engine->channelSampler(0).collectRetiredSamples(false);
+    engine->channelSampler(1).collectRetiredSamples(false);
+
+    // Channel 1 is the selected lane — the one the old code would have taken.
+    engine->setAuditionChannel(1);
+    std::string error;
+    REQUIRE(engine->installMissingInstrument("Piano", {}, 2, error));
+    CHECK(engine->hasHostedInstrument(2));
+    CHECK_FALSE(engine->hasHostedInstrument(1));
+
+    onebeat::core::ScheduleBuilder builder;
+    const auto beat = static_cast<int64_t>(48000.0 / 2.0);  // 120 BPM
+    builder.addNote(1, onebeat::core::Sampler::RootNote, 1.0F, 0, beat / 2);
+    engine->publishSchedule(builder.setLengthFrames(beat * 2).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    // Channel 1 still plays its own sample. Hosted onto channel 1 instead, this
+    // would be silence — the plug-in stand-in produces none.
+    const auto hosted_elsewhere = renderOffline(*engine, 12000, 128);
+    CHECK(hosted_elsewhere.peak() == doctest::Approx(0.25F).epsilon(0.02));
+
+    // Deleting the first lane renumbers the rack; the plug-in follows its
+    // instrument down to channel 1 rather than staying on an index.
+    std::vector<int> destination(onebeat::core::MaxRackChannels);
+    for (size_t channel = 0; channel < destination.size(); ++channel) {
+      destination[channel] = static_cast<int>(channel);
+    }
+    destination[2] = 1;
+    REQUIRE(engine->remapHostedInstruments(destination, error));
+    CHECK(engine->hasHostedInstrument(1));
+    CHECK_FALSE(engine->hasHostedInstrument(2));
+  }
+
   TEST_CASE("An audio-start event plays the loaded sample as a full one-shot") {
     auto engine = makeOfflineEngine();
     REQUIRE(engine != nullptr);

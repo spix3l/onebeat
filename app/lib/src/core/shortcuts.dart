@@ -72,6 +72,24 @@ class CommandPaletteIntent extends Intent {
   const CommandPaletteIntent();
 }
 
+/// Project files (OB-3-05 §4). Structural like transport and undo — the shell
+/// owns the project, so these are intents rather than editor-dispatched ids.
+class SaveProjectIntent extends Intent {
+  const SaveProjectIntent();
+}
+
+class SaveProjectAsIntent extends Intent {
+  const SaveProjectAsIntent();
+}
+
+class OpenProjectIntent extends Intent {
+  const OpenProjectIntent();
+}
+
+class RenameProjectIntent extends Intent {
+  const RenameProjectIntent();
+}
+
 /// Escape. Cancels an in-flight drag, then closes an overlay, then clears a
 /// selection — whichever applies first. Never leaves the user in a state they
 /// cannot see how to get out of.

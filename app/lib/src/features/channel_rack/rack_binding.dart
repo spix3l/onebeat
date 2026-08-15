@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/engine_controller.dart' as core;
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
+import '../../core/snap_grid.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/popover_menu.dart';
 import '../browser/sample_pack.dart';
@@ -523,6 +524,27 @@ class _RackBindingState extends State<RackBinding>
                       ],
                     ),
                     ObMenuSectionVm(
+                      header: 'Step actions',
+                      separated: true,
+                      rows: <ObMenuRowVm>[
+                        ObMenuRowVm(
+                          label: 'Add note every 2 steps',
+                          icon: ObKitGlyphKind.plus,
+                          shortcut: '2',
+                        ),
+                        ObMenuRowVm(
+                          label: 'Add note every 4 steps',
+                          icon: ObKitGlyphKind.plus,
+                          shortcut: '4',
+                        ),
+                        ObMenuRowVm(
+                          label: 'Add note every 8 steps',
+                          icon: ObKitGlyphKind.plus,
+                          shortcut: '8',
+                        ),
+                      ],
+                    ),
+                    ObMenuSectionVm(
                       separated: true,
                       rows: <ObMenuRowVm>[
                         ObMenuRowVm(
@@ -542,6 +564,12 @@ class _RackBindingState extends State<RackBinding>
                     case 1:
                       _duplicateInstrument(instrumentId);
                     case 2:
+                      _store.addNotesEvery(instrumentId, 2);
+                    case 3:
+                      _store.addNotesEvery(instrumentId, 4);
+                    case 4:
+                      _store.addNotesEvery(instrumentId, 8);
+                    case 5:
                       _deleteInstrument(instrumentId);
                   }
                 },
@@ -600,15 +628,12 @@ class _RackBindingState extends State<RackBinding>
       onGroup: (String val) => setState(() => _selectedGroup = val),
       onSnap: (String val) {
         setState(() => _selectedSnap = val);
-        final int ticks = switch (val) {
-          '1/4' => 960,
-          '1/8' => 480,
-          '1/16' => 240,
-          '1/32' => 120,
-          _ => 240,
-        };
+        final SnapGridChoice choice = SnapGridChoice.all.firstWhere(
+          (SnapGridChoice value) => value.label == val,
+          orElse: () => SnapGridChoice.all[4],
+        );
         if (_store.selectedInstrumentId != null) {
-          _store.setGrid(_store.selectedInstrumentId!, ticks);
+          _store.setGrid(_store.selectedInstrumentId!, choice.ticks);
         }
       },
       onSteps: (int steps) => _store.setLength(steps),

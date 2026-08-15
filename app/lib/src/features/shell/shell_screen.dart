@@ -27,6 +27,7 @@ class ShellScreen extends StatelessWidget {
     this.onSearchTap,
     this.onExport,
     this.onBrowserTap,
+    this.onBrowserDoubleTap,
     this.onBrowserToggle,
     this.onBrowserSearchTap,
     this.onBrowserSearchChanged,
@@ -50,6 +51,7 @@ class ShellScreen extends StatelessWidget {
   final VoidCallback? onSearchTap;
   final VoidCallback? onExport;
   final ValueChanged<String>? onBrowserTap;
+  final ValueChanged<String>? onBrowserDoubleTap;
   final ValueChanged<String>? onBrowserToggle;
   final VoidCallback? onBrowserSearchTap;
   final ValueChanged<String>? onBrowserSearchChanged;
@@ -88,6 +90,7 @@ class ShellScreen extends StatelessWidget {
                   _ResizableBrowserPanel(
                     vm: vm.browser!,
                     onTap: onBrowserTap,
+                    onDoubleTap: onBrowserDoubleTap,
                     onToggle: onBrowserToggle,
                     onSearchTap: onBrowserSearchTap,
                     onSearchChanged: onBrowserSearchChanged,
@@ -112,9 +115,8 @@ class ShellScreen extends StatelessWidget {
 
     return ColoredBox(
       color: tokens.color.surfaceSunken,
-      child: overlay == null
-          ? frame
-          : Stack(children: <Widget>[frame, overlay]),
+      child:
+          overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
     );
   }
 }
@@ -127,6 +129,7 @@ class _ResizableBrowserPanel extends StatefulWidget {
     required this.vm,
     required this.width,
     this.onTap,
+    this.onDoubleTap,
     this.onToggle,
     this.onSearchTap,
     this.onSearchChanged,
@@ -138,6 +141,7 @@ class _ResizableBrowserPanel extends StatefulWidget {
   final ObBrowserPanelVm vm;
   final double width;
   final ValueChanged<String>? onTap;
+  final ValueChanged<String>? onDoubleTap;
   final ValueChanged<String>? onToggle;
   final VoidCallback? onSearchTap;
   final ValueChanged<String>? onSearchChanged;
@@ -188,6 +192,7 @@ class _ResizableBrowserPanelState extends State<_ResizableBrowserPanel> {
               vm: widget.vm,
               width: _width,
               onTap: widget.onTap,
+              onDoubleTap: widget.onDoubleTap,
               onToggle: widget.onToggle,
               onSearchTap: widget.onSearchTap,
               onSearchChanged: widget.onSearchChanged,

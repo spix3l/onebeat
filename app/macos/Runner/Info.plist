@@ -32,5 +32,48 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- The `.obt` project bundle (ADR-004 §2). It is a directory, and
+	     LSTypeIsPackage is what makes Finder treat it as one document:
+	     double-click opens it, dragging moves it whole, and Show Package
+	     Contents still reaches project.json. Without this key the open panel
+	     walks into the bundle and the user picks a file inside it. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>dev.onebeat.project</string>
+			<key>UTTypeDescription</key>
+			<string>OneBeat Project</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>obt</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>OneBeat Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSTypeIsPackage</key>
+			<true/>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>dev.onebeat.project</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

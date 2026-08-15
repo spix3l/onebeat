@@ -42,6 +42,55 @@ class _Body extends StatelessWidget {
   }
 }
 
+/// The same body, scrolled so a note that starts at tick 0 straddles the left
+/// edge. The note's visible sliver has to stop at the key column — the canvas
+/// clips, never draws under the keys.
+class _ScrolledBody extends StatelessWidget {
+  const _ScrolledBody({super.key});
+
+  /// Two bars in, so everything before tick 3840 is off the left edge.
+  static const PrViewport viewport = PrViewport(
+    ticksPerPx: demoTicksPerPx,
+    rowHeight: 14,
+    firstVisibleTick: 3840,
+    topMidiNote: demoTopMidiNote,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    // A sixteen-bar note at tick 0: on screen it is a sliver at the very left
+    // of the canvas, exactly the note that used to paint over the keys.
+    final PianoRollVm vm = PianoRollVm(
+      notes: <PrNoteVm>[
+        const PrNoteVm(id: 900, startTick: 0, lengthTicks: 960 * 16, midiNote: 70),
+        ...demoNotes,
+      ],
+      viewport: viewport,
+    );
+    return Column(
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            SizedBox(width: tokens.size.prKeyColumnWidth),
+            const Expanded(child: PrBarRuler(viewport: viewport)),
+          ],
+        ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const PrKeyColumn(viewport: viewport),
+              Expanded(child: PrNoteGrid(vm: vm)),
+            ],
+          ),
+        ),
+        PrVelocityLane(vm: vm),
+      ],
+    );
+  }
+}
+
 void main() {
   setUpAll(loadAppFonts);
 
@@ -55,6 +104,24 @@ void main() {
     await expectLater(
       find.byKey(const Key('body')),
       uiGolden('piano_roll_body'),
+    );
+  });
+
+  testWidgets('a note that starts before the visible area is clipped at the key column', (
+    WidgetTester tester,
+  ) async {
+    await pumpUi(
+      tester,
+      const _ScrolledBody(key: Key('body-scrolled')),
+      size: const Size(1600, 900),
+    );
+    await tester.pumpAndSettle();
+    // The sixteen-bar note at tick 0 pokes into view from the left; the golden
+    // records it stopping cleanly at the key column instead of painting over
+    // the keys.
+    await expectLater(
+      find.byKey(const Key('body-scrolled')),
+      uiGolden('piano_roll_body_scrolled'),
     );
   });
 

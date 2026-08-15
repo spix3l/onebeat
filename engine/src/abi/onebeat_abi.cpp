@@ -103,8 +103,14 @@ struct ob_engine {
   std::string undo_name_cache;
   std::string redo_name_cache;
   // Where the project last came from or went to. Kept so that a save can carry
-  // existing plug-in sidecars across rather than dropping them (OB-3-05).
+  // existing plug-in sidecars across rather than dropping them (OB-3-05), and
+  // so ⌘S knows whether it has a destination at all.
   std::string project_path;
+  // Canonical bytes of the project at the last save or open, hashed. The dirty
+  // flag compares against this rather than counting edits: undoing back to the
+  // last save leaves nothing to write, and a counter would still say otherwise.
+  std::string saved_project_hash;
+  std::string project_name_cache;
   // Parsed-but-unmodelled fields from a project written by a newer version.
   // Round-tripped verbatim so opening and saving never silently deletes them.
   onebeat::model::Residue residue;
@@ -121,9 +127,40 @@ struct ob_engine {
   std::string instance_vendor;
   std::string instance_path;
   std::vector<uint8_t> instance_state;
+
+  /* Which plug-in each instrument has hosted, and on which engine channel.
+   *
+   * A hosted plug-in belongs to its instrument, not to whatever lane happened to
+   * be selected when it was loaded: a rack of samples plus one instrument plays
+   * both, and adding the instrument does not take a sampler's voice away. The
+   * channel recorded here is the dense index syncChannels assigns, so it moves
+   * whenever removing an instrument renumbers the lanes after it. */
+  struct HostedSlot {
+    int channel = -1;
+    std::string path;
+    std::string plugin_id;
+    /* What the plug-in calls itself, read once it was hosted. */
+    std::string name;
+    /* The bundle was not on disk, so a silent stand-in holds the state instead
+     * (session load's "missing plug-in" case). */
+    bool missing = false;
+    /* Hosting was tried and failed. Kept so a broken plug-in is not respawned on
+     * every subsequent model edit; cleared when the instrument's plug-in ref
+     * changes. */
+    bool failed = false;
+  };
+  std::map<onebeat::model::InstrumentId, HostedSlot> hosted;
 };
 
 namespace {
+
+// The project's canonical bytes, hashed. Cheap enough to be asked for by the
+// UI a few times a second, and exact — two projects with the same hash write
+// the same file, which is the only definition of "saved" that does not lie.
+std::string projectHash(const ob_engine& handle) {
+  return onebeat::model::sha256Hex(
+      onebeat::model::writeProjectJson(handle.project, handle.residue));
+}
 
 // Created on first use rather than in ob_engine_create, so an engine that never
 // hosts a plugin — every Stage 1 test, the offline renderer, the devtool's
@@ -260,6 +297,148 @@ void syncChannels(ob_engine& handle) {
   handle.engine->setChannels(std::move(channels));
 }
 
+/* The dense channel an instrument's voice sounds on: its position in
+ * `project.instruments()`, which is the order syncChannels and the flattener
+ * both walk. -1 when the instrument is not in the project. */
+int channelIndexOf(const ob_engine& handle, const onebeat::model::InstrumentId& id) {
+  int index = 0;
+  for (const auto& [other, instrument] : handle.project.instruments()) {
+    (void)instrument;
+    if (other == id) return index;
+    ++index;
+  }
+  return -1;
+}
+
+/* An instrument that sounds through a hosted plug-in rather than through a
+ * channel's built-in sampler: it names a plug-in, and that plug-in is not the
+ * sample player every WAV lane uses. */
+bool isHostedInstrument(const onebeat::model::Instrument& instrument) {
+  return !instrument.plugin.id.empty() && !isSampleInstrument(instrument);
+}
+
+/* Brings the hosted plug-ins in line with the model's instruments.
+ *
+ * Hosting belongs to an instrument, not to a selection and not to a channel
+ * number. Adding an instrument must therefore not take the voice of whichever
+ * lane happened to be selected — the bug that made a new plug-in play out of
+ * the last sample's channel — and deleting a lane must carry the plug-ins after
+ * it down to their new indices rather than leave them pointing at a neighbour.
+ *
+ * Runs from publishModel, so every path that can change the rack (add, replace,
+ * delete, undo, open) reconciles through here and nowhere else. */
+void syncHostedInstruments(ob_engine& handle) {
+  std::vector<int> destination(static_cast<size_t>(onebeat::core::MaxRackChannels));
+  for (size_t channel = 0; channel < destination.size(); ++channel) {
+    destination[channel] = static_cast<int>(channel);
+  }
+
+  /* What is hosted already: keep it where its instrument now sits, or drop it
+   * when the instrument is gone or has been given a different plug-in. */
+  std::vector<onebeat::model::InstrumentId> dropped;
+  for (auto& [id, slot] : handle.hosted) {
+    const onebeat::model::Instrument* instrument = handle.project.findInstrument(id);
+    const bool keeps_plugin = instrument != nullptr && isHostedInstrument(*instrument) &&
+                              instrument->plugin.id == slot.plugin_id &&
+                              instrument->plugin.path_hint == slot.path;
+    const int index = keeps_plugin ? channelIndexOf(handle, id) : -1;
+    const bool usable = index >= 0 && index < onebeat::core::MaxRackChannels;
+    if (slot.channel >= 0 && slot.channel < static_cast<int>(destination.size())) {
+      destination[static_cast<size_t>(slot.channel)] = usable ? index : -1;
+    }
+    if (!usable) {
+      dropped.push_back(id);
+      continue;
+    }
+    slot.channel = index;
+  }
+  for (const onebeat::model::InstrumentId& id : dropped) handle.hosted.erase(id);
+  std::string error;
+  (void)handle.engine->remapHostedInstruments(destination, error);
+
+  /* What should be hosted and is not. Collected first: hosting reads the
+   * instrument map, and the naming fix-up below writes to it. */
+  std::vector<std::pair<onebeat::model::InstrumentId, int>> to_host;
+  int index = 0;
+  for (const auto& [id, instrument] : handle.project.instruments()) {
+    const int channel = index++;
+    if (!isHostedInstrument(instrument)) continue;
+    if (handle.hosted.count(id) != 0) continue;
+    if (channel >= onebeat::core::MaxRackChannels) continue;
+    to_host.emplace_back(id, channel);
+  }
+
+  for (const auto& [id, channel] : to_host) {
+    const onebeat::model::Instrument* instrument = handle.project.findInstrument(id);
+    if (instrument == nullptr) continue;
+    ob_engine::HostedSlot slot;
+    slot.channel = channel;
+    slot.path = instrument->plugin.path_hint;
+    slot.plugin_id = instrument->plugin.id;
+    slot.missing = slot.path.empty() || !std::filesystem::exists(slot.path);
+    std::string host_error;
+    if (slot.missing) {
+      /* The bundle is not on this machine. A silent stand-in keeps the lane, its
+       * notes and its saved state rather than dropping them. */
+      slot.failed = !handle.engine->installMissingInstrument(instrument->plugin.name, {}, channel,
+                                                             host_error);
+    } else {
+      slot.failed = !handle.engine->createSandboxedInstrument(
+          slot.path, slot.plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(),
+          channel, host_error);
+    }
+    if (!slot.failed) {
+      slot.name = handle.engine->channelInstrument(channel).name().text();
+    }
+    /* A lane added straight from a bundle path — the integration driver, a
+     * project written elsewhere — has only the plug-in ID to go on. Now that the
+     * plug-in has introspected, give the lane the name it calls itself. A
+     * consequence of hosting rather than an edit, so it stays out of the undo
+     * history for the same reason growPatternToFit does. */
+    if (!slot.name.empty() && instrument->plugin.name == instrument->plugin.id) {
+      const std::string name = slot.name;
+      const bool rename_lane = instrument->name == instrument->plugin.id;
+      handle.project.updateInstrument(id, onebeat::model::ChangeField::Name,
+                                      [&name, rename_lane](onebeat::model::Instrument& value) {
+                                        value.plugin.name = name;
+                                        if (rename_lane) value.name = name;
+                                      });
+    }
+    handle.hosted.emplace(id, std::move(slot));
+  }
+}
+
+/* Which channel the single-instance ABI surface — parameters, the editor, the
+ * scratch session — talks to: the selected instrument's. Channel 0 is the
+ * fallback for a scratch instance that has no instrument behind it at all. */
+int instanceChannel(const ob_engine& handle) {
+  if (!handle.selected_instrument.has_value()) return 0;
+  const int channel = channelIndexOf(handle, *handle.selected_instrument);
+  return channel < 0 ? 0 : channel;
+}
+
+/* Refreshes what ob_engine_instance_at and the parameter calls report: the
+ * selected instrument's plug-in. The instance surface is a view of the
+ * selection, not a second place where hosting is decided. */
+void refreshInstanceView(ob_engine& handle) {
+  handle.has_instance = false;
+  handle.instance_missing = false;
+  if (!handle.selected_instrument.has_value()) return;
+  const onebeat::model::Instrument* instrument =
+      handle.project.findInstrument(*handle.selected_instrument);
+  if (instrument == nullptr) return;
+  handle.instance_path = instrument->plugin.path_hint;
+  handle.instance_plugin_id = instrument->plugin.id;
+  handle.instance_name = instrument->plugin.name;
+  handle.instance_vendor = instrument->plugin.vendor;
+  handle.instance_format = static_cast<uint32_t>(instrument->plugin.format);
+  const auto hosted = handle.hosted.find(*handle.selected_instrument);
+  if (hosted == handle.hosted.end() || hosted->second.failed) return;
+  if (!hosted->second.name.empty()) handle.instance_name = hosted->second.name;
+  handle.has_instance = true;
+  handle.instance_missing = hosted->second.missing;
+}
+
 void publishModel(ob_engine& handle) {
   /* Before the flatten, so the schedule is built from the grown pattern rather
    * than from the one that was too short to hold the edit just made. */
@@ -273,6 +452,10 @@ void publishModel(ob_engine& handle) {
    * instrument, loading a sample, gain, pan, mute, reordering — reaches the
    * engine through here, for the same reason the schedule does. */
   syncChannels(handle);
+  /* And every edit that can change which lane a plug-in belongs to reconciles
+   * hosting here, for the same reason. */
+  syncHostedInstruments(handle);
+  refreshInstanceView(handle);
   if (flattened.schedule != nullptr) {
     handle.engine->publishSchedule(std::move(flattened.schedule));
   }
@@ -537,7 +720,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.10.0";
+  return "1.11.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -601,6 +784,9 @@ ob_status ob_engine_create(const ob_engine_config* config, ob_engine** out_engin
     if (!initialiseRack(*handle)) {
       return fail(OB_ERR_INTERNAL, "The default pattern could not be created.");
     }
+    // The empty project the app opens with is not a project with unsaved
+    // changes: closing it must not ask to save a rack nobody touched.
+    handle->saved_project_hash = projectHash(*handle);
     *out_engine = handle.release();
     g_last_error.clear();
     return OB_OK;
@@ -892,42 +1078,50 @@ ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path
     return fail(OB_ERR_INVALID_ARGUMENT, "A plug-in bundle path and ID are required.");
   }
   try {
-    std::string error;
-    if (!engine->engine->createSandboxedInstrument(
-            utf8_bundle_path, utf8_plugin_id,
-            onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
-      return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
-    }
-    engine->has_instance = true;
-    engine->instance_missing = false;
-    engine->instance_path = utf8_bundle_path;
-    engine->instance_plugin_id = utf8_plugin_id;
-    engine->instance_name = engine->engine->instrument().name().text();
-    engine->instance_vendor.clear();
+    /* The instrument comes first and hosting follows it. The plug-in then lands
+     * on the lane it owns instead of on whichever lane was selected — a rack of
+     * samples keeps every one of its voices when an instrument is added. */
+    onebeat::model::PluginRef plugin;
+    plugin.format = onebeat::model::PluginFormat::Clap;
+    plugin.id = utf8_plugin_id;
+    plugin.name = utf8_plugin_id;
+    plugin.path_hint = utf8_bundle_path;
     for (const auto& row : pluginLibrary(*engine).plugins()) {
-      if (row.path.text() == engine->instance_path && row.id.text() == engine->instance_plugin_id) {
-        engine->instance_vendor = row.vendor.text();
-        engine->instance_format = static_cast<uint32_t>(row.format);
+      if (row.path.text() == plugin.path_hint && row.id.text() == plugin.id) {
+        plugin.format = row.format;
+        plugin.name = row.name.text();
+        plugin.vendor = row.vendor.text();
         break;
       }
     }
     engine->instance_state.clear();
-    onebeat::model::PluginRef plugin;
-    plugin.format = static_cast<onebeat::model::PluginFormat>(engine->instance_format);
-    plugin.id = engine->instance_plugin_id;
-    plugin.name = engine->instance_name;
-    plugin.vendor = engine->instance_vendor;
-    plugin.path_hint = engine->instance_path;
     if (executeModel(*engine, onebeat::model::addInstrument(engine->project, plugin),
                      "Could not add the instrument to the project.") != OB_OK) {
       return fail(OB_ERR_INTERNAL, "Could not add the instrument to the project.");
     }
+    /* executeModel published the model, and publishing is what hosts the
+     * plug-in (syncHostedInstruments). */
+    std::optional<onebeat::model::InstrumentId> added;
     for (const auto& [id, instrument] : engine->project.instruments()) {
       if (instrument.order == static_cast<int32_t>(engine->project.instruments().size() - 1)) {
-        engine->selected_instrument = id;
+        added = id;
         break;
       }
     }
+    if (!added.has_value()) {
+      return fail(OB_ERR_INTERNAL, "Could not add the instrument to the project.");
+    }
+    const auto hosted = engine->hosted.find(*added);
+    if (hosted == engine->hosted.end() || hosted->second.failed) {
+      /* Nothing was added as far as the user is concerned, so the failed lane
+       * goes back out rather than sitting silent in the rack. */
+      (void)engine->commands.undo();
+      publishModel(*engine);
+      return fail(OB_ERR_FILE_UNSUPPORTED, "The plug-in could not be hosted.");
+    }
+    engine->selected_instrument = added;
+    refreshInstanceView(*engine);
+    syncChannels(*engine);
     g_last_error.clear();
     return OB_OK;
   } catch (const std::bad_alloc&) {
@@ -942,18 +1136,23 @@ ob_status ob_engine_instance_remove(ob_engine* engine, uint32_t instance_id) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
   }
   try {
-    std::string error;
-    if (!engine->engine->restoreBuiltinInstrument(error))
-      return fail(OB_ERR_INTERNAL, error.c_str());
-    engine->has_instance = false;
-    engine->instance_missing = false;
     engine->instance_state.clear();
     if (engine->selected_instrument.has_value()) {
+      /* Removing the instrument is what un-hosts the plug-in: publishing the
+       * model reconciles hosting, here as everywhere else. */
       if (executeModel(*engine, onebeat::model::removeInstrument(*engine->selected_instrument),
                        "Could not remove the instrument from the project.") != OB_OK) {
         return fail(OB_ERR_INTERNAL, "Could not remove the instrument from the project.");
       }
       engine->selected_instrument = std::nullopt;
+      refreshInstanceView(*engine);
+    } else {
+      /* A scratch instance with no instrument behind it (session load). */
+      std::string error;
+      if (!engine->engine->restoreBuiltinInstrument(instanceChannel(*engine), error))
+        return fail(OB_ERR_INTERNAL, error.c_str());
+      engine->has_instance = false;
+      engine->instance_missing = false;
     }
     return OB_OK;
   } catch (const std::exception& exception) {
@@ -973,11 +1172,12 @@ ob_status ob_engine_instance_at(ob_engine* engine, int32_t index, ob_instance_in
   out_info->struct_size = sizeof(*out_info);
   out_info->instance_id = engine->instance_id;
   out_info->format = engine->instance_format;
+  const int channel = instanceChannel(*engine);
   out_info->flags = engine->instance_missing ? OB_INSTANCE_FLAG_MISSING : 0U;
-  if (engine->engine->hostedHasEditor()) out_info->flags |= OB_INSTANCE_FLAG_HAS_EDITOR;
-  if (!engine->instance_missing && !engine->engine->hostedHealthy())
+  if (engine->engine->hostedHasEditor(channel)) out_info->flags |= OB_INSTANCE_FLAG_HAS_EDITOR;
+  if (!engine->instance_missing && !engine->engine->hostedHealthy(channel))
     out_info->flags |= OB_INSTANCE_FLAG_NEEDS_RESTART;
-  out_info->param_count = engine->engine->hostedParamCount();
+  out_info->param_count = engine->engine->hostedParamCount(channel);
   copyText(out_info->plugin_id, sizeof(out_info->plugin_id), engine->instance_plugin_id.c_str());
   copyText(out_info->name, sizeof(out_info->name), engine->instance_name.c_str());
   copyText(out_info->vendor, sizeof(out_info->vendor), engine->instance_vendor.c_str());
@@ -991,8 +1191,9 @@ ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int32_t in
       instance_id != engine->instance_id || index < 0) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Plug-in parameter index is out of range.");
   }
+  const int channel = instanceChannel(*engine);
   onebeat::plugin::ParamInfo info;
-  if (!engine->engine->hostedParamInfo(static_cast<uint32_t>(index), info)) {
+  if (!engine->engine->hostedParamInfo(channel, static_cast<uint32_t>(index), info)) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Plug-in parameter index is out of range.");
   }
   std::memset(out_info, 0, sizeof(*out_info));
@@ -1003,11 +1204,11 @@ ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int32_t in
   out_info->min_value = info.min_value;
   out_info->max_value = info.max_value;
   out_info->default_value = info.default_value;
-  engine->engine->hostedParamValue(info.id, out_info->value);
+  engine->engine->hostedParamValue(channel, info.id, out_info->value);
   copyText(out_info->name, sizeof(out_info->name), info.name.text());
   copyText(out_info->module, sizeof(out_info->module), info.module.text());
-  if (!engine->engine->instrument().paramValueToText(info.id, out_info->value, out_info->display,
-                                                     sizeof(out_info->display))) {
+  if (!engine->engine->channelInstrument(channel).paramValueToText(
+          info.id, out_info->value, out_info->display, sizeof(out_info->display))) {
     std::snprintf(out_info->display, sizeof(out_info->display), "%.3f", out_info->value);
   }
   return OB_OK;
@@ -1016,7 +1217,7 @@ ob_status ob_engine_param_at(ob_engine* engine, uint32_t instance_id, int32_t in
 ob_status ob_engine_instance_editor_open(ob_engine* engine, uint32_t instance_id) {
   if (engine == nullptr || !engine->has_instance || instance_id != engine->instance_id)
     return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
-  return engine->engine->openHostedEditor()
+  return engine->engine->openHostedEditor(instanceChannel(*engine))
              ? OB_OK
              : fail(OB_ERR_FILE_UNSUPPORTED, "This plug-in has no native editor.");
 }
@@ -1024,7 +1225,7 @@ ob_status ob_engine_instance_editor_open(ob_engine* engine, uint32_t instance_id
 ob_status ob_engine_instance_editor_close(ob_engine* engine, uint32_t instance_id) {
   if (engine == nullptr || !engine->has_instance || instance_id != engine->instance_id)
     return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance does not exist.");
-  engine->engine->closeHostedEditor();
+  engine->engine->closeHostedEditor(instanceChannel(*engine));
   return OB_OK;
 }
 
@@ -1032,8 +1233,9 @@ ob_status ob_engine_instance_restart(ob_engine* engine, uint32_t instance_id) {
   if (engine == nullptr || !engine->has_instance || engine->instance_missing ||
       instance_id != engine->instance_id)
     return fail(OB_ERR_INVALID_ARGUMENT, "The plug-in instance cannot be restarted.");
-  if (engine->engine->restartHostedInstrument()) return OB_OK;
-  const std::string detail = engine->engine->hostedError();
+  const int channel = instanceChannel(*engine);
+  if (engine->engine->restartHostedInstrument(channel)) return OB_OK;
+  const std::string detail = engine->engine->hostedError(channel);
   return fail(OB_ERR_INTERNAL,
               detail.empty() ? "The plug-in helper could not be restarted." : detail.c_str());
 }
@@ -1043,10 +1245,11 @@ ob_status ob_engine_session_save(ob_engine* engine, const char* utf8_path) {
     return fail(OB_ERR_INVALID_ARGUMENT, "A scratch session path is required.");
   }
   try {
+    const int channel = instanceChannel(*engine);
     std::vector<uint8_t> state = engine->instance_state;
     if (engine->has_instance && !engine->instance_missing &&
-        !engine->engine->saveHostedState(state)) {
-      const std::string detail = engine->engine->hostedError();
+        !engine->engine->saveHostedState(channel, state)) {
+      const std::string detail = engine->engine->hostedError(channel);
       return fail(OB_ERR_INTERNAL,
                   detail.empty() ? "The plug-in state could not be saved." : detail.c_str());
     }
@@ -1112,8 +1315,12 @@ ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path) {
       file.read(reinterpret_cast<char*>(state.data()), static_cast<std::streamsize>(state.size()));
     if (!file) return fail(OB_ERR_FILE_UNSUPPORTED, "The scratch session is truncated.");
     std::string error;
+    /* The scratch session restores one plug-in onto the selected instrument's
+     * channel — it predates per-instrument hosting and stays a crash-recovery
+     * path for the current selection rather than a second project format. */
+    const int channel = instanceChannel(*engine);
     if (present == 0) {
-      if (engine->has_instance && !engine->engine->restoreBuiltinInstrument(error))
+      if (engine->has_instance && !engine->engine->restoreBuiltinInstrument(channel, error))
         return fail(OB_ERR_INTERNAL, error.c_str());
       engine->has_instance = false;
       return OB_OK;
@@ -1121,13 +1328,24 @@ ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path) {
     const bool available = std::filesystem::exists(path);
     if (available) {
       if (!engine->engine->createSandboxedInstrument(
-              path, plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(),
+              path, plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), channel,
               error) ||
-          !engine->engine->loadHostedState(state))
+          !engine->engine->loadHostedState(channel, state))
         return fail(OB_ERR_FILE_UNSUPPORTED,
                     error.empty() ? "The saved plug-in could not be restored." : error.c_str());
-    } else if (!engine->engine->installMissingInstrument(name, state, error)) {
+    } else if (!engine->engine->installMissingInstrument(name, state, channel, error)) {
       return fail(OB_ERR_INTERNAL, error.c_str());
+    }
+    if (engine->selected_instrument.has_value()) {
+      /* Keep the reconciler's view in step with what was just hosted, so the
+       * next model publish does not tear the restored plug-in back out. */
+      ob_engine::HostedSlot slot;
+      slot.channel = channel;
+      slot.path = path;
+      slot.plugin_id = plugin_id;
+      slot.name = name;
+      slot.missing = !available;
+      engine->hosted[*engine->selected_instrument] = std::move(slot);
     }
     engine->has_instance = true;
     engine->instance_missing = !available;
@@ -1190,42 +1408,16 @@ ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instru
   if (instrument == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   if (engine->selected_instrument == id) return OB_OK;
   try {
-    if (isSampleInstrument(*instrument)) {
-      std::string error;
-      if (!engine->engine->restoreBuiltinInstrument(error)) {
-        return fail(OB_ERR_INTERNAL, error.c_str());
-      }
-      /* No sample load here any more. The channel already holds its own sample
-       * — that is what the rack is — and reloading on selection is exactly the
-       * bug that made every lane play whichever sample was touched last. */
-      engine->has_instance = false;
-      engine->instance_missing = false;
-      engine->instance_path = instrument->plugin.path_hint;
-      engine->instance_plugin_id = kSamplePluginId;
-      engine->instance_name = instrument->plugin.name;
-      engine->instance_vendor = instrument->plugin.vendor;
-      engine->instance_format = static_cast<uint32_t>(instrument->plugin.format);
-      engine->selected_instrument = *id;
-      /* Moves the audition voice onto the newly selected channel. */
-      syncChannels(*engine);
-      g_last_error.clear();
-      return OB_OK;
-    }
-
-    std::string error;
-    if (!engine->engine->createSandboxedInstrument(
-            instrument->plugin.path_hint, instrument->plugin.id,
-            onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
-      return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
-    }
-    engine->has_instance = true;
-    engine->instance_missing = false;
-    engine->instance_path = instrument->plugin.path_hint;
-    engine->instance_plugin_id = instrument->plugin.id;
-    engine->instance_name = instrument->plugin.name;
-    engine->instance_vendor = instrument->plugin.vendor;
-    engine->instance_format = static_cast<uint32_t>(instrument->plugin.format);
+    /* Selection no longer hosts or un-hosts anything. Every instrument already
+     * holds its own voice — a sample on its channel's sampler, a plug-in on the
+     * channel it was loaded onto — and tearing that down on selection is what
+     * silenced the other lanes when a plug-in lane was picked.
+     *
+     * No sample load here either, for the same reason: reloading on selection is
+     * exactly the bug that made every lane play whichever sample was touched
+     * last. */
     engine->selected_instrument = *id;
+    refreshInstanceView(*engine);
     /* Moves the audition voice onto the newly selected channel and republishes
      * every channel's gain, pan and mute from the model — which is where the
      * per-channel mix now lives, so switching channels cannot carry the
@@ -1320,22 +1512,20 @@ ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instr
         break;
       }
     }
-    if (engine->selected_instrument == id) {
-      std::string error;
-      if (!engine->engine->createSandboxedInstrument(
-              plugin.path_hint, plugin.id,
-              onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), error)) {
-        return fail(OB_ERR_FILE_UNSUPPORTED, error.c_str());
-      }
-      engine->instance_path = plugin.path_hint;
-      engine->instance_plugin_id = plugin.id;
-      engine->instance_name = engine->engine->instrument().name().text();
-      engine->instance_vendor = plugin.vendor;
-      engine->instance_format = static_cast<uint32_t>(plugin.format);
-      plugin.name = engine->instance_name;
+    /* Publishing the model is what swaps the voice on this lane's channel, and
+     * only on this lane's channel — dropping a plug-in on one row leaves every
+     * other row playing what it played before. */
+    const ob_status status =
+        executeModel(*engine, onebeat::model::replaceInstrument(engine->project, *id, plugin),
+                     "The instrument could not be replaced.");
+    if (status != OB_OK) return status;
+    const auto hosted = engine->hosted.find(*id);
+    if (hosted == engine->hosted.end() || hosted->second.failed) {
+      (void)engine->commands.undo();
+      publishModel(*engine);
+      return fail(OB_ERR_FILE_UNSUPPORTED, "The plug-in could not be hosted.");
     }
-    return executeModel(*engine, onebeat::model::replaceInstrument(engine->project, *id, plugin),
-                        "The instrument could not be replaced.");
+    return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
   }
@@ -1362,9 +1552,6 @@ ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8_instru
     return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   }
   if (engine->selected_instrument == id) {
-    std::string error;
-    if (!engine->engine->restoreBuiltinInstrument(error))
-      return fail(OB_ERR_INTERNAL, error.c_str());
     engine->has_instance = false;
     engine->selected_instrument = std::nullopt;
   }
@@ -1415,10 +1602,8 @@ ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_na
     return fail(OB_ERR_FILE_NOT_FOUND, "The sample file does not exist.");
   }
   try {
-    std::string error;
-    if (!engine->engine->restoreBuiltinInstrument(error)) {
-      return fail(OB_ERR_INTERNAL, error.c_str());
-    }
+    /* No global un-hosting here: a sample lane plays its own channel's sampler,
+     * and adding one must leave the plug-ins on the other lanes alone. */
     onebeat::model::PluginRef plugin;
     plugin.format = onebeat::model::PluginFormat::Builtin;
     plugin.id = kSamplePluginId;
@@ -1461,10 +1646,8 @@ ob_status ob_engine_instrument_replace_sample(ob_engine* engine, const char* utf
     return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   }
   try {
-    std::string error;
-    if (!engine->engine->restoreBuiltinInstrument(error)) {
-      return fail(OB_ERR_INTERNAL, error.c_str());
-    }
+    /* Replacing this lane's voice is a per-channel change; publishing the model
+     * drops whatever plug-in this lane held and leaves the others hosted. */
     onebeat::model::PluginRef plugin;
     plugin.format = onebeat::model::PluginFormat::Builtin;
     plugin.id = kSamplePluginId;
@@ -1553,8 +1736,8 @@ ob_status ob_engine_project_undo(ob_engine* engine) {
   }
   if (engine->selected_instrument.has_value() &&
       engine->project.findInstrument(*engine->selected_instrument) == nullptr) {
-    std::string error;
-    (void)engine->engine->restoreBuiltinInstrument(error);
+    /* The selected lane was undone out of existence; publishModel below drops
+     * whatever it had hosted. */
     engine->has_instance = false;
     engine->selected_instrument = std::nullopt;
   }
@@ -1569,8 +1752,8 @@ ob_status ob_engine_project_redo(ob_engine* engine) {
   }
   if (engine->selected_instrument.has_value() &&
       engine->project.findInstrument(*engine->selected_instrument) == nullptr) {
-    std::string error;
-    (void)engine->engine->restoreBuiltinInstrument(error);
+    /* The selected lane was undone out of existence; publishModel below drops
+     * whatever it had hosted. */
     engine->has_instance = false;
     engine->selected_instrument = std::nullopt;
   }
@@ -2585,6 +2768,7 @@ ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path) {
                   report.error.empty() ? "The project could not be saved." : report.error.c_str());
     }
     engine->project_path = utf8_path;
+    engine->saved_project_hash = projectHash(*engine);
     g_last_error.clear();
     return OB_OK;
   } catch (const std::exception& exception) {
@@ -2626,6 +2810,7 @@ ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path) {
                                   : engine->project.patterns().begin()->first;
     engine->flattener.markDirty();
     publishModel(*engine);
+    engine->saved_project_hash = projectHash(*engine);
     g_last_error.clear();
     return OB_OK;
   } catch (const std::exception& exception) {
@@ -2642,6 +2827,59 @@ const char* ob_engine_project_json(ob_engine* engine) {
     return engine->project_json_cache.c_str();
   } catch (...) {
     return "";
+  }
+}
+
+const char* ob_engine_project_path(ob_engine* engine) {
+  if (engine == nullptr) return "";
+  return engine->project_path.c_str();
+}
+
+const char* ob_engine_project_name(ob_engine* engine) {
+  if (engine == nullptr) return "";
+  try {
+    engine->project_name_cache = engine->project.meta().name;
+    return engine->project_name_cache.c_str();
+  } catch (...) {
+    return "";
+  }
+}
+
+ob_status ob_engine_project_set_name(ob_engine* engine, const char* utf8_name) {
+  if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A project name is required.");
+  }
+  try {
+    onebeat::model::ProjectMeta meta = engine->project.meta();
+    if (meta.name == utf8_name) {
+      g_last_error.clear();
+      return OB_OK;
+    }
+    meta.name = utf8_name;
+    if (!engine->commands.execute(onebeat::model::setProjectMeta(engine->project, meta))) {
+      return fail(OB_ERR_INTERNAL, "The project could not be renamed.");
+    }
+    // Renaming changes nothing audible, so there is nothing to flatten — but
+    // the history entry and the dirty flag are both real.
+    engine->commands.seal();
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  } catch (...) {
+    return fail(OB_ERR_INTERNAL, "Unknown failure while renaming the project.");
+  }
+}
+
+int32_t ob_engine_project_is_modified(ob_engine* engine) {
+  if (engine == nullptr) return 0;
+  try {
+    return projectHash(*engine) == engine->saved_project_hash ? 0 : 1;
+  } catch (...) {
+    // Unable to tell: say modified, because the failure mode of a false "saved"
+    // is losing work and the failure mode of a false "edited" is a needless
+    // prompt.
+    return 1;
   }
 }
 

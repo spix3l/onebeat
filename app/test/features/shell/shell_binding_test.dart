@@ -3,10 +3,14 @@
 // Proves the mapping between the engine client and the ShellScreenVm, tests
 // that callbacks (play, stop, undo, redo, rail select) reach the engine and
 // change workspace views.
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:onebeat/src/core/shortcuts.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
+import 'package:onebeat/src/features/project/rename_project_dialog.dart';
 import 'package:onebeat/src/features/shell/shell_binding.dart';
+import 'package:onebeat/src/features/shell/shell_screen.dart';
 import 'package:onebeat/src/features/shell/side_rail.dart';
 import 'package:onebeat/src/ui_kit/transport_button.dart';
 
@@ -138,6 +142,35 @@ class _FakeEngineClient implements EngineClient {
   @override
   List<ProjectInstrument> readInstruments() => const <ProjectInstrument>[];
 
+  // ----- project files ------------------------------------------------------
+
+  String projectPathValue = '';
+  String projectNameValue = 'Untitled';
+  bool projectModified = false;
+  final List<String> savedTo = <String>[];
+
+  @override
+  String get projectPath => projectPathValue;
+
+  @override
+  String get projectName => projectNameValue;
+
+  @override
+  bool get isProjectModified => projectModified;
+
+  @override
+  void setProjectName(String name) => projectNameValue = name;
+
+  @override
+  void saveProject(String path) {
+    savedTo.add(path);
+    projectPathValue = path;
+    projectModified = false;
+  }
+
+  @override
+  void openProject(String path) => projectPathValue = path;
+
   @override
   void noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -162,8 +195,67 @@ void main() {
     expect(find.text('4/4'), findsOneWidget);
     expect(find.text('02:01:218'), findsOneWidget);
 
-    // Initial transport status
-    expect(find.text('New project'), findsOneWidget);
+    // The status bar names the project rather than inventing a file name.
+    expect(find.text('Untitled'), findsOneWidget);
+    expect(find.textContaining('Untitled.obt'), findsOneWidget);
+  });
+
+  testWidgets('⌘S saves in place once the project has a file', (
+    WidgetTester tester,
+  ) async {
+    final _FakeEngineClient client =
+        _FakeEngineClient()
+          ..projectPathValue = '/Music/Night Drive.obt'
+          ..projectNameValue = 'Night Drive';
+
+    await pumpForTest(
+      tester,
+      ShellBinding(client: client),
+      size: const Size(1600, 1000),
+    );
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    // Not pumpAndSettle: the shell's engine ticker never settles.
+    await tester.pump();
+    await tester.pump();
+
+    expect(client.savedTo, <String>['/Music/Night Drive.obt']);
+  });
+
+  testWidgets('the rename dialog renames the project and its bundle', (
+    WidgetTester tester,
+  ) async {
+    final _FakeEngineClient client =
+        _FakeEngineClient()
+          ..projectPathValue = '/Music/Old.obt'
+          ..projectNameValue = 'Old';
+
+    await pumpForTest(
+      tester,
+      ShellBinding(client: client),
+      size: const Size(1600, 1000),
+    );
+    await tester.pump();
+
+    // Reached the way the menu reaches it: the registry intent, not a tap on
+    // chrome the platform draws.
+    final BuildContext context = tester.element(find.byType(ShellScreen));
+    Actions.invoke(context, const RenameProjectIntent());
+    await tester.pump();
+    expect(find.byType(RenameProjectDialog), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText).last, 'New');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey<String>('action:project.rename')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(client.projectNameValue, 'New');
+    expect(client.savedTo, <String>['/Music/New.obt']);
+    expect(find.byType(RenameProjectDialog), findsNothing);
   });
 
   testWidgets('play and loop callbacks reach the engine client', (

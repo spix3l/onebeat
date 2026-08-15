@@ -140,38 +140,45 @@ class Engine final : public audio_io::RenderCallback {
   // Which channel manual note commands (the audition path) sound on.
   void setAuditionChannel(int index) noexcept;
 
-  // The engine holds its instrument as a `PluginInstance` and nothing else: a
-  // hosted CLAP plugin (OB-2-07) drops in here with no change above this line.
-  // Names the channel a hosted plug-in occupies, which is also slot 0 — the
-  // audition voice — until something is hosted elsewhere.
-  plugin::PluginInstance& instrument() { return channelInstrument(hosted_channel_); }
-  const plugin::PluginInstance& instrument() const { return channelInstrument(hosted_channel_); }
+  // The engine holds every instrument as a `PluginInstance` and nothing else: a
+  // hosted CLAP plugin (OB-2-07) drops into any channel with no change above
+  // this line. The no-argument form is the audition voice — the channel the user
+  // has selected — which is what the manual note path and the v0.1 callers mean.
+  plugin::PluginInstance& instrument() { return channelInstrument(auditionChannel()); }
+  const plugin::PluginInstance& instrument() const { return channelInstrument(auditionChannel()); }
   // On the audio thread's path (renderChannel), so it carries the RT contract:
   // a compare, a branch and an array index, and nothing else.
   plugin::PluginInstance& channelInstrument(int index) noexcept OB_NONBLOCKING;
   const plugin::PluginInstance& channelInstrument(int index) const noexcept OB_NONBLOCKING;
-  // Replaces the v0.1 built-in instrument while the device is stopped around
-  // the swap. Ownership stays with the engine so the audio thread only ever
-  // observes a stable pointer.
-  bool installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance,
+  int auditionChannel() const noexcept { return audition_channel_.load(std::memory_order_acquire); }
+  // Replaces one channel's built-in sampler with a hosted plug-in while the
+  // device is stopped around the swap. Ownership stays with the engine so the
+  // audio thread only ever observes a stable pointer. Hosting is per channel:
+  // a plug-in on one lane never disturbs the samplers on the others.
+  bool installHostedInstrument(std::unique_ptr<plugin::PluginInstance> instance, int channel,
                                std::string& error);
-  bool restoreBuiltinInstrument(std::string& error);
-  bool hasHostedInstrument() const noexcept { return hosted_instrument_ != nullptr; }
+  bool restoreBuiltinInstrument(int channel, std::string& error);
+  bool hasHostedInstrument(int channel) const noexcept;
   bool createSandboxedInstrument(const std::string& bundle_path, const std::string& plugin_id,
-                                 const std::string& helper_path, std::string& error);
+                                 const std::string& helper_path, int channel, std::string& error);
   bool installMissingInstrument(const std::string& name, const std::vector<uint8_t>& state,
-                                std::string& error);
-  uint32_t hostedParamCount() const;
-  bool hostedParamInfo(uint32_t index, plugin::ParamInfo& out) const;
-  bool hostedParamValue(plugin::ParamId param, double& out) const;
-  bool saveHostedState(std::vector<uint8_t>& out) const;
-  std::string hostedError() const;
-  bool loadHostedState(const std::vector<uint8_t>& bytes);
-  bool hostedHasEditor() const;
-  bool hostedHealthy() const;
-  bool restartHostedInstrument();
-  bool openHostedEditor();
-  void closeHostedEditor();
+                                int channel, std::string& error);
+  // Moves hosted voices to new channel indices in one stop/start window:
+  // `destination[channel]` is where the plug-in currently on `channel` belongs,
+  // or -1 to drop it. Deleting a rack channel renumbers every lane after it, and
+  // a hosted plug-in has to follow its instrument rather than stay on an index.
+  bool remapHostedInstruments(const std::vector<int>& destination, std::string& error);
+  uint32_t hostedParamCount(int channel) const;
+  bool hostedParamInfo(int channel, uint32_t index, plugin::ParamInfo& out) const;
+  bool hostedParamValue(int channel, plugin::ParamId param, double& out) const;
+  bool saveHostedState(int channel, std::vector<uint8_t>& out) const;
+  std::string hostedError(int channel) const;
+  bool loadHostedState(int channel, const std::vector<uint8_t>& bytes);
+  bool hostedHasEditor(int channel) const;
+  bool hostedHealthy(int channel) const;
+  bool restartHostedInstrument(int channel);
+  bool openHostedEditor(int channel);
+  void closeHostedEditor(int channel);
   static constexpr uint32_t CommandQueueCapacity = 1024;
   // Sample loading has no place in a format-agnostic interface, so it stays on
   // the concrete built-in.
@@ -256,6 +263,9 @@ class Engine final : public audio_io::RenderCallback {
                      bool release_all, plugin::PluginInstance& instrument,
                      bool preview_voice = false) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
+  // The plug-in hosted on `channel`, or null for a channel that plays its own
+  // built-in sampler or is out of range.
+  plugin::PluginInstance* hostedAt(int channel) const noexcept;
 
   void drainCommands(plugin::EventList& block_events) noexcept OB_NONBLOCKING;
   void applyCommand(const ob_command& command,
@@ -287,11 +297,10 @@ class Engine final : public audio_io::RenderCallback {
   std::array<std::unique_ptr<Channel>, MaxRackChannels> channels_;
   // Independent from the rack because slot 0 may host the default piano.
   std::unique_ptr<Channel> preview_channel_;
-  // A hosted CLAP plug-in still replaces exactly one channel's voice. Per-channel
-  // hosting is a Stage 7 concern; what matters here is that the *built-in*
-  // sampler is per-channel, which is what the rack is made of today.
-  std::unique_ptr<plugin::PluginInstance> hosted_instrument_;
-  int hosted_channel_ = 0;
+  // A hosted CLAP plug-in replaces the built-in sampler of the one channel it
+  // was loaded onto, and of no other. Null means that channel plays its own
+  // sampler — which is what the rack is made of.
+  std::array<std::unique_ptr<plugin::PluginInstance>, MaxRackChannels> hosted_;
   std::atomic<int> audition_channel_{0};
   rt::NonRealtimeMutable<Schedule> schedule_;
 

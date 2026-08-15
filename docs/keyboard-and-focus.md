@@ -55,7 +55,7 @@ where it belongs.
 
 | Scope | Lives on | Examples |
 |---|---|---|
-| `global` | the shell | Space, ⌘Z, ⇧⌘Z, ⌘K, 1/2/3 view switching |
+| `global` | the shell | Space, ⌘Z, ⇧⌘Z, ⌘S, ⇧⌘S, ⌘O, ⌘K, 1/2/3 view switching |
 | `editor` | whichever editor has focus | B/V, ⌘J, ⌘D, ⌫ |
 
 `⌘D` is bound in both the piano roll and the arrangement, to different actions.
