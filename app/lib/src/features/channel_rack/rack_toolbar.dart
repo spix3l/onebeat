@@ -18,7 +18,7 @@ class RackToolbarVm {
     required this.channelType,
     required this.group,
     required this.snap,
-    required this.caption,
+    required this.steps,
     this.channelTypes = const <String>['Sampler', 'Synth', 'Audio clip'],
     this.groups = const <String>['All', 'Drums', 'Music'],
     this.snaps = const <String>['1/4', '1/8', '1/16', 'None'],
@@ -28,8 +28,14 @@ class RackToolbarVm {
   final String group;
   final String snap;
 
-  /// The dim mono note at the right (`16 steps · loop`).
-  final String caption;
+  /// How many steps the pattern is, as the engine's control accepts it. Not a
+  /// caption: this used to be a formatted string next to a grid that was always
+  /// 16 wide, which read as a setting but was only ever a label.
+  final int steps;
+
+  /// The lengths `ob_engine_rack_set_length` accepts. Anything else is rejected
+  /// at the ABI, so the control offers exactly these.
+  static const List<int> stepOptions = <int>[16, 32, 64];
 
   final List<String> channelTypes;
   final List<String> groups;
@@ -45,6 +51,7 @@ class ObRackToolbar extends StatelessWidget {
     this.onMixerTap,
     this.onAddChannel,
     this.onAutomationTap,
+    this.onSteps,
     super.key,
   });
 
@@ -55,6 +62,7 @@ class ObRackToolbar extends StatelessWidget {
   final VoidCallback? onMixerTap;
   final VoidCallback? onAddChannel;
   final VoidCallback? onAutomationTap;
+  final ValueChanged<int>? onSteps;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +121,22 @@ class ObRackToolbar extends StatelessWidget {
             onTap: onAutomationTap,
           ),
           const Spacer(),
-          Text(vm.caption, maxLines: 1, style: tokens.type.numericSmall),
+          ObDropdown(
+            label: 'Steps',
+            value: '${vm.steps}',
+            items: <String>[
+              for (final int option in RackToolbarVm.stepOptions) '$option',
+            ],
+            width: tokens.size.rackSnapFieldWidth,
+            onSelected: onSteps == null
+                ? null
+                : (String value) {
+                    final int? parsed = int.tryParse(value);
+                    if (parsed != null) onSteps!(parsed);
+                  },
+          ),
+          SizedBox(width: tokens.spacing.sm),
+          Text('· loop', maxLines: 1, style: tokens.type.numericSmall),
         ],
       ),
     );

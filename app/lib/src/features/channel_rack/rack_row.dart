@@ -99,10 +99,17 @@ class ObRackRow extends StatelessWidget {
     this.onVol,
     this.onPan,
     this.onRouteTap,
+    this.reorderIndex,
     super.key,
   });
 
   final RackRowVm vm;
+
+  /// This lane's position in the rack, when the rack is reorderable. Non-null
+  /// makes the name block a drag handle. The handle is the *name*, not the
+  /// whole lane: the lane's step cells are a paint surface, and a drag that
+  /// started there would reorder channels instead of drawing steps.
+  final int? reorderIndex;
 
   /// The step column the transport is on, zero-based; null draws no ring.
   /// Passed per row rather than held here so every lane agrees about it.
@@ -165,27 +172,7 @@ class ObRackRow extends StatelessWidget {
               ),
             ),
             SizedBox(width: tokens.spacing.md),
-            SizedBox(
-              width: tokens.size.rackNameWidth,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    vm.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.rackName,
-                  ),
-                  Text(
-                    vm.type,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.rackCaption,
-                  ),
-                ],
-              ),
-            ),
+            _NameBlock(vm: vm, reorderIndex: reorderIndex),
             if (vm.previewNotes != null)
               RackPianoPreview(
                 notes: vm.previewNotes!,
@@ -211,6 +198,48 @@ class ObRackRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The lane's name and instrument caption, and — when the rack is reorderable
+/// — the grip the lane is dragged by.
+class _NameBlock extends StatelessWidget {
+  const _NameBlock({required this.vm, this.reorderIndex});
+
+  final RackRowVm vm;
+  final int? reorderIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final Widget block = SizedBox(
+      width: tokens.size.rackNameWidth,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            vm.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.type.rackName,
+          ),
+          Text(
+            vm.type,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.type.rackCaption,
+          ),
+        ],
+      ),
+    );
+
+    final int? index = reorderIndex;
+    if (index == null) return block;
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: ReorderableDragStartListener(index: index, child: block),
     );
   }
 }

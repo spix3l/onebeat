@@ -22,10 +22,12 @@ class ChannelRackScreen extends StatelessWidget {
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
     this.onAddInstrument,
+    this.onReorderRow,
     this.onSearchTap,
     this.onChannelType,
     this.onGroup,
     this.onSnap,
+    this.onSteps,
     this.onMixerTap,
     this.onAutomationTap,
     this.onInspectorVol,
@@ -57,10 +59,12 @@ class ChannelRackScreen extends StatelessWidget {
       onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(Object data)? onAddInstrument;
+  final void Function(int oldIndex, int newIndex)? onReorderRow;
   final VoidCallback? onSearchTap;
   final ValueChanged<String>? onChannelType;
   final ValueChanged<String>? onGroup;
   final ValueChanged<String>? onSnap;
+  final ValueChanged<int>? onSteps;
   final VoidCallback? onMixerTap;
   final VoidCallback? onAutomationTap;
   final ValueChanged<double>? onInspectorVol;
@@ -100,6 +104,7 @@ class ChannelRackScreen extends StatelessWidget {
             onChannelType: onChannelType,
             onGroup: onGroup,
             onSnap: onSnap,
+            onSteps: onSteps,
             onMixerTap: onMixerTap,
             onAddChannel: onAddChannel,
             onAutomationTap: onAutomationTap,
@@ -125,6 +130,7 @@ class ChannelRackScreen extends StatelessWidget {
               onRowSecondaryTapDown: onRowSecondaryTapDown,
               onDropInstrument: onDropInstrument,
               onAddInstrument: onAddInstrument,
+              onReorderRow: onReorderRow,
               onPointerDownStep: onPointerDownStep,
               onPointerMoveStep: onPointerMoveStep,
               onPointerUpStep: onPointerUpStep,
@@ -366,6 +372,7 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
     this.onAddInstrument,
+    this.onReorderRow,
     this.onPointerDownStep,
     this.onPointerMoveStep,
     this.onPointerUpStep,
@@ -391,6 +398,7 @@ class _RackRowsScrollArea extends StatelessWidget {
       onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(Object data)? onAddInstrument;
+  final void Function(int oldIndex, int newIndex)? onReorderRow;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
       onPointerDownStep;
   final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
@@ -419,31 +427,36 @@ class _RackRowsScrollArea extends StatelessWidget {
             // The rows own the scroll. The footer stays attached to the bottom
             // of the rack, matching the reference instead of travelling away
             // after the last channel.
+            // A reorderable list rather than a plain Column: the lanes are the
+            // channel order, and the order is data the user edits. This list
+            // adds no drag handles of its own — the name block opts in via
+            // ObRackRow.reorderIndex — so dragging across the step cells still
+            // paints steps.
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    for (int i = 0; i < rows.length; i++)
-                      _RackRowItem(
-                        index: i,
-                        row: rows[i],
-                        playingStep: playingStep,
-                        playingTick: playingTick,
-                        onSelectRow: onSelectRow,
-                        onTogglePower: onTogglePower,
-                        onStepTap: onStepTap,
-                        onVolChanged: onVolChanged,
-                        onPanChanged: onPanChanged,
-                        onRouteTap: onRouteTap,
-                        onSecondaryTapDown: onRowSecondaryTapDown,
-                        onDropInstrument: onDropInstrument,
-                        onPointerDownStep: onPointerDownStep,
-                        onPointerMoveStep: onPointerMoveStep,
-                        onPointerUpStep: onPointerUpStep,
-                        onPointerCancelStep: onPointerCancelStep,
-                      ),
-                  ],
+              child: ReorderableList(
+                itemCount: rows.length,
+                // onReorderItem, not onReorder: it hands back a newIndex that
+                // already accounts for the dragged row being lifted out.
+                onReorderItem: onReorderRow ?? (int _, int _) {},
+                itemBuilder: (BuildContext context, int i) => _RackRowItem(
+                  key: ValueKey<String>('rack-row-${rows[i].name}-$i'),
+                  index: i,
+                  row: rows[i],
+                  reorderable: onReorderRow != null,
+                  playingStep: playingStep,
+                  playingTick: playingTick,
+                  onSelectRow: onSelectRow,
+                  onTogglePower: onTogglePower,
+                  onStepTap: onStepTap,
+                  onVolChanged: onVolChanged,
+                  onPanChanged: onPanChanged,
+                  onRouteTap: onRouteTap,
+                  onSecondaryTapDown: onRowSecondaryTapDown,
+                  onDropInstrument: onDropInstrument,
+                  onPointerDownStep: onPointerDownStep,
+                  onPointerMoveStep: onPointerMoveStep,
+                  onPointerUpStep: onPointerUpStep,
+                  onPointerCancelStep: onPointerCancelStep,
                 ),
               ),
             ),
@@ -472,6 +485,8 @@ class _RackRowItem extends StatelessWidget {
     required this.row,
     required this.playingStep,
     required this.playingTick,
+    this.reorderable = false,
+    super.key,
     this.onSelectRow,
     this.onTogglePower,
     this.onStepTap,
@@ -488,6 +503,7 @@ class _RackRowItem extends StatelessWidget {
 
   final int index;
   final RackRowVm row;
+  final bool reorderable;
   final int? playingStep;
   final int? playingTick;
   final ValueChanged<int>? onSelectRow;
@@ -535,6 +551,7 @@ class _RackRowItem extends StatelessWidget {
                     : (_) => onPointerCancelStep!(),
             child: ObRackRow(
               vm: row,
+              reorderIndex: reorderable ? index : null,
               playingStep: playingStep,
               playingTick: playingTick,
               onTap: onSelectRow == null ? null : () => onSelectRow!(index),

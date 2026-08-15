@@ -377,6 +377,21 @@ class _RackBindingState extends State<RackBinding>
     _store.refresh();
   }
 
+  /// Moves the lane at [oldIndex] to [newIndex]. Rack rows are in instrument
+  /// order, so the row's new position *is* the instrument's new `order`.
+  void _onReorderRow(int oldIndex, int newIndex) {
+    final List<RackRow> rows = _store.rows;
+    if (oldIndex < 0 || oldIndex >= rows.length) return;
+    if (newIndex == oldIndex || newIndex < 0 || newIndex >= rows.length) return;
+    try {
+      widget.client.reorderInstrument(rows[oldIndex].instrumentId, newIndex);
+    } catch (_) {
+      // The command is a stub on a fake client.
+      return;
+    }
+    _store.refresh();
+  }
+
   void _onAddChannel() => _addChannelLane();
 
   void _onDoubleTap() => _addChannelLane();
@@ -611,6 +626,7 @@ class _RackBindingState extends State<RackBinding>
       onRowSecondaryTapDown: _onRowSecondaryTapDown,
       onDropInstrument: _onDropInstrument,
       onAddInstrument: _onAddInstrument,
+      onReorderRow: _onReorderRow,
       onChannelType: (String val) => setState(() => _selectedType = val),
       onGroup: (String val) => setState(() => _selectedGroup = val),
       onSnap: (String val) {
