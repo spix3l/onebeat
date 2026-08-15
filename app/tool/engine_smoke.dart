@@ -57,9 +57,33 @@ Future<void> main(List<String> arguments) async {
     ..writeln('xruns             ${snapshot.xrunCount}')
     ..writeln('errors            ${errors.isEmpty ? 'none' : errors.join('; ')}');
 
+  // The export path, end to end: the same engine, the same schedule, written to
+  // a real file through the ABI. A smoke test that stopped at the snapshot
+  // would have passed all the way through the months when export did nothing.
+  final Directory exportFolder = Directory.systemTemp.createTempSync('onebeat-smoke-export');
+  client.startExport(directory: exportFolder.path, format: ExportFormat.wav, sampleRate: 48000);
+  ExportStatus export = client.readExportStatus();
+  final DateTime exportDeadline = DateTime.now().add(const Duration(seconds: 60));
+  while (export.state == ExportState.running && DateTime.now().isBefore(exportDeadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    export = client.readExportStatus();
+  }
+  final int exportedBytes =
+      export.path.isNotEmpty && File(export.path).existsSync() ? File(export.path).lengthSync() : 0;
+
+  stdout
+    ..writeln('export state      ${export.state.name}')
+    ..writeln('export file       ${export.path}')
+    ..writeln('export bytes      $exportedBytes');
+
   client.dispose();
+  exportFolder.deleteSync(recursive: true);
 
   final List<String> failures = <String>[
+    if (export.state != ExportState.done) 'the export did not finish: ${export.error}',
+    // 44 bytes of header and nothing else is an export that wrote silence-free
+    // nothing; a second of stereo 24-bit is ~288 KB.
+    if (exportedBytes < 100000) 'the exported file is too small to hold the render',
     if (snapshot.scheduleEventCount != 20) 'the schedule did not reach the engine',
     if (snapshot.positionFrames <= 0) 'the transport did not advance',
     if (loudestPeak <= 0.05) 'the pattern produced no audible output',

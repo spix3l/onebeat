@@ -12,7 +12,10 @@
 #include <filesystem>
 #include <thread>
 
+#include <cmath>
+
 #include "abi/onebeat_abi.h"
+#include "core/wav_loader.h"
 #include "doctest.h"
 #include "test_helpers.h"
 #include "testing/offline_driver.h"
@@ -20,10 +23,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.16.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.17.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.16.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.17.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -1122,6 +1125,104 @@ TEST_SUITE("abi") {
     CHECK(saw_schedule_event);
 
     ob_engine_destroy(engine);
+  }
+
+  TEST_CASE("ob_export_status layout is frozen") {
+    CHECK(sizeof(ob_export_status) == 784);
+    CHECK(offsetof(ob_export_status, struct_size) == 0);
+    CHECK(offsetof(ob_export_status, state) == 4);
+    CHECK(offsetof(ob_export_status, progress) == 8);
+    CHECK(offsetof(ob_export_status, path) == 16);
+    CHECK(offsetof(ob_export_status, error) == 528);
+  }
+
+  TEST_CASE("An export writes the project to the chosen folder and reports progress") {
+    const std::filesystem::path folder =
+        std::filesystem::temp_directory_path() / "onebeat-export-abi";
+    std::error_code ignored;
+    std::filesystem::remove_all(folder, ignored);
+    std::filesystem::create_directories(folder, ignored);
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/export";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    ob_export_status status{};
+    REQUIRE(ob_engine_export_status(engine, &status) == OB_OK);
+    CHECK(status.state == OB_EXPORT_IDLE);
+    CHECK(status.struct_size == sizeof(ob_export_status));
+
+    CHECK(ob_engine_export_start(engine, "", OB_EXPORT_FORMAT_WAV, 48000) ==
+          OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_export_start(engine, folder.c_str(), 99, 48000) == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_export_start(engine, folder.c_str(), OB_EXPORT_FORMAT_WAV, 0) ==
+          OB_ERR_INVALID_ARGUMENT);
+
+    // Its own deadline per render, rather than one shared stopwatch: a slow
+    // sanitizer runner must make the test take longer, not make it lie.
+    const auto runExport = [engine, &status](const std::filesystem::path& destination,
+                                             uint32_t format, int32_t rate) {
+      REQUIRE_MESSAGE(ob_engine_export_start(engine, destination.c_str(), format, rate) == OB_OK,
+                      ob_last_error_message());
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+      while (std::chrono::steady_clock::now() < deadline) {
+        REQUIRE(ob_engine_export_status(engine, &status) == OB_OK);
+        if (status.state != OB_EXPORT_RUNNING) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+      REQUIRE_MESSAGE(status.state == OB_EXPORT_DONE, status.error);
+      return std::string(status.path);
+    };
+
+    // A project that actually makes a sound: one sample instrument, four notes,
+    // on the default arrangement clip. Silence would pass every structural
+    // check below and still be a broken export.
+    const std::string sample = (folder / "tone.wav").string();
+    onebeat::testing::RenderResult source;
+    source.left.assign(24000, 0.4F);
+    source.right.assign(24000, 0.4F);
+    REQUIRE(onebeat::testing::writeWav(source, sample));
+    REQUIRE(ob_engine_instrument_add_sample(engine, "Tone", sample.c_str()) == OB_OK);
+    ob_instrument_info instrument{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &instrument) == OB_OK);
+    for (int step = 0; step < 4; ++step) {
+      REQUIRE(ob_engine_note_add(engine, instrument.id, step * 960, 480, 60, 12000) == OB_OK);
+    }
+
+    const std::string first = runExport(folder, OB_EXPORT_FORMAT_WAV, 48000);
+    CHECK(status.progress == doctest::Approx(1.0F));
+    CHECK(std::string(status.error).empty());
+    CHECK(std::filesystem::exists(first));
+    // Named after the project, in the folder that was asked for.
+    CHECK(std::filesystem::path(first).parent_path() == folder);
+    CHECK(std::filesystem::path(first).extension() == ".wav");
+
+    std::string decode_error;
+    const auto rendered = onebeat::core::loadAudioFile(first, decode_error);
+    REQUIRE_MESSAGE(rendered != nullptr, decode_error);
+    CHECK(rendered->channels == 2);
+    CHECK(rendered->sample_rate == doctest::Approx(48000.0));
+    float peak = 0.0F;
+    for (const float value : rendered->samples) peak = std::max(peak, std::abs(value));
+    CHECK_MESSAGE(peak > 0.05F, "the exported file is silent");
+
+    // Exporting again is how two mixes are compared, so it must not overwrite.
+    const std::string second = runExport(folder, OB_EXPORT_FORMAT_WAV, 44100);
+    CHECK(second != first);
+    CHECK(std::filesystem::exists(first));
+    CHECK(std::filesystem::exists(second));
+
+    const std::string third = runExport(folder, OB_EXPORT_FORMAT_AIFF, 48000);
+    CHECK(std::filesystem::path(third).extension() == ".aiff");
+    CHECK(std::filesystem::exists(third));
+
+    ob_engine_destroy(engine);
+    std::filesystem::remove_all(folder, ignored);
   }
 
   TEST_CASE("Bad arguments produce status codes and messages, never crashes") {

@@ -2457,6 +2457,64 @@ class OneBeatBindings {
       _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>('ob_engine_project_is_modified');
   late final _ob_engine_project_is_modified = _ob_engine_project_is_modifiedPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_export_start(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_directory,
+    int format,
+    int sample_rate,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_export_start(
+        engine,
+        utf8_directory,
+        format,
+        sample_rate,
+      ),
+    );
+  }
+
+  late final _ob_engine_export_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Uint32, ffi.Int32)
+        >
+      >('ob_engine_export_start');
+  late final _ob_engine_export_start = _ob_engine_export_startPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int, int)>();
+
+  ob_status ob_engine_export_status(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ob_export_status> out_status,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_export_status(
+        engine,
+        out_status,
+      ),
+    );
+  }
+
+  late final _ob_engine_export_statusPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ob_export_status>)>>(
+        'ob_engine_export_status',
+      );
+  late final _ob_engine_export_status = _ob_engine_export_statusPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ob_export_status>)>();
+
+  ob_status ob_engine_export_cancel(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_export_cancel(
+        engine,
+      ),
+    );
+  }
+
+  late final _ob_engine_export_cancelPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>)>>('ob_engine_export_cancel');
+  late final _ob_engine_export_cancel = _ob_engine_export_cancelPtr.asFunction<int Function(ffi.Pointer<ob_engine>)>();
 }
 
 enum ob_status {
@@ -3184,13 +3242,67 @@ final class ob_clip_info extends ffi.Struct {
   external ffi.Array<ffi.Char> audio_path;
 }
 
+enum ob_export_format {
+  OB_EXPORT_FORMAT_WAV(0),
+  OB_EXPORT_FORMAT_AIFF(1);
+
+  final int value;
+  const ob_export_format(this.value);
+
+  static ob_export_format fromValue(int value) => switch (value) {
+    0 => OB_EXPORT_FORMAT_WAV,
+    1 => OB_EXPORT_FORMAT_AIFF,
+    _ => throw ArgumentError('Unknown value for ob_export_format: $value'),
+  };
+}
+
+enum ob_export_state {
+  OB_EXPORT_IDLE(0),
+  OB_EXPORT_RUNNING(1),
+  OB_EXPORT_DONE(2),
+  OB_EXPORT_FAILED(3),
+  OB_EXPORT_CANCELLED(4);
+
+  final int value;
+  const ob_export_state(this.value);
+
+  static ob_export_state fromValue(int value) => switch (value) {
+    0 => OB_EXPORT_IDLE,
+    1 => OB_EXPORT_RUNNING,
+    2 => OB_EXPORT_DONE,
+    3 => OB_EXPORT_FAILED,
+    4 => OB_EXPORT_CANCELLED,
+    _ => throw ArgumentError('Unknown value for ob_export_state: $value'),
+  };
+}
+
+final class ob_export_status extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int state;
+
+  @ffi.Float()
+  external double progress;
+
+  @ffi.Uint32()
+  external int reserved_;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Char> path;
+
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Char> error;
+}
+
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 16;
+const int OB_ABI_VERSION_MINOR = 17;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 69632;
+const int OB_ABI_VERSION_PACKED = 69888;
 
 const int OB_SNAPSHOT_VERSION = 1;
 

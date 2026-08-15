@@ -69,8 +69,12 @@ fi
 
 if [[ "$ONLY" == "all" ]]; then
   # Xcode ships clang-format; clang-tidy comes with the LLVM install below.
+  # Build directories are pruned: CI checks out clean, but a dev machine has
+  # `engine/build*` full of CMake's generated compiler-probe sources, and those
+  # are not ours to format. Without this the local run fails on files the real
+  # CI never sees.
   run "clang-format" bash -c \
-    "find engine \\( -name '*.cpp' -o -name '*.h' \\) -print0 | xargs -0 \"\$(xcrun -f clang-format)\" --dry-run --Werror"
+    "find engine \\( -path '*/build*' -prune \\) -o \\( -name '*.cpp' -o -name '*.h' \\) -print0 | xargs -0 \"\$(xcrun -f clang-format)\" --dry-run --Werror"
   run "seam check"    tools/seam_check.sh
   run "licence audit" python3 tools/license_audit.py
   run "token lint"    python3 tools/token_lint.py

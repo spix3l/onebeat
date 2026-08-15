@@ -64,6 +64,7 @@ add_executable(onebeat_tests
   test_schedule.cpp
   test_rt_primitives.cpp
   test_sampler.cpp
+  test_audio_export.cpp
   test_transport.cpp
   test_engine_render.cpp
   test_abi.cpp

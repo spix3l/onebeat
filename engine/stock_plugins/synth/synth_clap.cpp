@@ -16,7 +16,8 @@
 #define OB_STOCK_PLUGIN_ID "dev.onebeat.stock.drill_synth"
 #define OB_STOCK_PLUGIN_NAME "OneBeat Drill Synth"
 #define OB_STOCK_NOTE_NAME "Drill Synth"
-#define OB_STOCK_PLUGIN_DESCRIPTION "A sample-free subtractive synth voiced for dark drill melodies and sub bass."
+#define OB_STOCK_PLUGIN_DESCRIPTION \
+  "A sample-free subtractive synth voiced for dark drill melodies and sub bass."
 #endif
 
 namespace {
@@ -97,7 +98,8 @@ void pluginReset(const clap_plugin_t* plugin) {
 
 clap_process_status pluginProcess(const clap_plugin_t* plugin, const clap_process_t* process) {
   SynthPlugin& synth = self(plugin);
-  if (process == nullptr || process->audio_outputs_count == 0 || process->audio_outputs[0].data32 == nullptr) {
+  if (process == nullptr || process->audio_outputs_count == 0 ||
+      process->audio_outputs[0].data32 == nullptr) {
     return CLAP_PROCESS_CONTINUE;
   }
   clap_audio_buffer_t& output = process->audio_outputs[0];
@@ -151,9 +153,9 @@ bool paramsValueToText(const clap_plugin_t*, clap_id id, double value, char* dis
   if (parameterIndex(id) >= ParameterSpecs.size() || display == nullptr || size == 0) return false;
   const double clamped = clampParameter(value);
   if (id == onebeat::stock::synth::ParamPreset) {
-    const uint32_t index = std::clamp(
-        static_cast<uint32_t>(clamped * static_cast<double>(PresetCount)), 0U,
-        static_cast<uint32_t>(PresetCount - 1));
+    const uint32_t index =
+        std::clamp(static_cast<uint32_t>(clamped * static_cast<double>(PresetCount)), 0U,
+                   static_cast<uint32_t>(PresetCount - 1));
     std::strncpy(display, onebeat::stock::synth::presetName(index), size - 1);
     display[size - 1] = '\0';
     return true;
@@ -187,7 +189,8 @@ bool paramsValueToText(const clap_plugin_t*, clap_id id, double value, char* dis
 }
 
 bool paramsTextToValue(const clap_plugin_t*, clap_id id, const char* text, double* value) {
-  if (parameterIndex(id) >= ParameterSpecs.size() || text == nullptr || value == nullptr) return false;
+  if (parameterIndex(id) >= ParameterSpecs.size() || text == nullptr || value == nullptr)
+    return false;
   if (id == onebeat::stock::synth::ParamPreset) return false;
   *value = clampParameter(std::strtod(text, nullptr) / 100.0);
   return true;
@@ -246,11 +249,13 @@ struct SavedStateHeader {
 bool stateSave(const clap_plugin_t* plugin, const clap_ostream_t* stream) {
   if (stream == nullptr) return false;
   SavedStateHeader header{};
-  if (stream->write(stream, &header, sizeof(header)) != static_cast<int64_t>(sizeof(header))) return false;
+  if (stream->write(stream, &header, sizeof(header)) != static_cast<int64_t>(sizeof(header)))
+    return false;
   const SynthEngine& synth = self(plugin).engine;
   for (const auto& spec : ParameterSpecs) {
     const double value = synth.parameter(spec.id);
-    if (stream->write(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value))) return false;
+    if (stream->write(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value)))
+      return false;
   }
   return true;
 }
@@ -265,7 +270,8 @@ bool stateLoad(const clap_plugin_t* plugin, const clap_istream_t* stream) {
   SynthEngine& synth = self(plugin).engine;
   for (const auto& spec : ParameterSpecs) {
     double value = 0.0;
-    if (stream->read(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value))) return false;
+    if (stream->read(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value)))
+      return false;
     synth.setParameter(spec.id, value);
   }
   return true;
@@ -307,7 +313,8 @@ const clap_plugin_descriptor_t* factoryDescriptor(const clap_plugin_factory_t*, 
   return index == 0 ? &Descriptor : nullptr;
 }
 
-const clap_plugin_t* factoryCreate(const clap_plugin_factory_t*, const clap_host_t*, const char* id) {
+const clap_plugin_t* factoryCreate(const clap_plugin_factory_t*, const clap_host_t*,
+                                   const char* id) {
   if (id == nullptr || std::strcmp(id, Descriptor.id) != 0) return nullptr;
   auto* synth = new (std::nothrow) SynthPlugin;
   if (synth == nullptr) return nullptr;

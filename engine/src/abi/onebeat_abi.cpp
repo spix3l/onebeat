@@ -18,8 +18,10 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include "core/audio_export.h"
 #include "core/engine.h"
 #include "core/wav_loader.h"
 #include "model/command.h"
@@ -160,6 +162,33 @@ struct ob_engine {
   // fitted the pattern can follow it when the notes in it grow or shrink what
   // it plays. See fitClipsToPatterns.
   std::map<onebeat::model::PatternId, onebeat::model::Ticks> pattern_lengths;
+
+  /* One audio export, running on its own thread (EPIC-4).
+   *
+   * `state` is the handshake: the worker writes `path` and `error` before it
+   * releases a terminal state, and the UI reads them after it has acquired one,
+   * so neither needs a lock on the frame path. */
+  struct ExportJob {
+    std::thread worker;
+    onebeat::core::SongExportProgress progress;
+    std::atomic<uint32_t> state{OB_EXPORT_IDLE};
+    std::string path;
+    std::string error;
+  };
+  ExportJob export_job;
+
+  ~ob_engine() {
+    /* A render holds the device stopped and the transport claimed; leaving one
+     * running while the engine underneath it is destroyed is not a race worth
+     * having. */
+    export_job.progress.cancel.store(true, std::memory_order_relaxed);
+    if (export_job.worker.joinable()) export_job.worker.join();
+  }
+  ob_engine() = default;
+  ob_engine(const ob_engine&) = delete;
+  ob_engine& operator=(const ob_engine&) = delete;
+  ob_engine(ob_engine&&) = delete;
+  ob_engine& operator=(ob_engine&&) = delete;
 };
 
 namespace {
@@ -598,6 +627,52 @@ void publishModel(ob_engine& handle) {
   handle.engine->postCommand(metronome);
 }
 
+/* How much arrangement there is to render, in beats: the end of the last clip.
+ *
+ * The same walk publishModel does to size the loop region, and for the same
+ * reason — a pattern clip is arrangement too, so an export that only looked at
+ * audio clips would stop before the song does. */
+double songEndBeats(const ob_engine& handle) {
+  double end_beats = 0.0;
+  for (const auto& [clip_id, clip] : handle.project.clips()) {
+    (void)clip_id;
+    const double clip_end = static_cast<double>(clip.start + clip.length) /
+                            static_cast<double>(onebeat::model::TicksPerQuarter);
+    end_beats = std::max(end_beats, clip_end);
+  }
+  return end_beats;
+}
+
+/* Where an export lands: the project's name, in the folder the user chose, with
+ * the format's extension.
+ *
+ * Never an overwrite. Exporting twice is how a person compares two mixes, and
+ * the second one silently replacing the first is the version of that feature
+ * nobody wants. */
+std::string exportDestination(const std::string& directory, const std::string& project_name,
+                              const std::string& extension) {
+  std::string stem = project_name.empty() ? std::string("Untitled") : project_name;
+  for (char& character : stem) {
+    if (character == '/' || character == '\\' || character == ':') character = '-';
+  }
+  const std::filesystem::path folder(directory);
+  const auto named = [&folder, &stem, &extension](int attempt) {
+    std::string name = stem;
+    if (attempt > 1) {
+      name += " ";
+      name += std::to_string(attempt);
+    }
+    name += ".";
+    name += extension;
+    return folder / name;
+  };
+  std::filesystem::path candidate = named(1);
+  for (int attempt = 2; std::filesystem::exists(candidate) && attempt < 1000; ++attempt) {
+    candidate = named(attempt);
+  }
+  return candidate.string();
+}
+
 ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
   if (command == nullptr || !handle.commands.execute(std::move(command))) {
     return fail(OB_ERR_INVALID_ARGUMENT, failure);
@@ -864,7 +939,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.16.0";
+  return "1.17.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -984,6 +1059,12 @@ ob_status ob_engine_stop(ob_engine* engine) {
 ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
   if (engine == nullptr || command == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and command must not be null.");
+  }
+  // An export drives the transport itself, from its own thread, and the command
+  // queue has exactly one producer. Both facts say the same thing: while a
+  // render is in flight, nobody else posts.
+  if (engine->export_job.state.load(std::memory_order_acquire) == OB_EXPORT_RUNNING) {
+    return fail(OB_ERR_ALREADY_RUNNING, "An export is running.");
   }
   if ((command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) ||
       command->type == OB_CMD_SET_METRONOME || command->type == OB_CMD_SET_LOOP) {
@@ -1904,19 +1985,18 @@ ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_ins
   if (engine->project.findMixerTrack(*track) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
   }
-  return executeModel(
-      *engine,
-      onebeat::model::editInstrument(
-          engine->project, *instrument, onebeat::model::ChangeField::Routing,
-          [track](onebeat::model::Instrument& value) {
-            if (value.routing.empty()) {
-              value.routing.push_back(onebeat::model::OutputRoute{0, *track});
-            } else {
-              value.routing.front().track = *track;
-            }
-          },
-          "Route instrument"),
-      "The instrument could not be routed.");
+  return executeModel(*engine,
+                      onebeat::model::editInstrument(
+                          engine->project, *instrument, onebeat::model::ChangeField::Routing,
+                          [track](onebeat::model::Instrument& value) {
+                            if (value.routing.empty()) {
+                              value.routing.push_back(onebeat::model::OutputRoute{0, *track});
+                            } else {
+                              value.routing.front().track = *track;
+                            }
+                          },
+                          "Route instrument"),
+                      "The instrument could not be routed.");
 }
 
 int32_t ob_engine_project_can_undo(ob_engine* engine) {
@@ -2568,27 +2648,28 @@ ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pattern_i
 ob_status ob_engine_pattern_set_time_signature(ob_engine* engine, const char* utf8_pattern_id,
                                                int32_t numerator, int32_t denominator) {
   if (engine == nullptr || numerator < 1 || numerator > 32 ||
-      (denominator != 1 && denominator != 2 && denominator != 4 && denominator != 8 && denominator != 16 &&
-       denominator != 32)) {
+      (denominator != 1 && denominator != 2 && denominator != 4 && denominator != 8 &&
+       denominator != 16 && denominator != 32)) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Pattern time signature is not supported.");
   }
   const auto id = patternId(utf8_pattern_id);
   if (!id || engine->project.findPattern(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
   }
-  return executeModel(
-      *engine,
-      onebeat::model::editPatternMeta(
-          engine->project, *id, onebeat::model::ChangeField::Meta,
-          [numerator, denominator](onebeat::model::PatternMeta& meta) {
-            meta.time_signature = onebeat::model::TimeSignature{numerator, denominator};
-          },
-          "Set pattern time signature"),
-      "The pattern time signature could not be changed.");
+  return executeModel(*engine,
+                      onebeat::model::editPatternMeta(
+                          engine->project, *id, onebeat::model::ChangeField::Meta,
+                          [numerator, denominator](onebeat::model::PatternMeta& meta) {
+                            meta.time_signature =
+                                onebeat::model::TimeSignature{numerator, denominator};
+                          },
+                          "Set pattern time signature"),
+                      "The pattern time signature could not be changed.");
 }
 
 ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_id, int32_t order) {
-  if (engine == nullptr || order < 0) return fail(OB_ERR_INVALID_ARGUMENT, "Pattern order is invalid.");
+  if (engine == nullptr || order < 0)
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern order is invalid.");
   const auto id = patternId(utf8_pattern_id);
   if (!id || engine->project.findPattern(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
@@ -2596,9 +2677,8 @@ ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_
   const std::vector<const onebeat::model::Pattern*> before = orderedPatterns(*engine);
   const int32_t maximum = static_cast<int32_t>(before.size() - 1);
   const int32_t target = std::clamp(order, int32_t{0}, maximum);
-  const auto moving = std::find_if(before.begin(), before.end(), [id](const auto* pattern) {
-    return pattern->id == *id;
-  });
+  const auto moving = std::find_if(before.begin(), before.end(),
+                                   [id](const auto* pattern) { return pattern->id == *id; });
   if (moving == before.end()) return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
   const int32_t source = static_cast<int32_t>(std::distance(before.begin(), moving));
   if (source == target) return OB_OK;
@@ -2627,7 +2707,8 @@ ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_
 
 ob_status ob_engine_pattern_set_group(ob_engine* engine, const char* utf8_pattern_id,
                                       const char* utf8_group) {
-  if (engine == nullptr || utf8_group == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "A pattern group is required.");
+  if (engine == nullptr || utf8_group == nullptr)
+    return fail(OB_ERR_INVALID_ARGUMENT, "A pattern group is required.");
   const auto id = patternId(utf8_pattern_id);
   if (!id || engine->project.findPattern(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
@@ -3230,8 +3311,7 @@ ob_status ob_engine_clip_split_by_channel(ob_engine* engine, const char* utf8_cl
     onebeat::model::ArrangementLaneId target_lane = first_lane;
     if (index > 0) {
       const auto created = executeAndFindNew<onebeat::model::ArrangementLaneId>(
-          *engine, engine->project.lanes(),
-          onebeat::model::addLane(engine->project, channel_name));
+          *engine, engine->project.lanes(), onebeat::model::addLane(engine->project, channel_name));
       if (!created) return abort("The channel's lane could not be created.");
       target_lane = *created;
       const auto order = static_cast<int32_t>(source_order + static_cast<int32_t>(index));
@@ -3491,6 +3571,124 @@ int32_t ob_engine_project_is_modified(ob_engine* engine) {
     // prompt.
     return 1;
   }
+}
+
+ob_status ob_engine_export_start(ob_engine* engine, const char* utf8_directory, uint32_t format,
+                                 int32_t sample_rate) {
+  if (engine == nullptr || utf8_directory == nullptr || utf8_directory[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A destination folder is required.");
+  }
+  if (sample_rate <= 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A positive sample rate is required.");
+  }
+  if (format != OB_EXPORT_FORMAT_WAV && format != OB_EXPORT_FORMAT_AIFF) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Unknown export format.");
+  }
+  try {
+    ob_engine::ExportJob& job = engine->export_job;
+    if (job.state.load(std::memory_order_acquire) == OB_EXPORT_RUNNING) {
+      return fail(OB_ERR_ALREADY_RUNNING, "An export is already running.");
+    }
+    // The previous render's thread outlives its terminal state; a new one may
+    // not start until that thread is gone.
+    if (job.worker.joinable()) job.worker.join();
+
+    const std::filesystem::path folder(utf8_directory);
+    std::error_code folder_error;
+    if (!std::filesystem::is_directory(folder, folder_error)) {
+      return fail(OB_ERR_INVALID_ARGUMENT, "The destination folder does not exist.");
+    }
+
+    const double end_beats = songEndBeats(*engine);
+    if (end_beats <= 0.0) {
+      return fail(OB_ERR_INVALID_ARGUMENT, "There is nothing to export: the playlist is empty.");
+    }
+
+    onebeat::core::SongExportRequest request;
+    request.path = exportDestination(
+        utf8_directory, engine->project.meta().name,
+        format == OB_EXPORT_FORMAT_AIFF ? std::string("aiff") : std::string("wav"));
+    request.format = format == OB_EXPORT_FORMAT_AIFF ? onebeat::core::ExportFormat::Aiff
+                                                     : onebeat::core::ExportFormat::Wav;
+    request.sample_rate = sample_rate;
+    const onebeat::core::TimeMap& time_map = engine->engine->transportForTests().timeMap();
+    request.length_frames = time_map.beatsToFrames(end_beats);
+    // Two seconds past the last note, so a release, a long sample or a reverb
+    // tail ends the way it does on playback rather than at a cliff.
+    request.tail_frames = static_cast<int64_t>(engine->engine->config().sample_rate * 2.0);
+
+    job.path = request.path;
+    job.error.clear();
+    job.progress.fraction.store(0.0, std::memory_order_relaxed);
+    job.progress.cancel.store(false, std::memory_order_relaxed);
+    job.state.store(OB_EXPORT_RUNNING, std::memory_order_release);
+
+    ob_engine* handle = engine;
+    job.worker = std::thread([handle, request]() {
+      ob_engine::ExportJob& running = handle->export_job;
+      std::string error;
+      const bool ok = onebeat::core::exportSong(*handle->engine, request, running.progress, error);
+      if (ok) {
+        running.state.store(OB_EXPORT_DONE, std::memory_order_release);
+        return;
+      }
+      running.error = error;
+      running.state.store(running.progress.cancel.load(std::memory_order_relaxed)
+                              ? OB_EXPORT_CANCELLED
+                              : OB_EXPORT_FAILED,
+                          std::memory_order_release);
+    });
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    engine->export_job.state.store(OB_EXPORT_IDLE, std::memory_order_release);
+    return fail(OB_ERR_INTERNAL, exception.what());
+  } catch (...) {
+    engine->export_job.state.store(OB_EXPORT_IDLE, std::memory_order_release);
+    return fail(OB_ERR_INTERNAL, "Unknown failure while starting the export.");
+  }
+}
+
+ob_status ob_engine_export_status(ob_engine* engine, ob_export_status* out_status) {
+  if (engine == nullptr || out_status == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine and out_status must not be null.");
+  }
+  try {
+    ob_engine::ExportJob& job = engine->export_job;
+    const uint32_t state = job.state.load(std::memory_order_acquire);
+    if (state != OB_EXPORT_RUNNING && job.worker.joinable()) {
+      job.worker.join();
+      // The render left the transport where it found it; the loop region and
+      // the metronome come back from the model, which owns them.
+      publishModel(*engine);
+    }
+    std::memset(out_status, 0, sizeof(*out_status));
+    out_status->struct_size = sizeof(ob_export_status);
+    out_status->state = state;
+    out_status->progress =
+        static_cast<float>(job.progress.fraction.load(std::memory_order_relaxed));
+    copyText(out_status->path, sizeof(out_status->path), job.path.c_str());
+    // `path` is written by this thread before the render starts, so it is
+    // always readable. `error` belongs to the render thread until it publishes
+    // a terminal state — reading it while the render is running would be a
+    // race, and an error message that does not exist yet.
+    if (state != OB_EXPORT_RUNNING) {
+      copyText(out_status->error, sizeof(out_status->error), job.error.c_str());
+    }
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_export_cancel(ob_engine* engine) {
+  if (engine == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  }
+  engine->export_job.progress.cancel.store(true, std::memory_order_relaxed);
+  g_last_error.clear();
+  return OB_OK;
 }
 
 }  // extern "C"

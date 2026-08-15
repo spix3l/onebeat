@@ -2,7 +2,8 @@ import Cocoa
 import FlutterMacOS
 import UniformTypeIdentifiers
 
-/// The native half of ⌘O and ⌘S: the two panels, and nothing else.
+/// The native half of ⌘O, ⌘S and the export destination: the panels, and
+/// nothing else.
 ///
 /// A `.obt` project is a directory that Finder presents as one document
 /// (ADR-004 §2). That single fact is what shapes both panels here — the open
@@ -38,6 +39,10 @@ final class ProjectFileBridge {
           directory: arguments["directory"] as? String ?? ""
         )
       )
+
+    case "pickExportFolder":
+      let arguments = call.arguments as? [String: Any] ?? [:]
+      result(folderPanel(directory: arguments["directory"] as? String ?? ""))
 
     default:
       result(FlutterMethodNotImplemented)
@@ -78,6 +83,24 @@ final class ProjectFileBridge {
     return url.pathExtension.lowercased() == Self.projectExtension
       ? url.path
       : url.appendingPathExtension(Self.projectExtension).path
+  }
+
+  /// Where an export should be written. A folder, not a file name: the engine
+  /// names the file after the project and refuses to overwrite an earlier
+  /// export, so there is nothing here for the user to type.
+  private func folderPanel(directory: String) -> String? {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.prompt = "Export Here"
+    panel.message = "Choose a folder for the exported audio."
+    if !directory.isEmpty {
+      panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true)
+    }
+
+    return panel.runModal() == .OK ? panel.url?.path : nil
   }
 
   /// Limits a panel to project bundles.

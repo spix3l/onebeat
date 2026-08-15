@@ -289,7 +289,53 @@ abstract interface class ProjectFileClient {
   void openProject(String path);
 }
 
-class EngineClient implements RackClient, NoteClient, PatternClient, ArrangementClient, ProjectFileClient {
+/// The uncompressed formats an export can be written in. Both are 24-bit PCM:
+/// the depth is not a choice the dialog asks about, because 24-bit is the only
+/// answer that is right for a master.
+enum ExportFormat {
+  wav('WAV', 'wav'),
+  aiff('AIFF', 'aiff');
+
+  const ExportFormat(this.label, this.extension);
+
+  final String label;
+  final String extension;
+}
+
+enum ExportState { idle, running, done, failed, cancelled }
+
+/// Where one export has got to. Polled while a render runs, and read once more
+/// when it stops — the terminal states survive until the next export starts.
+@immutable
+class ExportStatus {
+  const ExportStatus({required this.state, required this.progress, required this.path, required this.error});
+
+  final ExportState state;
+  final double progress;
+
+  /// The file being written, or the one that was written.
+  final String path;
+
+  /// Empty unless [state] is [ExportState.failed].
+  final String error;
+}
+
+/// The audio export seam (EPIC-4). Separate from the rest for the same reason
+/// [ProjectFileClient] is: it is the whole of what the export dialog needs, so
+/// the dialog can be driven by a fake in tests.
+abstract interface class ExportClient {
+  /// Starts a background render of the arrangement into [directory]. The file
+  /// is named after the project and never overwrites an existing export.
+  void startExport({required String directory, required ExportFormat format, required int sampleRate});
+
+  /// Poll once per frame while a render runs.
+  ExportStatus readExportStatus();
+
+  /// Asks the render to stop; the partial file is deleted.
+  void cancelExport();
+}
+
+class EngineClient implements RackClient, NoteClient, PatternClient, ArrangementClient, ProjectFileClient, ExportClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -304,7 +350,8 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
       _laneInfo = calloc<ob_lane_info>(),
       _clipInfo = calloc<ob_clip_info>(),
       _noteCount = calloc<Int32>(),
-      _paramInfo = calloc<ob_param_info>();
+      _paramInfo = calloc<ob_param_info>(),
+      _exportStatus = calloc<ob_export_status>();
 
   /// Creates and initialises the engine. [useNullDevice] runs headless, which
   /// is how widget tests and CI drive the UI without audio hardware.
@@ -351,6 +398,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   final Pointer<ob_clip_info> _clipInfo;
   final Pointer<Int32> _noteCount;
   final Pointer<ob_param_info> _paramInfo;
+  final Pointer<ob_export_status> _exportStatus;
 
   // The note buffer is the one output that is not a single fixed struct, so it
   // grows on demand and is then reused. Reading a 2,000-note pattern must not
@@ -1308,6 +1356,45 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   /// save/reopen equality check (docs/project-format.md §6).
   String get projectJson => _bindings.ob_engine_project_json(_engine).cast<Utf8>().toDartString();
 
+  // --- audio export (EPIC-4) ------------------------------------------------
+
+  @override
+  void startExport({required String directory, required ExportFormat format, required int sampleRate}) =>
+      _withNativeString(
+        directory,
+        (Pointer<Char> native) => _bindings.ob_engine_export_start(
+          _engine,
+          native,
+          format == ExportFormat.aiff
+              ? ob_export_format.OB_EXPORT_FORMAT_AIFF.value
+              : ob_export_format.OB_EXPORT_FORMAT_WAV.value,
+          sampleRate,
+        ),
+      );
+
+  @override
+  ExportStatus readExportStatus() {
+    if (_bindings.ob_engine_export_status(_engine, _exportStatus) != ob_status.OB_OK) {
+      return const ExportStatus(state: ExportState.idle, progress: 0, path: '', error: '');
+    }
+    final ob_export_status value = _exportStatus.ref;
+    return ExportStatus(
+      state: switch (value.state) {
+        1 => ExportState.running,
+        2 => ExportState.done,
+        3 => ExportState.failed,
+        4 => ExportState.cancelled,
+        _ => ExportState.idle,
+      },
+      progress: value.progress,
+      path: _readFixedUtf8(value.path, 512),
+      error: _readFixedUtf8(value.error, 256),
+    );
+  }
+
+  @override
+  void cancelExport() => _check(_bindings.ob_engine_export_cancel(_engine));
+
   void _withNativeString(String value, ob_status Function(Pointer<Char>) call) {
     final Pointer<Utf8> native = value.toNativeUtf8();
     try {
@@ -1388,6 +1475,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
     calloc.free(_clipInfo);
     calloc.free(_noteCount);
     calloc.free(_paramInfo);
+    calloc.free(_exportStatus);
     if (_noteBuffer != nullptr) calloc.free(_noteBuffer);
   }
 }

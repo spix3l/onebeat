@@ -1,49 +1,56 @@
 // ExportFlowVm — sealed state machine for audio export (UI-C-06 / UI-D-06).
 import 'package:flutter/foundation.dart';
 
+import '../../engine/engine_client.dart' show ExportFormat;
+
+/// The rates the dialog offers, in hertz. The engine renders at whatever the
+/// device is running at and converts on the way out, so any of these is
+/// available whatever the audio hardware is doing.
+const List<int> exportSampleRates = <int>[44100, 48000, 88200, 96000];
+
+/// `48000` -> `48 kHz`, `44100` -> `44.1 kHz`.
+String sampleRateLabel(int hertz) {
+  final double kilohertz = hertz / 1000;
+  final String text = kilohertz == kilohertz.roundToDouble()
+      ? kilohertz.toStringAsFixed(0)
+      : kilohertz.toStringAsFixed(1);
+  return '$text kHz';
+}
+
 @immutable
 sealed class ExportFlowVm {
   const ExportFlowVm();
 }
 
+/// What the dialog asks for, and nothing else: a format, a rate, and a folder.
+///
+/// Bit depth, range and stems used to live here. They were choices the engine
+/// could not honour — every export was the whole song, at 24-bit, of the master
+/// — so the dialog was describing a render nobody was performing.
 @immutable
 class ExportSettingsVm extends ExportFlowVm {
   const ExportSettingsVm({
     required this.projectName,
     required this.format,
-    required this.bitDepth,
     required this.sampleRate,
-    required this.range,
-    required this.selectedStems,
-    required this.destinationPath,
-    required this.fileCount,
-    required this.durationText,
-    required this.estimatedSizeText,
+    required this.destinationDirectory,
+    required this.fileName,
   });
 
   final String projectName;
-  final String format;
-  final String bitDepth;
-  final String sampleRate;
-  final String range;
-  final Set<String> selectedStems;
-  final String destinationPath;
-  final int fileCount;
-  final String durationText;
-  final String estimatedSizeText;
+  final ExportFormat format;
+  final int sampleRate;
 
-  static const List<String> formats = <String>['WAV', 'AIFF', 'FLAC', 'MP3'];
-  static const List<String> bitDepths = <String>['16-bit', '24-bit', '32-bit float'];
-  static const List<String> sampleRates = <String>['44.1 kHz', '48 kHz', '88.2 kHz', '96 kHz'];
-  static const List<String> ranges = <String>['Whole project', 'Loop region', 'Selection'];
-  static const List<String> availableStems = <String>[
-    'Master',
-    'Drums Bus',
-    'Bass',
-    'Music',
-    'Vox',
-    'Reverb Send',
-  ];
+  /// The folder the file will be written into.
+  final String destinationDirectory;
+
+  /// What the file will be called there, extension included. The engine picks
+  /// the final name — it will not overwrite an earlier export — so this is the
+  /// name a first export gets.
+  final String fileName;
+
+  static const List<ExportFormat> formats = ExportFormat.values;
+  static const List<int> sampleRates = exportSampleRates;
 }
 
 @immutable

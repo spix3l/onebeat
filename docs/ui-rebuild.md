@@ -52,6 +52,12 @@ This document records the exit review for the complete Flutter UI rebuild (Phase
 | 27 | `workspace-drag.png` | `ui_kit/docked_panel.dart`<br>`features/channel_rack/channel_inspector.dart` | `channel_inspector_golden_test.dart` | **Shipped & Verified** |
 | 28 | `workspace-window.png` | `ui_kit/floating_window.dart`<br>`features/plugins/plugin_binding.dart` | `plugin_binding_test.dart` | **Shipped & Verified** |
 
+> **Screens 8–11 diverge from the design on purpose.** `export-audio.png` draws a
+> bit-depth row, a range row and a stems column. The engine renders the whole
+> arrangement, at 24-bit, of the master — so those controls described a render
+> nobody was performing, and the shipped dialog asks for a format, a sample rate
+> and a destination folder instead (UI-D-06, `GAPS.md` §2).
+
 ---
 
 ## Known ABI Gaps & Backlog Forward Tracking
@@ -59,4 +65,4 @@ This document records the exit review for the complete Flutter UI rebuild (Phase
 As documented in [`backlog/ui-rebuild/GAPS.md`](file:///Users/steve/Spix3l/daw/backlog/ui-rebuild/GAPS.md):
 1. **Dynamic Send Matrix ABI**: Full N×M routing matrix mutation requires engine graph recompilation support in Stage 4.
 2. **Dynamic Sidechain Envelopes**: Routing envelopes between arbitrary mixer tracks is visually wired and containment-isolated; native sidechain feed routing will be added in Stage 4.
-3. **Multi-Stem Offline Render**: Offline stem bounce loops over individual track stems; full parallel multi-stem rendering pipeline scheduled for Stage 4 export engine upgrade.
+3. **Multi-Stem Offline Render**: the export renders the master mix only (`ob_engine_export_start`, ABI 1.17: format, sample rate, destination folder). One file per stem needs a render pass per stem in the engine.

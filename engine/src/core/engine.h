@@ -187,6 +187,10 @@ class Engine final : public audio_io::RenderCallback {
     return channels_[static_cast<size_t>(index)]->instrument.sampler();
   }
   Transport& transportForTests() { return transport_; }
+  // The transport, for a caller that owns the render loop instead of the device
+  // — the offline exporter (core/audio_export.h). Only safe while the device is
+  // stopped: the audio thread otherwise owns this object outright.
+  Transport& offlineTransport() { return transport_; }
   Diagnostics& diagnostics() { return diagnostics_; }
   rt::RtLog& rtLog() { return rt_log_; }
   audio_io::AudioDevice* device() { return device_.get(); }

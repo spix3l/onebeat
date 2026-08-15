@@ -1,8 +1,8 @@
 #include "core/engine.h"
 
 #include <algorithm>
-#include <cstring>
 #include <cmath>
+#include <cstring>
 
 #include "core/wav_loader.h"
 #include "plugin/missing_plugin.h"
@@ -709,29 +709,29 @@ void Engine::renderMetronome(const AudioBufferView& output, int offset, int num_
 
   const double sample_rate = config_.sample_rate;
   const double frames_per_beat = transport_.timeMap().framesPerBeat();
-  constexpr int click_frames = 720;
-  constexpr float normal_level = 0.22F;
-  constexpr float accent_level = 0.34F;
-  constexpr double normal_frequency = 1200.0;
-  constexpr double accent_frequency = 1800.0;
-  constexpr double pi = 3.14159265358979323846;
+  constexpr int ClickFrames = 720;
+  constexpr float NormalLevel = 0.22F;
+  constexpr float AccentLevel = 0.34F;
+  constexpr double NormalFrequency = 1200.0;
+  constexpr double AccentFrequency = 1800.0;
+  constexpr double Pi = 3.14159265358979323846;
 
   for (int frame = 0; frame < num_frames; ++frame) {
     const int64_t position = chunk_start + frame;
-    const int64_t beat_number = static_cast<int64_t>(
-        std::floor(static_cast<double>(position) / frames_per_beat));
-    const int64_t beat_start = static_cast<int64_t>(
-        std::llround(static_cast<double>(beat_number) * frames_per_beat));
+    const int64_t beat_number =
+        static_cast<int64_t>(std::floor(static_cast<double>(position) / frames_per_beat));
+    const int64_t beat_start =
+        static_cast<int64_t>(std::llround(static_cast<double>(beat_number) * frames_per_beat));
     const int64_t since_beat = position - beat_start;
-    if (since_beat < 0 || since_beat >= click_frames) continue;
+    if (since_beat < 0 || since_beat >= ClickFrames) continue;
 
     const bool accent = (beat_number % 4) == 0;
-    const double frequency = accent ? accent_frequency : normal_frequency;
-    const float level = accent ? accent_level : normal_level;
+    const double frequency = accent ? AccentFrequency : NormalFrequency;
+    const float level = accent ? AccentLevel : NormalLevel;
     const float envelope = std::exp(-static_cast<float>(since_beat) / 180.0F);
     const float sample = level * envelope *
-                         static_cast<float>(std::sin(2.0 * pi * frequency *
-                                                     static_cast<double>(since_beat) / sample_rate));
+                         static_cast<float>(std::sin(
+                             2.0 * Pi * frequency * static_cast<double>(since_beat) / sample_rate));
     output.channel(0)[offset + frame] += sample;
     if (output.numChannels() > 1) output.channel(1)[offset + frame] += sample;
   }

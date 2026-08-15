@@ -11,18 +11,29 @@
 
 ## Scope
 
-1. **`ExportBinding`**: drives the sealed `ExportFlowVm` state machine — settings → progress (real progress callbacks) → done/failed; maps options (format/depth/rate/range/stems) onto the existing export call surface.
-2. Options the backend doesn't support yet: visibly disabled + `GAPS.md` entry (likely candidates: stems, some formats — verify against the current export code before assuming).
-3. Summary block computed live (file count, duration from range, estimated size).
-4. Wire the transport-bar `Export` button and `⌘E` (via `action_registry.dart`) to open the flow.
-5. Tests with a fake exporter: happy path reaches done with a real file in a temp dir; failure path shows the failed vm with the error message.
+1. **The engine had no export at all.** The dialog's progress bar was a timer and
+   its "done" screen named a file nobody had written. So the ticket grew an
+   engine half: `core/audio_export.{h,cpp}` (24-bit WAV/AIFF writer, windowed-sinc
+   resampler, `exportSong` driving `Engine::process` faster than real time) and
+   `ob_engine_export_start` / `_status` / `_cancel` (ABI 1.17).
+2. **`ExportBinding`**: drives the sealed `ExportFlowVm` — settings → progress
+   (polled from the render thread) → done/failed, and cancel back to settings.
+3. **The dialog was cut down to what the engine renders**: format and sample
+   rate, plus the destination folder (`NSOpenPanel` via the existing panels
+   bridge). Bit depth, range and stems are gone rather than disabled — see
+   `GAPS.md` §2.
+4. Transport-bar `Export` and ⌘E open the flow (already wired in UI-D-01).
+5. Tests: engine-level render-to-file and resampler tests, an ABI test that
+   exports a real project to a temp folder, and widget tests over a fake client.
 
 ## Acceptance criteria
 
-- [ ] A real project exports through the new dialog end-to-end (WAV at least), file plays.
-- [ ] Cancel mid-progress works and cleans up.
-- [ ] Suite green; analyze + token lint clean; C-06 goldens unchanged.
+- [x] A real project exports through the new dialog end-to-end (WAV at least), file plays.
+- [x] Cancel mid-progress works and cleans up (the partial file is deleted).
+- [x] Suite green; analyze + token lint clean; C-06 goldens unchanged.
+- [x] Human review (R4, delegated).
 
 ## Out of scope
 
-New export capabilities (stem rendering etc. if absent — EPIC-4).
+Stem rendering, compressed formats, an export range and a bit-depth choice —
+all recorded in `GAPS.md` §2.

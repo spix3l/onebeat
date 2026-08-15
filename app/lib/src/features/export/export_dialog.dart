@@ -2,6 +2,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../engine/engine_client.dart' show ExportFormat;
 import '../../ui_kit/button.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import 'export_flow_vm.dart';
@@ -11,10 +12,8 @@ class ExportDialog extends StatelessWidget {
     required this.vm,
     required this.onClose,
     this.onFormatChanged,
-    this.onBitDepthChanged,
     this.onSampleRateChanged,
-    this.onRangeChanged,
-    this.onToggleStem,
+    this.onChooseFolder,
     this.onStartExport,
     this.onCancelExport,
     this.onOpenFolder,
@@ -24,11 +23,9 @@ class ExportDialog extends StatelessWidget {
 
   final ExportFlowVm vm;
   final VoidCallback onClose;
-  final ValueChanged<String>? onFormatChanged;
-  final ValueChanged<String>? onBitDepthChanged;
-  final ValueChanged<String>? onSampleRateChanged;
-  final ValueChanged<String>? onRangeChanged;
-  final ValueChanged<String>? onToggleStem;
+  final ValueChanged<ExportFormat>? onFormatChanged;
+  final ValueChanged<int>? onSampleRateChanged;
+  final VoidCallback? onChooseFolder;
   final VoidCallback? onStartExport;
   final VoidCallback? onCancelExport;
   final VoidCallback? onOpenFolder;
@@ -67,10 +64,8 @@ class ExportDialog extends StatelessWidget {
               final ExportSettingsVm settings => _ExportSettingsBody(
                 vm: settings,
                 onFormatChanged: onFormatChanged,
-                onBitDepthChanged: onBitDepthChanged,
                 onSampleRateChanged: onSampleRateChanged,
-                onRangeChanged: onRangeChanged,
-                onToggleStem: onToggleStem,
+                onChooseFolder: onChooseFolder,
                 onClose: onClose,
                 onStartExport: onStartExport,
               ),
@@ -145,20 +140,16 @@ class _ExportSettingsBody extends StatelessWidget {
   const _ExportSettingsBody({
     required this.vm,
     this.onFormatChanged,
-    this.onBitDepthChanged,
     this.onSampleRateChanged,
-    this.onRangeChanged,
-    this.onToggleStem,
+    this.onChooseFolder,
     this.onClose,
     this.onStartExport,
   });
 
   final ExportSettingsVm vm;
-  final ValueChanged<String>? onFormatChanged;
-  final ValueChanged<String>? onBitDepthChanged;
-  final ValueChanged<String>? onSampleRateChanged;
-  final ValueChanged<String>? onRangeChanged;
-  final ValueChanged<String>? onToggleStem;
+  final ValueChanged<ExportFormat>? onFormatChanged;
+  final ValueChanged<int>? onSampleRateChanged;
+  final VoidCallback? onChooseFolder;
   final VoidCallback? onClose;
   final VoidCallback? onStartExport;
 
@@ -171,125 +162,81 @@ class _ExportSettingsBody extends StatelessWidget {
       children: <Widget>[
         Padding(
           padding: EdgeInsets.all(tokens.spacing.lg),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Left column: settings
-              Expanded(
-                flex: 11,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('FORMAT', style: tokens.type.label),
-                    SizedBox(height: tokens.spacing.xs),
-                    Wrap(
-                      spacing: tokens.spacing.xs,
-                      runSpacing: tokens.spacing.xs,
-                      children: <Widget>[
-                        for (final String fmt in ExportSettingsVm.formats)
-                          _ChoiceChip(
-                            label: fmt,
-                            selected: vm.format == fmt,
-                            onTap: onFormatChanged == null ? null : () => onFormatChanged!(fmt),
-                          ),
-                      ],
+              Text('FORMAT', style: tokens.type.label),
+              SizedBox(height: tokens.spacing.xs),
+              Wrap(
+                spacing: tokens.spacing.xs,
+                runSpacing: tokens.spacing.xs,
+                children: <Widget>[
+                  for (final ExportFormat format in ExportSettingsVm.formats)
+                    _ChoiceChip(
+                      label: format.label,
+                      selected: vm.format == format,
+                      onTap: onFormatChanged == null ? null : () => onFormatChanged!(format),
                     ),
-                    SizedBox(height: tokens.spacing.md),
-                    Text('BIT DEPTH', style: tokens.type.label),
-                    SizedBox(height: tokens.spacing.xs),
-                    Wrap(
-                      spacing: tokens.spacing.xs,
-                      runSpacing: tokens.spacing.xs,
-                      children: <Widget>[
-                        for (final String depth in ExportSettingsVm.bitDepths)
-                          _ChoiceChip(
-                            label: depth,
-                            selected: vm.bitDepth == depth,
-                            onTap: onBitDepthChanged == null ? null : () => onBitDepthChanged!(depth),
-                          ),
-                      ],
-                    ),
-                    SizedBox(height: tokens.spacing.md),
-                    Text('SAMPLE RATE', style: tokens.type.label),
-                    SizedBox(height: tokens.spacing.xs),
-                    Wrap(
-                      spacing: tokens.spacing.xs,
-                      runSpacing: tokens.spacing.xs,
-                      children: <Widget>[
-                        for (final String rate in ExportSettingsVm.sampleRates)
-                          _ChoiceChip(
-                            label: rate,
-                            selected: vm.sampleRate == rate,
-                            onTap: onSampleRateChanged == null ? null : () => onSampleRateChanged!(rate),
-                          ),
-                      ],
-                    ),
-                    SizedBox(height: tokens.spacing.md),
-                    Text('RANGE', style: tokens.type.label),
-                    SizedBox(height: tokens.spacing.xs),
-                    Wrap(
-                      spacing: tokens.spacing.xs,
-                      runSpacing: tokens.spacing.xs,
-                      children: <Widget>[
-                        for (final String range in ExportSettingsVm.ranges)
-                          _ChoiceChip(
-                            label: range,
-                            selected: vm.range == range,
-                            onTap: onRangeChanged == null ? null : () => onRangeChanged!(range),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+                ],
               ),
-              SizedBox(width: tokens.spacing.lg),
-              // Right column: stems & stats
-              Expanded(
-                flex: 10,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('STEMS · PER TRACK', style: tokens.type.label),
-                    SizedBox(height: tokens.spacing.xs),
-                    Wrap(
-                      spacing: tokens.spacing.xs,
-                      runSpacing: tokens.spacing.xs,
-                      children: <Widget>[
-                        for (final String stem in ExportSettingsVm.availableStems)
-                          _StemPill(
-                            label: stem,
-                            selected: vm.selectedStems.contains(stem),
-                            onTap: onToggleStem == null ? null : () => onToggleStem!(stem),
-                          ),
-                      ],
+              SizedBox(height: tokens.spacing.md),
+              Text('SAMPLE RATE', style: tokens.type.label),
+              SizedBox(height: tokens.spacing.xs),
+              Wrap(
+                spacing: tokens.spacing.xs,
+                runSpacing: tokens.spacing.xs,
+                children: <Widget>[
+                  for (final int rate in ExportSettingsVm.sampleRates)
+                    _ChoiceChip(
+                      label: sampleRateLabel(rate),
+                      selected: vm.sampleRate == rate,
+                      onTap: onSampleRateChanged == null ? null : () => onSampleRateChanged!(rate),
                     ),
-                    SizedBox(height: tokens.spacing.md),
-                    Container(
-                      padding: EdgeInsets.all(tokens.spacing.md),
-                      decoration: BoxDecoration(
-                        color: tokens.color.surfaceDeep,
-                        borderRadius: tokens.radius.controlBorder,
-                        border: Border.all(
-                          color: tokens.color.line,
-                          width: tokens.border.hairline,
-                        ),
-                      ),
+                ],
+              ),
+              SizedBox(height: tokens.spacing.md),
+              Text('DESTINATION', style: tokens.type.label),
+              SizedBox(height: tokens.spacing.xs),
+              Container(
+                padding: EdgeInsets.all(tokens.spacing.md),
+                decoration: BoxDecoration(
+                  color: tokens.color.surfaceDeep,
+                  borderRadius: tokens.radius.controlBorder,
+                  border: Border.all(
+                    color: tokens.color.line,
+                    width: tokens.border.hairline,
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    ObKitGlyph(
+                      kind: ObKitGlyphKind.folder,
+                      color: tokens.color.textMuted,
+                      size: ObKitGlyphSize.inline,
+                    ),
+                    SizedBox(width: tokens.spacing.xs),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          _SummaryRow(label: 'Files', value: '${vm.fileCount} (${vm.format} ${vm.bitDepth})'),
-                          SizedBox(height: tokens.spacing.xxs),
-                          _SummaryRow(label: 'Duration', value: vm.durationText),
-                          SizedBox(height: tokens.spacing.xxs),
-                          _SummaryRow(label: 'Estimated size', value: vm.estimatedSizeText),
-                          SizedBox(height: tokens.spacing.xs),
                           Text(
-                            vm.destinationPath,
+                            vm.destinationDirectory,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: tokens.type.numericSmall,
+                          ),
+                          SizedBox(height: tokens.spacing.xxs),
+                          Text(
+                            vm.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: tokens.type.numericSmall.copyWith(color: tokens.color.textMuted),
                           ),
                         ],
                       ),
                     ),
+                    SizedBox(width: tokens.spacing.sm),
+                    ObButton(label: 'Choose Folder…', onTap: onChooseFolder),
                   ],
                 ),
               ),
@@ -310,13 +257,6 @@ class _ExportSettingsBody extends StatelessWidget {
           ),
           child: Row(
             children: <Widget>[
-              ObKitGlyph(
-                kind: ObKitGlyphKind.folder,
-                color: tokens.color.textMuted,
-                size: ObKitGlyphSize.inline,
-              ),
-              SizedBox(width: tokens.spacing.xs),
-              Text('Export to ~/Music/OneBeat', style: tokens.type.numericSmall),
               const Spacer(),
               ObButton(label: 'Cancel', onTap: onClose),
               SizedBox(width: tokens.spacing.sm),
@@ -519,95 +459,6 @@ class _ChoiceChip extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _StemPill extends StatelessWidget {
-  const _StemPill({
-    required this.label,
-    required this.selected,
-    this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: tokens.spacing.sm,
-            vertical: tokens.spacing.xs,
-          ),
-          decoration: BoxDecoration(
-            color: tokens.color.surfaceDeep,
-            borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: selected ? tokens.color.accent : tokens.color.line,
-              width: selected ? tokens.border.emphasis : tokens.border.hairline,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Container(
-                width: tokens.spacing.sm,
-                height: tokens.spacing.sm,
-                decoration: BoxDecoration(
-                  color: selected ? tokens.color.accent : tokens.color.none,
-                  borderRadius: tokens.radius.controlBorder,
-                  border: Border.all(
-                    color: selected ? tokens.color.accent : tokens.color.line,
-                    width: tokens.border.hairline,
-                  ),
-                ),
-              ),
-              SizedBox(width: tokens.spacing.xs),
-              Text(
-                label,
-                style: tokens.type.body.copyWith(
-                  color: selected ? tokens.color.textPrimary : tokens.color.textMuted,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return Row(
-      children: <Widget>[
-        Text(label, style: tokens.type.numericSmall),
-        const Spacer(),
-        Text(
-          value,
-          style: tokens.type.numericSmall.copyWith(color: tokens.color.textPrimary),
-        ),
-      ],
     );
   }
 }

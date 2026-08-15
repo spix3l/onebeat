@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 16
+#define OB_ABI_VERSION_MINOR 17
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -138,7 +138,7 @@ typedef enum ob_command_type {
   OB_CMD_SET_INSTRUMENT_PAN = 15,   /* f64_a = pan -1..1 */
   OB_CMD_PREVIEW_NOTE_ON = 16,      /* i64_a = midi note, f64_a = velocity */
   OB_CMD_PREVIEW_NOTE_OFF = 17,     /* i64_a = midi note */
-  OB_CMD_SET_METRONOME = 18          /* i64_a = 0 disabled / 1 enabled */
+  OB_CMD_SET_METRONOME = 18         /* i64_a = 0 disabled / 1 enabled */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).
@@ -474,9 +474,9 @@ typedef struct ob_instrument_info {
   char plugin_name[128];
   char plugin_vendor[128];
   char plugin_path[512];
-  float gain; /* linear 0..2, the channel rack VOL knob */
-  float pan;  /* -1..1, the channel rack PAN knob */
-  char route_id[32];   /* stable mixer-track ID for output port 0 */
+  float gain;           /* linear 0..2, the channel rack VOL knob */
+  float pan;            /* -1..1, the channel rack PAN knob */
+  char route_id[32];    /* stable mixer-track ID for output port 0 */
   char route_name[128]; /* display name for output port 0 */
 } ob_instrument_info;
 
@@ -702,8 +702,7 @@ OB_API ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pa
 /* Pattern metadata edits are undoable and persist with the project. */
 OB_API ob_status ob_engine_pattern_set_time_signature(ob_engine* engine,
                                                       const char* utf8_pattern_id,
-                                                      int32_t numerator,
-                                                      int32_t denominator);
+                                                      int32_t numerator, int32_t denominator);
 OB_API ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_id,
                                            int32_t order);
 OB_API ob_status ob_engine_pattern_set_group(ob_engine* engine, const char* utf8_pattern_id,
@@ -897,6 +896,62 @@ OB_API ob_status ob_engine_project_set_name(ob_engine* engine, const char* utf8_
  * there is. The comparison is memoised against the model revision, so calling
  * this every frame costs a load and a compare. */
 OB_API int32_t ob_engine_project_is_modified(ob_engine* engine);
+
+/* ------------------------------------------------------------------------- */
+/* Audio export (added in ABI 1.17, EPIC-4)                                   */
+/* ------------------------------------------------------------------------- */
+
+/* Both are uncompressed 24-bit PCM. Bit depth is not offered: 24-bit is the
+ * only answer that is right for a master, and a choice the user cannot judge
+ * from the dialog is a choice not worth asking for. */
+typedef enum ob_export_format {
+  OB_EXPORT_FORMAT_WAV = 0,
+  OB_EXPORT_FORMAT_AIFF = 1
+} ob_export_format;
+
+typedef enum ob_export_state {
+  OB_EXPORT_IDLE = 0,
+  OB_EXPORT_RUNNING = 1,
+  OB_EXPORT_DONE = 2,
+  OB_EXPORT_FAILED = 3,
+  OB_EXPORT_CANCELLED = 4
+} ob_export_state;
+
+typedef struct ob_export_status {
+  uint32_t struct_size; /* = sizeof(ob_export_status) */
+  uint32_t state;       /* ob_export_state */
+  float progress;       /* 0..1 */
+  uint32_t reserved_;
+  char path[512];  /* the file being written, or the one written */
+  char error[256]; /* empty unless state == OB_EXPORT_FAILED */
+} ob_export_status;
+
+/* Main/UI thread. Never blocks: starts a background render and returns.
+ *
+ * The render goes through the same Engine::process the device calls, faster
+ * than real time, from the start of the arrangement to its end plus a tail so
+ * that releases and reverbs are not cut off. The audio device is stopped for
+ * the duration and restarted afterwards — the transport is left where it was,
+ * stopped — so nothing is audible while an export runs.
+ *
+ * `utf8_directory` is the folder to write into; the file is named after the
+ * project with the format's extension, and an existing file of that name is
+ * given a ` 2`, ` 3` suffix rather than being overwritten. `sample_rate` is the
+ * rate of the file, which need not be the rate the engine is running at.
+ *
+ * Returns OB_ERR_ALREADY_RUNNING if an export is already in flight. Commands
+ * posted with ob_engine_post_command are rejected while one is: the exporter
+ * owns the transport until it is finished. */
+OB_API ob_status ob_engine_export_start(ob_engine* engine, const char* utf8_directory,
+                                        uint32_t format, int32_t sample_rate);
+
+/* Main/UI thread. Never blocks. Poll once per frame while an export runs; the
+ * terminal states (done, failed, cancelled) survive until the next start. */
+OB_API ob_status ob_engine_export_status(ob_engine* engine, ob_export_status* out_status);
+
+/* Main/UI thread. Never blocks. Asks the render to stop at the next block; the
+ * partial file is deleted, and the state becomes OB_EXPORT_CANCELLED. */
+OB_API ob_status ob_engine_export_cancel(ob_engine* engine);
 
 #ifdef __cplusplus
 } /* extern "C" */

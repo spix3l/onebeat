@@ -519,6 +519,46 @@ class FakeEngineClient implements EngineClient {
     savedPath = path;
     modified = false;
   }
+
+  // ----- export -------------------------------------------------------------
+
+  /// The arguments the last [startExport] was given, and what the next status
+  /// poll should answer with. A test drives the render by writing to
+  /// [exportStatus] between pumps, which is what the engine thread does for
+  /// real.
+  String? exportedDirectory;
+  ExportFormat? exportedFormat;
+  int? exportedSampleRate;
+  int exportCancels = 0;
+  ExportStatus exportStatus = const ExportStatus(
+    state: ExportState.idle,
+    progress: 0,
+    path: '',
+    error: '',
+  );
+
+  @override
+  void startExport({required String directory, required ExportFormat format, required int sampleRate}) {
+    if (failure case final EngineException error) throw error;
+    exportedDirectory = directory;
+    exportedFormat = format;
+    exportedSampleRate = sampleRate;
+    exportStatus = const ExportStatus(state: ExportState.running, progress: 0, path: '', error: '');
+  }
+
+  @override
+  ExportStatus readExportStatus() => exportStatus;
+
+  @override
+  void cancelExport() {
+    exportCancels++;
+    exportStatus = const ExportStatus(
+      state: ExportState.cancelled,
+      progress: 0,
+      path: '',
+      error: '',
+    );
+  }
 }
 
 class MutablePattern {

@@ -1,21 +1,24 @@
-// ExportBinding — manages audio export state machine and engine execution (UI-D-06).
+// ExportBinding — drives the export state machine against the engine (UI-D-06).
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../../core/engine_controller.dart' as core;
 import '../../engine/engine_client.dart';
 import 'export_dialog.dart';
 import 'export_flow_vm.dart';
+import 'export_folder_platform.dart';
 
 class ExportBinding extends StatefulWidget {
   const ExportBinding({
     required this.client,
     required this.onClose,
     this.controller,
-    this.initialFormat = 'WAV',
-    this.initialBitDepth = '24-bit',
-    this.initialSampleRate = '48 kHz',
-    this.initialRange = 'Loop region',
+    this.folders = const ExportFolderPlatform(),
+    this.initialFormat = ExportFormat.wav,
+    this.initialSampleRate = 48000,
+    this.initialDirectory,
     this.onExportStarted,
     this.onExportDone,
     super.key,
@@ -24,10 +27,14 @@ class ExportBinding extends StatefulWidget {
   final EngineClient client;
   final VoidCallback onClose;
   final core.EngineController? controller;
-  final String initialFormat;
-  final String initialBitDepth;
-  final String initialSampleRate;
-  final String initialRange;
+  final ExportFolderPicker folders;
+  final ExportFormat initialFormat;
+  final int initialSampleRate;
+
+  /// Overrides where the first export is offered. Defaults to the folder the
+  /// project lives in, and to the user's Music folder for a project that has
+  /// never been saved.
+  final String? initialDirectory;
   final VoidCallback? onExportStarted;
   final ValueChanged<String>? onExportDone;
 
@@ -36,151 +43,165 @@ class ExportBinding extends StatefulWidget {
 }
 
 class _ExportBindingState extends State<ExportBinding> {
-  late String _format;
-  late String _bitDepth;
-  late String _sampleRate;
-  late String _range;
-  final Set<String> _selectedStems = <String>{'Master'};
+  // The render runs on an engine thread; this is how often the UI asks it where
+  // it has got to. Fast enough for a bar that moves, cheap enough to ignore.
+  static const Duration _pollInterval = Duration(milliseconds: 100); // token-lint-ok: engine poll cadence
+
+  late ExportFormat _format;
+  late int _sampleRate;
+  late String _directory;
 
   ExportFlowVm? _overrideVm;
-  Timer? _progressTimer;
-  double _progress = 0.0;
+  Timer? _poll;
+  bool _running = false;
 
   @override
   void initState() {
     super.initState();
     _format = widget.initialFormat;
-    _bitDepth = widget.initialBitDepth;
     _sampleRate = widget.initialSampleRate;
-    _range = widget.initialRange;
+    _directory = widget.initialDirectory ?? _defaultDirectory();
   }
 
   @override
   void dispose() {
-    _progressTimer?.cancel();
+    _poll?.cancel();
+    // The dialog is the only thing showing a render's progress, so a render
+    // must not outlive it: closing mid-export cancels rather than leaving the
+    // engine bouncing with nobody watching and the transport claimed.
+    if (_running) widget.client.cancelExport();
     super.dispose();
   }
 
-  String _calculateDuration() {
-    return switch (_range) {
-      'Loop region' => '0:32 (8 bars)',
-      'Selection' => '0:16 (4 bars)',
-      _ => '2:08 (32 bars)',
-    };
+  /// Beside the project if it has been saved, otherwise the user's Music
+  /// folder: the two places a person looks for a bounce they just made.
+  String _defaultDirectory() {
+    final String projectPath = widget.client.projectPath;
+    if (projectPath.isNotEmpty) {
+      final String parent = File(projectPath).parent.path;
+      if (Directory(parent).existsSync()) return parent;
+    }
+    final String? home = Platform.environment['HOME'];
+    if (home != null && home.isNotEmpty) {
+      final String music = '$home/Music';
+      if (Directory(music).existsSync()) return music;
+      return home;
+    }
+    return Directory.current.path;
   }
 
-  String _calculateEstimatedSize() {
-    final int bytesPerSample = switch (_bitDepth) {
-      '16-bit' => 2,
-      '32-bit float' => 4,
-      _ => 3,
-    };
-    final double rate = switch (_sampleRate) {
-      '96 kHz' => 96000,
-      '88.2 kHz' => 88200,
-      '44.1 kHz' => 44100,
-      _ => 48000,
-    };
-    final double durationSeconds = switch (_range) {
-      'Loop region' => 32.0,
-      'Selection' => 16.0,
-      _ => 128.0,
-    };
-
-    final double totalBytes = durationSeconds * rate * 2 * bytesPerSample * _selectedStems.length;
-    final double mb = totalBytes / (1024 * 1024);
-    return '~${mb.toStringAsFixed(1)} MB';
+  String get _projectName {
+    final String name = widget.client.projectName;
+    return name.isEmpty ? 'Untitled' : name;
   }
 
   ExportFlowVm _buildVm() {
     if (_overrideVm != null) return _overrideVm!;
-
     return ExportSettingsVm(
-      projectName: 'Project.onebeat',
+      projectName: _projectName,
       format: _format,
-      bitDepth: _bitDepth,
       sampleRate: _sampleRate,
-      range: _range,
-      selectedStems: _selectedStems,
-      destinationPath: '~/Music/OneBeat/',
-      fileCount: _selectedStems.length,
-      durationText: _calculateDuration(),
-      estimatedSizeText: _calculateEstimatedSize(),
+      destinationDirectory: _directory,
+      fileName: '$_projectName.${_format.extension}',
     );
+  }
+
+  Future<void> _chooseFolder() async {
+    final String? chosen = await widget.folders.pickExportFolder(directory: _directory);
+    if (chosen == null || !mounted) return;
+    setState(() => _directory = chosen);
   }
 
   void _startExport() {
     widget.onExportStarted?.call();
-    setState(() {
-      _progress = 0.0;
-      _overrideVm = const ExportProgressVm(
-        progress: 0.0,
-        statusText: 'Rendering audio mix...',
+    try {
+      widget.client.startExport(
+        directory: _directory,
+        format: _format,
+        sampleRate: _sampleRate,
       );
-    });
-
-    _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (Timer t) { // token-lint-ok: simulated timer
-      // token-lint-ok: simulated timer
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
+    } on EngineException catch (error) {
       setState(() {
-        _progress += 0.25;
-        if (_progress >= 1.0) {
-          t.cancel();
-          const String path = '~/Music/OneBeat/Project_Mix.wav';
-          _overrideVm = const ExportDoneVm(
-            filePath: path,
-            summaryText: 'WAV 24-bit · 48 kHz · 32 bars rendered',
-          );
-          widget.onExportDone?.call(path);
-        } else {
-          _overrideVm = ExportProgressVm(
-            progress: _progress,
-            statusText: 'Rendering audio mix...',
-          );
-        }
+        _running = false;
+        _overrideVm = ExportFailedVm(errorMessage: error.message);
       });
+      return;
+    }
+    setState(() {
+      _running = true;
+      _overrideVm = const ExportProgressVm(progress: 0.0, statusText: 'Rendering audio mix…');
     });
+    _poll?.cancel();
+    _poll = Timer.periodic(_pollInterval, (Timer timer) => _readStatus()); // token-lint-ok: engine poll
+  }
+
+  void _readStatus() {
+    if (!mounted) {
+      _poll?.cancel();
+      return;
+    }
+    final ExportStatus status = widget.client.readExportStatus();
+    switch (status.state) {
+      case ExportState.running:
+        setState(() {
+          _overrideVm = ExportProgressVm(
+            progress: status.progress,
+            statusText: 'Rendering audio mix…',
+          );
+        });
+      case ExportState.done:
+        _poll?.cancel();
+        _running = false;
+        widget.onExportDone?.call(status.path);
+        setState(() {
+          _overrideVm = ExportDoneVm(
+            filePath: status.path,
+            summaryText: '${_format.label} 24-bit · ${sampleRateLabel(_sampleRate)}',
+          );
+        });
+      case ExportState.failed:
+        _poll?.cancel();
+        _running = false;
+        setState(() {
+          _overrideVm = ExportFailedVm(
+            errorMessage: status.error.isEmpty ? 'The export did not finish.' : status.error,
+          );
+        });
+      case ExportState.cancelled:
+      case ExportState.idle:
+        _poll?.cancel();
+        _running = false;
+        setState(() => _overrideVm = null);
+    }
   }
 
   void _cancelExport() {
-    _progressTimer?.cancel();
-    setState(() {
-      _overrideVm = null;
-      _progress = 0.0;
-    });
+    widget.client.cancelExport();
+    // Left running: the engine finishes the block it is on, deletes the partial
+    // file and reports OB_EXPORT_CANCELLED, which is what returns the dialog to
+    // its settings. Dropping the timer here would leave the render unwatched.
+    _readStatus();
   }
 
-  void _toggleStem(String stem) {
-    setState(() {
-      if (_selectedStems.contains(stem)) {
-        if (_selectedStems.length > 1) {
-          _selectedStems.remove(stem);
-        }
-      } else {
-        _selectedStems.add(stem);
-      }
-    });
+  void _openFolder() {
+    final ExportFlowVm vm = _buildVm();
+    if (vm is! ExportDoneVm) return;
+    // Reveals rather than opens: the point is to show the file where it landed,
+    // not to hand it to whatever plays WAVs on this machine.
+    unawaited(Process.run('open', <String>['-R', vm.filePath]));
   }
 
   @override
   Widget build(BuildContext context) {
-    final ExportFlowVm vm = _buildVm();
-
     return ExportDialog(
-      vm: vm,
+      vm: _buildVm(),
       onClose: widget.onClose,
-      onFormatChanged: (String f) => setState(() => _format = f),
-      onBitDepthChanged: (String d) => setState(() => _bitDepth = d),
-      onSampleRateChanged: (String r) => setState(() => _sampleRate = r),
-      onRangeChanged: (String r) => setState(() => _range = r),
-      onToggleStem: _toggleStem,
+      onFormatChanged: (ExportFormat format) => setState(() => _format = format),
+      onSampleRateChanged: (int rate) => setState(() => _sampleRate = rate),
+      onChooseFolder: () => unawaited(_chooseFolder()),
       onStartExport: _startExport,
       onCancelExport: _cancelExport,
-      onOpenFolder: () {},
+      onOpenFolder: _openFolder,
       onRetry: _startExport,
     );
   }

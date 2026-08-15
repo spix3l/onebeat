@@ -36,26 +36,31 @@ struct PresetValues {
 
 constexpr std::array<PresetValues, PresetCount> FactoryPresets{{
     // A mono-friendly low sine/saw foundation that leaves kick space.
-    {.05, .16, .50, .96, .15, .12, .52, .005, .48, .20, .18, .28, .02, .12, .80, .13, .03, .03, .00},
+    {.05, .16, .50, .96, .15, .12, .52, .005, .48, .20, .18, .28, .02, .12, .80, .13, .03, .03,
+     .00},
     // Short, glassy upper-register bell for the familiar drill counter melody.
-    {.92, .68, .54, .18, .68, .22, .35, .002, .18, .08, .20, .08, .25, .46, .72, .26, .06, .00, .05},
+    {.92, .68, .54, .18, .68, .22, .35, .002, .18, .08, .20, .08, .25, .46, .72, .26, .06, .00,
+     .05},
     // Muted saw pluck with a controlled midrange bite.
-    {.10, .36, .50, .24, .31, .18, .78, .003, .24, .06, .16, .24, .12, .28, .76, .20, .04, .00, .01},
+    {.10, .36, .50, .24, .31, .18, .78, .003, .24, .06, .16, .24, .12, .28, .76, .20, .04, .00,
+     .01},
     // Saturated sub with a long tail and portamento-ready setting.
-    {.02, .10, .50, .99, .12, .08, .40, .004, .66, .22, .38, .48, .01, .10, .78, .10, .02, .16, .00},
+    {.02, .10, .50, .99, .12, .08, .40, .004, .66, .22, .38, .48, .01, .10, .78, .10, .02, .16,
+     .00},
     // Slow, dark supersaw pad for the background of an eight-bar loop.
     {.08, .72, .62, .42, .29, .20, .64, .34, .64, .74, .70, .10, .34, .92, .62, .24, .18, .00, .01},
     // Hollow digital keys that stay out of the 808's fundamental.
     {.36, .46, .48, .10, .48, .20, .48, .01, .38, .46, .32, .12, .18, .55, .70, .18, .08, .00, .00},
     // Narrow, resonant siren lead with vibrato and a little stereo movement.
-    {.18, .58, .56, .12, .55, .62, .72, .025, .30, .62, .28, .14, .20, .64, .70, .42, .18, .05, .01},
+    {.18, .58, .56, .12, .55, .62, .72, .025, .30, .62, .28, .14, .20, .64, .70, .42, .18, .05,
+     .01},
     // Breath-like minor-key atmosphere: sine core plus restrained noise.
     {.98, .50, .50, .26, .38, .16, .74, .46, .70, .82, .88, .04, .52, .86, .58, .16, .12, .00, .11},
 }};
 
 [[nodiscard]] uint32_t presetIndex(double normalized) noexcept {
-  return std::clamp(static_cast<uint32_t>(normalized * static_cast<double>(PresetCount)),
-                    0U, static_cast<uint32_t>(PresetCount - 1));
+  return std::clamp(static_cast<uint32_t>(normalized * static_cast<double>(PresetCount)), 0U,
+                    static_cast<uint32_t>(PresetCount - 1));
 }
 
 [[nodiscard]] double oscillator(double phase, double shape) noexcept {
@@ -132,7 +137,8 @@ void SynthEngine::applyFactoryDefaults() noexcept {
 }
 
 void SynthEngine::applyPreset(uint32_t index) noexcept {
-  const PresetValues& preset = FactoryPresets[std::min(index, static_cast<uint32_t>(PresetCount - 1))];
+  const PresetValues& preset =
+      FactoryPresets[std::min(index, static_cast<uint32_t>(PresetCount - 1))];
   parameters_[parameterIndex(ParamOscShape)].store(preset.shape, std::memory_order_relaxed);
   parameters_[parameterIndex(ParamOscMix)].store(preset.mix, std::memory_order_relaxed);
   parameters_[parameterIndex(ParamDetune)].store(preset.detune, std::memory_order_relaxed);
@@ -294,7 +300,8 @@ void SynthEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
   const double decay_coeff = std::exp(-1.0 / (sample_rate_ * decay_seconds));
   const double release_coeff = std::exp(-1.0 / (sample_rate_ * release_seconds));
   const double detune_semitones = (detune - 0.5) * 2.0;
-  const size_t delay_samples = static_cast<size_t>(0.06 * sample_rate_ + delay * 0.38 * sample_rate_);
+  const size_t delay_samples =
+      static_cast<size_t>(0.06 * sample_rate_ + delay * 0.38 * sample_rate_);
   const float delay_feedback = static_cast<float>(0.18 + delay * 0.38);
   const float delay_mix = static_cast<float>(delay * 0.24);
 
@@ -346,7 +353,8 @@ void SynthEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
       } else {
         voice.frequency = voice.target_frequency;
       }
-      const double frequency = voice.frequency * std::pow(2.0, (detune_semitones + lfo_pitch) / 12.0);
+      const double frequency =
+          voice.frequency * std::pow(2.0, (detune_semitones + lfo_pitch) / 12.0);
       const double secondary_frequency = frequency * std::pow(2.0, detune_semitones / 1200.0);
       const double phase_step = frequency / sample_rate_;
       const double secondary_step = secondary_frequency / sample_rate_;
@@ -354,7 +362,8 @@ void SynthEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
       const double oscillator_b = oscillator(voice.phase_secondary, std::min(1.0, shape + 0.07));
       const double sub_oscillator = std::sin(voice.phase * 0.5 * TwoPi);
       const double noise_sample = static_cast<double>(nextNoise(voice.noise_state)) * noise;
-      const double raw = oscillator_a * (1.0 - mix) + oscillator_b * mix + sub_oscillator * sub + noise_sample;
+      const double raw =
+          oscillator_a * (1.0 - mix) + oscillator_b * mix + sub_oscillator * sub + noise_sample;
 
       voice.phase += phase_step;
       if (voice.phase >= 1.0) voice.phase -= std::floor(voice.phase);
@@ -363,18 +372,22 @@ void SynthEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
 
       const double envelope_cutoff = filter_env * voice.envelope;
       const double lfo_cutoff = lfo * lfo_depth * 0.14;
-      const double cutoff_hz = std::clamp(35.0 * std::pow(520.0, cutoff + envelope_cutoff + lfo_cutoff),
-                                          35.0, sample_rate_ * 0.44);
-      const float filter_alpha = static_cast<float>(1.0 - std::exp(-TwoPi * cutoff_hz / sample_rate_));
-      const float input = static_cast<float>(raw) - voice.filter_band * static_cast<float>(resonance * 0.70);
+      const double cutoff_hz = std::clamp(
+          35.0 * std::pow(520.0, cutoff + envelope_cutoff + lfo_cutoff), 35.0, sample_rate_ * 0.44);
+      const float filter_alpha =
+          static_cast<float>(1.0 - std::exp(-TwoPi * cutoff_hz / sample_rate_));
+      const float input =
+          static_cast<float>(raw) - voice.filter_band * static_cast<float>(resonance * 0.70);
       const float high = input - voice.filter_low - voice.filter_band;
       voice.filter_band += filter_alpha * high;
       voice.filter_low += filter_alpha * voice.filter_band;
-      const double filtered = static_cast<double>(voice.filter_low + voice.filter_band * static_cast<float>(resonance * 0.20));
+      const double filtered = static_cast<double>(
+          voice.filter_low + voice.filter_band * static_cast<float>(resonance * 0.20));
       const double driven = std::tanh(filtered * (1.0 + drive * 7.0));
       const double voice_output = driven * voice.envelope * std::pow(voice.velocity, 0.75) * 0.18;
 
-      const double pan = std::clamp((static_cast<double>(voice.key) - 60.0) / 48.0, -1.0, 1.0) * width * 0.55;
+      const double pan =
+          std::clamp((static_cast<double>(voice.key) - 60.0) / 48.0, -1.0, 1.0) * width * 0.55;
       left += voice_output * std::sqrt((1.0 - pan) * 0.5);
       right += voice_output * std::sqrt((1.0 + pan) * 0.5);
     }

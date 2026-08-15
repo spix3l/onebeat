@@ -37,8 +37,7 @@ target_include_directories(onebeat_third_party SYSTEM INTERFACE
 # ---------------------------------------------------------------------------
 # Warning / sanitizer discipline (NFR-08)
 # ---------------------------------------------------------------------------
-add_library(onebeat_flags INTERFACE)
-target_compile_options(onebeat_flags INTERFACE
+set(ONEBEAT_WARNINGS
   -Wall -Wextra -Wpedantic
   -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused
   -Woverloaded-virtual -Wconversion -Wsign-conversion -Wdouble-promotion
@@ -47,8 +46,23 @@ target_compile_options(onebeat_flags INTERFACE
   -Wfunction-effects
 )
 if(ONEBEAT_WERROR)
-  target_compile_options(onebeat_flags INTERFACE -Werror)
+  list(APPEND ONEBEAT_WARNINGS -Werror)
 endif()
+
+add_library(onebeat_flags INTERFACE)
+target_compile_options(onebeat_flags INTERFACE ${ONEBEAT_WARNINGS})
+
+# The stock plug-ins get our warnings and *not* our sanitizers.
+#
+# They are hosted exactly like third-party CLAP bundles: dlopened into the same
+# process, several at a time, and several of them share a DSP core. Two bundles
+# built from one header put two copies of the same `inline constexpr` parameter
+# table in the process, which ASan reports as an ODR violation and aborts on —
+# a diagnostic about how the plug-ins are packaged, not about the engine, and it
+# took every hosting test in the sanitizer builds down with it. The host is what
+# the sanitizers are pointed at, and it stays fully instrumented.
+add_library(onebeat_plugin_flags INTERFACE)
+target_compile_options(onebeat_plugin_flags INTERFACE ${ONEBEAT_WARNINGS})
 
 if(ONEBEAT_ASAN)
   target_compile_definitions(onebeat_flags INTERFACE ONEBEAT_SANITIZER_BUILD=1)
@@ -110,6 +124,7 @@ add_library(onebeat_core STATIC
   src/core/schedule.cpp
   src/core/sampler.cpp
   src/core/wav_loader.cpp
+  src/core/audio_export.cpp
   src/core/diagnostics.cpp
   src/core/rt/rt.cpp
   src/core/rt/rt_log.cpp
@@ -171,7 +186,7 @@ add_library(onebeat_stock_piano MODULE
   stock_plugins/piano/piano_engine.cpp)
 target_include_directories(onebeat_stock_piano SYSTEM PRIVATE
   ${ONEBEAT_THIRD_PARTY}/clap/include)
-target_link_libraries(onebeat_stock_piano PRIVATE onebeat_flags)
+target_link_libraries(onebeat_stock_piano PRIVATE onebeat_plugin_flags)
 set_target_properties(onebeat_stock_piano PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"
@@ -207,7 +222,7 @@ add_library(onebeat_stock_guitar MODULE
   stock_plugins/guitar/guitar_engine.cpp)
 target_include_directories(onebeat_stock_guitar SYSTEM PRIVATE
   ${ONEBEAT_THIRD_PARTY}/clap/include)
-target_link_libraries(onebeat_stock_guitar PRIVATE onebeat_flags)
+target_link_libraries(onebeat_stock_guitar PRIVATE onebeat_plugin_flags)
 set_target_properties(onebeat_stock_guitar PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"
@@ -243,7 +258,7 @@ add_library(onebeat_stock_lowkey MODULE
   stock_plugins/guitar/guitar_engine.cpp)
 target_include_directories(onebeat_stock_lowkey SYSTEM PRIVATE
   ${ONEBEAT_THIRD_PARTY}/clap/include)
-target_link_libraries(onebeat_stock_lowkey PRIVATE onebeat_flags)
+target_link_libraries(onebeat_stock_lowkey PRIVATE onebeat_plugin_flags)
 set_target_properties(onebeat_stock_lowkey PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"
@@ -280,7 +295,7 @@ add_library(onebeat_stock_drill_synth MODULE
   stock_plugins/synth/synth_engine.cpp)
 target_include_directories(onebeat_stock_drill_synth SYSTEM PRIVATE
   ${ONEBEAT_THIRD_PARTY}/clap/include)
-target_link_libraries(onebeat_stock_drill_synth PRIVATE onebeat_flags)
+target_link_libraries(onebeat_stock_drill_synth PRIVATE onebeat_plugin_flags)
 set_target_properties(onebeat_stock_drill_synth PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"
@@ -322,7 +337,7 @@ target_compile_definitions(onebeat_stock_organ PRIVATE
   OB_STOCK_PLUGIN_NAME="OneBeat Organ"
   OB_STOCK_NOTE_NAME="Tonewheel Organ"
   OB_STOCK_PLUGIN_DESCRIPTION="A sample-free tonewheel organ with rotary cabinet character.")
-target_link_libraries(onebeat_stock_organ PRIVATE onebeat_flags)
+target_link_libraries(onebeat_stock_organ PRIVATE onebeat_plugin_flags)
 set_target_properties(onebeat_stock_organ PROPERTIES
   PREFIX ""
   SUFFIX ".dylib"

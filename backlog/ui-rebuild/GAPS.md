@@ -16,15 +16,25 @@ This document tracks backend engine and ABI capabilities required by the UI desi
 
 ## 2. Audio Export (UI-D-06 / EPIC-4)
 
-- **Per-track Multi-stem Export**:
-  - *Current state*: Master mix stereo export to WAV. Individual stem file rendering (e.g. separate Drums Bus, Bass, Music, Vox wav files) is not yet parallel-rendered in the native engine.
-  - *UI Handling*: Stems selector UI reflects selection; export flow renders project master with stem summary indication.
-  - *Waiting on*: `ob_engine_export_stems()` in engine library.
+The dialog now offers exactly what the engine renders: a format, a sample rate
+and a destination folder (`ob_engine_export_start`, ABI 1.17). Bit depth, range
+and stem selectors were removed rather than disabled — an option the engine
+cannot honour is a description of a render nobody is performing.
 
-- **Non-WAV Export Formats (MP3, AIFF, FLAC)**:
-  - *Current state*: Native engine offline renderer exports PCM WAV. Other container/compression formats require external encoders.
-  - *UI Handling*: Format selector shows WAV as primary active format, non-PCM options reflect their respective file extensions.
-  - *Waiting on*: Native encoders or platform media encoder bridges.
+- **Per-track Multi-stem Export**:
+  - *Current state*: the master mix only. Rendering one file per channel needs a render pass per stem in the engine.
+  - *UI Handling*: not offered. The dialog does not mention stems.
+  - *Waiting on*: `ob_engine_export_stems()` in the engine library.
+
+- **Compressed Export Formats (MP3, FLAC)**:
+  - *Current state*: uncompressed 24-bit PCM, as WAV or AIFF. Compressed containers need an encoder the engine does not vendor.
+  - *UI Handling*: not offered.
+  - *Waiting on*: native encoders or platform media encoder bridges.
+
+- **Export Range and Bit Depth**:
+  - *Current state*: the whole arrangement, plus a two-second tail, at 24-bit.
+  - *UI Handling*: not offered.
+  - *Waiting on*: a loop/selection region the model owns (the loop region is derived from the arrangement today), and a depth choice worth asking about.
 
 ## 3. Extensions & WASM Sandboxing (UI-D-08 / EPIC-6)
 
