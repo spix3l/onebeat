@@ -20,10 +20,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.11.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.12.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.11.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.12.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -134,7 +134,7 @@ TEST_SUITE("abi") {
   }
 
   TEST_CASE("ABI 1.5 project instrument layout is frozen") {
-    CHECK(sizeof(ob_instrument_info) == 1096);
+    CHECK(sizeof(ob_instrument_info) == 1256);
     CHECK(offsetof(ob_instrument_info, order) == 4);
     CHECK(offsetof(ob_instrument_info, affected_pattern_count) == 12);
     CHECK(offsetof(ob_instrument_info, id) == 24);
@@ -144,6 +144,8 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_instrument_info, plugin_path) == 576);
     CHECK(offsetof(ob_instrument_info, gain) == 1088);
     CHECK(offsetof(ob_instrument_info, pan) == 1092);
+    CHECK(offsetof(ob_instrument_info, route_id) == 1096);
+    CHECK(offsetof(ob_instrument_info, route_name) == 1128);
   }
 
   TEST_CASE("ABI 1.6 channel rack layouts are frozen") {
@@ -241,7 +243,7 @@ TEST_SUITE("abi") {
   }
 
   TEST_CASE("The hosted instance and generic parameter model cross the C surface") {
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     ob_engine_config config{};
     config.struct_size = sizeof(config);
     config.sample_rate = 48000.0;
@@ -272,6 +274,13 @@ TEST_SUITE("abi") {
     CHECK(std::string(project_instrument.name) == "OneBeat Test Synth");
     CHECK((project_instrument.flags & 2U) != 0U);
     CHECK(std::string(project_instrument.plugin_id) == "dev.onebeat.test.synth");
+    CHECK(std::string(project_instrument.route_id).size() > 0);
+    const std::string route_name = project_instrument.route_name;
+    CHECK_FALSE(route_name.empty());
+    REQUIRE(ob_engine_instrument_set_route(engine, project_instrument.id,
+                                           project_instrument.route_id) == OB_OK);
+    REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
+    CHECK(std::string(project_instrument.route_name) == route_name);
 
     ob_rack_pattern_info pattern{};
     REQUIRE(ob_engine_rack_pattern(engine, &pattern) == OB_OK);
@@ -315,8 +324,10 @@ TEST_SUITE("abi") {
     REQUIRE(ob_engine_rack_row_at(engine, 0, &row) == OB_OK);
     CHECK(row.step_active[20] == 1);
     REQUIRE(ob_engine_instrument_set_muted(engine, project_instrument.id, 1) == OB_OK);
+    REQUIRE(ob_engine_instrument_set_soloed(engine, project_instrument.id, 1) == OB_OK);
     REQUIRE(ob_engine_instrument_at(engine, 0, &project_instrument) == OB_OK);
     CHECK((project_instrument.flags & 1U) != 0U);
+    CHECK((project_instrument.flags & 4U) != 0U);
     REQUIRE(ob_engine_instrument_replace(engine, project_instrument.id, bundle.c_str(),
                                          "dev.onebeat.test.synth") == OB_OK);
 
@@ -348,7 +359,7 @@ TEST_SUITE("abi") {
   // The interesting assertion is the last one: Make unique must cut *one* clip
   // loose and leave the other still sharing, and undo must restore the share.
   TEST_CASE("Notes, patterns, lanes and clips cross the C surface") {
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     ob_engine_config config{};
     config.struct_size = sizeof(config);
     config.sample_rate = 48000.0;
@@ -578,7 +589,7 @@ TEST_SUITE("abi") {
   // swept it. The pattern grows to hold it instead, and the placement that
   // still fitted the pattern grows with it so the note is actually scheduled.
   TEST_CASE("Drawing past the end of a pattern lengthens it rather than silencing the note") {
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     ob_engine_config config{};
     config.struct_size = sizeof(config);
     config.sample_rate = 48000.0;
@@ -649,7 +660,7 @@ TEST_SUITE("abi") {
   // deleting the plug-in gave it back.
   TEST_CASE("A plug-in instrument gets its own lane and leaves the samples alone") {
     namespace fs = std::filesystem;
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     const fs::path scratch =
         fs::path("/tmp/onebeat-tests") / ("rack-hosting-" + std::to_string(::getpid()));
     fs::remove_all(scratch);
@@ -728,7 +739,7 @@ TEST_SUITE("abi") {
 
   TEST_CASE("Scratch sessions preserve an opaque chunk through a missing placeholder") {
     namespace fs = std::filesystem;
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     const fs::path scratch =
         fs::path("/tmp/onebeat-tests") / ("stage2-session-" + std::to_string(::getpid()));
     fs::remove_all(scratch);
@@ -768,7 +779,7 @@ TEST_SUITE("abi") {
   // not survive ⌘S and ⌘O, the project reopens as a different piece of music.
   TEST_CASE("A plug-in's settings survive saving and reopening the project") {
     namespace fs = std::filesystem;
-    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
     const fs::path scratch =
         fs::path("/tmp/onebeat-tests") / ("project-state-" + std::to_string(::getpid()));
     fs::remove_all(scratch);

@@ -28,6 +28,7 @@
 #include "plugin/scan/plugin_cache.h"
 #include "plugin/scan/plugin_library.h"
 #include "plugin/scan/scanner.h"
+#include "test_helpers.h"
 
 using onebeat::plugin::scan::BundleRef;
 using onebeat::plugin::scan::CacheFileHeader;
@@ -670,7 +671,15 @@ TEST_SUITE("unit") {
     CHECK(library.generation() > before);
   }
 
+  // The shipping probe, with no helper to run it: `PluginLibrary` uses the real
+  // `SubprocessProbe` rather than an injected one, and this is the half of its
+  // behaviour that applies when no helper binary can be found.
   TEST_CASE("The shipping probe reports what it found without pretending to know more") {
+    // Stated rather than inherited. A hosting test elsewhere in this binary
+    // points OB_PLUGIN_HOST at the real helper, and with a helper available
+    // the fake bundle below is genuinely opened and correctly rejected — the
+    // case covered by the test that follows this one.
+    const onebeat::tests::ScopedPluginHost no_helper(nullptr);
     TempDir library_dir("probe-lib");
     TempDir state("probe-state");
     makeBundle(library_dir.path(), "Diva");
@@ -692,6 +701,33 @@ TEST_SUITE("unit") {
     CHECK_FALSE(found.introspected());
     CHECK(found.param_count == 0);
     CHECK(found.audio_output_count == 0);
+  }
+
+  // The other half: a helper *is* available, so the bundle is really opened.
+  // "Diva" is a directory with the word MACHO in it, which is what a plug-in
+  // for another architecture looks like from here — not offered, and not
+  // quarantined either, because there is nothing for the user to retry.
+  TEST_CASE("A bundle that will not load is reported, not offered and not quarantined") {
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
+    TempDir library_dir("probe-real-lib");
+    TempDir state("probe-real-state");
+    makeBundle(library_dir.path(), "Diva");
+
+    onebeat::plugin::scan::PluginLibrary library(state.child("plugin-cache.bin"));
+    library.loadCache();
+    library.setSearchPaths({library_dir.str()});
+    REQUIRE(library.startScan());
+    while (library.scanning()) {
+      library.pump();
+    }
+    library.pump();
+
+    REQUIRE(library.plugins().size() == 1);
+    const PluginDescriptor& found = library.plugins()[0];
+    CHECK(std::string(found.name.text()) == "Diva");
+    CHECK(found.outcome == ScanOutcome::NotAPlugin);
+    CHECK_FALSE(found.usable());
+    CHECK_FALSE(found.quarantined());
   }
 
   // Without this, every row written before OB-2-07's probe exists would be
