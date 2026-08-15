@@ -19,6 +19,7 @@ import '../../support/app_harness.dart';
 class _FakeEngineClient implements EngineClient {
   bool isPlaying = false;
   bool isLooping = false;
+  bool isMetronomeEnabled = false;
   double bpm = 124.0;
   int bar = 2;
   int beat = 1;
@@ -84,6 +85,9 @@ class _FakeEngineClient implements EngineClient {
   }
 
   @override
+  void setMetronomeEnabled(bool enabled) => isMetronomeEnabled = enabled;
+
+  @override
   void seekFrames(int frames) => seekFramesCount++;
 
   @override
@@ -105,13 +109,8 @@ class _FakeEngineClient implements EngineClient {
   List<PluginListing> readPluginList(int count) => const <PluginListing>[];
 
   @override
-  RackPattern readRackPattern() => const RackPattern(
-    id: 'pattern',
-    name: 'Pattern 1',
-    lengthTicks: 3840,
-    baseGridTicks: 240,
-    swing: 0,
-  );
+  RackPattern readRackPattern() =>
+      const RackPattern(id: 'pattern', name: 'Pattern 1', lengthTicks: 3840, baseGridTicks: 240, swing: 0);
 
   @override
   List<RackRow> readRackRows() => const <RackRow>[];
@@ -178,16 +177,10 @@ class _FakeEngineClient implements EngineClient {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('ShellBinding formats readouts and propagates transport state', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('ShellBinding formats readouts and propagates transport state', (WidgetTester tester) async {
     final _FakeEngineClient client = _FakeEngineClient();
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     // BPM, SIG, and Position formatting
@@ -200,18 +193,13 @@ void main() {
     expect(find.textContaining('Untitled.obt'), findsOneWidget);
   });
 
-  testWidgets('⌘S saves in place once the project has a file', (
-    WidgetTester tester,
-  ) async {
-    final _FakeEngineClient client = _FakeEngineClient()
-      ..projectPathValue = '/Music/Night Drive.obt'
-      ..projectNameValue = 'Night Drive';
+  testWidgets('⌘S saves in place once the project has a file', (WidgetTester tester) async {
+    final _FakeEngineClient client =
+        _FakeEngineClient()
+          ..projectPathValue = '/Music/Night Drive.obt'
+          ..projectNameValue = 'Night Drive';
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
@@ -224,18 +212,13 @@ void main() {
     expect(client.savedTo, <String>['/Music/Night Drive.obt']);
   });
 
-  testWidgets('the rename dialog renames the project and its bundle', (
-    WidgetTester tester,
-  ) async {
-    final _FakeEngineClient client = _FakeEngineClient()
-      ..projectPathValue = '/Music/Old.obt'
-      ..projectNameValue = 'Old';
+  testWidgets('the rename dialog renames the project and its bundle', (WidgetTester tester) async {
+    final _FakeEngineClient client =
+        _FakeEngineClient()
+          ..projectPathValue = '/Music/Old.obt'
+          ..projectNameValue = 'Old';
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     // Reached the way the menu reaches it: the registry intent, not a tap on
@@ -256,16 +239,10 @@ void main() {
     expect(find.byType(RenameProjectDialog), findsNothing);
   });
 
-  testWidgets('play and loop callbacks reach the engine client', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('play and loop callbacks reach the engine client', (WidgetTester tester) async {
     final _FakeEngineClient client = _FakeEngineClient();
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     expect(client.isPlaying, isFalse);
@@ -280,22 +257,21 @@ void main() {
     await tester.pump();
     expect(client.isLooping, isTrue);
 
+    // Tap the metronome button after the existing transport cluster.
+    await tester.tap(find.byKey(const ValueKey<String>('transport-metronome')));
+    await tester.pump();
+    expect(client.isMetronomeEnabled, isTrue);
+
     // Tap Stop button (index 3)
     await tester.tap(find.byType(ObTransportButton).at(3));
     await tester.pump();
     expect(client.isPlaying, isFalse);
   });
 
-  testWidgets('undo and redo callbacks reach the engine client', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('undo and redo callbacks reach the engine client', (WidgetTester tester) async {
     final _FakeEngineClient client = _FakeEngineClient();
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     // Tap Undo (index 0)
@@ -309,16 +285,10 @@ void main() {
     expect(client.redoCount, 1);
   });
 
-  testWidgets('Current Project is shown only on Playlist', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Current Project is shown only on Playlist', (WidgetTester tester) async {
     final _FakeEngineClient client = _FakeEngineClient();
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     expect(find.text('Current Project'), findsNothing);
@@ -331,14 +301,10 @@ void main() {
     expect(find.text('Current Project'), findsNothing);
   });
 
-  testWidgets('the browser restores and stores which rows are open', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the browser restores and stores which rows are open', (WidgetTester tester) async {
     const MethodChannel channel = MethodChannel('onebeat/sample_packs');
     Map<String, bool> stored = <String, bool>{'current-project': false};
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
-      MethodCall call,
-    ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (MethodCall call) async {
       switch (call.method) {
         case 'loadBrowserExpansion':
           return stored;
@@ -350,18 +316,9 @@ void main() {
       }
       return null;
     });
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        channel,
-        null,
-      ),
-    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: _FakeEngineClient()),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: _FakeEngineClient()), size: const Size(1600, 1000));
     // Two pumps: one for the shell's first frame, one for the restored
     // expansion that the platform read hands back after it.
     await tester.pump();
@@ -381,16 +338,10 @@ void main() {
     expect(stored['current-project'], isTrue);
   });
 
-  testWidgets('rail selection switches active index', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('rail selection switches active index', (WidgetTester tester) async {
     final _FakeEngineClient client = _FakeEngineClient();
 
-    await pumpForTest(
-      tester,
-      ShellBinding(client: client),
-      size: const Size(1600, 1000),
-    );
+    await pumpForTest(tester, ShellBinding(client: client), size: const Size(1600, 1000));
     await tester.pump();
 
     // Initial state: Channels active (index 0), the composition home

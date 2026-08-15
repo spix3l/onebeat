@@ -326,6 +326,9 @@ json::Value writeTransport(const TransportState& transport) {
 
   json::Object out;
   out.emplace("tempo", json::Value::real(transport.tempo));
+  if (transport.metronome_enabled) {
+    out.emplace("metronome_enabled", json::Value::boolean(true));
+  }
   out.emplace("time_signature",
               json::Value::array({json::Value::integer(transport.time_signature.numerator),
                                   json::Value::integer(transport.time_signature.denominator)}));
@@ -690,6 +693,7 @@ class Loader {
     TransportState parsed;
     if (transport != nullptr) {
       parsed.tempo = takeDouble(*transport, "tempo", 120.0);
+      parsed.metronome_enabled = takeBool(*transport, "metronome_enabled");
       if (!(parsed.tempo > 0.0) || parsed.tempo > 1000.0) {
         warn("Tempo of " + json::formatReal(parsed.tempo) + " BPM is out of range; using 120.");
         parsed.tempo = 120.0;

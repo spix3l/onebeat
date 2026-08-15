@@ -28,6 +28,7 @@ class EngineController extends ChangeNotifier {
   EngineSnapshot snapshot = const EngineSnapshot.empty();
   String status = '';
   bool showPerformanceOverlay = false;
+  bool metronomeEnabled = false;
   bool _previewAfterSampleLoad = false;
   bool _patternPreviewing = false;
   Timer? _samplePreviewTimer;
@@ -145,6 +146,12 @@ class EngineController extends ChangeNotifier {
 
   void toggleLoop() {
     client.setLoop(snapshot.loopStartBeats, snapshot.loopEndBeats, enabled: !snapshot.loopEnabled);
+  }
+
+  void toggleMetronome() {
+    metronomeEnabled = !metronomeEnabled;
+    client.setMetronomeEnabled(metronomeEnabled);
+    notifyListeners();
   }
 
   void seekFrames(int frames) => client.seekFrames(frames);

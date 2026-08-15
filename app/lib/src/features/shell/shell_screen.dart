@@ -24,6 +24,7 @@ class ShellScreen extends StatelessWidget {
     this.onTogglePlay,
     this.onStop,
     this.onToggleLoop,
+    this.onToggleMetronome,
     this.onSearchTap,
     this.onExport,
     this.onTempoSubmitted,
@@ -49,6 +50,7 @@ class ShellScreen extends StatelessWidget {
   final VoidCallback? onTogglePlay;
   final VoidCallback? onStop;
   final VoidCallback? onToggleLoop;
+  final VoidCallback? onToggleMetronome;
   final VoidCallback? onSearchTap;
   final VoidCallback? onExport;
   final ValueChanged<String>? onTempoSubmitted;
@@ -77,6 +79,7 @@ class ShellScreen extends StatelessWidget {
           onTogglePlay: onTogglePlay,
           onStop: onStop,
           onToggleLoop: onToggleLoop,
+          onToggleMetronome: onToggleMetronome,
           onSearchTap: onSearchTap,
           onExport: onExport,
           onTempoSubmitted: onTempoSubmitted,
@@ -238,10 +241,7 @@ class _ShellPanel extends StatelessWidget {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return Container(
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: tokens.color.surfaceDeep,
-        borderRadius: tokens.radius.panelBorder,
-      ),
+      decoration: BoxDecoration(color: tokens.color.surfaceDeep, borderRadius: tokens.radius.panelBorder),
       child: child,
     );
   }

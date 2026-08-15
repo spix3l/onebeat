@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 14
+#define OB_ABI_VERSION_MINOR 15
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -137,7 +137,8 @@ typedef enum ob_command_type {
   OB_CMD_SET_INSTRUMENT_GAIN = 14,  /* f64_a = linear gain, 0..2 */
   OB_CMD_SET_INSTRUMENT_PAN = 15,   /* f64_a = pan -1..1 */
   OB_CMD_PREVIEW_NOTE_ON = 16,      /* i64_a = midi note, f64_a = velocity */
-  OB_CMD_PREVIEW_NOTE_OFF = 17      /* i64_a = midi note */
+  OB_CMD_PREVIEW_NOTE_OFF = 17,     /* i64_a = midi note */
+  OB_CMD_SET_METRONOME = 18          /* i64_a = 0 disabled / 1 enabled */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).

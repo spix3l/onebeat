@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 #include "core/wav_loader.h"
 #include "plugin/missing_plugin.h"
@@ -521,6 +522,7 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
   renderChannel(*preview_channel_, 0, output, offset, num_frames, nullptr, chunk_start,
                 block_events, release_all, preview_channel_->instrument, true);
   voices += preview_channel_->instrument.activeVoiceCount();
+  renderMetronome(output, offset, num_frames, chunk_start);
   active_voices_ = voices;
 }
 
@@ -701,6 +703,40 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
   }
 }
 
+void Engine::renderMetronome(const AudioBufferView& output, int offset, int num_frames,
+                             int64_t chunk_start) noexcept OB_NONBLOCKING {
+  if (!metronome_enabled_ || !transport_.playing() || output.numChannels() <= 0) return;
+
+  const double sample_rate = config_.sample_rate;
+  const double frames_per_beat = transport_.timeMap().framesPerBeat();
+  constexpr int click_frames = 720;
+  constexpr float normal_level = 0.22F;
+  constexpr float accent_level = 0.34F;
+  constexpr double normal_frequency = 1200.0;
+  constexpr double accent_frequency = 1800.0;
+  constexpr double pi = 3.14159265358979323846;
+
+  for (int frame = 0; frame < num_frames; ++frame) {
+    const int64_t position = chunk_start + frame;
+    const int64_t beat_number = static_cast<int64_t>(
+        std::floor(static_cast<double>(position) / frames_per_beat));
+    const int64_t beat_start = static_cast<int64_t>(
+        std::llround(static_cast<double>(beat_number) * frames_per_beat));
+    const int64_t since_beat = position - beat_start;
+    if (since_beat < 0 || since_beat >= click_frames) continue;
+
+    const bool accent = (beat_number % 4) == 0;
+    const double frequency = accent ? accent_frequency : normal_frequency;
+    const float level = accent ? accent_level : normal_level;
+    const float envelope = std::exp(-static_cast<float>(since_beat) / 180.0F);
+    const float sample = level * envelope *
+                         static_cast<float>(std::sin(2.0 * pi * frequency *
+                                                     static_cast<double>(since_beat) / sample_rate));
+    output.channel(0)[offset + frame] += sample;
+    if (output.numChannels() > 1) output.channel(1)[offset + frame] += sample;
+  }
+}
+
 void Engine::runSchedule(const AudioBufferView& output, int block_offset, int num_frames,
                          const plugin::EventList& block_events) noexcept OB_NONBLOCKING {
   const Schedule* schedule = schedule_.acquire();
@@ -779,6 +815,9 @@ void Engine::applyCommand(const ob_command& command,
       break;
     case OB_CMD_SET_LOOP:
       transport_.setLoop(command.f64_a, command.f64_b, command.i64_a != 0);
+      break;
+    case OB_CMD_SET_METRONOME:
+      metronome_enabled_ = command.i64_a != 0;
       break;
     case OB_CMD_NOTE_ON:
       block_events.push(

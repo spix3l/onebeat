@@ -271,6 +271,7 @@ inline Ticks patternEffectiveLength(const Pattern& pattern) {
 struct TransportState {
   double tempo = 120.0;
   TimeSignature time_signature;
+  bool metronome_enabled = false;
   bool loop_enabled = false;
   Ticks loop_start = 0;
   Ticks loop_end = TicksPerBarFourFour * 8;

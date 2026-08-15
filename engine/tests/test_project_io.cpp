@@ -181,6 +181,7 @@ struct Fixture {
     onebeat::model::TransportState transport;
     transport.tempo = 128.5;
     transport.time_signature = {7, 8};
+    transport.metronome_enabled = true;
     transport.loop_enabled = true;
     transport.loop_end = TicksPerBarFourFour * 3;
     project.setTransport(transport);
@@ -200,6 +201,7 @@ void requireSameModel(const Project& a, const Project& b) {
   REQUIRE(a.transport().tempo == doctest::Approx(b.transport().tempo));
   REQUIRE(a.transport().time_signature.numerator == b.transport().time_signature.numerator);
   REQUIRE(a.transport().time_signature.denominator == b.transport().time_signature.denominator);
+  REQUIRE(a.transport().metronome_enabled == b.transport().metronome_enabled);
   REQUIRE(a.transport().loop_enabled == b.transport().loop_enabled);
   REQUIRE(a.transport().loop_start == b.transport().loop_start);
   REQUIRE(a.transport().loop_end == b.transport().loop_end);

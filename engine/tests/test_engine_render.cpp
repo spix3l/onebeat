@@ -37,6 +37,20 @@ TEST_SUITE("engine") {
     CHECK(result.peak() <= 1.0F);
   }
 
+  TEST_CASE("The metronome can be enabled and disabled without notes") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    engine->postCommand(command(OB_CMD_SET_METRONOME, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto click = renderOffline(*engine, 128, 128);
+    CHECK(click.peak() > 0.05F);
+
+    engine->postCommand(command(OB_CMD_SET_METRONOME, 0));
+    const auto silent = renderOffline(*engine, 128, 128);
+    CHECK(silent.isSilent());
+  }
+
   TEST_CASE("Renders are bit-exact across repeated runs") {
     auto first = makeOfflineEngine();
     REQUIRE(first != nullptr);

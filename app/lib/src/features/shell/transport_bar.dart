@@ -1,10 +1,10 @@
 // ObTransportBar — the ~68px transport bar under the menu bar (UI-B-02).
 //
 // Full-width chrome on every screen: traffic lights, the app tile and title
-// block, the transport cluster (undo/redo/play/stop/loop), the three readout
-// boxes, the action search, and the master meter sliver beside the Export
-// button. Every value is vm text — nothing here reads real state — and every
-// control fires a plain callback that Phase D will wire.
+// block, the transport cluster (undo/redo/play/stop/loop/metronome), the three
+// readout boxes, the action search, and the master meter sliver beside the
+// Export button. Every value is vm text — nothing here reads real state — and
+// every control fires a plain callback that Phase D will wire.
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
@@ -21,6 +21,7 @@ class ObTransportBarVm {
     required this.subtitle,
     required this.playing,
     required this.looping,
+    this.metronome = false,
     required this.bpmText,
     required this.sigText,
     required this.positionText,
@@ -39,6 +40,9 @@ class ObTransportBarVm {
 
   /// Loop renders latched (accent wash) when true.
   final bool looping;
+
+  /// The audible quarter-note click is latched independently from loop mode.
+  final bool metronome;
 
   /// Readout values, already formatted (`124.00`, `4/4`, `02:01:218`).
   final String bpmText;
@@ -62,6 +66,7 @@ class ObTransportBar extends StatelessWidget {
     this.onTogglePlay,
     this.onStop,
     this.onToggleLoop,
+    this.onToggleMetronome,
     this.onSearchTap,
     this.onExport,
     this.onTempoSubmitted,
@@ -74,6 +79,7 @@ class ObTransportBar extends StatelessWidget {
   final VoidCallback? onTogglePlay;
   final VoidCallback? onStop;
   final VoidCallback? onToggleLoop;
+  final VoidCallback? onToggleMetronome;
   final VoidCallback? onSearchTap;
   final VoidCallback? onExport;
   final ValueChanged<String>? onTempoSubmitted;
@@ -86,12 +92,7 @@ class ObTransportBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: tokens.color.surfaceSunken,
-        border: Border(
-          bottom: BorderSide(
-            color: tokens.color.lineStrong,
-            width: tokens.border.hairline,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: tokens.color.lineStrong, width: tokens.border.hairline)),
       ),
       child: Row(
         children: <Widget>[
@@ -104,13 +105,10 @@ class ObTransportBar extends StatelessWidget {
             onTogglePlay: onTogglePlay,
             onStop: onStop,
             onToggleLoop: onToggleLoop,
+            onToggleMetronome: onToggleMetronome,
           ),
           SizedBox(width: tokens.spacing.lg),
-          ObReadout(
-            value: vm.bpmText,
-            unit: 'BPM',
-            onSubmitted: onTempoSubmitted,
-          ),
+          ObReadout(value: vm.bpmText, unit: 'BPM', onSubmitted: onTempoSubmitted),
           SizedBox(width: tokens.spacing.xs),
           ObReadout(value: vm.sigText, unit: 'SIG'),
           SizedBox(width: tokens.spacing.xs),
@@ -118,11 +116,7 @@ class ObTransportBar extends StatelessWidget {
           SizedBox(width: tokens.spacing.xs),
           ObReadout(value: vm.durationText, unit: 'DURATION'),
           const Spacer(),
-          ObSearchField(
-            hint: vm.searchHint,
-            shortcut: '⌘K',
-            onTap: onSearchTap,
-          ),
+          ObSearchField(hint: vm.searchHint, shortcut: '⌘K', onTap: onSearchTap),
           SizedBox(width: tokens.spacing.md),
           _MasterMeter(vm: vm, tokens: tokens),
           SizedBox(width: tokens.spacing.sm),
@@ -147,18 +141,12 @@ class _TitleBlock extends StatelessWidget {
         Container(
           width: tokens.size.appTileSize,
           height: tokens.size.appTileSize,
-          decoration: BoxDecoration(
-            color: tokens.color.accent,
-            borderRadius: tokens.radius.controlBorder,
-          ),
+          decoration: BoxDecoration(color: tokens.color.accent, borderRadius: tokens.radius.controlBorder),
           alignment: Alignment.center,
           child: Container(
             width: tokens.spacing.sm,
             height: tokens.spacing.sm,
-            decoration: BoxDecoration(
-              color: tokens.color.surfaceSunken,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: tokens.color.surfaceSunken, shape: BoxShape.circle),
           ),
         ),
         SizedBox(width: tokens.spacing.sm),
@@ -183,6 +171,7 @@ class _TransportCluster extends StatelessWidget {
     this.onTogglePlay,
     this.onStop,
     this.onToggleLoop,
+    this.onToggleMetronome,
   });
 
   final ObTransportBarVm vm;
@@ -191,6 +180,7 @@ class _TransportCluster extends StatelessWidget {
   final VoidCallback? onTogglePlay;
   final VoidCallback? onStop;
   final VoidCallback? onToggleLoop;
+  final VoidCallback? onToggleMetronome;
 
   @override
   Widget build(BuildContext context) {
@@ -200,18 +190,12 @@ class _TransportCluster extends StatelessWidget {
       children: <Widget>[
         ObTransportButton(
           onTap: onUndo,
-          child: ObChromeGlyph(
-            kind: ObChromeGlyphKind.undo,
-            color: color.textSecondary,
-          ),
+          child: ObChromeGlyph(kind: ObChromeGlyphKind.undo, color: color.textSecondary),
         ),
         SizedBox(width: tokens.spacing.xs),
         ObTransportButton(
           onTap: onRedo,
-          child: ObChromeGlyph(
-            kind: ObChromeGlyphKind.redo,
-            color: color.textSecondary,
-          ),
+          child: ObChromeGlyph(kind: ObChromeGlyphKind.redo, color: color.textSecondary),
         ),
         SizedBox(width: tokens.spacing.xs),
         // The play control is the one accented thing in the bar — what the
@@ -227,10 +211,7 @@ class _TransportCluster extends StatelessWidget {
         SizedBox(width: tokens.spacing.xs),
         ObTransportButton(
           onTap: onStop,
-          child: ObChromeGlyph(
-            kind: ObChromeGlyphKind.stop,
-            color: color.textSecondary,
-          ),
+          child: ObChromeGlyph(kind: ObChromeGlyphKind.stop, color: color.textSecondary),
         ),
         SizedBox(width: tokens.spacing.xs),
         ObTransportButton(
@@ -239,6 +220,16 @@ class _TransportCluster extends StatelessWidget {
           child: ObChromeGlyph(
             kind: ObChromeGlyphKind.loop,
             color: vm.looping ? color.accentBright : color.textSecondary,
+          ),
+        ),
+        SizedBox(width: tokens.spacing.xs),
+        ObTransportButton(
+          key: const ValueKey<String>('transport-metronome'),
+          onTap: onToggleMetronome,
+          toggled: vm.metronome,
+          child: ObChromeGlyph(
+            kind: ObChromeGlyphKind.metronome,
+            color: vm.metronome ? color.accentBright : color.textSecondary,
           ),
         ),
       ],
@@ -280,18 +271,10 @@ class _MeterSliver extends StatelessWidget {
     return Container(
       width: tokens.size.masterMeterSliverWidth,
       height: tokens.size.readoutBoxHeight,
-      decoration: BoxDecoration(
-        color: tokens.color.meterTrack,
-        borderRadius: tokens.radius.meterBorder,
-      ),
+      decoration: BoxDecoration(color: tokens.color.meterTrack, borderRadius: tokens.radius.meterBorder),
       child: ClipRRect(
         borderRadius: tokens.radius.meterBorder,
-        child: CustomPaint(
-          painter: _MeterSliverPainter(
-            level: level.clamp(0.0, 1.0),
-            color: tokens.color,
-          ),
-        ),
+        child: CustomPaint(painter: _MeterSliverPainter(level: level.clamp(0.0, 1.0), color: tokens.color)),
       ),
     );
   }
@@ -316,10 +299,7 @@ class _MeterSliverPainter extends CustomPainter {
       final double top = size.height - to.clamp(0.0, fillHeight);
       final double bottom = size.height - from.clamp(0.0, fillHeight);
       if (bottom > top) {
-        canvas.drawRect(
-          Rect.fromLTWH(0, top, size.width, bottom - top),
-          Paint()..color = c,
-        );
+        canvas.drawRect(Rect.fromLTWH(0, top, size.width, bottom - top), Paint()..color = c);
       }
     }
 
@@ -360,10 +340,7 @@ class _ExportButtonState extends State<_ExportButton> {
           decoration: BoxDecoration(
             color: _hover ? tokens.color.accentBright : tokens.color.accent,
             borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: tokens.color.accentDeep,
-              width: tokens.border.hairline,
-            ),
+            border: Border.all(color: tokens.color.accentDeep, width: tokens.border.hairline),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -376,10 +353,7 @@ class _ExportButtonState extends State<_ExportButton> {
               SizedBox(width: tokens.spacing.xs),
               Text(
                 'Export',
-                style: tokens.type.label.copyWith(
-                  color: tokens.color.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: tokens.type.label.copyWith(color: tokens.color.textPrimary, fontWeight: FontWeight.w600),
               ),
             ],
           ),

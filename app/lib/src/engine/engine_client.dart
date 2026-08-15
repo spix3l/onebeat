@@ -404,6 +404,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   void setTempo(double bpm) => _post(cmdSetTempo, f64a: bpm);
   void setLoop(double startBeats, double endBeats, {required bool enabled}) =>
       _post(cmdSetLoop, i64: enabled ? 1 : 0, f64a: startBeats, f64b: endBeats);
+  void setMetronomeEnabled(bool enabled) => _post(cmdSetMetronome, i64: enabled ? 1 : 0);
   void noteOn(int note, double velocity) => _post(cmdNoteOn, i64: note, f64a: velocity);
   void noteOff(int note) => _post(cmdNoteOff, i64: note);
   void allNotesOff() => _post(cmdAllNotesOff);
@@ -869,7 +870,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
       return List<SequenceNote>.generate(written, (int index) {
         final ob_note note = buffer[index];
         return SequenceNote(startTicks: note.start, lengthTicks: note.length, key: note.key, velocity: note.velocity);
-      }, growable: false,);
+      }, growable: false);
     } finally {
       calloc.free(native);
     }
@@ -1067,8 +1068,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   @override
   void setPatternTimeSignature(String patternId, int numerator, int denominator) => _withNativeString(
     patternId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_pattern_set_time_signature(_engine, native, numerator, denominator),
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_set_time_signature(_engine, native, numerator, denominator),
   );
 
   @override
@@ -1792,6 +1792,7 @@ const int cmdNoteOn = 7;
 const int cmdNoteOff = 8;
 const int cmdPreviewNoteOn = 16;
 const int cmdPreviewNoteOff = 17;
+const int cmdSetMetronome = 18;
 const int cmdAllNotesOff = 9;
 const int cmdSetMasterGain = 10;
 const int cmdPluginParamBegin = 11;

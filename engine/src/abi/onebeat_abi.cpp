@@ -573,6 +573,11 @@ void publishModel(ob_engine& handle) {
   loop.f64_b = loop_end_beats;
   loop.i64_a = 1;
   handle.engine->postCommand(loop);
+
+  ob_command metronome{};
+  metronome.type = OB_CMD_SET_METRONOME;
+  metronome.i64_a = handle.project.transport().metronome_enabled ? 1 : 0;
+  handle.engine->postCommand(metronome);
 }
 
 ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, const char* failure) {
@@ -809,7 +814,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.14.0";
+  return "1.15.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -930,10 +935,20 @@ ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
   if (engine == nullptr || command == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and command must not be null.");
   }
-  if (command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) {
+  if ((command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) ||
+      command->type == OB_CMD_SET_METRONOME) {
     onebeat::model::TransportState transport = engine->project.transport();
-    if (std::abs(transport.tempo - command->f64_a) > 0.0001) {
+    bool changed = false;
+    if (command->type == OB_CMD_SET_TEMPO && std::abs(transport.tempo - command->f64_a) > 0.0001) {
       transport.tempo = command->f64_a;
+      changed = true;
+    }
+    if (command->type == OB_CMD_SET_METRONOME &&
+        transport.metronome_enabled != (command->i64_a != 0)) {
+      transport.metronome_enabled = command->i64_a != 0;
+      changed = true;
+    }
+    if (changed) {
       (void)engine->commands.execute(onebeat::model::setTransport(engine->project, transport));
       publishModel(*engine);
     }

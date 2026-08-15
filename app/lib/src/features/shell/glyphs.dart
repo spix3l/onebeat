@@ -13,16 +13,11 @@ import 'package:flutter/widgets.dart';
 import '../../design/tokens.dart';
 
 /// Which chrome glyph to paint.
-enum ObChromeGlyphKind { undo, redo, play, stop, loop, download, chevronDown }
+enum ObChromeGlyphKind { undo, redo, play, stop, loop, metronome, download, chevronDown }
 
 /// A painted top-chrome glyph, coloured by the caller.
 class ObChromeGlyph extends StatelessWidget {
-  const ObChromeGlyph({
-    required this.kind,
-    required this.color,
-    this.scale = ObGlyphScale.transport,
-    super.key,
-  });
+  const ObChromeGlyph({required this.kind, required this.color, this.scale = ObGlyphScale.transport, super.key});
 
   final ObChromeGlyphKind kind;
   final Color color;
@@ -39,9 +34,7 @@ class ObChromeGlyph extends StatelessWidget {
     return SizedBox(
       width: side,
       height: side,
-      child: CustomPaint(
-        painter: _ChromeGlyphPainter(kind: kind, color: color),
-      ),
+      child: CustomPaint(painter: _ChromeGlyphPainter(kind: kind, color: color)),
     );
   }
 }
@@ -64,12 +57,13 @@ class _ChromeGlyphPainter extends CustomPainter {
     final double w = size.width;
     final double h = size.height;
     final double weight = w / 8;
-    final Paint stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = weight
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color;
+    final Paint stroke =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = weight
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = color;
     switch (kind) {
       case ObChromeGlyphKind.undo:
       case ObChromeGlyphKind.redo:
@@ -93,13 +87,7 @@ class _ChromeGlyphPainter extends CustomPainter {
         // and runs anti-clockwise, which is the direction the head then has to
         // travel in.
         const double lead = -50 * _radian;
-        canvas.drawArc(
-          Rect.fromCircle(center: centre, radius: r),
-          lead,
-          285 * _radian,
-          false,
-          stroke,
-        );
+        canvas.drawArc(Rect.fromCircle(center: centre, radius: r), lead, 285 * _radian, false, stroke);
         // Along the tangent at that end. An isoceles head on the tangent is the
         // one placement that reads as motion rather than as a flag stuck to the
         // side of a circle.
@@ -118,11 +106,12 @@ class _ChromeGlyphPainter extends CustomPainter {
         // Optically centred rather than geometrically: a triangle's mass sits
         // behind its apex, so the shape is nudged left of the box's middle.
         // Rounded at the corners to match the stop square's radius.
-        final Path path = Path()
-          ..moveTo(w * 0.30, h * 0.18)
-          ..lineTo(w * 0.82, h * 0.5)
-          ..lineTo(w * 0.30, h * 0.82)
-          ..close();
+        final Path path =
+            Path()
+              ..moveTo(w * 0.30, h * 0.18)
+              ..lineTo(w * 0.82, h * 0.5)
+              ..lineTo(w * 0.30, h * 0.82)
+              ..close();
         canvas
           ..drawPath(path, fill)
           ..drawPath(
@@ -135,10 +124,7 @@ class _ChromeGlyphPainter extends CustomPainter {
           );
       case ObChromeGlyphKind.stop:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(w * 0.22, h * 0.22, w * 0.56, h * 0.56),
-            Radius.circular(w * 0.12),
-          ),
+          RRect.fromRectAndRadius(Rect.fromLTWH(w * 0.22, h * 0.22, w * 0.56, h * 0.56), Radius.circular(w * 0.12)),
           fill,
         );
       case ObChromeGlyphKind.loop:
@@ -155,14 +141,12 @@ class _ChromeGlyphPainter extends CustomPainter {
 
         // The right half: top edge from the break, round the right end, back
         // along the bottom to the other break.
-        final Path right = Path()
-          ..moveTo(cx + gapHalf, track.top)
-          ..lineTo(track.right - radius, track.top)
-          ..arcToPoint(
-            Offset(track.right - radius, track.bottom),
-            radius: Radius.circular(radius),
-          )
-          ..lineTo(cx + gapHalf, track.bottom);
+        final Path right =
+            Path()
+              ..moveTo(cx + gapHalf, track.top)
+              ..lineTo(track.right - radius, track.top)
+              ..arcToPoint(Offset(track.right - radius, track.bottom), radius: Radius.circular(radius))
+              ..lineTo(cx + gapHalf, track.bottom);
         // The left half is that path rotated half a turn about the centre.
         canvas
           ..drawPath(right, stroke)
@@ -191,31 +175,24 @@ class _ChromeGlyphPainter extends CustomPainter {
           length: w * 0.21,
           halfWidth: w * 0.15,
         );
+      case ObChromeGlyphKind.metronome:
+        // A compact bell: dome, clapper and a pair of feet. It remains
+        // legible at the transport button's small size and reads as a click
+        // source rather than another transport arrow.
+        final Rect dome = Rect.fromLTWH(w * 0.22, h * 0.16, w * 0.56, h * 0.52);
+        canvas.drawArc(dome, math.pi, math.pi, false, stroke);
+        canvas.drawLine(Offset(w * 0.22, h * 0.68), Offset(w * 0.78, h * 0.68), stroke);
+        canvas.drawLine(Offset(w * 0.5, h * 0.68), Offset(w * 0.5, h * 0.82), stroke);
+        canvas.drawCircle(Offset(w * 0.5, h * 0.84), w * 0.08, fill);
       case ObChromeGlyphKind.download:
         // A down arrow into a tray.
         canvas.drawLine(Offset(w * 0.5, h * 0.1), Offset(w * 0.5, h * 0.6), stroke);
-        canvas.drawLine(
-          Offset(w * 0.28, h * 0.42),
-          Offset(w * 0.5, h * 0.64),
-          stroke,
-        );
-        canvas.drawLine(
-          Offset(w * 0.72, h * 0.42),
-          Offset(w * 0.5, h * 0.64),
-          stroke,
-        );
+        canvas.drawLine(Offset(w * 0.28, h * 0.42), Offset(w * 0.5, h * 0.64), stroke);
+        canvas.drawLine(Offset(w * 0.72, h * 0.42), Offset(w * 0.5, h * 0.64), stroke);
         canvas.drawLine(Offset(w * 0.14, h * 0.82), Offset(w * 0.86, h * 0.82), stroke);
       case ObChromeGlyphKind.chevronDown:
-        canvas.drawLine(
-          Offset(w * 0.18, h * 0.34),
-          Offset(w * 0.5, h * 0.66),
-          stroke,
-        );
-        canvas.drawLine(
-          Offset(w * 0.5, h * 0.66),
-          Offset(w * 0.82, h * 0.34),
-          stroke,
-        );
+        canvas.drawLine(Offset(w * 0.18, h * 0.34), Offset(w * 0.5, h * 0.66), stroke);
+        canvas.drawLine(Offset(w * 0.5, h * 0.66), Offset(w * 0.82, h * 0.34), stroke);
     }
   }
 

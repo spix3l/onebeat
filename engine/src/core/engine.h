@@ -283,6 +283,8 @@ class Engine final : public audio_io::RenderCallback {
                     const plugin::EventList* block_events) noexcept OB_NONBLOCKING;
   void publishSnapshot(const ProcessContext& context,
                        uint64_t render_nanos) noexcept OB_NONBLOCKING;
+  void renderMetronome(const AudioBufferView& output, int offset, int num_frames,
+                       int64_t chunk_start) noexcept OB_NONBLOCKING;
   void housekeepingLoop();
   void onDeviceNotification(audio_io::DeviceNotification notification, const std::string& detail);
   // `out_name` / `out_frames` report what was decoded, so the preview cache can
@@ -345,6 +347,7 @@ class Engine final : public audio_io::RenderCallback {
   // note-off into, so it rides to the next block. Audibly identical: voices only
   // advance their fade while rendering, and nothing renders in between.
   bool pending_all_notes_off_ = false;
+  bool metronome_enabled_ = false;
 
   std::atomic<uint64_t> xruns_{0};
   std::atomic<bool> running_{false};
