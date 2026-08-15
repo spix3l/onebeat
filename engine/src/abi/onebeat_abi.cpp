@@ -8,6 +8,7 @@
 #include "abi/onebeat_abi.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -20,6 +21,7 @@
 #include <vector>
 
 #include "core/engine.h"
+#include "core/wav_loader.h"
 #include "model/command.h"
 #include "model/commands.h"
 #include "model/flattener.h"
@@ -29,6 +31,12 @@
 #include "plugin/scan/subprocess_probe.h"
 
 namespace {
+
+constexpr const char* kSamplePluginId = "onebeat.sample";
+
+bool isSampleInstrument(const onebeat::model::Instrument& instrument) {
+  return instrument.plugin.id == kSamplePluginId;
+}
 
 // Per-thread, so two threads failing at once cannot clobber each other's
 // message (ADR-002 §2).
@@ -54,6 +62,11 @@ void copyText(char* destination, size_t capacity, const char* source) {
   const size_t copied = length < capacity - 1 ? length : capacity - 1;
   std::memcpy(destination, source, copied);
   destination[copied] = '\0';
+}
+
+std::string fileName(const std::string& path) {
+  const size_t slash = path.find_last_of("/\\\\");
+  return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
 // NUL-separated, double-NUL-terminated — the shape Dart can build with one
@@ -151,7 +164,86 @@ const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
   return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
 }
 
+/* Grows the current pattern so that everything drawn in it can sound.
+ *
+ * The flattener wraps a looping clip modulo the *pattern* length and drops what
+ * falls past it, so a note past the end was accepted by the editor, stored,
+ * drawn, swept over by the playhead, and never played. Nothing in the roll
+ * bounded a note by the pattern length, so drawing past it was a normal thing
+ * to do.
+ *
+ * Grow only, and to a whole bar, so a length the user chose (the rack's 16/32/
+ * 64-step control, ob_engine_rack_set_length) is never quietly reduced. Clips
+ * follow the same rule that control uses: a placement still exactly as long as
+ * the pattern is one that fits it, and is carried along; a placement the user
+ * has resized is a deliberate window and is left alone.
+ *
+ * Outside the command bus on purpose. This is a consequence of an edit rather
+ * than an edit, and recording it would make undoing one note take two undos.
+ */
+void growPatternToFit(ob_engine& handle) {
+  const onebeat::model::Pattern* pattern = currentPattern(handle);
+  if (pattern == nullptr) return;
+  const onebeat::model::PatternId pattern_id = pattern->id;
+  const onebeat::model::Ticks old_length = pattern->length;
+  const onebeat::model::Ticks length = onebeat::model::patternLoopLength(*pattern);
+  if (length <= old_length) return;
+
+  /* Collected before mutating: updating a clip emits a change event, and a
+   * subscriber must not observe a half-walked map. */
+  std::vector<onebeat::model::ClipId> fitting;
+  for (const auto& [clip_id, clip] : handle.project.clips()) {
+    const onebeat::model::PatternSource* source = clip.pattern();
+    if (source == nullptr || source->pattern != pattern_id) continue;
+    if (clip.length == old_length) fitting.push_back(clip_id);
+  }
+
+  handle.project.updatePattern(
+      pattern_id, onebeat::model::ChangeField::Length,
+      [length](onebeat::model::Pattern& target) { target.length = length; });
+  for (const onebeat::model::ClipId clip_id : fitting) {
+    handle.project.updateClip(clip_id, onebeat::model::ChangeField::Length,
+                              [length](onebeat::model::Clip& target) { target.length = length; });
+  }
+}
+
+/* Hands the engine the rack the model describes.
+ *
+ * The order here is not a choice: the schedule addresses instruments by the
+ * dense index the flattener assigns in ULID order (model/flattener.h), and
+ * `project.instruments()` is a map keyed by that same ULID — so walking it in
+ * order *is* the index. Building the rack any other way would route every
+ * channel's notes to the wrong voice. */
+void syncChannels(ob_engine& handle) {
+  std::vector<onebeat::core::Engine::ChannelDesc> channels;
+  channels.reserve(handle.project.instruments().size());
+  int index = 0;
+  for (const auto& [id, instrument] : handle.project.instruments()) {
+    onebeat::core::Engine::ChannelDesc desc;
+    /* Only a sample instrument has a WAV to load. An empty lane and a hosted
+     * plug-in both leave this blank, which leaves that channel silent rather
+     * than sounding whatever the slot held before. */
+    if (isSampleInstrument(instrument)) desc.sample_path = instrument.plugin.path_hint;
+    desc.gain = instrument.gain;
+    desc.pan = instrument.pan;
+    desc.muted = instrument.muted;
+    channels.push_back(std::move(desc));
+    if (handle.selected_instrument.has_value() && *handle.selected_instrument == id) {
+      handle.engine->setAuditionChannel(index);
+    }
+    ++index;
+  }
+  handle.engine->setChannels(std::move(channels));
+}
+
 void publishModel(ob_engine& handle) {
+  /* Before the flatten, so the schedule is built from the grown pattern rather
+   * than from the one that was too short to hold the edit just made. */
+  growPatternToFit(handle);
+  /* Every model edit that can change what a channel sounds like — adding an
+   * instrument, loading a sample, gain, pan, mute, reordering — reaches the
+   * engine through here, for the same reason the schedule does. */
+  syncChannels(handle);
   onebeat::model::FlattenResult flattened =
       handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
   if (flattened.schedule != nullptr) {
@@ -160,9 +252,11 @@ void publishModel(ob_engine& handle) {
   double loop_end_beats = 4.0;
   const onebeat::model::Pattern* pattern = currentPattern(handle);
   if (pattern != nullptr) {
-    /* The loop covers what the pattern contains, not its stored length — see
-     * model::patternLoopLength for why. */
-    loop_end_beats = static_cast<double>(onebeat::model::patternLoopLength(*pattern)) /
+    /* The pattern's own length, which growPatternToFit has already made big
+     * enough to hold every note in it. Looping over the *content* instead would
+     * turn the rack's 16/32/64-step control into a setting with no audible
+     * effect, and would cut a deliberately empty tail out of the bar. */
+    loop_end_beats = static_cast<double>(pattern->length) /
                      static_cast<double>(onebeat::model::TicksPerQuarter);
   } else if (flattened.length_frames > 0) {
     loop_end_beats =
@@ -406,7 +500,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.7.0";
+  return "1.9.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -1046,6 +1140,8 @@ ob_status ob_engine_instrument_at(ob_engine* engine, int32_t index, ob_instrumen
            instrument->plugin.vendor.c_str());
   copyText(out_info->plugin_path, sizeof(out_info->plugin_path),
            instrument->plugin.path_hint.c_str());
+  out_info->gain = instrument->gain;
+  out_info->pan = instrument->pan;
   g_last_error.clear();
   return OB_OK;
 }
@@ -1057,6 +1153,28 @@ ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instru
   if (instrument == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   if (engine->selected_instrument == id) return OB_OK;
   try {
+    if (isSampleInstrument(*instrument)) {
+      std::string error;
+      if (!engine->engine->restoreBuiltinInstrument(error)) {
+        return fail(OB_ERR_INTERNAL, error.c_str());
+      }
+      /* No sample load here any more. The channel already holds its own sample
+       * — that is what the rack is — and reloading on selection is exactly the
+       * bug that made every lane play whichever sample was touched last. */
+      engine->has_instance = false;
+      engine->instance_missing = false;
+      engine->instance_path = instrument->plugin.path_hint;
+      engine->instance_plugin_id = kSamplePluginId;
+      engine->instance_name = instrument->plugin.name;
+      engine->instance_vendor = instrument->plugin.vendor;
+      engine->instance_format = static_cast<uint32_t>(instrument->plugin.format);
+      engine->selected_instrument = *id;
+      /* Moves the audition voice onto the newly selected channel. */
+      syncChannels(*engine);
+      g_last_error.clear();
+      return OB_OK;
+    }
+
     std::string error;
     if (!engine->engine->createSandboxedInstrument(
             instrument->plugin.path_hint, instrument->plugin.id,
@@ -1071,6 +1189,11 @@ ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instru
     engine->instance_vendor = instrument->plugin.vendor;
     engine->instance_format = static_cast<uint32_t>(instrument->plugin.format);
     engine->selected_instrument = *id;
+    /* Moves the audition voice onto the newly selected channel and republishes
+     * every channel's gain, pan and mute from the model — which is where the
+     * per-channel mix now lives, so switching channels cannot carry the
+     * previous channel's levels over to the next one. */
+    syncChannels(*engine);
     g_last_error.clear();
     return OB_OK;
   } catch (const std::exception& exception) {
@@ -1245,6 +1368,90 @@ ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_nam
   }
 }
 
+ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_name,
+                                               const char* utf8_sample_path) {
+  if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0' ||
+      utf8_sample_path == nullptr || utf8_sample_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A sample name and path are required.");
+  }
+  if (!std::filesystem::is_regular_file(utf8_sample_path)) {
+    return fail(OB_ERR_FILE_NOT_FOUND, "The sample file does not exist.");
+  }
+  try {
+    std::string error;
+    if (!engine->engine->restoreBuiltinInstrument(error)) {
+      return fail(OB_ERR_INTERNAL, error.c_str());
+    }
+    onebeat::model::PluginRef plugin;
+    plugin.format = onebeat::model::PluginFormat::Builtin;
+    plugin.id = kSamplePluginId;
+    plugin.name = utf8_name;
+    plugin.vendor = "OneBeat";
+    plugin.path_hint = utf8_sample_path;
+    if (executeModel(*engine, onebeat::model::addInstrument(engine->project, utf8_name, plugin),
+                     "Could not add the sample instrument.") != OB_OK) {
+      return fail(OB_ERR_INTERNAL, "Could not add the sample instrument.");
+    }
+    const int32_t count = static_cast<int32_t>(engine->project.instruments().size());
+    for (const auto& [id, instrument] : engine->project.instruments()) {
+      if (instrument.order == count - 1) {
+        engine->selected_instrument = id;
+        break;
+      }
+    }
+    engine->has_instance = false;
+    /* The sample reaches its own channel through syncChannels, which the
+     * executeModel above already ran. Loading it here as well would put it on
+     * whatever slot the global sampler happened to be. */
+    syncChannels(*engine);
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
+ob_status ob_engine_instrument_replace_sample(ob_engine* engine,
+                                               const char* utf8_instrument_id,
+                                               const char* utf8_name,
+                                               const char* utf8_sample_path) {
+  if (engine == nullptr || utf8_name == nullptr || utf8_name[0] == '\0' ||
+      utf8_sample_path == nullptr || utf8_sample_path[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A sample name and path are required.");
+  }
+  if (!std::filesystem::is_regular_file(utf8_sample_path)) {
+    return fail(OB_ERR_FILE_NOT_FOUND, "The sample file does not exist.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  try {
+    std::string error;
+    if (!engine->engine->restoreBuiltinInstrument(error)) {
+      return fail(OB_ERR_INTERNAL, error.c_str());
+    }
+    onebeat::model::PluginRef plugin;
+    plugin.format = onebeat::model::PluginFormat::Builtin;
+    plugin.id = kSamplePluginId;
+    plugin.name = utf8_name;
+    plugin.vendor = "OneBeat";
+    plugin.path_hint = utf8_sample_path;
+    const ob_status status = executeModel(
+        *engine,
+        onebeat::model::replaceInstrument(engine->project, *id, plugin),
+        "The sample instrument could not be replaced.");
+    if (status != OB_OK) return status;
+    engine->selected_instrument = *id;
+    engine->has_instance = false;
+    /* Re-run now that the selection has moved, so the audition voice follows
+     * the replaced channel. The sample itself came in with executeModel. */
+    syncChannels(*engine);
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  }
+}
+
 ob_status ob_engine_instrument_set_gain(ob_engine* engine, const char* utf8_instrument_id,
                                         float gain) {
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
@@ -1252,10 +1459,18 @@ ob_status ob_engine_instrument_set_gain(ob_engine* engine, const char* utf8_inst
   if (!id || engine->project.findInstrument(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   }
-  ob_command command{};
-  command.type = OB_CMD_SET_INSTRUMENT_GAIN;
-  command.f64_a = static_cast<double>(gain);
-  return engine->engine->postCommand(command) ? OB_OK : OB_ERR_QUEUE_FULL;
+  const float clamped = std::clamp(gain, 0.0F, 2.0F);
+  const ob_status status =
+      executeModel(*engine,
+                   onebeat::model::editInstrument(
+                       engine->project, *id, onebeat::model::ChangeField::Gain,
+                       [clamped](onebeat::model::Instrument& value) { value.gain = clamped; },
+                       "Set instrument gain"),
+                   "The instrument does not exist.");
+  if (status != OB_OK) return status;
+  // Every channel carries its own gain now, and executeModel has already
+  // published all of them — so there is no "apply it when selected" case left.
+  return OB_OK;
 }
 
 ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instrument_id,
@@ -1265,10 +1480,17 @@ ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instr
   if (!id || engine->project.findInstrument(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
   }
-  ob_command command{};
-  command.type = OB_CMD_SET_INSTRUMENT_PAN;
-  command.f64_a = static_cast<double>(pan);
-  return engine->engine->postCommand(command) ? OB_OK : OB_ERR_QUEUE_FULL;
+  const float clamped = std::clamp(pan, -1.0F, 1.0F);
+  const ob_status status =
+      executeModel(*engine,
+                   onebeat::model::editInstrument(
+                       engine->project, *id, onebeat::model::ChangeField::Pan,
+                       [clamped](onebeat::model::Instrument& value) { value.pan = clamped; },
+                       "Set instrument pan"),
+                   "The instrument does not exist.");
+  if (status != OB_OK) return status;
+  // As for gain: per-channel pan is published by executeModel for every channel.
+  return OB_OK;
 }
 
 int32_t ob_engine_project_can_undo(ob_engine* engine) {
@@ -1997,7 +2219,8 @@ ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
   out_info->flags =
-      (clip.muted ? OB_CLIP_FLAG_MUTED : 0U) | (clip.transforms.loop ? OB_CLIP_FLAG_LOOP : 0U);
+      (clip.muted ? OB_CLIP_FLAG_MUTED : 0U) | (clip.transforms.loop ? OB_CLIP_FLAG_LOOP : 0U) |
+      (clip.audio() != nullptr ? OB_CLIP_FLAG_AUDIO : 0U);
   out_info->start_ticks = clip.start;
   out_info->length_ticks = clip.length;
   out_info->window_start_ticks = clip.transforms.window_start;
@@ -2005,9 +2228,17 @@ ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_
   copyText(out_info->id, sizeof(out_info->id), clip.id.str().c_str());
   copyText(out_info->lane_id, sizeof(out_info->lane_id), clip.lane.str().c_str());
 
-  // v0.3 draws pattern clips only; audio and automation clips exist in the
-  // model (D-M7) and arrive with Stages 4 and 9. Reporting them with an empty
-  // pattern id is how the view knows to skip rather than mis-draw them.
+  // Audio clips carry their own source name and duration. The path remains in
+  // the model for project save/reopen, while the UI only needs the display name.
+  if (const onebeat::model::AudioSource* audio = clip.audio()) {
+    copyText(out_info->name, sizeof(out_info->name), fileName(audio->path).c_str());
+    copyText(out_info->color, sizeof(out_info->color), "#50B8C6");
+    g_last_error.clear();
+    return OB_OK;
+  }
+
+  // Automation clips also have an empty pattern id; they remain unrendered
+  // until their editor exists.
   const onebeat::model::PatternSource* source = clip.pattern();
   if (source == nullptr) {
     g_last_error.clear();
@@ -2048,6 +2279,37 @@ ob_status ob_engine_clip_add(ob_engine* engine, const char* utf8_lane_id,
       onebeat::model::addClip(engine->project, *lane, onebeat::model::PatternSource{*target},
                               start_ticks, length_ticks),
       "The clip could not be placed.");
+}
+
+ob_status ob_engine_audio_clip_add(ob_engine* engine, const char* utf8_lane_id,
+                                   const char* utf8_sample_path, int64_t start_ticks) {
+  if (engine == nullptr || utf8_sample_path == nullptr || utf8_sample_path[0] == '\0' ||
+      start_ticks < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An audio clip needs a sample path and non-negative start.");
+  }
+  const auto lane = laneId(utf8_lane_id);
+  if (!lane || engine->project.findLane(*lane) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
+  }
+
+  std::string error;
+  const std::unique_ptr<onebeat::core::SampleData> sample =
+      onebeat::core::loadAudioFile(utf8_sample_path, error);
+  if (sample == nullptr || sample->sample_rate <= 0.0 || sample->frames <= 0) {
+    return fail(OB_ERR_FILE_UNSUPPORTED,
+                error.empty() ? "The sample could not be read." : error.c_str());
+  }
+
+  const double beats = (static_cast<double>(sample->frames) / sample->sample_rate) *
+                       engine->project.transport().tempo / 60.0;
+  const int64_t length = std::max<int64_t>(
+      1, static_cast<int64_t>(std::llround(beats * onebeat::model::TicksPerQuarter)));
+  onebeat::model::AudioSource source;
+  source.path = utf8_sample_path;
+  source.destination = engine->project.masterTrack();
+  return executeModel(*engine,
+                      onebeat::model::addClip(engine->project, *lane, source, start_ticks, length),
+                      "The audio clip could not be placed.");
 }
 
 ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id, const char* utf8_lane_id,

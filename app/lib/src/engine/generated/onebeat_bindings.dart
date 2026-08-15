@@ -856,10 +856,79 @@ class OneBeatBindings {
           )
         >
       >('ob_engine_instrument_add_empty');
-  late final _ob_engine_instrument_add_empty = _ob_engine_instrument_add_emptyPtr
-      .asFunction<
-        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
-      >();
+  late final _ob_engine_instrument_add_empty =
+      _ob_engine_instrument_add_emptyPtr
+          .asFunction<
+            int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)
+          >();
+
+  ob_status ob_engine_instrument_add_sample(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_name,
+    ffi.Pointer<ffi.Char> utf8_sample_path,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_add_sample(engine, utf8_name, utf8_sample_path),
+    );
+  }
+
+  late final _ob_engine_instrument_add_samplePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_instrument_add_sample');
+  late final _ob_engine_instrument_add_sample =
+      _ob_engine_instrument_add_samplePtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<ob_engine>,
+              ffi.Pointer<ffi.Char>,
+              ffi.Pointer<ffi.Char>,
+            )
+          >();
+
+  ob_status ob_engine_instrument_replace_sample(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ffi.Char> utf8_name,
+    ffi.Pointer<ffi.Char> utf8_sample_path,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_replace_sample(
+        engine,
+        utf8_instrument_id,
+        utf8_name,
+        utf8_sample_path,
+      ),
+    );
+  }
+
+  late final _ob_engine_instrument_replace_samplePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('ob_engine_instrument_replace_sample');
+  late final _ob_engine_instrument_replace_sample =
+      _ob_engine_instrument_replace_samplePtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<ob_engine>,
+              ffi.Pointer<ffi.Char>,
+              ffi.Pointer<ffi.Char>,
+              ffi.Pointer<ffi.Char>,
+            )
+          >();
 
   ob_status ob_engine_instrument_set_gain(
     ffi.Pointer<ob_engine> engine,
@@ -2104,6 +2173,43 @@ class OneBeatBindings {
         )
       >();
 
+  ob_status ob_engine_audio_clip_add(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_lane_id,
+    ffi.Pointer<ffi.Char> utf8_sample_path,
+    int start_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_add(
+        engine,
+        utf8_lane_id,
+        utf8_sample_path,
+        start_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int64,
+          )
+        >
+      >('ob_engine_audio_clip_add');
+  late final _ob_engine_audio_clip_add = _ob_engine_audio_clip_addPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+        )
+      >();
+
   ob_status ob_engine_clip_move(
     ffi.Pointer<ob_engine> engine,
     ffi.Pointer<ffi.Char> utf8_clip_id,
@@ -2467,7 +2573,9 @@ enum ob_command_type {
   OB_CMD_SET_MASTER_GAIN(10),
   OB_CMD_PLUGIN_PARAM_BEGIN(11),
   OB_CMD_PLUGIN_PARAM_VALUE(12),
-  OB_CMD_PLUGIN_PARAM_END(13);
+  OB_CMD_PLUGIN_PARAM_END(13),
+  OB_CMD_SET_INSTRUMENT_GAIN(14),
+  OB_CMD_SET_INSTRUMENT_PAN(15);
 
   final int value;
   const ob_command_type(this.value);
@@ -2487,6 +2595,8 @@ enum ob_command_type {
     11 => OB_CMD_PLUGIN_PARAM_BEGIN,
     12 => OB_CMD_PLUGIN_PARAM_VALUE,
     13 => OB_CMD_PLUGIN_PARAM_END,
+    14 => OB_CMD_SET_INSTRUMENT_GAIN,
+    15 => OB_CMD_SET_INSTRUMENT_PAN,
     _ => throw ArgumentError('Unknown value for ob_command_type: $value'),
   };
 }
@@ -2921,6 +3031,12 @@ final class ob_instrument_info extends ffi.Struct {
 
   @ffi.Array.multi([512])
   external ffi.Array<ffi.Char> plugin_path;
+
+  @ffi.Float()
+  external double gain;
+
+  @ffi.Float()
+  external double pan;
 }
 
 final class ob_rack_pattern_info extends ffi.Struct {
@@ -3093,11 +3209,11 @@ final class ob_clip_info extends ffi.Struct {
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 7;
+const int OB_ABI_VERSION_MINOR = 9;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 67328;
+const int OB_ABI_VERSION_PACKED = 67584;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -3124,3 +3240,5 @@ const int OB_LANE_FLAG_COLLAPSED = 4;
 const int OB_CLIP_FLAG_MUTED = 1;
 
 const int OB_CLIP_FLAG_LOOP = 2;
+
+const int OB_CLIP_FLAG_AUDIO = 4;

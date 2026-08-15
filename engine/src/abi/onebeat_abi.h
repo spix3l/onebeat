@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 7
+#define OB_ABI_VERSION_MINOR 9
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -471,6 +471,8 @@ typedef struct ob_instrument_info {
   char plugin_name[128];
   char plugin_vendor[128];
   char plugin_path[512];
+  float gain; /* linear 0..2, the channel rack VOL knob */
+  float pan;  /* -1..1, the channel rack PAN knob */
 } ob_instrument_info;
 
 /* Main/UI thread. The rows are project-global and ordered by `order`. */
@@ -494,6 +496,16 @@ OB_API ob_status ob_engine_instrument_remove(ob_engine* engine, const char* utf8
 /* Adds a channel with no plug-in — an empty lane to drop an instrument into.
  * Main/UI thread. `utf8_name` may be empty for a generated name. */
 OB_API ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_name);
+/* Adds a project instrument backed by one decoded WAV sample. The path is
+ * persisted in the instrument's plugin reference and loaded by the built-in
+ * sampler when the row is selected. */
+OB_API ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_name,
+                                                const char* utf8_sample_path);
+/* Replaces an existing instrument with a sample-backed instrument. */
+OB_API ob_status ob_engine_instrument_replace_sample(ob_engine* engine,
+                                                    const char* utf8_instrument_id,
+                                                    const char* utf8_name,
+                                                    const char* utf8_sample_path);
 /* Per-channel gain (linear 0..2) and pan (-1..1), applied to the active voice.
  * v0.3 hosts one instrument, so these act on the hosted voice; the per-track
  * mixer (v0.4) replaces this. */
@@ -713,6 +725,7 @@ OB_API ob_status ob_engine_lane_remove(ob_engine* engine, const char* utf8_lane_
 
 #define OB_CLIP_FLAG_MUTED 0x1u
 #define OB_CLIP_FLAG_LOOP 0x2u /* clear => hold-off: the tail is silence */
+#define OB_CLIP_FLAG_AUDIO 0x4u /* source is an audio file, not a pattern */
 
 typedef struct ob_clip_info {
   uint32_t struct_size;
@@ -741,6 +754,13 @@ OB_API ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_inf
 OB_API ob_status ob_engine_clip_add(ob_engine* engine, const char* utf8_lane_id,
                                     const char* utf8_pattern_id, int64_t start_ticks,
                                     int64_t length_ticks);
+/* Adds an audio clip from a WAV file. The clip length is derived from the
+ * source duration at the current project tempo, so the UI can place the full
+ * file without decoding it a second time. Main/UI thread; may block while the
+ * WAV header and samples are read. */
+OB_API ob_status ob_engine_audio_clip_add(ob_engine* engine, const char* utf8_lane_id,
+                                          const char* utf8_sample_path,
+                                          int64_t start_ticks);
 /* Moving between lanes is deliberately the same call as moving in time, and
  * changes nothing audible: a lane carries no signal (ARCHITECTURE.md §4). */
 OB_API ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id,

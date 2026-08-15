@@ -66,7 +66,26 @@ bool SnapshotSlot::read(ob_snapshot& out) const noexcept OB_NONBLOCKING {
 // Engine
 // --------------------------------------------------------------------------
 
-Engine::Engine(EngineConfig config) : config_(std::move(config)) {}
+Engine::Engine(EngineConfig config) : config_(std::move(config)) {
+  // Every slot exists from construction. Adding a channel later then costs a
+  // flag and a sample load, never an allocation the audio thread could race.
+  for (auto& channel : channels_) {
+    channel = std::make_unique<Channel>(&host_bridge_, &rt_log_);
+  }
+  // Slot 0 is the engine's voice when there is no project rack at all: the
+  // audition path, the v0.1 behaviour, and every test that loads one sample.
+  channels_[0]->active.store(true, std::memory_order_release);
+}
+
+plugin::PluginInstance& Engine::channelInstrument(int index) noexcept OB_NONBLOCKING {
+  if (index == hosted_channel_ && hosted_instrument_ != nullptr) return *hosted_instrument_;
+  return channels_[static_cast<size_t>(index)]->instrument;
+}
+
+const plugin::PluginInstance& Engine::channelInstrument(int index) const noexcept OB_NONBLOCKING {
+  if (index == hosted_channel_ && hosted_instrument_ != nullptr) return *hosted_instrument_;
+  return channels_[static_cast<size_t>(index)]->instrument;
+}
 
 Engine::~Engine() {
   stop();
@@ -115,11 +134,18 @@ bool Engine::initialise(std::string& error) {
   setup.sample_rate = granted.sample_rate;
   setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
   setup.is_offline = config_.use_null_device;
-  if (!instrument_->configure(setup) || !instrument_->activate()) {
-    error = "The built-in instrument could not be configured for this device format.";
-    diagnostics_.log(LogLevel::Error, "plugin", error);
-    return false;
+  // Every channel, not just the ones in use: a slot activated later would have
+  // to allocate, and the thread that would add it is the one holding the model.
+  for (auto& channel : channels_) {
+    if (!channel->instrument.configure(setup) || !channel->instrument.activate()) {
+      error = "The built-in instrument could not be configured for this device format.";
+      diagnostics_.log(LogLevel::Error, "plugin", error);
+      return false;
+    }
   }
+
+  // One channel's worth of interleaved-by-plane stereo scratch.
+  channel_scratch_.assign(static_cast<size_t>(granted.block_frames) * MaxChannels, 0.0F);
 
   // Sized for the worst honest case rather than the typical one: the command
   // ring holds 1024 entries, and a block can in principle carry a schedule event
@@ -197,7 +223,10 @@ bool Engine::installHostedInstrument(std::unique_ptr<plugin::PluginInstance> ins
   if (resume) stop();
   if (hosted_instrument_ != nullptr) hosted_instrument_->deactivate();
   hosted_instrument_ = std::move(instance);
-  instrument_ = hosted_instrument_.get();
+  // The hosted voice takes over the audition channel — the one the user has
+  // selected — which is the channel every hosted-plug-in call site means.
+  hosted_channel_ = audition_channel_.load(std::memory_order_acquire);
+  channels_[static_cast<size_t>(hosted_channel_)]->active.store(true, std::memory_order_release);
   if (resume && !start(error)) return false;
   return true;
 }
@@ -208,7 +237,7 @@ bool Engine::restoreBuiltinInstrument(std::string& error) {
   if (resume) stop();
   hosted_instrument_->deactivate();
   hosted_instrument_.reset();
-  instrument_ = &builtin_instrument_;
+  hosted_channel_ = 0;
   if (resume && !start(error)) return false;
   return true;
 }
@@ -313,7 +342,11 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   // one tick per *callback*, not per process() call — a callback split at a loop
   // seam is still one block.
   schedule_.beginBlock();
-  instrument_->beginAudioBlock();
+  for (int index = 0; index < MaxRackChannels; ++index) {
+    Channel& channel = *channels_[static_cast<size_t>(index)];
+    if (!channel.active.load(std::memory_order_acquire)) continue;
+    channelInstrument(index).beginAudioBlock();
+  }
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
@@ -334,12 +367,10 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   float peak_right = 0.0F;
   double sum_left = 0.0;
   double sum_right = 0.0;
-  // Per-channel gain and a constant-power balance: pan == 0 is centred, +1 is
-  // hard right, -1 is hard left. Applied before the master gain.
-  const float channel_gain = instrument_gain_;
-  const float pan = instrument_pan_;
-  const float left_gain = master_gain_ * channel_gain * (pan > 0.0F ? 1.0F - pan : 1.0F);
-  const float right_gain = master_gain_ * channel_gain * (pan < 0.0F ? 1.0F + pan : 1.0F);
+  // Channel gain and pan have already been applied per channel, on the way into
+  // the mix (renderChannel). What is left here is the master.
+  const float left_gain = master_gain_;
+  const float right_gain = master_gain_;
   const int channels = output.numChannels();
   for (int frame = 0; frame < context.num_frames; ++frame) {
     const float left = output.channel(0)[frame] * left_gain;
@@ -381,20 +412,71 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
     return;
   }
 
+  // Consumed once for the whole chunk and then broadcast to every channel: a
+  // loop seam releases the entire rack, not whichever channel happened to be
+  // rendered first.
+  const bool release_all = pending_all_notes_off_;
+  pending_all_notes_off_ = false;
+
+  // Tempo is the *host's* clock, not any channel's: applied once for the chunk,
+  // before anything renders and before the transport advances, which is exactly
+  // where the single-instrument engine applied it.
+  if (schedule != nullptr) {
+    const int32_t event_count = schedule->eventCount();
+    const ScheduleEvent* schedule_events = schedule->events();
+    const int64_t chunk_end = chunk_start + num_frames;
+    for (int32_t cursor = schedule->lowerBound(chunk_start);
+         cursor < event_count && schedule_events[cursor].frame < chunk_end; ++cursor) {
+      if (static_cast<EventType>(schedule_events[cursor].type) == EventType::TempoChange) {
+        transport_.setTempo(static_cast<double>(schedule_events[cursor].value));
+      }
+    }
+  }
+
+  int32_t voices = 0;
+  for (int index = 0; index < MaxRackChannels; ++index) {
+    Channel& channel = *channels_[static_cast<size_t>(index)];
+    if (!channel.active.load(std::memory_order_acquire)) continue;
+    renderChannel(channel, static_cast<InstrumentId>(index), output, offset, num_frames, schedule,
+                  chunk_start, block_events, release_all);
+    voices += channelInstrument(index).activeVoiceCount();
+  }
+  active_voices_ = voices;
+}
+
+// One channel. Its events are the schedule events addressed to it, plus the
+// block's commands when it is the audition channel — a manual note belongs to
+// the channel the user has selected, not to all of them at once. Renders into
+// the shared scratch buffer and mixes the result into `output`, so a channel
+// never sees, and cannot overwrite, what the channels before it produced.
+void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
+                           int offset, int num_frames, const Schedule* schedule,
+                           int64_t chunk_start, const plugin::EventList* block_events,
+                           bool release_all) noexcept OB_NONBLOCKING {
   plugin::EventList events = chunk_events_.list();
 
   // A loop wrap that landed on the previous block boundary releases here, before
   // anything else, so it still precedes every note this chunk starts.
-  if (pending_all_notes_off_) {
+  if (release_all) {
     events.push(plugin::PluginEvent::allNotesOff(0));
-    pending_all_notes_off_ = false;
   }
 
   // Commands first, at frame 0 — they were drained before the block rendered,
   // and the stable sort below keeps them ahead of any schedule event at 0.
+  // Transport-wide releases (stop, seek) are broadcast to every channel;
+  // auditioned notes and parameter edits belong to the selected channel only,
+  // or every lane would sound whenever the user pressed a key.
+  const bool is_audition =
+      static_cast<int>(index) == audition_channel_.load(std::memory_order_acquire);
   if (block_events != nullptr) {
-    for (uint32_t index = 0; index < block_events->size(); ++index) {
-      events.push((*block_events)[index]);
+    for (uint32_t i = 0; i < block_events->size(); ++i) {
+      const plugin::PluginEvent& event = (*block_events)[i];
+      const bool is_broadcast_release =
+          event.type == static_cast<uint16_t>(plugin::EventType::NoteOff) &&
+          event.key == plugin::AnyKey;
+      if (is_audition || is_broadcast_release) {
+        events.push(event);
+      }
     }
   }
 
@@ -402,9 +484,11 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
     const int32_t event_count = schedule->eventCount();
     const ScheduleEvent* schedule_events = schedule->events();
     const int64_t chunk_end = chunk_start + num_frames;
-    for (int32_t index = schedule->lowerBound(chunk_start);
-         index < event_count && schedule_events[index].frame < chunk_end; ++index) {
-      const ScheduleEvent& event = schedule_events[index];
+    for (int32_t cursor = schedule->lowerBound(chunk_start);
+         cursor < event_count && schedule_events[cursor].frame < chunk_end; ++cursor) {
+      const ScheduleEvent& event = schedule_events[cursor];
+      // The whole point of the rack: an event belongs to exactly one channel.
+      if (event.instrument != index) continue;
       const auto time = static_cast<uint32_t>(event.frame - chunk_start);
       switch (static_cast<EventType>(event.type)) {
         case EventType::NoteOn:
@@ -415,11 +499,7 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
           events.push(plugin::PluginEvent::noteOff(time, event.note));
           break;
         case EventType::TempoChange:
-          // Tempo is the *host's* clock, not the instrument's: it never reaches
-          // process(). Applied here, before the chunk renders and before the
-          // transport advances, which is exactly where v0.1 applied it.
-          transport_.setTempo(static_cast<double>(event.value));
-          break;
+          break;  // host clock, applied once per chunk in processChunk
         case EventType::ParamValue:
           events.push(plugin::PluginEvent::paramValue(time, event.reserved,
                                                       static_cast<double>(event.value)));
@@ -439,15 +519,19 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
                 static_cast<int64_t>(events.capacity()));
   }
 
-  // A window onto the output at `offset`. Stack storage, no allocation: the
-  // instrument's ports are addressed from frame 0 of what it is given, so the
-  // host does the offsetting rather than every plugin having to.
-  float* slice[MaxChannels] = {nullptr, nullptr};
+  // The channel renders into scratch rather than straight into the master, so
+  // its gain and pan can be applied on the way in and so each channel starts
+  // from silence instead of from the previous channel's output. Stack storage
+  // for the plane pointers, no allocation: the scratch itself was sized at
+  // initialise() for the device's largest block.
   const int channels = std::min(output.numChannels(), MaxChannels);
-  for (int channel = 0; channel < channels; ++channel) {
-    slice[channel] = output.channel(channel) + offset;
+  const auto stride = static_cast<size_t>(config_.block_frames);
+  float* slice[MaxChannels] = {nullptr, nullptr};
+  for (int plane = 0; plane < channels; ++plane) {
+    slice[plane] = channel_scratch_.data() + (static_cast<size_t>(plane) * stride);
   }
   const AudioBufferView port(slice, channels, num_frames);
+  port.clear();
 
   plugin::ProcessBlock block;
   block.frames = static_cast<uint32_t>(num_frames);
@@ -467,11 +551,38 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
   transport.loop_start_beats = transport_.loopStartBeats();
   transport.loop_end_beats = transport_.loopEndBeats();
 
-  const plugin::ProcessStatus status = instrument_->process(block);
+  const plugin::ProcessStatus status = channelInstrument(static_cast<int>(index)).process(block);
   if (status == plugin::ProcessStatus::Error) {
-    rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed, 0, 0);
+    rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed,
+                static_cast<int64_t>(index), 0);
   }
-  active_voices_ = instrument_->activeVoiceCount();
+
+  // Mix into the master with this channel's level. Muting is a gain of zero
+  // taken here rather than a skipped render, so a muted channel's voices still
+  // advance and unmuting does not resurrect a note from where it left off.
+  const float gain = channel.muted.load(std::memory_order_acquire)
+                         ? 0.0F
+                         : channel.gain.load(std::memory_order_acquire);
+  if (gain == 0.0F) return;
+  // Constant-power balance: pan == 0 is centred, +1 hard right, -1 hard left.
+  const float pan = channel.pan.load(std::memory_order_acquire);
+  const float left_gain = gain * (pan > 0.0F ? 1.0F - pan : 1.0F);
+  const float right_gain = gain * (pan < 0.0F ? 1.0F + pan : 1.0F);
+
+  float* out_left = output.channel(0) + offset;
+  const float* in_left = port.channel(0);
+  if (channels > 1) {
+    float* out_right = output.channel(1) + offset;
+    const float* in_right = port.channel(1);
+    for (int frame = 0; frame < num_frames; ++frame) {
+      out_left[frame] += in_left[frame] * left_gain;
+      out_right[frame] += in_right[frame] * right_gain;
+    }
+  } else {
+    for (int frame = 0; frame < num_frames; ++frame) {
+      out_left[frame] += in_left[frame] * left_gain;
+    }
+  }
 }
 
 void Engine::runSchedule(const AudioBufferView& output, int block_offset, int num_frames,
@@ -567,10 +678,14 @@ void Engine::applyCommand(const ob_command& command,
       master_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
       break;
     case OB_CMD_SET_INSTRUMENT_GAIN:
-      instrument_gain_ = std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F);
+      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]
+          ->gain.store(std::clamp(static_cast<float>(command.f64_a), 0.0F, 2.0F),
+                       std::memory_order_release);
       break;
     case OB_CMD_SET_INSTRUMENT_PAN:
-      instrument_pan_ = std::clamp(static_cast<float>(command.f64_a), -1.0F, 1.0F);
+      channels_[static_cast<size_t>(audition_channel_.load(std::memory_order_acquire))]
+          ->pan.store(std::clamp(static_cast<float>(command.f64_a), -1.0F, 1.0F),
+                      std::memory_order_release);
       break;
     case OB_CMD_PLUGIN_PARAM_BEGIN:
       block_events.push(
@@ -697,6 +812,14 @@ void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
 }
 
 bool Engine::loadSample(const std::string& path, std::string& error) {
+  return loadChannelSample(0, path, error);
+}
+
+bool Engine::loadChannelSample(int index, const std::string& path, std::string& error) {
+  if (index < 0 || index >= MaxRackChannels) {
+    error = "The channel index is out of range.";
+    return false;
+  }
   std::unique_ptr<SampleData> sample =
       path.empty() ? makeFallbackSample(config_.sample_rate) : loadAudioFile(path, error);
   if (sample == nullptr) {
@@ -711,9 +834,9 @@ bool Engine::loadSample(const std::string& path, std::string& error) {
 
   const std::string name = sample->name;
   const int64_t frames = sample->frames;
-  builtin_instrument_.sampler().setSample(std::move(sample));
-  diagnostics_.logf(LogLevel::Info, "sampler", "loaded '%s' (%lld frames)", name.c_str(),
-                    static_cast<long long>(frames));
+  channels_[static_cast<size_t>(index)]->instrument.sampler().setSample(std::move(sample));
+  diagnostics_.logf(LogLevel::Info, "sampler", "channel %d loaded '%s' (%lld frames)", index,
+                    name.c_str(), static_cast<long long>(frames));
 
   ob_event event{};
   event.type = OB_EVT_SAMPLE_LOADED;
@@ -731,12 +854,64 @@ void Engine::requestSampleLoad(const std::string& path) {
   work_signal_.notify_one();
 }
 
+void Engine::setChannels(std::vector<ChannelDesc> channels) {
+  {
+    std::lock_guard<std::mutex> lock(work_mutex_);
+    pending_channels_ = std::move(channels);
+    has_pending_channels_ = true;
+  }
+  work_signal_.notify_one();
+}
+
+void Engine::setAuditionChannel(int index) noexcept {
+  if (index < 0 || index >= MaxRackChannels) return;
+  audition_channel_.store(index, std::memory_order_release);
+}
+
+// Housekeeping thread. Levels are published immediately — they are atomics the
+// audio thread re-reads every block — while a changed sample path costs a disk
+// read, so it is done only where the path actually differs.
+void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
+  const size_t count = std::min(channels.size(), static_cast<size_t>(MaxRackChannels));
+  for (size_t index = 0; index < count; ++index) {
+    Channel& channel = *channels_[index];
+    const ChannelDesc& desc = channels[index];
+    channel.gain.store(std::clamp(desc.gain, 0.0F, 2.0F), std::memory_order_release);
+    channel.pan.store(std::clamp(desc.pan, -1.0F, 1.0F), std::memory_order_release);
+    channel.muted.store(desc.muted, std::memory_order_release);
+    if (desc.sample_path != channel.loaded_path) {
+      std::string error;
+      // A channel with no sample yet (an empty lane, or a hosted plug-in) is
+      // left silent rather than given the fallback tone: an empty lane that
+      // beeped would be worse than one that does nothing.
+      if (!desc.sample_path.empty() &&
+          loadChannelSample(static_cast<int>(index), desc.sample_path, error)) {
+        channel.loaded_path = desc.sample_path;
+      } else if (desc.sample_path.empty()) {
+        channel.loaded_path.clear();
+      }
+    }
+    channel.active.store(true, std::memory_order_release);
+  }
+  // Slots the rack no longer reaches fall silent. Slot 0 stays active even when
+  // the project is empty so the audition path always has a voice.
+  for (size_t index = std::max<size_t>(count, 1); index < MaxRackChannels; ++index) {
+    channels_[index]->active.store(false, std::memory_order_release);
+  }
+}
+
 void Engine::applyPendingWorkForTests() {
   std::vector<std::string> pending;
+  std::vector<ChannelDesc> channels;
+  bool has_channels = false;
   {
     std::lock_guard<std::mutex> lock(work_mutex_);
     pending.swap(pending_sample_loads_);
+    has_channels = has_pending_channels_;
+    channels.swap(pending_channels_);
+    has_pending_channels_ = false;
   }
+  if (has_channels) applyChannelSync(std::move(channels));
   for (const std::string& path : pending) {
     std::string error;
     loadSample(path, error);
@@ -747,12 +922,18 @@ void Engine::housekeepingLoop() {
   char formatted[256];
   while (housekeeping_active_.load(std::memory_order_acquire)) {
     std::vector<std::string> pending;
+    std::vector<ChannelDesc> channels;
+    bool has_channels = false;
     {
       std::unique_lock<std::mutex> lock(work_mutex_);
       work_signal_.wait_for(lock, std::chrono::milliseconds(20));
       pending.swap(pending_sample_loads_);
+      has_channels = has_pending_channels_;
+      channels.swap(pending_channels_);
+      has_pending_channels_ = false;
     }
 
+    if (has_channels) applyChannelSync(std::move(channels));
     for (const std::string& path : pending) {
       std::string error;
       loadSample(path, error);
@@ -768,7 +949,9 @@ void Engine::housekeepingLoop() {
     // Free everything the audio thread provably cannot reach any more.
     const bool rt_running = running_.load(std::memory_order_acquire);
     schedule_.collect(rt_running);
-    builtin_instrument_.sampler().collectRetiredSamples(rt_running);
+    for (auto& channel : channels_) {
+      channel->instrument.sampler().collectRetiredSamples(rt_running);
+    }
   }
 }
 
@@ -806,13 +989,19 @@ void Engine::onDeviceNotification(audio_io::DeviceNotification notification,
       setup.sample_rate = granted.sample_rate;
       setup.max_block_frames = static_cast<uint32_t>(granted.block_frames);
       setup.is_offline = config_.use_null_device;
-      instrument_->deactivate();
-      if (!instrument_->configure(setup) || !instrument_->activate()) {
-        diagnostics_.log(LogLevel::Error, "plugin",
-                         "the built-in instrument rejected the new device format");
+      for (int index = 0; index < MaxRackChannels; ++index) {
+        plugin::PluginInstance& voice = channelInstrument(index);
+        voice.deactivate();
+        if (!voice.configure(setup) || !voice.activate()) {
+          diagnostics_.logf(LogLevel::Error, "plugin",
+                            "channel %d rejected the new device format", index);
+        }
       }
     }
     config_.block_frames = granted.block_frames;
+    // The scratch is sized for the device's block; a larger block would other-
+    // wise have channels rendering past the end of it.
+    channel_scratch_.assign(static_cast<size_t>(granted.block_frames) * MaxChannels, 0.0F);
     latency_frames_output_ = device_->outputLatencyFrames();
     latency_frames_roundtrip_ = device_->roundTripLatencyFrames();
   }

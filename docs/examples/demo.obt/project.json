@@ -294,6 +294,7 @@
   "instruments": {
     "ins_01K2QF8Z00KEYS000000000000": {
       "color": "#6C8CFF",
+      "gain": 1.000000,
       "muted": false,
       "name": "Piano",
       "note_defaults": {
@@ -302,6 +303,7 @@
         "velocity": 12900
       },
       "order": 0,
+      "pan": 0.000000,
       "plugin": {
         "format": "clap",
         "id": "com.onebeat.piano",
@@ -320,6 +322,7 @@
     },
     "ins_01K2QF8Z01BASS000000000000": {
       "color": "#4FB286",
+      "gain": 1.000000,
       "muted": false,
       "name": "Bass",
       "note_defaults": {
@@ -328,6 +331,7 @@
         "velocity": 12900
       },
       "order": 1,
+      "pan": 0.000000,
       "plugin": {
         "format": "clap",
         "id": "org.surge-synth-team.surge-xt",
@@ -346,6 +350,7 @@
     },
     "ins_01K2QF8Z02SYNTH00000000000": {
       "color": "#E2A33C",
+      "gain": 1.000000,
       "muted": false,
       "name": "Lead",
       "note_defaults": {
@@ -354,6 +359,7 @@
         "velocity": 12900
       },
       "order": 2,
+      "pan": 0.000000,
       "plugin": {
         "format": "clap",
         "id": "audio.vital.synth",
@@ -372,6 +378,7 @@
     },
     "ins_01K2QF8Z03PAD0000000000000": {
       "color": "#B36CE0",
+      "gain": 1.000000,
       "muted": false,
       "name": "Pad",
       "note_defaults": {
@@ -380,6 +387,7 @@
         "velocity": 12900
       },
       "order": 3,
+      "pan": 0.000000,
       "plugin": {
         "format": "clap",
         "id": "com.thewavewarden.odin2",

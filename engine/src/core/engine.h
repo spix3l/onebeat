@@ -6,6 +6,7 @@
 // than by convention.
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <memory>
@@ -70,10 +71,27 @@ class SnapshotSlot {
   std::atomic<uint64_t> words_[WordCount]{};
 };
 
+// How many rack channels can sound at once. The schedule addresses instruments
+// by a dense index (see model/flattener.h), and this is the size of the array
+// that index selects — so it is also the hard ceiling on project instruments
+// that produce audio. Every slot is configured and activated up front, which is
+// what lets a channel be added mid-session without allocating on the RT path.
+inline constexpr int MaxRackChannels = 64;
+
 class Engine final : public audio_io::RenderCallback {
  public:
   explicit Engine(EngineConfig config);
   ~Engine() override;
+
+  // What one rack channel should be, as the model sees it. The main thread
+  // hands over a whole rack; the housekeeping thread reconciles it against what
+  // is loaded (see setChannels).
+  struct ChannelDesc {
+    std::string sample_path;
+    float gain = 1.0F;
+    float pan = 0.0F;
+    bool muted = false;
+  };
 
   Engine(const Engine&) = delete;
   Engine& operator=(const Engine&) = delete;
@@ -100,13 +118,30 @@ class Engine final : public audio_io::RenderCallback {
   void publishSchedule(std::unique_ptr<Schedule> schedule);
   uint64_t scheduleGeneration() const { return schedule_.generation(); }
   bool loadSample(const std::string& path, std::string& error);
+  bool loadChannelSample(int index, const std::string& path, std::string& error);
   void requestSampleLoad(const std::string& path);
   void applyPendingWorkForTests();
 
+  // Replaces the whole rack, indexed by the schedule's dense instrument index.
+  // Asynchronous by design: reconciling means reading WAVs off disk, which must
+  // not happen on the caller's thread any more than on the audio thread. Slots
+  // past `channels.size()` fall silent. A channel whose sample path is unchanged
+  // keeps the sample it already has, so reordering the rack does not re-read
+  // every file.
+  void setChannels(std::vector<ChannelDesc> channels);
+  // Which channel manual note commands (the audition path) sound on.
+  void setAuditionChannel(int index) noexcept;
+
   // The engine holds its instrument as a `PluginInstance` and nothing else: a
   // hosted CLAP plugin (OB-2-07) drops in here with no change above this line.
-  plugin::PluginInstance& instrument() { return *instrument_; }
-  const plugin::PluginInstance& instrument() const { return *instrument_; }
+  // Names the channel a hosted plug-in occupies, which is also slot 0 — the
+  // audition voice — until something is hosted elsewhere.
+  plugin::PluginInstance& instrument() { return channelInstrument(hosted_channel_); }
+  const plugin::PluginInstance& instrument() const { return channelInstrument(hosted_channel_); }
+  // On the audio thread's path (renderChannel), so it carries the RT contract:
+  // a compare, a branch and an array index, and nothing else.
+  plugin::PluginInstance& channelInstrument(int index) noexcept OB_NONBLOCKING;
+  const plugin::PluginInstance& channelInstrument(int index) const noexcept OB_NONBLOCKING;
   // Replaces the v0.1 built-in instrument while the device is stopped around
   // the swap. Ownership stays with the engine so the audio thread only ever
   // observes a stable pointer.
@@ -132,7 +167,8 @@ class Engine final : public audio_io::RenderCallback {
   static constexpr uint32_t CommandQueueCapacity = 1024;
   // Sample loading has no place in a format-agnostic interface, so it stays on
   // the concrete built-in.
-  Sampler& sampler() { return builtin_instrument_.sampler(); }
+  Sampler& sampler() { return channels_[0]->instrument.sampler(); }
+  Sampler& channelSampler(int index) { return channels_[static_cast<size_t>(index)]->instrument.sampler(); }
   Transport& transportForTests() { return transport_; }
   Diagnostics& diagnostics() { return diagnostics_; }
   rt::RtLog& rtLog() { return rt_log_; }
@@ -175,6 +211,34 @@ class Engine final : public audio_io::RenderCallback {
     std::atomic<uint32_t> ports_rescan_{0};
   };
 
+  // One rack channel: its own voice, its own sample, its own level. Slots are
+  // constructed once and never reallocated, so the audio thread's view of a
+  // channel is stable for the life of the engine and only the atomics below
+  // change under it.
+  struct Channel {
+    Channel(plugin::PluginHost* host, rt::RtLog* log) : instrument(host, log) {}
+
+    plugin::builtin::SamplerPlugin instrument;
+    std::atomic<float> gain{1.0F};
+    std::atomic<float> pan{0.0F};
+    std::atomic<bool> muted{false};
+    // Whether this slot is part of the rack at all. Slot 0 starts active so an
+    // engine with no project still sounds — that is the audition path every
+    // test and the v0.1 single-sampler behaviour rely on.
+    std::atomic<bool> active{false};
+    // Housekeeping thread only: what `instrument`'s sampler currently holds, so
+    // reconciliation can tell a re-order from a genuine sample change.
+    std::string loaded_path;
+  };
+
+  // Renders one channel into the scratch buffer and mixes it into `output` at
+  // `offset` with that channel's gain and constant-power pan.
+  void renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output, int offset,
+                     int num_frames, const Schedule* schedule, int64_t chunk_start,
+                     const plugin::EventList* block_events,
+                     bool release_all) noexcept OB_NONBLOCKING;
+  void applyChannelSync(std::vector<ChannelDesc> channels);
+
   void drainCommands(plugin::EventList& block_events) noexcept OB_NONBLOCKING;
   void applyCommand(const ob_command& command,
                     plugin::EventList& block_events) noexcept OB_NONBLOCKING;
@@ -197,10 +261,22 @@ class Engine final : public audio_io::RenderCallback {
   std::unique_ptr<audio_io::AudioDevice> device_;
   Transport transport_;
   HostBridge host_bridge_;
-  plugin::builtin::SamplerPlugin builtin_instrument_{&host_bridge_, &rt_log_};
+  // The rack. Slot 0 doubles as the v0.1 single instrument: `sampler()` and
+  // `instrument()` below still name it, so the audition path and every caller
+  // that predates the rack keep working unchanged.
+  std::array<std::unique_ptr<Channel>, MaxRackChannels> channels_;
+  // A hosted CLAP plug-in still replaces exactly one channel's voice. Per-channel
+  // hosting is a Stage 7 concern; what matters here is that the *built-in*
+  // sampler is per-channel, which is what the rack is made of today.
   std::unique_ptr<plugin::PluginInstance> hosted_instrument_;
-  plugin::PluginInstance* instrument_ = &builtin_instrument_;
+  int hosted_channel_ = 0;
+  std::atomic<int> audition_channel_{0};
   rt::NonRealtimeMutable<Schedule> schedule_;
+
+  // One channel's render target, mixed into the master and reused across
+  // channels. Sized at initialise() for the device's largest block; the audio
+  // thread never resizes it.
+  std::vector<float> channel_scratch_;
 
   // Both reserved at initialise() time and never resized afterwards: pushing an
   // event on the audio thread must never allocate (OB-2-01 AC 3).
@@ -213,8 +289,6 @@ class Engine final : public audio_io::RenderCallback {
 
   // Audio-thread-owned state (no synchronisation, single writer).
   float master_gain_ = 1.0F;
-  float instrument_gain_ = 1.0F;
-  float instrument_pan_ = 0.0F;
   float peak_left_ = 0.0F;
   float peak_right_ = 0.0F;
   float rms_left_ = 0.0F;
@@ -238,6 +312,11 @@ class Engine final : public audio_io::RenderCallback {
   std::mutex work_mutex_;
   std::condition_variable work_signal_;
   std::vector<std::string> pending_sample_loads_;
+  // The rack the model last asked for. Only the newest matters — a burst of
+  // edits should reconcile once, not once per edit — so this is a slot, not a
+  // queue.
+  std::vector<ChannelDesc> pending_channels_;
+  bool has_pending_channels_ = false;
 };
 
 }  // namespace onebeat::core

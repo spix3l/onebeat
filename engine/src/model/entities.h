@@ -79,6 +79,11 @@ struct Instrument {
   NoteDefaults note_defaults;
   std::vector<OutputRoute> routing;
   bool muted = false;
+  // Channel gain (linear 0..2) and pan (-1..1), the channel rack's VOL/PAN
+  // knobs. Applied to the hosted voice while this instrument is selected; the
+  // per-track mixer (v0.4) replaces these with mixer-track gain/pan.
+  float gain = 1.0F;
+  float pan = 0.0F;
 };
 
 // Stage 4 owns the behaviour (chains, gain law, sends, solo semantics). What
@@ -219,13 +224,14 @@ inline Ticks patternContentEnd(const Pattern& pattern) {
   return end;
 }
 
-// How long the transport loops when this pattern is what you are playing: its
-// content, rounded up to a whole bar, and never less than one bar.
+// The shortest whole number of bars that holds everything in the pattern, and
+// never less than one bar.
 //
-// Not `Pattern::length`. That is a stored four-bar default which nothing in the
-// UI can yet change, so looping on it made a one-bar idea play four bars and cut
-// a five-bar idea off at four. Rounding up to the bar keeps the turnaround on a
-// barline, which is where the ear expects it.
+// This is the floor under `Pattern::length`, not a replacement for it: the
+// flattener drops whatever falls past the pattern length, so a length below
+// this one means notes that are stored and drawn but cannot sound. Rounding to
+// a bar rather than to the last note keeps the turnaround on a barline, which
+// is where the ear expects it.
 inline Ticks patternLoopLength(const Pattern& pattern) {
   const Ticks content = patternContentEnd(pattern);
   if (content <= 0) return TicksPerBarFourFour;

@@ -101,6 +101,10 @@ class _RackBindingState extends State<RackBinding>
 
   void _onEngineChanged() {
     if (mounted) {
+      // The engine can change the instrument set without a store action — the
+      // shell seeds the default channel on the first tick. Refresh cheaply when
+      // the set moved, then rebuild either way.
+      _store.refreshIfInstrumentsChanged();
       setState(() {});
     }
   }
@@ -206,8 +210,7 @@ class _RackBindingState extends State<RackBinding>
       );
     }
 
-    final List<RackRow> visibleRows =
-        _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visibleRows = _store.rows;
 
     final List<RackRowVm> rowVms = <RackRowVm>[];
     for (int i = 0; i < visibleRows.length; i++) {
@@ -282,7 +285,7 @@ class _RackBindingState extends State<RackBinding>
       channelType: _selectedType,
       group: _selectedGroup,
       snap: _selectedSnap,
-      caption: '$stepCount steps · loop',
+      steps: stepCount,
     );
 
     return ChannelRackScreenVm(
@@ -347,14 +350,14 @@ class _RackBindingState extends State<RackBinding>
   }
 
   void _onStepTap(int rowIndex, int stepIndex) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex >= 0 && rowIndex < visible.length) {
       _store.toggleStep(visible[rowIndex].instrumentId, stepIndex);
     }
   }
 
   void _onSelectRow(int rowIndex) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex >= 0 && rowIndex < visible.length) {
       _store.selectInstrument(visible[rowIndex].instrumentId);
     }
@@ -372,9 +375,6 @@ class _RackBindingState extends State<RackBinding>
       return;
     }
     _store.refresh();
-    if (_store.instruments.isNotEmpty) {
-      _store.includeInstrument(_store.instruments.last.id);
-    }
   }
 
   void _onAddChannel() => _addChannelLane();
@@ -382,7 +382,7 @@ class _RackBindingState extends State<RackBinding>
   void _onDoubleTap() => _addChannelLane();
 
   void _onVolChanged(int rowIndex, double value) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     setState(() => _gains[id] = value.clamp(0.0, 1.0));
@@ -394,7 +394,7 @@ class _RackBindingState extends State<RackBinding>
   }
 
   void _onPanChanged(int rowIndex, double value) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     setState(() => _pans[id] = value.clamp(0.0, 1.0));
@@ -406,7 +406,7 @@ class _RackBindingState extends State<RackBinding>
   }
 
   void _onTogglePower(int rowIndex) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     final ProjectInstrument? inst = _store.instrumentFor(id);
@@ -468,25 +468,23 @@ class _RackBindingState extends State<RackBinding>
       } else {
         return;
       }
+      // A dropped asset is an instrument, so it is a lane — no "include" step.
+      // Selection stays a separate action so the inspector does not appear
+      // unexpectedly.
       _store.refresh();
-      if (_store.instruments.isNotEmpty) {
-        // A dropped asset becomes a visible lane, but selection remains a
-        // separate action so the preview does not appear unexpectedly.
-        _store.includeInstrument(_store.instruments.last.id);
-      }
     } catch (_) {
       // Hosting or sample loading failed; ignore the drop.
     }
   }
 
   void _onRowSecondaryTapDown(int rowIndex, TapDownDetails details) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     _showContextMenu(visible[rowIndex].instrumentId, details.globalPosition);
   }
 
   void _onDropInstrument(int rowIndex, Object data) {
-    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     try {
       if (data is PluginListing) {
@@ -579,9 +577,6 @@ class _RackBindingState extends State<RackBinding>
       return;
     }
     _store.refresh();
-    if (_store.instruments.isNotEmpty) {
-      _store.includeInstrument(_store.instruments.last.id);
-    }
   }
 
   void _deleteInstrument(String instrumentId) {
@@ -631,6 +626,7 @@ class _RackBindingState extends State<RackBinding>
           _store.setGrid(_store.selectedInstrumentId!, ticks);
         }
       },
+      onSteps: (int steps) => _store.setLength(steps),
       onMixerTap: widget.onOpenMixer,
       onInspectorVol: _onInspectorVol,
       onInspectorPan: _onInspectorPan,
@@ -638,8 +634,7 @@ class _RackBindingState extends State<RackBinding>
       onInspectorSolo: _onInspectorSolo,
       onInspectorKeyPress: (int note) => _store.auditionNote(note),
       onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
-        final List<RackRow> visible =
-            _store.rows.where(_store.isVisible).toList();
+        final List<RackRow> visible = _store.rows;
         if (rowIndex < 0 || rowIndex >= visible.length) return;
         final RackRow row = visible[rowIndex];
         final bool velocityMode = event.buttons == kSecondaryMouseButton ||
@@ -654,8 +649,7 @@ class _RackBindingState extends State<RackBinding>
         }
       },
       onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
-        final List<RackRow> visible =
-            _store.rows.where(_store.isVisible).toList();
+        final List<RackRow> visible = _store.rows;
         if (rowIndex < 0 || rowIndex >= visible.length) return;
         final RackRow row = visible[rowIndex];
         if (event.buttons == kSecondaryMouseButton ||

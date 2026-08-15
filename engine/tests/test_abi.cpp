@@ -19,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.7.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.9.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.7.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.9.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -133,7 +133,7 @@ TEST_SUITE("abi") {
   }
 
   TEST_CASE("ABI 1.5 project instrument layout is frozen") {
-    CHECK(sizeof(ob_instrument_info) == 1088);
+    CHECK(sizeof(ob_instrument_info) == 1096);
     CHECK(offsetof(ob_instrument_info, order) == 4);
     CHECK(offsetof(ob_instrument_info, affected_pattern_count) == 12);
     CHECK(offsetof(ob_instrument_info, id) == 24);
@@ -141,6 +141,8 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_instrument_info, color) == 184);
     CHECK(offsetof(ob_instrument_info, plugin_id) == 192);
     CHECK(offsetof(ob_instrument_info, plugin_path) == 576);
+    CHECK(offsetof(ob_instrument_info, gain) == 1088);
+    CHECK(offsetof(ob_instrument_info, pan) == 1092);
   }
 
   TEST_CASE("ABI 1.6 channel rack layouts are frozen") {
@@ -564,6 +566,58 @@ TEST_SUITE("abi") {
     CHECK(ob_engine_clips_make_unique(engine, "") == OB_ERR_INVALID_ARGUMENT);
     CHECK(ob_engine_pattern_select(engine, "pat_nope") == OB_ERR_INVALID_ARGUMENT);
     CHECK_FALSE(std::string(ob_last_error_message()).empty());
+
+    ob_engine_destroy(engine);
+  }
+
+  // A note past the end of the pattern used to be accepted, stored and drawn,
+  // and then dropped by the flattener — audible silence over a playhead that
+  // swept it. The pattern grows to hold it instead, and the placement that
+  // still fitted the pattern grows with it so the note is actually scheduled.
+  TEST_CASE("Drawing past the end of a pattern lengthens it rather than silencing the note") {
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/stage3-abi";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    const std::string bundle = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE(ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK);
+    ob_instrument_info instrument{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &instrument) == OB_OK);
+
+    constexpr int64_t Bar = 3840;
+    ob_pattern_info pattern{};
+    pattern.struct_size = sizeof(pattern);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    const int64_t started_at = pattern.length_ticks;
+    CHECK(started_at == Bar);
+
+    // Bar 4, which is well past a one-bar pattern.
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 3 * Bar, 960, 60, 9000) == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 4 * Bar);
+
+    // The rack's placement fitted the pattern, so it grew too. Without this the
+    // pattern is long enough and the note still never reaches the schedule.
+    ob_clip_info clip{};
+    clip.struct_size = sizeof(clip);
+    REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
+    CHECK(clip.length_ticks == 4 * Bar);
+
+    // Deleting the note back out does not shrink it again: a length is a thing
+    // the user can set, and re-deriving it downwards would undo that setting
+    // every time a bar was cleared.
+    ob_note notes[4]{};
+    int32_t note_count = 0;
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 4, &note_count) == OB_OK);
+    REQUIRE(note_count == 1);
+    REQUIRE(ob_engine_notes_remove(engine, instrument.id, notes, 1) == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 4 * Bar);
 
     ob_engine_destroy(engine);
   }

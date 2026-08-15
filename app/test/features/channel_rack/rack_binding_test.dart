@@ -7,6 +7,7 @@
 // 4. Pattern switch re-scopes rows.
 // 5. Playing step updates from snapshot.
 // 6. Channel inspector updates on row selection.
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
@@ -201,6 +202,40 @@ class _FakeRackEngineClient implements EngineClient {
       ),
     );
   }
+
+  int duplicateCalls = 0;
+  int deleteCalls = 0;
+
+  @override
+  void setInstrumentMuted(String id, {required bool muted}) {
+    instruments = instruments
+        .map(
+          (ProjectInstrument inst) => inst.id == id
+              ? ProjectInstrument(
+                  id: inst.id,
+                  name: inst.name,
+                  color: inst.color,
+                  order: inst.order,
+                  pluginId: inst.pluginId,
+                  pluginName: inst.pluginName,
+                  pluginVendor: inst.pluginVendor,
+                  pluginPath: inst.pluginPath,
+                  muted: muted,
+                  selected: inst.selected,
+                  affectedPatterns: inst.affectedPatterns,
+                  affectedClips: inst.affectedClips,
+                  affectedNotes: inst.affectedNotes,
+                )
+              : inst,
+        )
+        .toList();
+  }
+
+  @override
+  void duplicateInstrument(String id) => duplicateCalls++;
+
+  @override
+  void deleteInstrument(String id) => deleteCalls++;
 
   @override
   void selectPattern(String patternId) {
@@ -609,5 +644,65 @@ void main() {
     await tester.pump();
 
     expect(client.auditionedNotes, contains(60));
+  });
+
+  testWidgets('the row power button toggles the instrument mute', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // The power button is the first control in each row: the left edge plus the
+    // md inset and half the power-well width. Tap the one on the first row.
+    final Rect kickRow = tester.getRect(find.byType(ObRackRow).first);
+    await tester.tapAt(Offset(kickRow.left + 12 + 9, kickRow.center.dy));
+    await tester.pump();
+
+    expect(client.instruments.first.muted, isTrue);
+  });
+
+  testWidgets('right-clicking a lane offers duplicate and delete', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Kick 808')),
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(find.text('Open in piano roll'), findsOneWidget);
+    expect(find.text('Duplicate'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+
+    await tester.tap(find.text('Duplicate'));
+    await tester.pump();
+    expect(client.duplicateCalls, 1);
+
+    // Re-open for delete.
+    final TestGesture second = await tester.startGesture(
+      tester.getCenter(find.text('Kick 808')),
+      buttons: kSecondaryMouseButton,
+    );
+    await second.up();
+    await tester.pump();
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    expect(client.deleteCalls, 1);
   });
 }

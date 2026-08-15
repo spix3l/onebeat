@@ -2,9 +2,15 @@
 //
 // Ports the behaviour of `ui/rack_store.dart` and the rack-relevant parts of
 // `pattern_store.dart`. The engine remains the model source of truth; this
-// store holds presentation selections (e.g. showAll, included empty rows,
-// selected instrument for the inspector, drag paint state) and translates
-// user actions into engine commands.
+// store holds presentation selections (selected instrument for the inspector,
+// drag paint state) and translates user actions into engine commands.
+//
+// Every project instrument is a rack row, always. There is deliberately no
+// visibility filter: one used to hide channels with no notes in the current
+// pattern, but the "keep this one anyway" set lived on this object, so
+// switching to the playlist and back rebuilt the store and silently emptied
+// the rack of every channel the user had not yet drawn a step on. A channel
+// exists because the user made it — the rack shows it until they delete it.
 import 'package:flutter/foundation.dart';
 
 import '../../engine/engine_client.dart';
@@ -24,9 +30,6 @@ class RackStore extends ChangeNotifier {
   final Map<String, List<SequenceNote>> notesByInstrument =
       <String, List<SequenceNote>>{};
 
-  bool showAll = false;
-  final Set<String> _includedEmptyRows = <String>{};
-
   String? selectedInstrumentId;
   String? selectedVelocityInstrument;
   int? selectedVelocityStep;
@@ -44,6 +47,27 @@ class RackStore extends ChangeNotifier {
   String get redoName => _client.redoProjectName;
 
   void load() => refresh();
+
+  /// Re-reads the instrument list and refreshes the whole store only when the
+  /// set of instruments actually changed. This is the cheap way for the binding
+  /// to notice an edit made outside the store — the shell seeding the default
+  /// channel on the first tick is the canonical one — without re-reading notes
+  /// on every frame.
+  void refreshIfInstrumentsChanged() {
+    final List<ProjectInstrument> now = _client.readInstruments();
+    if (now.length == instruments.length) {
+      final Set<String> nowIds = now
+          .map((ProjectInstrument inst) => inst.id)
+          .toSet();
+      final Set<String> cachedIds = instruments
+          .map((ProjectInstrument inst) => inst.id)
+          .toSet();
+      if (nowIds.length == cachedIds.length && nowIds.containsAll(cachedIds)) {
+        return;
+      }
+    }
+    refresh();
+  }
 
   void refresh() {
     pattern = _client.readRackPattern();
@@ -72,34 +96,8 @@ class RackStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool isVisible(RackRow row) {
-    if (showAll ||
-        row.hasSequence ||
-        _includedEmptyRows.contains(row.instrumentId)) {
-      return true;
-    }
-    // An instrument that holds notes in *another* pattern still has notes the
-    // user made. Hiding its row behind the current pattern's scope makes those
-    // notes "lost" — present in the mixer, absent from the rack — so any
-    // instrument with notes anywhere stays visible. Truly empty channels are
-    // still hidden unless explicitly added or SHOW ALL is on.
-    final ProjectInstrument? inst = instrumentFor(row.instrumentId);
-    return inst != null && inst.affectedNotes > 0;
-  }
-
-  void setShowAll({required bool value}) {
-    if (showAll == value) return;
-    showAll = value;
-    notifyListeners();
-  }
-
-  void includeInstrument(String instrumentId) {
-    if (_includedEmptyRows.add(instrumentId)) notifyListeners();
-  }
-
   void removeSequence(String instrumentId) {
     _client.removeRackSequence(instrumentId);
-    _includedEmptyRows.remove(instrumentId);
     refresh();
   }
 

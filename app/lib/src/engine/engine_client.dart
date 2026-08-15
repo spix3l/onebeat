@@ -423,6 +423,14 @@ class EngineClient
   void allNotesOff() => _post(cmdAllNotesOff);
   void setMasterGain(double gain) => _post(cmdSetMasterGain, f64a: gain);
 
+  /// Loads a sample into the built-in preview voice without changing the
+  /// project. The completion arrives as an `OB_EVT_SAMPLE_LOADED` event, which
+  /// [EngineController] uses to start the audition at the right time.
+  void loadSample(String samplePath) => _withNativeString(
+    samplePath,
+    (Pointer<Char> native) => _bindings.ob_engine_load_sample(_engine, native),
+  );
+
   /// v0.1 content stand-in: a step pattern, flattened and published by the
   /// engine. Stage 3 replaces this with real model edits.
   void setStepPattern(
@@ -658,6 +666,50 @@ class EngineClient
   void addPlugin(PluginListing plugin) =>
       addPluginByPath(plugin.path, plugin.id);
 
+  /// Adds a WAV-backed project instrument. The engine keeps the source path in
+  /// the instrument reference so the sample survives project save/reopen.
+  void addSampleInstrument(String name, String samplePath) {
+    final Pointer<Utf8> nativeName = name.toNativeUtf8();
+    final Pointer<Utf8> nativePath = samplePath.toNativeUtf8();
+    try {
+      _check(
+        _bindings.ob_engine_instrument_add_sample(
+          _engine,
+          nativeName.cast<Char>(),
+          nativePath.cast<Char>(),
+        ),
+      );
+    } finally {
+      calloc.free(nativeName);
+      calloc.free(nativePath);
+    }
+  }
+
+  /// Replaces a rack instrument with a WAV-backed sample instrument.
+  void replaceSampleInstrument(
+    String instrumentId,
+    String name,
+    String samplePath,
+  ) {
+    final Pointer<Utf8> nativeInstrument = instrumentId.toNativeUtf8();
+    final Pointer<Utf8> nativeName = name.toNativeUtf8();
+    final Pointer<Utf8> nativePath = samplePath.toNativeUtf8();
+    try {
+      _check(
+        _bindings.ob_engine_instrument_replace_sample(
+          _engine,
+          nativeInstrument.cast<Char>(),
+          nativeName.cast<Char>(),
+          nativePath.cast<Char>(),
+        ),
+      );
+    } finally {
+      calloc.free(nativeInstrument);
+      calloc.free(nativeName);
+      calloc.free(nativePath);
+    }
+  }
+
   /// The same thing addressed by bundle path and plug-in id rather than by a
   /// scanned listing. The browser always has a listing; the integration driver
   /// does not — it points straight at the stock bundle in the build tree so it
@@ -703,6 +755,8 @@ class EngineClient
           affectedPatterns: value.affected_pattern_count,
           affectedClips: value.affected_clip_count,
           affectedNotes: value.affected_note_count,
+          gain: value.gain,
+          pan: value.pan,
         ),
       );
     }
@@ -1315,6 +1369,7 @@ class EngineClient
           usageCount: value.usage_count,
           muted: (value.flags & clipFlagMuted) != 0,
           loop: (value.flags & clipFlagLoop) != 0,
+          isAudio: (value.flags & clipFlagAudio) != 0,
         ),
       );
     }
@@ -1529,6 +1584,25 @@ class EngineClient
   }
 }
 
+/// Audio clips are deliberately an additive capability rather than part of the
+/// pattern-placement API. Keeping this as an extension means test doubles that
+/// implement [EngineClient] do not need native audio plumbing just to test the
+/// pattern editor.
+extension AudioClipEngineClient on EngineClient {
+  void addAudioClip(String laneId, String samplePath, int startTicks) =>
+      _withTwoNativeStrings(
+        laneId,
+        samplePath,
+        (Pointer<Char> nativeLane, Pointer<Char> nativePath) =>
+            _bindings.ob_engine_audio_clip_add(
+              _engine,
+              nativeLane,
+              nativePath,
+              startTicks,
+            ),
+      );
+}
+
 /// Mirrors `ob_scan_state`.
 enum ScanState { idle, discovering, probing, complete, cancelled }
 
@@ -1671,6 +1745,8 @@ class ProjectInstrument {
     required this.affectedPatterns,
     required this.affectedClips,
     required this.affectedNotes,
+    this.gain = 1.0,
+    this.pan = 0.0,
   });
 
   final String id;
@@ -1686,6 +1762,10 @@ class ProjectInstrument {
   final int affectedPatterns;
   final int affectedClips;
   final int affectedNotes;
+
+  /// Channel gain (linear 0..2) and pan (-1..1): the rack's VOL/PAN knobs.
+  final double gain;
+  final double pan;
 }
 
 class RackPattern {
@@ -1843,17 +1923,19 @@ class ArrangementClip {
     required this.usageCount,
     required this.muted,
     required this.loop,
+    this.isAudio = false,
   });
 
   final String id;
   final String laneId;
 
-  /// Empty for audio and automation clips, which exist in the model (D-M7) but
-  /// are not drawn until Stages 4 and 9.
+  /// Empty for audio and automation clips. Audio clips set [isAudio] and use
+  /// [name] for the source file's display name.
   final String patternId;
 
-  /// The pattern's name and colour: a clip has none of its own, which is why
-  /// renaming a pattern renames every placement at once.
+  /// The pattern's name and colour, or the audio source's file name and colour.
+  /// Pattern clips have no independent name, so renaming a pattern renames every
+  /// placement at once.
   final String name;
   final String color;
 
@@ -1866,9 +1948,10 @@ class ArrangementClip {
   final int usageCount;
   final bool muted;
   final bool loop;
+  final bool isAudio;
 
   int get endTicks => startTicks + lengthTicks;
-  bool get isPattern => patternId.isNotEmpty;
+  bool get isPattern => !isAudio && patternId.isNotEmpty;
   bool get isShared => usageCount > 1;
 
   /// How many times the source pattern repeats inside the clip. Used to draw
@@ -1917,7 +2000,7 @@ const int cmdPluginParamBegin = 11;
 const int cmdPluginParamValue = 12;
 const int cmdPluginParamEnd = 13;
 
-/// Flag bits from the ABI 1.7 structs. Mirrored rather than generated because
+/// Flag bits from the ABI 1.9 structs. Mirrored rather than generated because
 /// ffigen renders `#define`s inconsistently; the C side freezes them.
 const int patternFlagCurrent = 0x1;
 const int laneFlagMuted = 0x1;
@@ -1925,6 +2008,7 @@ const int laneFlagSoloed = 0x2;
 const int laneFlagCollapsed = 0x4;
 const int clipFlagMuted = 0x1;
 const int clipFlagLoop = 0x2;
+const int clipFlagAudio = 0x4;
 
 const int evtDeviceChanged = 1;
 const int evtDeviceLost = 2;

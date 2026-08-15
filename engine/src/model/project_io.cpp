@@ -373,6 +373,8 @@ json::Value writeInstrument(const Instrument& instrument,
   out.emplace("color", json::Value::string(instrument.color));
   out.emplace("order", json::Value::integer(instrument.order));
   out.emplace("muted", json::Value::boolean(instrument.muted));
+  out.emplace("gain", json::Value::real(instrument.gain));
+  out.emplace("pan", json::Value::real(instrument.pan));
   out.emplace("plugin", json::Value::object(std::move(plugin)));
   out.emplace("note_defaults", json::Value::object(std::move(defaults)));
   out.emplace("routing", json::Value::array(std::move(routing)));
@@ -767,6 +769,8 @@ class Loader {
       instrument.order = static_cast<int32_t>(takeInt(*fields, "order", fallback_order));
       ++fallback_order;
       instrument.muted = takeBool(*fields, "muted");
+      instrument.gain = takeFloat(*fields, "gain", 1.0F);
+      instrument.pan = takeFloat(*fields, "pan", 0.0F);
 
       json::Value plugin_value = take(*fields, "plugin");
       if (json::Object* plugin = plugin_value.asObject(); plugin != nullptr) {
