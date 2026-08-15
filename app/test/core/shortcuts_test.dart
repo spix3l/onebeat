@@ -70,10 +70,12 @@ void main() {
         tester,
         ScopedShortcuts(
           shortcuts: <ShortcutActivator, Intent>{
-            const SingleActivator(LogicalKeyboardKey.keyB):
-                const RunActionIntent('tool'),
-            const SingleActivator(LogicalKeyboardKey.backspace):
-                const RunActionIntent('delete'),
+            const SingleActivator(
+              LogicalKeyboardKey.keyB,
+            ): const RunActionIntent('tool'),
+            const SingleActivator(
+              LogicalKeyboardKey.backspace,
+            ): const RunActionIntent('delete'),
           },
           handlers: <String, VoidCallback>{
             'tool': () => toolChanges++,
@@ -112,8 +114,9 @@ void main() {
         tester,
         ScopedShortcuts(
           shortcuts: <ShortcutActivator, Intent>{
-            const SingleActivator(LogicalKeyboardKey.keyB):
-                const RunActionIntent('tool'),
+            const SingleActivator(
+              LogicalKeyboardKey.keyB,
+            ): const RunActionIntent('tool'),
           },
           handlers: <String, VoidCallback>{'tool': () => toolChanges++},
           child: Focus(focusNode: canvas, child: const SizedBox.expand()),
@@ -142,8 +145,10 @@ void main() {
         tester,
         ScopedShortcuts(
           shortcuts: <ShortcutActivator, Intent>{
-            const SingleActivator(LogicalKeyboardKey.keyZ, meta: true):
-                const RunActionIntent('undo'),
+            const SingleActivator(
+              LogicalKeyboardKey.keyZ,
+              meta: true,
+            ): const RunActionIntent('undo'),
           },
           handlers: <String, VoidCallback>{'undo': () => undos++},
           child: EditableText(
@@ -170,7 +175,7 @@ void main() {
   });
 
   group('focus policy', () {
-    testWidgets('an editor does not steal focus from a field mid-edit', (
+    testWidgets('a tap on an editor surface takes focus back from a field', (
       WidgetTester tester,
     ) async {
       final TextEditingController text = TextEditingController();
@@ -204,11 +209,15 @@ void main() {
       await tester.pump();
       expect(field.hasFocus, isTrue);
 
-      FocusPolicy.takeUnlessTyping(canvas);
+      FocusPolicy.take(canvas);
       await tester.pump();
 
-      expect(field.hasFocus, isTrue, reason: 'the rename keeps the keyboard');
-      expect(canvas.hasFocus, isFalse);
+      expect(
+        canvas.hasFocus,
+        isTrue,
+        reason: 'clicking the canvas means "I am done with the field"',
+      );
+      expect(field.hasFocus, isFalse);
     });
 
     testWidgets('an editor takes focus when nothing is being typed', (
@@ -223,10 +232,153 @@ void main() {
         size: const Size(400, 200),
       );
 
-      FocusPolicy.takeUnlessTyping(canvas);
+      FocusPolicy.take(canvas);
       await tester.pump();
 
       expect(canvas.hasFocus, isTrue);
+    });
+
+    testWidgets('returnToEditor hands the keyboard back to the last editor', (
+      WidgetTester tester,
+    ) async {
+      final FocusNode shell = FocusNode(debugLabel: 'shell');
+      final FocusNode editor = FocusNode(debugLabel: 'editor');
+      final FocusNode field = FocusNode(debugLabel: 'field');
+      addTearDown(shell.dispose);
+      addTearDown(editor.dispose);
+      addTearDown(field.dispose);
+
+      await pumpForTest(
+        tester,
+        Column(
+          children: <Widget>[
+            Focus(focusNode: shell, child: const SizedBox(height: 40)),
+            Focus(focusNode: editor, child: const SizedBox(height: 40)),
+            SizedBox(
+              height: 40,
+              child: EditableText(
+                controller: TextEditingController(),
+                focusNode: field,
+                style: OneBeatTokens.dark().type.body,
+                cursorColor: OneBeatTokens.dark().color.accent,
+                backgroundCursorColor: OneBeatTokens.dark().color.line,
+              ),
+            ),
+          ],
+        ),
+        size: const Size(400, 200),
+      );
+
+      FocusPolicy.registerShell(shell);
+      addTearDown(() => FocusPolicy.registerShell(shell));
+      FocusPolicy.take(editor);
+      field.requestFocus();
+      await tester.pump();
+      expect(field.hasFocus, isTrue);
+
+      FocusPolicy.returnToEditor();
+      await tester.pump();
+
+      expect(
+        editor.hasFocus,
+        isTrue,
+        reason: 'the keyboard comes back to where the user was working',
+      );
+      expect(field.hasFocus, isFalse);
+    });
+
+    testWidgets(
+      'returnToEditor falls back to the shell when no editor held it',
+      (WidgetTester tester) async {
+        final FocusNode shell = FocusNode(debugLabel: 'shell');
+        final FocusNode field = FocusNode(debugLabel: 'field');
+        addTearDown(shell.dispose);
+        addTearDown(field.dispose);
+
+        await pumpForTest(
+          tester,
+          Column(
+            children: <Widget>[
+              Focus(focusNode: shell, child: const SizedBox(height: 40)),
+              SizedBox(
+                height: 40,
+                child: EditableText(
+                  controller: TextEditingController(),
+                  focusNode: field,
+                  style: OneBeatTokens.dark().type.body,
+                  cursorColor: OneBeatTokens.dark().color.accent,
+                  backgroundCursorColor: OneBeatTokens.dark().color.line,
+                ),
+              ),
+            ],
+          ),
+          size: const Size(400, 200),
+        );
+
+        FocusPolicy.registerShell(shell);
+        addTearDown(() => FocusPolicy.registerShell(shell));
+        field.requestFocus();
+        await tester.pump();
+
+        FocusPolicy.returnToEditor();
+        await tester.pump();
+
+        expect(shell.hasFocus, isTrue);
+        expect(field.hasFocus, isFalse);
+      },
+    );
+
+    testWidgets('Escape in a field returns focus to the editor', (
+      WidgetTester tester,
+    ) async {
+      final FocusNode shell = FocusNode(debugLabel: 'shell');
+      final FocusNode editor = FocusNode(debugLabel: 'editor');
+      final TextEditingController text = TextEditingController();
+      final FocusNode field = FocusNode(debugLabel: 'field');
+      addTearDown(shell.dispose);
+      addTearDown(editor.dispose);
+      addTearDown(text.dispose);
+      addTearDown(field.dispose);
+
+      await pumpForTest(
+        tester,
+        ScopedShortcuts(
+          shortcuts: <ShortcutActivator, Intent>{},
+          handlers: const <String, VoidCallback>{},
+          child: Column(
+            children: <Widget>[
+              Focus(focusNode: shell, child: const SizedBox(height: 40)),
+              Focus(focusNode: editor, child: const SizedBox(height: 40)),
+              SizedBox(
+                height: 40,
+                child: escapeReturnsFocus(
+                  child: EditableText(
+                    controller: text,
+                    focusNode: field,
+                    style: OneBeatTokens.dark().type.body,
+                    cursorColor: OneBeatTokens.dark().color.accent,
+                    backgroundCursorColor: OneBeatTokens.dark().color.line,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        size: const Size(400, 200),
+      );
+
+      FocusPolicy.registerShell(shell);
+      addTearDown(() => FocusPolicy.registerShell(shell));
+      FocusPolicy.take(editor);
+      field.requestFocus();
+      await tester.pump();
+      expect(field.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(editor.hasFocus, isTrue, reason: 'Escape leaves the field');
+      expect(field.hasFocus, isFalse);
     });
   });
 }

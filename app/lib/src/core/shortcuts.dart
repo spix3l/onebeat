@@ -175,17 +175,81 @@ class OneBeatShortcutManager extends ShortcutManager {
 /// - **An editor** takes focus on pointer-down inside its canvas, and on being
 ///   shown from the view switcher. It carries [ShortcutScope.editor] bindings.
 /// - **A text field** takes focus on tap and returns it on Enter, Escape or tap
-///   outside. While it holds focus, bare-key shortcuts are suppressed.
+///   outside: [returnToEditor] hands the keyboard back to whichever editor
+///   last had it. While it holds focus, bare-key shortcuts are suppressed.
 /// - **Space is the transport, everywhere.** No control binds it, so it works
 ///   no matter what was clicked last. This is the one rule that already existed
 ///   and it survives unchanged (FR-UX-24).
 abstract final class FocusPolicy {
-  /// Moves focus to `node` unless the user is mid-edit in a text field, where
-  /// stealing focus would drop what they typed.
-  static void takeUnlessTyping(FocusNode node) {
-    if (isEditingText()) return;
+  /// The shell's root focus node — where focus lands when no editor has ever
+  /// held it, and the default target [returnToEditor] falls back to.
+  static FocusNode? _shellRoot;
+
+  /// The editor that last took the keyboard. A finished text field returns
+  /// focus here so the shortcuts of the place the user was working in wake
+  /// back up, not just the global ones.
+  static FocusNode? _editor;
+
+  /// Registers the shell's root focus node as the default home for focus.
+  ///
+  /// The shell is the app's only `autofocus` and lives for the whole session,
+  /// so this is set once at startup and never cleared.
+  static void registerShell(FocusNode node) => _shellRoot = node;
+
+  /// Takes focus on behalf of an editor — a pointer-down in its canvas, or the
+  /// editor being shown. Records the node as the home a finished text field
+  /// returns to, so the keyboard comes back to where the user was working.
+  static void take(FocusNode node) {
+    _editor = node;
     node.requestFocus();
   }
+
+  /// A text field is done with the keyboard (Enter, Escape, or a tap that lands
+  /// on an editor surface). Focus goes back to the editor that last had it —
+  /// or the shell root when none ever did — which wakes the bare-key shortcuts
+  /// the field had been suppressing.
+  static void returnToEditor() {
+    final FocusNode? editor = _editor;
+    final FocusNode? target =
+        editor != null && editor.context != null && editor.context!.mounted
+            ? editor
+            : _shellRoot;
+    if (target == null || target.context == null || !target.context!.mounted) {
+      return;
+    }
+    target.requestFocus();
+  }
+}
+
+class _ReturnFocusIntent extends Intent {
+  const _ReturnFocusIntent();
+}
+
+/// Wraps a text field so Escape returns focus to the editor that last had it.
+///
+/// While a field has focus, bare-key shortcuts are suppressed app-wide (see
+/// [OneBeatShortcutManager]). Escape is the canonical way to leave a field,
+/// and leaving it must wake those shortcuts back up. The field-local
+/// [Shortcuts] consumes the key, so the shell's Cancel action does not fire on
+/// top of it. The rename dialogs handle Escape to *close* instead; they do not
+/// use this wrapper.
+Widget escapeReturnsFocus({required Widget child}) {
+  return Shortcuts(
+    shortcuts: const <ShortcutActivator, Intent>{
+      SingleActivator(LogicalKeyboardKey.escape): _ReturnFocusIntent(),
+    },
+    child: Actions(
+      actions: <Type, Action<Intent>>{
+        _ReturnFocusIntent: CallbackAction<_ReturnFocusIntent>(
+          onInvoke: (_) {
+            FocusPolicy.returnToEditor();
+            return null;
+          },
+        ),
+      },
+      child: child,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -299,21 +363,22 @@ String describeActivator(ShortcutActivator activator) {
 }
 
 String _keyLabel(LogicalKeyboardKey key) {
-  final String? special = <LogicalKeyboardKey, String>{
-    LogicalKeyboardKey.backspace: '⌫',
-    LogicalKeyboardKey.delete: '⌦',
-    LogicalKeyboardKey.escape: 'esc',
-    LogicalKeyboardKey.enter: '⏎',
-    LogicalKeyboardKey.space: 'space',
-    LogicalKeyboardKey.tab: '⇥',
-    LogicalKeyboardKey.arrowUp: '↑',
-    LogicalKeyboardKey.arrowDown: '↓',
-    LogicalKeyboardKey.arrowLeft: '←',
-    LogicalKeyboardKey.arrowRight: '→',
-    LogicalKeyboardKey.equal: '=',
-    LogicalKeyboardKey.minus: '−',
-    LogicalKeyboardKey.slash: '/',
-  }[key];
+  final String? special =
+      <LogicalKeyboardKey, String>{
+        LogicalKeyboardKey.backspace: '⌫',
+        LogicalKeyboardKey.delete: '⌦',
+        LogicalKeyboardKey.escape: 'esc',
+        LogicalKeyboardKey.enter: '⏎',
+        LogicalKeyboardKey.space: 'space',
+        LogicalKeyboardKey.tab: '⇥',
+        LogicalKeyboardKey.arrowUp: '↑',
+        LogicalKeyboardKey.arrowDown: '↓',
+        LogicalKeyboardKey.arrowLeft: '←',
+        LogicalKeyboardKey.arrowRight: '→',
+        LogicalKeyboardKey.equal: '=',
+        LogicalKeyboardKey.minus: '−',
+        LogicalKeyboardKey.slash: '/',
+      }[key];
   if (special != null) return special;
   final String label = key.keyLabel;
   return label.length == 1 ? label.toUpperCase() : label;

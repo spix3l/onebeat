@@ -86,7 +86,10 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       _store.setLastClickedItem(widget.lastClickedItem!);
     }
     _historySignature = _projectHistorySignature();
+    // Shown from the view switcher, so it owns the keyboard immediately rather
+    // than only after the first click on the canvas.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) FocusPolicy.take(_focus);
       _consumeExternalAudioDrop(widget.externalAudioDrop);
     });
   }
@@ -390,7 +393,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
   void _beginMarquee(Offset local) {
     if (!_isLasso) return;
-    FocusPolicy.takeUnlessTyping(_focus);
+    FocusPolicy.take(_focus);
     _store.beginMarquee(_tickAtCanvas(local), _laneAtCanvas(local));
   }
 
@@ -412,7 +415,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       if (clip.id.hashCode == hashId &&
           !clip.isAudio &&
           clip.patternId.isNotEmpty) {
-        FocusPolicy.takeUnlessTyping(_focus);
+        FocusPolicy.take(_focus);
         widget.onOpenPattern?.call(clip.patternId, clip.id);
         return;
       }
@@ -420,7 +423,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   }
 
   void _onClipTap(int hashId) {
-    FocusPolicy.takeUnlessTyping(_focus);
+    FocusPolicy.take(_focus);
     for (final ArrangementClip clip in _store.clips) {
       if (clip.id.hashCode == hashId) {
         if (_isLasso) {
@@ -471,7 +474,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       }
     }
     if (clip == null) return;
-    FocusPolicy.takeUnlessTyping(_focus);
+    FocusPolicy.take(_focus);
     if (!_store.selectedClipIds.contains(clip.id)) {
       _store.selectClip(clip.id);
     }
@@ -521,7 +524,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
           orElse: () => null,
         );
     if (clip == null) return;
-    FocusPolicy.takeUnlessTyping(_focus);
+    FocusPolicy.take(_focus);
     if (!_store.selectedClipIds.contains(clip.id)) {
       _store.selectClip(clip.id);
     }
@@ -655,7 +658,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   }
 
   void _onBackgroundTap(double bar, int lane) {
-    FocusPolicy.takeUnlessTyping(_focus);
+    FocusPolicy.take(_focus);
     if (_isLasso) {
       _store.clearClipSelection();
       return;

@@ -9,7 +9,9 @@
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../ui_kit/button.dart';
 import '../../ui_kit/fx_chip.dart';
+import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/knob.dart';
 import '../../ui_kit/toggle_chip.dart';
 import '../../ui_kit/tooltip.dart';
@@ -43,6 +45,7 @@ class ChannelInspectorVm {
     required this.route,
     this.muted = false,
     this.soloed = false,
+    this.hostsPlugin = false,
   });
 
   final String name;
@@ -51,6 +54,10 @@ class ChannelInspectorVm {
   final String subtitle;
 
   final Color color;
+
+  /// True when the channel runs a hosted plug-in rather than a sample or an
+  /// empty slot — the only channels that have a plug-in window to open.
+  final bool hostsPlugin;
 
   /// Normalised 0..1 envelope samples. Drawn mirrored about the centre line;
   /// deterministic, so the same vm always paints the same preview.
@@ -82,6 +89,7 @@ class ObChannelInspector extends StatelessWidget {
     this.onPan,
     this.onMute,
     this.onSolo,
+    this.onOpenPlugin,
     this.onFxTap,
     this.onAddFx,
     this.onRouteTap,
@@ -94,6 +102,10 @@ class ObChannelInspector extends StatelessWidget {
   final ValueChanged<double>? onPan;
   final VoidCallback? onMute;
   final VoidCallback? onSolo;
+
+  /// Opens the selected channel's plug-in window. Only wired for channels
+  /// that host a plug-in ([ChannelInspectorVm.hostsPlugin]).
+  final VoidCallback? onOpenPlugin;
 
   /// Fired with the index of the tapped chain entry.
   final ValueChanged<int>? onFxTap;
@@ -132,6 +144,21 @@ class ObChannelInspector extends StatelessWidget {
               Text(vm.subtitle, maxLines: 1, style: tokens.type.label),
             ],
           ),
+          // Only a plug-in channel has a window to open, so the action appears
+          // exactly when it can do something — next to the channel's name,
+          // which is where the eye is when you want to open what it runs.
+          if (vm.hostsPlugin && onOpenPlugin != null) ...<Widget>[
+            SizedBox(width: tokens.spacing.md),
+            ObTooltip(
+              message: 'Open plugin window',
+              child: ObButton(
+                label: 'Open plugin',
+                icon: ObKitGlyphKind.keyboard,
+                tone: ObButtonTone.secondary,
+                onTap: onOpenPlugin,
+              ),
+            ),
+          ],
           const Spacer(),
           _KnobReadout(
             value: vm.vol,

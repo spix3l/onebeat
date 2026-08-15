@@ -51,7 +51,6 @@ class PrToolbarVm {
     this.patterns = const <String>['Main Groove', 'Bass Motif'],
     this.scales = const <String>['C min', 'C maj', 'A min', 'Chromatic'],
     this.snaps,
-    this.backLabel = 'Back to playlist',
   });
 
   /// Trail from the outermost place inwards; the last is where you are.
@@ -66,7 +65,6 @@ class PrToolbarVm {
   final List<String>? snaps;
 
   List<String> get snapLabels => snaps ?? SnapGridChoice.labels;
-  final String backLabel;
 }
 
 class PrToolbar extends StatelessWidget {
@@ -179,7 +177,7 @@ class PrToolbar extends StatelessWidget {
             child: _ZoomButton(zoomIn: true, onTap: onZoomIn),
           ),
           SizedBox(width: tokens.spacing.sm),
-          _BackButton(label: vm.backLabel, onTap: onBack),
+          _BackButton(onTap: onBack),
         ],
       ),
     );
@@ -308,9 +306,8 @@ class _ZoomButton extends StatelessWidget {
 }
 
 class _BackButton extends StatefulWidget {
-  const _BackButton({required this.label, this.onTap});
+  const _BackButton({this.onTap});
 
-  final String label;
   final VoidCallback? onTap;
 
   @override
@@ -334,8 +331,9 @@ class _BackButtonState extends State<_BackButton> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
+          key: const Key('pr-back'),
+          width: tokens.size.microFieldHeight,
           height: tokens.size.microFieldHeight,
-          padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
           decoration: BoxDecoration(
             color: _hover && enabled ? color.surfaceHover : color.surfaceWell,
             borderRadius: tokens.radius.controlBorder,
@@ -344,26 +342,11 @@ class _BackButtonState extends State<_BackButton> {
               width: tokens.border.hairline,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              SizedBox(
-                width: tokens.size.iconSize,
-                height: tokens.size.iconSize,
-                child: CustomPaint(
-                  painter: _CrossPainter(
-                    color: color.textMuted,
-                    stroke: tokens.border.glyph,
-                  ),
-                ),
-              ),
-              SizedBox(width: tokens.spacing.xs),
-              Text(
-                widget.label,
-                maxLines: 1,
-                style: tokens.type.label.copyWith(color: color.textPrimary),
-              ),
-            ],
+          child: CustomPaint(
+            painter: _CrossPainter(
+              color: color.textMuted,
+              stroke: tokens.border.glyph,
+            ),
           ),
         ),
       ),

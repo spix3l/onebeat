@@ -66,8 +66,8 @@ void main() {
     expect(find.text('01 CONCERT GRAND'), findsOneWidget);
     expect(find.text('OCTAVE'), findsOneWidget);
 
-    // Tap on next preset stepper '>'
-    await tester.tap(find.text('>'));
+    // Tap on next preset stepper arrow
+    await tester.tap(find.byType(PianoPresetStepperButton).last);
     await tester.pump();
 
     // Verify preset parameter was updated

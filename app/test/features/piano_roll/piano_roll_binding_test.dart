@@ -25,7 +25,8 @@ import 'package:onebeat/src/features/piano_roll/velocity_lane.dart';
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
 
-class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClient {
+class _FakePianoRollEngineClient extends FakeEngineClient
+    implements EngineClient {
   _FakePianoRollEngineClient({
     this.isPlaying = false,
     this.positionBeats = 0.0,
@@ -97,42 +98,42 @@ class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClien
 
   @override
   EngineSnapshot readSnapshot() => EngineSnapshot(
-        playing: isPlaying,
-        loopEnabled: true,
-        loopStartBeats: loopStartBeats,
-        loopEndBeats: loopEndBeats,
-        positionFrames: 0,
-        positionBeats: positionBeats,
-        positionSeconds: 0,
-        hostTimeNanos: 0,
-        tempoBpm: 120,
-        bar: 1,
-        beat: 1,
-        tick: 0,
-        sampleRate: 48000,
-        blockFrames: 128,
-        activeVoices: 0,
-        peakLeft: 0,
-        peakRight: 0,
-        rmsLeft: 0,
-        rmsRight: 0,
-        cpuLoad: 0,
-        xrunCount: 0,
-        latencyFramesRoundTrip: 256,
-        scheduleEventCount: 0,
-      );
+    playing: isPlaying,
+    loopEnabled: true,
+    loopStartBeats: loopStartBeats,
+    loopEndBeats: loopEndBeats,
+    positionFrames: 0,
+    positionBeats: positionBeats,
+    positionSeconds: 0,
+    hostTimeNanos: 0,
+    tempoBpm: 120,
+    bar: 1,
+    beat: 1,
+    tick: 0,
+    sampleRate: 48000,
+    blockFrames: 128,
+    activeVoices: 0,
+    peakLeft: 0,
+    peakRight: 0,
+    rmsLeft: 0,
+    rmsRight: 0,
+    cpuLoad: 0,
+    xrunCount: 0,
+    latencyFramesRoundTrip: 256,
+    scheduleEventCount: 0,
+  );
 
   @override
   List<EngineEvent> pollEvents() => const <EngineEvent>[];
 
   @override
   RackPattern readRackPattern() => const RackPattern(
-        id: 'pat_a',
-        name: 'Verse Drums',
-        lengthTicks: 3840,
-        baseGridTicks: 240,
-        swing: 0.0,
-      );
+    id: 'pat_a',
+    name: 'Verse Drums',
+    lengthTicks: 3840,
+    baseGridTicks: 240,
+    swing: 0.0,
+  );
 
   @override
   List<RackRow> readRackRows() => const <RackRow>[];
@@ -141,107 +142,111 @@ class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClien
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('PianoRollBinding renders toolbar, ruler, key column, grid and velocity lane', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    client.addNote('inst_keys', 0, 240, 72, velocity: 12900);
-    client.addNote('inst_keys', 240, 240, 75, velocity: 10000);
+  testWidgets(
+    'PianoRollBinding renders toolbar, ruler, key column, grid and velocity lane',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      client.addNote('inst_keys', 0, 240, 72, velocity: 12900);
+      client.addNote('inst_keys', 240, 240, 75, velocity: 10000);
 
-    await pumpForTest(
-      tester,
-      PianoRollBinding(client: client),
-      size: const Size(1600, 900),
-    );
-    await tester.pump();
+      await pumpForTest(
+        tester,
+        PianoRollBinding(client: client),
+        size: const Size(1600, 900),
+      );
+      await tester.pump();
 
-    expect(find.byType(PianoRollScreen), findsOneWidget);
-    expect(find.byType(PrToolbar), findsOneWidget);
-    expect(find.byType(PrBarRuler), findsOneWidget);
-    expect(find.byType(PrKeyColumn), findsOneWidget);
-    expect(find.byType(PrVelocityLane), findsOneWidget);
-    expect(find.text('Piano roll'), findsOneWidget);
-    expect(find.text('Verse Drums'), findsNWidgets(2));
-    expect(find.text('Soft Keys'), findsOneWidget);
-  });
+      expect(find.byType(PianoRollScreen), findsOneWidget);
+      expect(find.byType(PrToolbar), findsOneWidget);
+      expect(find.byType(PrBarRuler), findsOneWidget);
+      expect(find.byType(PrKeyColumn), findsOneWidget);
+      expect(find.byType(PrVelocityLane), findsOneWidget);
+      expect(find.text('Piano roll'), findsOneWidget);
+      expect(find.text('Verse Drums'), findsNWidgets(2));
+      expect(find.text('Soft Keys'), findsOneWidget);
+    },
+  );
 
-  testWidgets('add note and select note in PianoRollStore round-trip to client', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+  testWidgets(
+    'add note and select note in PianoRollStore round-trip to client',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
 
-    expect(client.readNotes('inst_keys'), isEmpty);
+      expect(client.readNotes('inst_keys'), isEmpty);
 
-    store.addNoteAt(0, 72, length: 240);
-    expect(client.readNotes('inst_keys').length, 1);
-    expect(client.readNotes('inst_keys').first.key, 72);
-    expect(client.readNotes('inst_keys').first.startTicks, 0);
-    expect(store.hasSelection, isTrue);
+      store.addNoteAt(0, 72, length: 240);
+      expect(client.readNotes('inst_keys').length, 1);
+      expect(client.readNotes('inst_keys').first.key, 72);
+      expect(client.readNotes('inst_keys').first.startTicks, 0);
+      expect(store.hasSelection, isTrue);
 
-    // Add second note
-    store.addNoteAt(480, 76, length: 240);
-    expect(client.readNotes('inst_keys').length, 2);
-    expect(store.selection.length, 1);
-    expect(store.selection.first.key, 76);
-  });
+      // Add second note
+      store.addNoteAt(480, 76, length: 240);
+      expect(client.readNotes('inst_keys').length, 2);
+      expect(store.selection.length, 1);
+      expect(store.selection.first.key, 76);
+    },
+  );
 
-  testWidgets('drag move and resize perform single transaction begin and commit', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+  testWidgets(
+    'drag move and resize perform single transaction begin and commit',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
 
-    store.addNoteAt(0, 72, length: 240);
-    expect(client.readNotes('inst_keys').first.startTicks, 0);
+      store.addNoteAt(0, 72, length: 240);
+      expect(client.readNotes('inst_keys').first.startTicks, 0);
 
-    // Test drag move
-    store.beginMove();
-    store.updateMove(240, 2);
-    store.updateMove(480, 2);
-    store.endDrag();
+      // Test drag move
+      store.beginMove();
+      store.updateMove(240, 2);
+      store.updateMove(480, 2);
+      store.endDrag();
 
-    expect(client.gestureBegins, 1);
-    expect(client.gestureCommits, 1);
-    expect(client.readNotes('inst_keys').first.startTicks, 480);
-    expect(client.readNotes('inst_keys').first.key, 74);
+      expect(client.gestureBegins, 1);
+      expect(client.gestureCommits, 1);
+      expect(client.readNotes('inst_keys').first.startTicks, 480);
+      expect(client.readNotes('inst_keys').first.key, 74);
 
-    // Test drag resize
-    store.beginResize();
-    store.updateResize(240);
-    store.updateResize(480);
-    store.endDrag();
+      // Test drag resize
+      store.beginResize();
+      store.updateResize(240);
+      store.updateResize(480);
+      store.endDrag();
 
-    expect(client.gestureBegins, 2);
-    expect(client.gestureCommits, 2);
-    expect(client.readNotes('inst_keys').first.lengthTicks, 720);
-  });
+      expect(client.gestureBegins, 2);
+      expect(client.gestureCommits, 2);
+      expect(client.readNotes('inst_keys').first.lengthTicks, 720);
+    },
+  );
 
-  testWidgets('duplicate, transpose, nudge, and quantise commands mutate notes correctly', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+  testWidgets(
+    'duplicate, transpose, nudge, and quantise commands mutate notes correctly',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
 
-    store.addNoteAt(0, 60, length: 240);
-    expect(client.readNotes('inst_keys').length, 1);
+      store.addNoteAt(0, 60, length: 240);
+      expect(client.readNotes('inst_keys').length, 1);
 
-    // Transpose
-    store.transposeSelection(12);
-    expect(client.readNotes('inst_keys').first.key, 72);
+      // Transpose
+      store.transposeSelection(12);
+      expect(client.readNotes('inst_keys').first.key, 72);
 
-    // Nudge
-    store.nudgeSelection(240);
-    expect(client.readNotes('inst_keys').first.startTicks, 240);
+      // Nudge
+      store.nudgeSelection(240);
+      expect(client.readNotes('inst_keys').first.startTicks, 240);
 
-    // Duplicate
-    store.duplicateSelection();
-    expect(client.readNotes('inst_keys').length, 2);
+      // Duplicate
+      store.duplicateSelection();
+      expect(client.readNotes('inst_keys').length, 2);
 
-    // Quantise
-    store.quantiseSelection();
-    expect(client.readNotes('inst_keys').length, 2);
-  });
+      // Quantise
+      store.quantiseSelection();
+      expect(client.readNotes('inst_keys').length, 2);
+    },
+  );
 
   testWidgets('velocity adjustment modifies selected notes', (
     WidgetTester tester,
@@ -297,7 +302,10 @@ void main() {
     store.endDrag();
 
     expect(store.selection.length, 2);
-    expect(store.selection.map((n) => n.key).toSet(), containsAll(<int>[60, 64]));
+    expect(
+      store.selection.map((n) => n.key).toSet(),
+      containsAll(<int>[60, 64]),
+    );
   });
 
   testWidgets('key column press triggers note auditioning', (
@@ -340,7 +348,7 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Back to playlist'));
+    await tester.tap(find.byKey(const Key('pr-back')));
     await tester.pump();
 
     expect(backFired, isTrue);
@@ -365,9 +373,7 @@ void main() {
     expect(screen.vm.roll.playheadTick, 960);
   });
 
-  testWidgets('playhead wraps on the loop region', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('playhead wraps on the loop region', (WidgetTester tester) async {
     final _FakePianoRollEngineClient client = _FakePianoRollEngineClient(
       isPlaying: true,
       positionBeats: 3.5, // past the end of a [1, 3) loop region
@@ -584,45 +590,44 @@ void main() {
     );
   });
 
-  testWidgets('⌘V with the pointer off the canvas appends after the last note', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
-    store
-      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
-      ..setTool(PrTool.select)
-      ..addNoteAt(0, 84, length: 500)
-      ..selectAll()
-      ..copySelection();
+  testWidgets(
+    '⌘V with the pointer off the canvas appends after the last note',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+      store
+        ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+        ..setTool(PrTool.select)
+        ..addNoteAt(0, 84, length: 500)
+        ..selectAll()
+        ..copySelection();
 
-    await pumpForTest(
-      tester,
-      PianoRollBinding(client: client, store: store),
-      size: const Size(1600, 900),
-    );
-    await tester.pump();
+      await pumpForTest(
+        tester,
+        PianoRollBinding(client: client, store: store),
+        size: const Size(1600, 900),
+      );
+      await tester.pump();
 
-    // Focused by a touch tap, so no mouse ever hovers the canvas.
-    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
-    await tester.tapAt(Offset(keys.right + 300, keys.top + 300));
-    await tester.pump();
+      // Focused by a touch tap, so no mouse ever hovers the canvas.
+      final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+      await tester.tapAt(Offset(keys.right + 300, keys.top + 300));
+      await tester.pump();
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-    await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
 
-    expect(
-      store.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
-      <int>[0, 720],
-      reason: 'the note ends at 500, so the next free 1/16 slot is 720',
-    );
-  });
+      expect(
+        store.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+        <int>[0, 720],
+        reason: 'the note ends at 500, so the next free 1/16 slot is 720',
+      );
+    },
+  );
 
-  testWidgets('⌥-drag lassos rather than drawing', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('⌥-drag lassos rather than drawing', (WidgetTester tester) async {
     final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
     final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
     store.addNoteAt(0, 84, length: 480);
@@ -651,7 +656,11 @@ void main() {
       notesBefore,
       reason: '⌥ is the lasso modifier; it must never draw',
     );
-    expect(store.selection, isNotEmpty, reason: 'and it selected what it swept');
+    expect(
+      store.selection,
+      isNotEmpty,
+      reason: 'and it selected what it swept',
+    );
   });
 
   testWidgets('a plain drag with the draw tool still draws', (
@@ -750,16 +759,18 @@ void main() {
     await tester.pump();
 
     // Select one voice, and only that one follows the lane.
-    final SequenceNote target =
-        store.notes.firstWhere((SequenceNote n) => n.key == 64);
+    final SequenceNote target = store.notes.firstWhere(
+      (SequenceNote n) => n.key == 64,
+    );
     store.selectOnly(target);
     await tester.pump();
 
     await tester.tapAt(onStem);
     await tester.pump();
 
-    final SequenceNote after =
-        store.notes.firstWhere((SequenceNote n) => n.key == 64);
+    final SequenceNote after = store.notes.firstWhere(
+      (SequenceNote n) => n.key == 64,
+    );
     expect(after.velocity, isNot(target.velocity));
     for (final SequenceNote note in store.notes) {
       if (note.key == 64) continue;
@@ -818,50 +829,51 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('a right-button sweep erases every note it crosses, as one undo step', (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
-    // Three notes along one row. At the default zoom, 12.5 ticks to the pixel,
-    // so all three sit inside the first 80px of canvas.
-    store
-      ..addNoteAt(0, 84, length: 240)
-      ..addNoteAt(480, 84, length: 240)
-      ..addNoteAt(960, 84, length: 240);
-    expect(store.notes.length, 3);
+  testWidgets(
+    'a right-button sweep erases every note it crosses, as one undo step',
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+      // Three notes along one row. At the default zoom, 12.5 ticks to the pixel,
+      // so all three sit inside the first 80px of canvas.
+      store
+        ..addNoteAt(0, 84, length: 240)
+        ..addNoteAt(480, 84, length: 240)
+        ..addNoteAt(960, 84, length: 240);
+      expect(store.notes.length, 3);
 
-    await pumpForTest(
-      tester,
-      PianoRollBinding(client: client, store: store),
-      size: const Size(1600, 900),
-    );
-    await tester.pump();
+      await pumpForTest(
+        tester,
+        PianoRollBinding(client: client, store: store),
+        size: const Size(1600, 900),
+      );
+      await tester.pump();
 
-    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
-    final double rowY = keys.top + 7;
-    final int commitsBefore = client.gestureCommits;
+      final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+      final double rowY = keys.top + 7;
+      final int commitsBefore = client.gestureCommits;
 
-    final TestPointer mouse = TestPointer(
-      1,
-      PointerDeviceKind.mouse,
-      null,
-      kSecondaryButton,
-    );
-    await tester.sendEventToBinding(
-      mouse.down(Offset(keys.right + 2, rowY)),
-    );
-    await tester.sendEventToBinding(mouse.move(Offset(keys.right + 100, rowY)));
-    await tester.sendEventToBinding(mouse.up());
-    await tester.pump();
+      final TestPointer mouse = TestPointer(
+        1,
+        PointerDeviceKind.mouse,
+        null,
+        kSecondaryButton,
+      );
+      await tester.sendEventToBinding(mouse.down(Offset(keys.right + 2, rowY)));
+      await tester.sendEventToBinding(
+        mouse.move(Offset(keys.right + 100, rowY)),
+      );
+      await tester.sendEventToBinding(mouse.up());
+      await tester.pump();
 
-    expect(store.notes, isEmpty, reason: 'the sweep crossed all three');
-    expect(
-      client.gestureCommits - commitsBefore,
-      1,
-      reason: 'a sweep is one undo step, not one per note',
-    );
-  });
+      expect(store.notes, isEmpty, reason: 'the sweep crossed all three');
+      expect(
+        client.gestureCommits - commitsBefore,
+        1,
+        reason: 'a sweep is one undo step, not one per note',
+      );
+    },
+  );
 
   testWidgets('a right-button sweep only erases the row it crosses', (
     WidgetTester tester,
@@ -899,78 +911,82 @@ void main() {
     expect(store.notes.single.key, 80, reason: 'the other row is untouched');
   });
 
-  testWidgets("the cursor says 'resize' over a note's right edge and 'grab' over its body", (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
-    // 960 ticks at 12.5 ticks/px is 76.8px wide, so the handle is the full 8px
-    // rather than the third-of-the-note cap.
-    store.addNoteAt(0, 84, length: 960);
+  testWidgets(
+    "the cursor says 'resize' over a note's right edge and 'grab' over its body",
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+      // 960 ticks at 12.5 ticks/px is 76.8px wide, so the handle is the full 8px
+      // rather than the third-of-the-note cap.
+      store.addNoteAt(0, 84, length: 960);
 
-    await pumpForTest(
-      tester,
-      PianoRollBinding(client: client, store: store),
-      size: const Size(1600, 900),
-    );
-    await tester.pump();
+      await pumpForTest(
+        tester,
+        PianoRollBinding(client: client, store: store),
+        size: const Size(1600, 900),
+      );
+      await tester.pump();
 
-    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
-    final double rowY = keys.top + 7;
-    MouseCursor cursor() => tester
-        .widget<PianoRollScreen>(find.byType(PianoRollScreen))
-        .gridCursor;
+      final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+      final double rowY = keys.top + 7;
+      MouseCursor cursor() =>
+          tester
+              .widget<PianoRollScreen>(find.byType(PianoRollScreen))
+              .gridCursor;
 
-    final TestPointer mouse = TestPointer(1, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      mouse.hover(Offset(keys.right + 20, rowY)),
-    );
-    await tester.pump();
-    expect(cursor(), SystemMouseCursors.grab);
+      final TestPointer mouse = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        mouse.hover(Offset(keys.right + 20, rowY)),
+      );
+      await tester.pump();
+      expect(cursor(), SystemMouseCursors.grab);
 
-    // 76.8px in is the note's end; 2px short of it is inside the grab zone.
-    await tester.sendEventToBinding(
-      mouse.hover(Offset(keys.right + 75, rowY)),
-    );
-    await tester.pump();
-    expect(cursor(), SystemMouseCursors.resizeLeftRight);
+      // 76.8px in is the note's end; 2px short of it is inside the grab zone.
+      await tester.sendEventToBinding(
+        mouse.hover(Offset(keys.right + 75, rowY)),
+      );
+      await tester.pump();
+      expect(cursor(), SystemMouseCursors.resizeLeftRight);
 
-    await tester.sendEventToBinding(
-      mouse.hover(Offset(keys.right + 400, rowY)),
-    );
-    await tester.pump();
-    expect(cursor(), MouseCursor.defer, reason: 'empty canvas asks for nothing');
-  });
+      await tester.sendEventToBinding(
+        mouse.hover(Offset(keys.right + 400, rowY)),
+      );
+      await tester.pump();
+      expect(
+        cursor(),
+        MouseCursor.defer,
+        reason: 'empty canvas asks for nothing',
+      );
+    },
+  );
 
-  testWidgets("resizing lands the note's edge under the pointer, not offset by the grab", (
-    WidgetTester tester,
-  ) async {
-    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
-    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
-    store
-      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
-      ..addNoteAt(0, 84, length: 960);
+  testWidgets(
+    "resizing lands the note's edge under the pointer, not offset by the grab",
+    (WidgetTester tester) async {
+      final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+      final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+      store
+        ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+        ..addNoteAt(0, 84, length: 960);
 
-    await pumpForTest(
-      tester,
-      PianoRollBinding(client: client, store: store),
-      size: const Size(1600, 900),
-    );
-    await tester.pump();
+      await pumpForTest(
+        tester,
+        PianoRollBinding(client: client, store: store),
+        size: const Size(1600, 900),
+      );
+      await tester.pump();
 
-    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
-    final double rowY = keys.top + 7;
-    // Grab 3px inside the edge and drag to tick 1920 (153.6px). The old code
-    // measured the drag from where the grab started, so the edge finished 3px
-    // — a snap step, once rounded — short of the pointer.
-    await tester.dragFrom(
-      Offset(keys.right + 74, rowY),
-      const Offset(80, 0),
-    );
-    await tester.pump();
+      final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+      final double rowY = keys.top + 7;
+      // Grab 3px inside the edge and drag to tick 1920 (153.6px). The old code
+      // measured the drag from where the grab started, so the edge finished 3px
+      // — a snap step, once rounded — short of the pointer.
+      await tester.dragFrom(Offset(keys.right + 74, rowY), const Offset(80, 0));
+      await tester.pump();
 
-    expect(store.notes.single.endTicks, 1920);
-  });
+      expect(store.notes.single.endTicks, 1920);
+    },
+  );
 
   testWidgets('a selection of notes drags as one block', (
     WidgetTester tester,
@@ -1034,6 +1050,10 @@ void main() {
     await tester.tapAt(Offset(keys.right + 4, keys.top + 7));
     await tester.pump();
 
-    expect(store.selection.single.key, 84, reason: 'a click that never dragged');
+    expect(
+      store.selection.single.key,
+      84,
+      reason: 'a click that never dragged',
+    );
   });
 }

@@ -29,13 +29,10 @@ void main() {
       size: Size(1600, tokens.size.prToolbarHeight),
     );
     await tester.pumpAndSettle();
-    await expectLater(
-      find.byKey(const Key('toolbar')),
-      uiGolden('pr_toolbar'),
-    );
+    await expectLater(find.byKey(const Key('toolbar')), uiGolden('pr_toolbar'));
   });
 
-  testWidgets('tool and dropdown taps report their choices', (
+  testWidgets('the back button is the icon alone and reports its tap', (
     WidgetTester tester,
   ) async {
     final List<String> fired = <String>[];
@@ -49,7 +46,12 @@ void main() {
       ),
       size: Size(1600, tokens.size.prToolbarHeight),
     );
-    await tester.tap(find.text('Back to playlist'));
+    expect(
+      find.text('Back to playlist'),
+      findsNothing,
+      reason: 'the way back is the icon, not a labelled button',
+    );
+    await tester.tap(find.byKey(const Key('pr-back')));
     expect(fired, <String>['back']);
   });
 }

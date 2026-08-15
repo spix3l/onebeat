@@ -16,6 +16,7 @@ import 'package:onebeat/src/features/channel_rack/channel_rack_screen.dart';
 import 'package:onebeat/src/features/channel_rack/rack_binding.dart';
 import 'package:onebeat/src/features/channel_rack/rack_row.dart';
 import 'package:onebeat/src/features/channel_rack/rack_store.dart';
+import 'package:onebeat/src/ui_kit/popover_menu.dart';
 
 import '../../support/app_harness.dart';
 
@@ -247,6 +248,9 @@ class _FakeRackEngineClient implements EngineClient {
   int duplicateCalls = 0;
   int deleteCalls = 0;
 
+  /// Every rename the binding asked for, as (instrumentId, name).
+  final List<(String, String)> renames = <(String, String)>[];
+
   /// Every reorder the binding asked for, as (instrumentId, newOrder).
   final List<(String, int)> reorders = <(String, int)>[];
 
@@ -283,6 +287,32 @@ class _FakeRackEngineClient implements EngineClient {
 
   @override
   void deleteInstrument(String id) => deleteCalls++;
+
+  @override
+  void renameInstrument(String id, String name) {
+    renames.add((id, name));
+    instruments = instruments
+        .map(
+          (ProjectInstrument inst) => inst.id == id
+              ? ProjectInstrument(
+                  id: inst.id,
+                  name: name,
+                  color: inst.color,
+                  order: inst.order,
+                  pluginId: inst.pluginId,
+                  pluginName: inst.pluginName,
+                  pluginVendor: inst.pluginVendor,
+                  pluginPath: inst.pluginPath,
+                  muted: inst.muted,
+                  selected: inst.selected,
+                  affectedPatterns: inst.affectedPatterns,
+                  affectedClips: inst.affectedClips,
+                  affectedNotes: inst.affectedNotes,
+                )
+              : inst,
+        )
+        .toList();
+  }
 
   @override
   void selectPattern(String patternId) {
@@ -810,7 +840,16 @@ void main() {
     expect(opened, <String>['reese']);
   });
 
-  testWidgets('right-clicking a lane offers duplicate and delete', (
+  Future<void> rightClickRow(WidgetTester tester, String name) async {
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text(name)),
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+  }
+
+  testWidgets('right-clicking a lane offers the channel actions', (
     WidgetTester tester,
   ) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
@@ -822,15 +861,18 @@ void main() {
     );
     await tester.pump();
 
-    final TestGesture gesture = await tester.startGesture(
-      tester.getCenter(find.text('Kick 808')),
-      buttons: kSecondaryMouseButton,
-    );
-    await gesture.up();
-    await tester.pump();
+    await rightClickRow(tester, 'Kick 808');
 
+    // A sample lane has no window to open, so that row is absent.
     expect(find.text('Open in piano roll'), findsOneWidget);
+    expect(find.text('Open plugin window'), findsNothing);
+    expect(find.text('Rename'), findsOneWidget);
     expect(find.text('Duplicate'), findsOneWidget);
+    expect(find.text('Solo'), findsOneWidget);
+    expect(find.text('STEP ACTIONS'), findsOneWidget);
+    expect(find.text('Add note every 2 steps'), findsOneWidget);
+    expect(find.text('Add note every 4 steps'), findsOneWidget);
+    expect(find.text('Add note every 8 steps'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
 
     await tester.tap(find.text('Duplicate'));
@@ -838,14 +880,151 @@ void main() {
     expect(client.duplicateCalls, 1);
 
     // Re-open for delete.
-    final TestGesture second = await tester.startGesture(
-      tester.getCenter(find.text('Kick 808')),
-      buttons: kSecondaryMouseButton,
-    );
-    await second.up();
-    await tester.pump();
+    await rightClickRow(tester, 'Kick 808');
     await tester.tap(find.text('Delete'));
     await tester.pump();
     expect(client.deleteCalls, 1);
+  });
+
+  testWidgets('a step fill from the context menu fills the channel grid', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // Kick starts with steps 0/4/8/12 lit.
+    expect(client.rows.first.steps[2].active, isFalse);
+
+    await rightClickRow(tester, 'Kick 808');
+    await tester.tap(find.text('Add note every 2 steps'));
+    await tester.pump();
+
+    // Every second step is now lit, including the ones that were empty.
+    expect(client.rows.first.steps[2].active, isTrue);
+    expect(client.rows.first.steps[1].active, isFalse);
+    expect(client.rows.first.steps[4].active, isTrue);
+  });
+
+  testWidgets('right-clicking a plug-in lane offers Open plugin window', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client =
+        _FakeRackEngineClient(withPluginRow: true);
+    final List<String> opened = <String>[];
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    await rightClickRow(tester, 'Reese');
+
+    expect(find.text('Open plugin window'), findsOneWidget);
+    await tester.tap(find.text('Open plugin window'));
+    await tester.pump();
+
+    expect(opened, <String>['reese']);
+  });
+
+  testWidgets('the inspector opens the plug-in window for a plug-in lane', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client =
+        _FakeRackEngineClient(withPluginRow: true);
+    final List<String> opened = <String>[];
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // A sample lane's inspector has no window to open.
+    await tester.tap(find.text('Kick 808'));
+    await tester.pump();
+    expect(find.text('Open plugin'), findsNothing);
+
+    // Selecting the plug-in lane brings the action up. A plug-in lane's
+    // double-tap recognizer holds its single tap for the double-tap window,
+    // so the selection lands only after that window closes.
+    final Finder reeseFinder = find.text('Reese');
+    await tester.tap(reeseFinder);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Open plugin'), findsOneWidget);
+    await tester.tap(find.text('Open plugin'));
+    await tester.pump();
+    expect(opened, <String>['reese']);
+  });
+
+  testWidgets('Rename from the context menu renames the channel', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    await rightClickRow(tester, 'Kick 808');
+    await tester.tap(find.text('Rename'));
+    await tester.pump();
+
+    // The dialog opens pre-filled with the channel's current name.
+    expect(find.text('Rename channel'), findsOneWidget);
+    await tester.enterText(find.byType(EditableText), 'Kick Heavy');
+    await tester.tap(find.text('Rename'));
+    await tester.pump();
+
+    expect(client.renames, <(String, String)>[('kick', 'Kick Heavy')]);
+    expect(find.text('Kick Heavy'), findsOneWidget);
+  });
+
+  testWidgets('Solo from the context menu toggles the channel solo state', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    await rightClickRow(tester, 'Kick 808');
+    await tester.tap(find.text('Solo'));
+    await tester.pump();
+
+    // Re-open: the row is now ticked.
+    await rightClickRow(tester, 'Kick 808');
+    final ObPopoverMenu menu =
+        tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
+    final ObMenuRowVm soloRow = menu.vm.rows.firstWhere(
+      (ObMenuRowVm row) => row.label == 'Solo',
+    );
+    expect(soloRow.checked, isTrue);
+
+    // Toggling again clears the tick.
+    await tester.tap(find.text('Solo'));
+    await tester.pump();
+    await rightClickRow(tester, 'Kick 808');
+    final ObPopoverMenu reopened =
+        tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
+    final ObMenuRowVm cleared = reopened.vm.rows.firstWhere(
+      (ObMenuRowVm row) => row.label == 'Solo',
+    );
+    expect(cleared.checked, isFalse);
   });
 }

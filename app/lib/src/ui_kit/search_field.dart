@@ -7,6 +7,7 @@
 // OneBeat owns its chrome and does not use the Material theme.
 import 'package:flutter/widgets.dart';
 
+import '../core/shortcuts.dart';
 import '../design/tokens.dart';
 import 'magnifier_glyph.dart';
 
@@ -117,19 +118,21 @@ class _ObSearchFieldState extends State<ObSearchField> {
                       alignment: Alignment.centerLeft,
                       child: SizedBox(
                         width: double.infinity,
-                        child: EditableText(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          style: tokens.type.label.copyWith(
-                            color: color.textSecondary,
+                        child: escapeReturnsFocus(
+                          child: EditableText(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            style: tokens.type.label.copyWith(
+                              color: color.textSecondary,
+                            ),
+                            cursorColor: color.accent,
+                            backgroundCursorColor: color.surfaceWell,
+                            maxLines: 1,
+                            onChanged: (String value) {
+                              setState(() {});
+                              widget.onChanged?.call(value);
+                            },
                           ),
-                          cursorColor: color.accent,
-                          backgroundCursorColor: color.surfaceWell,
-                          maxLines: 1,
-                          onChanged: (String value) {
-                            setState(() {});
-                            widget.onChanged?.call(value);
-                          },
                         ),
                       ),
                     ),

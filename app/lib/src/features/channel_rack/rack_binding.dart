@@ -20,6 +20,7 @@ import 'channel_rack_screen_vm.dart';
 import 'rack_row.dart';
 import 'rack_store.dart';
 import 'rack_toolbar.dart';
+import 'rename_channel_dialog.dart';
 
 /// The engine's built-in sample player. A lane whose plug-in is this is a WAV
 /// channel, not a hosted plug-in, so double-clicking it has no plug-in window
@@ -69,6 +70,14 @@ class _RackBindingState extends State<RackBinding>
   final Map<String, double> _pans = <String, double>{};
 
   OverlayEntry? _contextMenuEntry;
+
+  /// The channel the rename dialog is pointed at, while it is open. Solo is a
+  /// mixer-track audio gate (v0.4), so the rack models it locally for now —
+  /// the same way the mixer does — so the menu's check and the inspector's S
+  /// chip can at least reflect the choice.
+  bool _showRenameDialog = false;
+  String? _renameInstrumentId;
+  final Set<String> _soloedInstrumentIds = <String>{};
 
   @override
   void initState() {
@@ -264,7 +273,11 @@ class _RackBindingState extends State<RackBinding>
         panText: _panText(selectedId, selectedInst),
         route: 'M1 · Music',
         muted: selectedInst?.muted ?? false,
-        soloed: false,
+        soloed: _soloedInstrumentIds.contains(selectedId),
+        hostsPlugin:
+            selectedInst != null &&
+            selectedInst.pluginId.isNotEmpty &&
+            selectedInst.pluginId != _kSamplePluginId,
       );
     }
 
@@ -468,8 +481,37 @@ class _RackBindingState extends State<RackBinding>
   }
 
   void _onInspectorSolo() {
-    // Solo is a mixer-track audio gate (v0.4). No-op for now rather than
-    // faking a behaviour the engine cannot yet honour.
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    _toggleSolo(id);
+  }
+
+  /// Opens the selected channel's plug-in window from the inspector. The
+  /// inspector's Open plugin button only renders for plug-in channels, so the
+  /// guard mirrors the same test the row uses.
+  void _onInspectorOpenPlugin() {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    final ProjectInstrument? inst = _store.instrumentFor(id);
+    if (inst == null ||
+        inst.pluginId.isEmpty ||
+        inst.pluginId == _kSamplePluginId) {
+      return;
+    }
+    _openPluginFromMenu(id);
+  }
+
+  /// Flips the local solo flag for [instrumentId]. Engine-backed solo arrives
+  /// with mixer-track audio gates (v0.4); until then this is UI state so the
+  /// channel rack and mixer can draw the choice without faking audio.
+  void _toggleSolo(String instrumentId) {
+    setState(() {
+      if (_soloedInstrumentIds.contains(instrumentId)) {
+        _soloedInstrumentIds.remove(instrumentId);
+      } else {
+        _soloedInstrumentIds.add(instrumentId);
+      }
+    });
   }
 
   void _onAddInstrument(Object data) {
@@ -519,6 +561,41 @@ class _RackBindingState extends State<RackBinding>
 
   void _showContextMenu(String instrumentId, Offset globalPosition) {
     _hideContextMenu();
+    final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
+    // A lane that hosts a plug-in gets the window-opening row; a sample or
+    // empty lane has no window to open, so the row is simply absent.
+    final bool hostsPlugin =
+        inst != null &&
+        inst.pluginId.isNotEmpty &&
+        inst.pluginId != _kSamplePluginId;
+    final bool soloed = _soloedInstrumentIds.contains(instrumentId);
+
+    // The channel rows, with their actions in the same order. The flat index
+    // the menu reports is this list, then the step fills, then delete.
+    final List<ObMenuRowVm> actionRows = <ObMenuRowVm>[
+      const ObMenuRowVm(label: 'Open in piano roll', icon: ObKitGlyphKind.note),
+      if (hostsPlugin)
+        const ObMenuRowVm(
+          label: 'Open plugin window',
+          icon: ObKitGlyphKind.keyboard,
+        ),
+      const ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
+      const ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+      ObMenuRowVm(
+        label: 'Solo',
+        checkable: true,
+        checked: soloed,
+        tone: soloed ? ObMenuRowTone.active : ObMenuRowTone.normal,
+      ),
+    ];
+    final List<void Function()> actions = <void Function()>[
+      () => widget.onOpenPianoRoll?.call(instrumentId),
+      if (hostsPlugin) () => _openPluginFromMenu(instrumentId),
+      () => _beginRename(instrumentId),
+      () => _duplicateInstrument(instrumentId),
+      () => _toggleSolo(instrumentId),
+    ];
+
     final OverlayState overlay = Overlay.of(context);
     _contextMenuEntry = OverlayEntry(
       builder: (BuildContext overlayContext) {
@@ -536,21 +613,10 @@ class _RackBindingState extends State<RackBinding>
               left: globalPosition.dx,
               top: globalPosition.dy,
               child: ObPopoverMenu(
-                vm: const ObPopoverMenuVm(
+                vm: ObPopoverMenuVm(
                   sections: <ObMenuSectionVm>[
-                    ObMenuSectionVm(
-                      rows: <ObMenuRowVm>[
-                        ObMenuRowVm(
-                          label: 'Open in piano roll',
-                          icon: ObKitGlyphKind.note,
-                        ),
-                        ObMenuRowVm(
-                          label: 'Duplicate',
-                          icon: ObKitGlyphKind.plus,
-                        ),
-                      ],
-                    ),
-                    ObMenuSectionVm(
+                    ObMenuSectionVm(rows: actionRows),
+                    const ObMenuSectionVm(
                       header: 'Step actions',
                       separated: true,
                       rows: <ObMenuRowVm>[
@@ -571,7 +637,7 @@ class _RackBindingState extends State<RackBinding>
                         ),
                       ],
                     ),
-                    ObMenuSectionVm(
+                    const ObMenuSectionVm(
                       separated: true,
                       rows: <ObMenuRowVm>[
                         ObMenuRowVm(
@@ -585,18 +651,18 @@ class _RackBindingState extends State<RackBinding>
                 ),
                 onSelect: (int index) {
                   _hideContextMenu();
-                  switch (index) {
+                  if (index < actions.length) {
+                    actions[index]();
+                    return;
+                  }
+                  switch (index - actions.length) {
                     case 0:
-                      widget.onOpenPianoRoll?.call(instrumentId);
-                    case 1:
-                      _duplicateInstrument(instrumentId);
-                    case 2:
                       _store.addNotesEvery(instrumentId, 2);
-                    case 3:
+                    case 1:
                       _store.addNotesEvery(instrumentId, 4);
-                    case 4:
+                    case 2:
                       _store.addNotesEvery(instrumentId, 8);
-                    case 5:
+                    case 3:
                       _deleteInstrument(instrumentId);
                   }
                 },
@@ -607,6 +673,45 @@ class _RackBindingState extends State<RackBinding>
       },
     );
     overlay.insert(_contextMenuEntry!);
+  }
+
+  /// Opens the plug-in window for a lane, from the context menu: the lane is
+  /// selected first so the engine's hosted-instance surface follows, exactly as
+  /// a double-click on the lane does.
+  void _openPluginFromMenu(String instrumentId) {
+    _store.selectInstrument(instrumentId);
+    widget.onOpenPlugin?.call(instrumentId);
+  }
+
+  void _beginRename(String instrumentId) {
+    setState(() {
+      _renameInstrumentId = instrumentId;
+      _showRenameDialog = true;
+    });
+  }
+
+  void _submitRename(String name) {
+    final String? id = _renameInstrumentId;
+    if (id == null) return;
+    final String trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      widget.client.renameInstrument(id, trimmed);
+    } catch (_) {
+      // The command is a stub on a fake client.
+    }
+    _store.refresh();
+    setState(() {
+      _showRenameDialog = false;
+      _renameInstrumentId = null;
+    });
+  }
+
+  void _closeRenameDialog() {
+    setState(() {
+      _showRenameDialog = false;
+      _renameInstrumentId = null;
+    });
   }
 
   void _duplicateInstrument(String instrumentId) {
@@ -637,77 +742,100 @@ class _RackBindingState extends State<RackBinding>
   @override
   Widget build(BuildContext context) {
     final ChannelRackScreenVm vm = _buildVm();
+    final String? renameId = _renameInstrumentId;
 
-    return ChannelRackScreen(
-      vm: vm,
-      onSelectPattern: (String id) => _store.selectPattern(id),
-      onSelectRow: _onSelectRow,
-      onRowDoubleTap: _onRowDoubleTap,
-      onTogglePower: _onTogglePower,
-      onStepTap: _onStepTap,
-      onVolChanged: _onVolChanged,
-      onPanChanged: _onPanChanged,
-      onAddChannel: _onAddChannel,
-      onRowSecondaryTapDown: _onRowSecondaryTapDown,
-      onDropInstrument: _onDropInstrument,
-      onAddInstrument: _onAddInstrument,
-      onReorderRow: _onReorderRow,
-      onChannelType: (String val) => setState(() => _selectedType = val),
-      onGroup: (String val) => setState(() => _selectedGroup = val),
-      onSnap: (String val) {
-        setState(() => _selectedSnap = val);
-        final SnapGridChoice choice = SnapGridChoice.all.firstWhere(
-          (SnapGridChoice value) => value.label == val,
-          orElse: () => SnapGridChoice.all[4],
-        );
-        if (_store.selectedInstrumentId != null) {
-          _store.setGrid(_store.selectedInstrumentId!, choice.ticks);
-        }
-      },
-      onSteps: (int steps) => _store.setLength(steps),
-      onMixerTap: widget.onOpenMixer,
-      onInspectorVol: _onInspectorVol,
-      onInspectorPan: _onInspectorPan,
-      onInspectorMute: _onInspectorMute,
-      onInspectorSolo: _onInspectorSolo,
-      onInspectorKeyPress: (int note) => _store.auditionNote(note),
-      onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
-        final List<RackRow> visible = _store.rows;
-        if (rowIndex < 0 || rowIndex >= visible.length) return;
-        final RackRow row = visible[rowIndex];
-        final bool velocityMode =
-            event.buttons == kSecondaryMouseButton ||
-            HardwareKeyboard.instance.isAltPressed;
-        if (velocityMode) {
-          _store.beginVelocityPaint();
-          _store.setVelocity(row.instrumentId, stepIndex, 12900);
-        } else {
-          final bool active =
-              stepIndex < row.steps.length
-                  ? !row.steps[stepIndex].active
-                  : true;
-          _store.beginPaint(row.instrumentId, stepIndex, active: active);
-        }
-      },
-      onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
-        final List<RackRow> visible = _store.rows;
-        if (rowIndex < 0 || rowIndex >= visible.length) return;
-        final RackRow row = visible[rowIndex];
-        if (event.buttons == kSecondaryMouseButton ||
-            HardwareKeyboard.instance.isAltPressed) {
-          _store.setVelocity(row.instrumentId, stepIndex, 12900);
-        } else {
-          _store.paintStep(row.instrumentId, stepIndex);
-        }
-      },
-      onPointerUpStep: () {
-        _store.commitPaint();
-        _store.commitVelocityPaint();
-      },
-      onPointerCancelStep: () {
-        _store.abortPaint();
-        _store.abortVelocityPaint();
-      },
+    return Stack(
+      children: <Widget>[
+        ChannelRackScreen(
+          vm: vm,
+          onSelectPattern: (String id) => _store.selectPattern(id),
+          onSelectRow: _onSelectRow,
+          onRowDoubleTap: _onRowDoubleTap,
+          onTogglePower: _onTogglePower,
+          onStepTap: _onStepTap,
+          onVolChanged: _onVolChanged,
+          onPanChanged: _onPanChanged,
+          onAddChannel: _onAddChannel,
+          onRowSecondaryTapDown: _onRowSecondaryTapDown,
+          onDropInstrument: _onDropInstrument,
+          onAddInstrument: _onAddInstrument,
+          onReorderRow: _onReorderRow,
+          onChannelType: (String val) => setState(() => _selectedType = val),
+          onGroup: (String val) => setState(() => _selectedGroup = val),
+          onSnap: (String val) {
+            setState(() => _selectedSnap = val);
+            final SnapGridChoice choice = SnapGridChoice.all.firstWhere(
+              (SnapGridChoice value) => value.label == val,
+              orElse: () => SnapGridChoice.all[4],
+            );
+            if (_store.selectedInstrumentId != null) {
+              _store.setGrid(_store.selectedInstrumentId!, choice.ticks);
+            }
+          },
+          onSteps: (int steps) => _store.setLength(steps),
+          onMixerTap: widget.onOpenMixer,
+          onInspectorVol: _onInspectorVol,
+          onInspectorPan: _onInspectorPan,
+          onInspectorMute: _onInspectorMute,
+          onInspectorSolo: _onInspectorSolo,
+          onInspectorOpenPlugin: _onInspectorOpenPlugin,
+          onInspectorKeyPress: (int note) => _store.auditionNote(note),
+          onPointerDownStep: (
+            PointerDownEvent event,
+            int rowIndex,
+            int stepIndex,
+          ) {
+            final List<RackRow> visible = _store.rows;
+            if (rowIndex < 0 || rowIndex >= visible.length) return;
+            final RackRow row = visible[rowIndex];
+            final bool velocityMode =
+                event.buttons == kSecondaryMouseButton ||
+                HardwareKeyboard.instance.isAltPressed;
+            if (velocityMode) {
+              _store.beginVelocityPaint();
+              _store.setVelocity(row.instrumentId, stepIndex, 12900);
+            } else {
+              final bool active =
+                  stepIndex < row.steps.length
+                      ? !row.steps[stepIndex].active
+                      : true;
+              _store.beginPaint(row.instrumentId, stepIndex, active: active);
+            }
+          },
+          onPointerMoveStep: (
+            PointerMoveEvent event,
+            int rowIndex,
+            int stepIndex,
+          ) {
+            final List<RackRow> visible = _store.rows;
+            if (rowIndex < 0 || rowIndex >= visible.length) return;
+            final RackRow row = visible[rowIndex];
+            if (event.buttons == kSecondaryMouseButton ||
+                HardwareKeyboard.instance.isAltPressed) {
+              _store.setVelocity(row.instrumentId, stepIndex, 12900);
+            } else {
+              _store.paintStep(row.instrumentId, stepIndex);
+            }
+          },
+          onPointerUpStep: () {
+            _store.commitPaint();
+            _store.commitVelocityPaint();
+          },
+          onPointerCancelStep: () {
+            _store.abortPaint();
+            _store.abortVelocityPaint();
+          },
+        ),
+        if (_showRenameDialog)
+          RenameChannelDialog(
+            initialName:
+                renameId == null
+                    ? ''
+                    : (_store.instrumentFor(renameId)?.name ?? ''),
+            onSubmit: _submitRename,
+            onClose: _closeRenameDialog,
+          ),
+      ],
     );
   }
 }

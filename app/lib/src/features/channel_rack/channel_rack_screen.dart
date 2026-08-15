@@ -40,6 +40,7 @@ class ChannelRackScreen extends StatelessWidget {
     this.onInspectorPan,
     this.onInspectorMute,
     this.onInspectorSolo,
+    this.onInspectorOpenPlugin,
     this.onInspectorFxTap,
     this.onInspectorAddFx,
     this.onInspectorRouteTap,
@@ -80,6 +81,10 @@ class ChannelRackScreen extends StatelessWidget {
   final ValueChanged<double>? onInspectorPan;
   final VoidCallback? onInspectorMute;
   final VoidCallback? onInspectorSolo;
+
+  /// Opens the selected channel's plug-in window; only wired for channels
+  /// that host a plug-in.
+  final VoidCallback? onInspectorOpenPlugin;
   final ValueChanged<int>? onInspectorFxTap;
   final VoidCallback? onInspectorAddFx;
   final VoidCallback? onInspectorRouteTap;
@@ -182,6 +187,7 @@ class ChannelRackScreen extends StatelessWidget {
               onPan: onInspectorPan,
               onMute: onInspectorMute,
               onSolo: onInspectorSolo,
+              onOpenPlugin: onInspectorOpenPlugin,
               onFxTap: onInspectorFxTap,
               onAddFx: onInspectorAddFx,
               onRouteTap: onInspectorRouteTap,

@@ -1,42 +1,34 @@
-// RenameProjectDialog — the one place a project gets its name (OB-3-05 §4).
+// RenameChannelDialog — the small modal that renames a rack channel.
 //
-// Small on purpose: a field, the consequence of typing in it, and two buttons.
-// The consequence line is the part that earns the dialog — renaming a saved
-// project moves the bundle on disk, and a user should read that before pressing
-// Rename rather than discover it in Finder afterwards.
+// The RenameProjectDialog sibling worries about bundles and file names on disk;
+// a channel has none of that, so this is the same shape with the disk talk
+// removed: a field, a one-line consequence, and two buttons.
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../core/action_registry.dart';
 import '../../design/tokens.dart';
 import '../../ui_kit/button.dart';
 import '../../ui_kit/kit_glyphs.dart';
-import 'project_files_platform.dart';
-import 'project_store.dart';
 
-class RenameProjectDialog extends StatefulWidget {
-  const RenameProjectDialog({
+class RenameChannelDialog extends StatefulWidget {
+  const RenameChannelDialog({
     required this.initialName,
     required this.onSubmit,
     required this.onClose,
-    this.currentFileName = '',
     super.key,
   });
 
   final String initialName;
 
-  /// The bundle the project currently lives in, or empty when it has never
-  /// been saved — which changes what renaming actually does.
-  final String currentFileName;
-
+  /// Fired with the trimmed name when the user confirms.
   final ValueChanged<String> onSubmit;
   final VoidCallback onClose;
 
   @override
-  State<RenameProjectDialog> createState() => _RenameProjectDialogState();
+  State<RenameChannelDialog> createState() => _RenameChannelDialogState();
 }
 
-class _RenameProjectDialogState extends State<RenameProjectDialog> {
+class _RenameChannelDialogState extends State<RenameChannelDialog> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
 
@@ -48,7 +40,7 @@ class _RenameProjectDialogState extends State<RenameProjectDialog> {
         baseOffset: 0,
         extentOffset: widget.initialName.length,
       );
-    _focusNode = FocusNode(debugLabel: 'rename-project');
+    _focusNode = FocusNode(debugLabel: 'rename-channel');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
     });
@@ -63,42 +55,41 @@ class _RenameProjectDialogState extends State<RenameProjectDialog> {
 
   String get _typed => _controller.text.trim();
 
+  bool get _valid => _typed.isNotEmpty;
+
   void _submit() {
-    if (ProjectStore.validateName(_typed) != null) return;
+    if (!_valid) return;
     widget.onSubmit(_typed);
   }
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final String? problem = ProjectStore.validateName(_typed);
-    final bool saved = widget.currentFileName.isNotEmpty;
+    final ColorTokens color = tokens.color;
+    final bool valid = _valid;
 
     return Container(
-      color: tokens.color.canvasScrim,
+      color: color.canvasScrim,
       alignment: Alignment.center,
       child: Container(
         width: tokens.size.modalWidthMedium,
         decoration: BoxDecoration(
-          color: tokens.color.surfacePanel,
+          color: color.surfacePanel,
           borderRadius: tokens.radius.panelBorder,
-          border: Border.all(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
+          border: Border.all(color: color.line, width: tokens.border.hairline),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _DialogHeader(title: 'Rename project', onClose: widget.onClose),
+            _DialogHeader(title: 'Rename channel', onClose: widget.onClose),
             Padding(
               padding: EdgeInsets.all(tokens.spacing.lg),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('Project name', style: tokens.type.microCaps),
+                  Text('Channel name', style: tokens.type.microCaps),
                   SizedBox(height: tokens.spacing.xs),
                   _NameField(
                     controller: _controller,
@@ -109,16 +100,11 @@ class _RenameProjectDialogState extends State<RenameProjectDialog> {
                   ),
                   SizedBox(height: tokens.spacing.sm),
                   Text(
-                    problem ??
-                        (saved
-                            ? 'The bundle is renamed to '
-                                  '“$_typed.$projectExtension” in the same folder.'
-                            : 'Used as the file name the first time you save.'),
+                    valid
+                        ? 'Applies everywhere this channel appears.'
+                        : 'Give the channel a name.',
                     style: tokens.type.label.copyWith(
-                      color:
-                          problem == null
-                              ? tokens.color.textMuted
-                              : tokens.color.danger,
+                      color: valid ? color.textMuted : color.danger,
                     ),
                   ),
                   SizedBox(height: tokens.spacing.lg),
@@ -128,10 +114,9 @@ class _RenameProjectDialogState extends State<RenameProjectDialog> {
                       ObButton(label: 'Cancel', onTap: widget.onClose),
                       SizedBox(width: tokens.spacing.sm),
                       ObButton(
-                        key: actionKey('project.rename'),
                         label: 'Rename',
                         tone: ObButtonTone.primary,
-                        onTap: problem == null ? _submit : null,
+                        onTap: valid ? _submit : null,
                       ),
                     ],
                   ),
@@ -165,15 +150,16 @@ class _NameField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ColorTokens color = tokens.color;
     return Container(
       height: tokens.size.buttonHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
-        color: tokens.color.surfaceWell,
+        color: color.surfaceWell,
         borderRadius: tokens.radius.controlBorder,
         border: Border.all(
-          color: tokens.color.lineStrong,
+          color: color.lineStrong,
           width: tokens.border.hairline,
         ),
       ),
@@ -197,9 +183,9 @@ class _NameField extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             style: tokens.type.body,
-            cursorColor: tokens.color.accent,
-            selectionColor: tokens.color.accentMuted,
-            backgroundCursorColor: tokens.color.surfaceWell,
+            cursorColor: color.accent,
+            selectionColor: color.accentMuted,
+            backgroundCursorColor: color.surfaceWell,
             maxLines: 1,
             onChanged: onChanged,
             onSubmitted: onSubmitted,
@@ -219,15 +205,13 @@ class _DialogHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ColorTokens color = tokens.color;
     return Container(
       height: tokens.size.dialogHeaderHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
+          bottom: BorderSide(color: color.line, width: tokens.border.hairline),
         ),
       ),
       child: Row(
@@ -240,7 +224,7 @@ class _DialogHeader extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: ObKitGlyph(
                 kind: ObKitGlyphKind.close,
-                color: tokens.color.textMuted,
+                color: color.textMuted,
                 size: ObKitGlyphSize.inline,
               ),
             ),

@@ -82,7 +82,7 @@ class _ShellBindingState extends State<ShellBinding>
   HostedInstance? _openPlugin;
   List<HostedParameter> _openPluginParameters = const <HostedParameter>[];
   String? _openPluginTrackId;
-  Offset _pluginOffset = Offset.zero;
+  Offset _pluginOffset = const Offset(140, 70);
 
   // The channel rack is the composition home; the arrangement is secondary.
   // Piano roll is not a rail destination — it is opened from the rack or
@@ -108,6 +108,9 @@ class _ShellBindingState extends State<ShellBinding>
     // controller those can differ, and the project must be the one the rest of
     // the shell is reading.
     _project = ProjectStore(_controller.client)..addListener(_onProjectChanged);
+    // The shell's root node is the default home for focus: a text field that
+    // finishes editing returns the keyboard here when no editor has claimed it.
+    FocusPolicy.registerShell(_rootFocus);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       stdout.writeln(

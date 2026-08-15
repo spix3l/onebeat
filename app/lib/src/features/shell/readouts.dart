@@ -6,6 +6,7 @@
 // formatting, this widget owns only the look.
 import 'package:flutter/widgets.dart';
 
+import '../../core/shortcuts.dart';
 import '../../design/tokens.dart';
 
 class ObReadout extends StatefulWidget {
@@ -64,6 +65,7 @@ class _ObReadoutState extends State<ObReadout> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ValueChanged<String>? onSubmit = widget.onSubmitted;
     return Container(
       height: tokens.size.readoutBoxHeight,
       // No vertical padding: the border and the 21px numerals claim most of
@@ -82,28 +84,59 @@ class _ObReadoutState extends State<ObReadout> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          widget.onSubmitted == null
+          onSubmit == null
               ? Text(widget.value, maxLines: 1, style: tokens.type.readoutValue)
               : SizedBox(
                 width: 92,
                 height: 25,
-                child: EditableText(
+                child: _EditableReadout(
                   controller: _controller,
                   focusNode: _focusNode,
-                  onSubmitted: widget.onSubmitted,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  style: tokens.type.readoutValue,
-                  cursorColor: tokens.color.accentBright,
-                  backgroundCursorColor: tokens.color.textSecondary,
+                  onSubmit: onSubmit,
                 ),
               ),
           SizedBox(height: tokens.spacing.xxs),
           Text(widget.unit, maxLines: 1, style: tokens.type.readoutUnit),
         ],
+      ),
+    );
+  }
+}
+
+/// The editable readout value.
+///
+/// Enter commits and hands the keyboard back to the editor — a readout keeps
+/// focus after submit, and a field that keeps focus leaves every bare-key
+/// shortcut dead until the user clicks the canvas. Escape does the same thing
+/// without committing (the value is committed on focus loss anyway).
+class _EditableReadout extends StatelessWidget {
+  const _EditableReadout({
+    required this.controller,
+    required this.focusNode,
+    required this.onSubmit,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return escapeReturnsFocus(
+      child: EditableText(
+        controller: controller,
+        focusNode: focusNode,
+        onSubmitted: (String value) {
+          onSubmit(value);
+          FocusPolicy.returnToEditor();
+        },
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: tokens.type.readoutValue,
+        cursorColor: tokens.color.accentBright,
+        backgroundCursorColor: tokens.color.textSecondary,
       ),
     );
   }

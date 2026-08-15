@@ -10,6 +10,7 @@
 //
 // What we own is the frame: radius, hairline, shadow, the title and subtitle,
 // and the app's own header buttons at the right.
+import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 import '../design/tokens.dart';
@@ -121,38 +122,60 @@ class ObFloatingWindow extends StatelessWidget {
                   ),
                 ),
               ),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate:
-                    onDragUpdate == null
-                        ? null
-                        : (DragUpdateDetails details) =>
-                            onDragUpdate!(details.delta),
-                child: Row(
-                  children: <Widget>[
-                    SizedBox(
-                      width:
-                          reserveSystemControls
-                              ? tokens.size.titleBarInset
-                              : tokens.spacing.md,
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanUpdate:
+                          onDragUpdate == null
+                              ? null
+                              : (DragUpdateDetails details) =>
+                                  onDragUpdate!(details.delta),
+                      child: Row(
+                        children: <Widget>[
+                          SizedBox(
+                            width:
+                                reserveSystemControls
+                                    ? tokens.size.titleBarInset
+                                    : tokens.spacing.md,
+                          ),
+                          Text(vm.title, style: tokens.type.windowTitle),
+                          if (subtitle != null) ...<Widget>[
+                            SizedBox(width: tokens.spacing.sm),
+                            Expanded(
+                              child: Text(
+                                '· $subtitle',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tokens.type.windowSubtitle,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    Text(vm.title, style: tokens.type.windowTitle),
-                    if (subtitle != null) ...<Widget>[
-                      SizedBox(width: tokens.spacing.sm),
-                      Flexible(
-                        child: Text(
-                          '· $subtitle',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: tokens.type.windowSubtitle,
+                  ),
+                  if (vm.actions.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: color.surfaceSunken,
+                        borderRadius: BorderRadius.all(tokens.radius.md),
+                        border: Border.all(
+                          color: color.lineStrong,
+                          width: tokens.border.hairline,
                         ),
                       ),
-                    ],
-                    const Spacer(),
-                    for (final ObWindowAction action in vm.actions)
-                      _HeaderButton(action: action),
-                  ],
-                ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          for (final ObWindowAction action in vm.actions)
+                            _HeaderButton(action: action),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
             Expanded(child: child),
@@ -179,6 +202,13 @@ class _HeaderButtonState extends State<_HeaderButton> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final bool enabled = widget.action.onTap != null;
+    final bool isClose = widget.action.icon == ObKitGlyphKind.close;
+    final Color hoverColor =
+        isClose ? tokens.color.dangerWash : tokens.color.accentWash;
+    final Color iconColor =
+        _hover && enabled
+            ? (isClose ? tokens.color.danger : tokens.color.accentBright)
+            : tokens.color.textSecondary;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: enabled ? (_) => setState(() => _hover = true) : null,
@@ -187,18 +217,15 @@ class _HeaderButtonState extends State<_HeaderButton> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.action.onTap,
         child: Container(
-          width: tokens.size.windowIconButton,
-          height: tokens.size.windowIconButton,
+          width: 30,
+          height: 30,
           margin: EdgeInsets.only(left: tokens.spacing.xs),
           decoration: BoxDecoration(
-            color: _hover && enabled ? tokens.color.surfaceHover : null,
+            color: _hover && enabled ? hoverColor : null,
             borderRadius: BorderRadius.all(tokens.radius.sm),
           ),
           child: Center(
-            child: ObKitGlyph(
-              kind: widget.action.icon,
-              color: tokens.color.textSecondary,
-            ),
+            child: ObKitGlyph(kind: widget.action.icon, color: iconColor),
           ),
         ),
       ),

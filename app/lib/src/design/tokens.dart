@@ -707,14 +707,14 @@ class SizeTokens {
   /// Shared overlay chrome (UI-B-11), measured off `screens/workspace-window.png`
   /// and `screens/ext-manager.png`.
   ///
-  /// A popover is 280 wide because that is what the LAYOUTS menu needs for
+  /// A popover is 230 wide because that is what the LAYOUTS menu needs for
   /// `Reset to default` plus its icon gutter; the Tools menu in the extension
   /// manager is wider because its rows carry a right-aligned shortcut.
-  double get popoverWidth => 280;
-  double get popoverWideWidth => 336;
-  double get popoverRowHeight => 32;
-  double get popoverIconGutter => 26;
-  double get popoverSectionHeight => 26;
+  double get popoverWidth => 230;
+  double get popoverWideWidth => 300;
+  double get popoverRowHeight => 28;
+  double get popoverIconGutter => 20;
+  double get popoverSectionHeight => 24;
 
   /// A floating window's title bar, and the square icon buttons in it.
   double get windowHeaderHeight => 38;
@@ -1395,8 +1395,8 @@ class OneBeatTheme extends InheritedWidget {
   final OneBeatTokens tokens;
 
   static OneBeatTokens of(BuildContext context) {
-    final OneBeatTheme? theme =
-        context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
+    final OneBeatTheme? theme = context
+        .dependOnInheritedWidgetOfExactType<OneBeatTheme>();
     assert(
       theme != null,
       'No OneBeatTheme found. Wrap the app in OneBeatTheme.',

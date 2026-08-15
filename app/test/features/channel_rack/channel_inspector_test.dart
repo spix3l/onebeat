@@ -113,6 +113,52 @@ void main() {
     expect(notes, <int>[60, 72, 61]);
   });
 
+  testWidgets('the Open plugin action appears only for plug-in channels', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    final ChannelInspectorVm hosted = ChannelInspectorVm(
+      name: 'Reese',
+      subtitle: 'Reese CLAP · channel 3',
+      color: channelColors[2],
+      waveform: const <double>[],
+      vol: 0.5,
+      volText: '50',
+      pan: 0.5,
+      panText: '· C',
+      fx: const <FxVm>[],
+      route: 'M1 · Music',
+      hostsPlugin: true,
+    );
+    final List<String> fired = <String>[];
+    await pumpUi(
+      tester,
+      ObChannelInspector(
+        vm: hosted,
+        onOpenPlugin: () => fired.add('open'),
+      ),
+      size: Size(1600, tokens.size.inspectorHeight),
+    );
+    expect(find.text('Open plugin'), findsOneWidget);
+    await tester.tap(find.text('Open plugin'));
+    expect(fired, <String>['open']);
+  });
+
+  testWidgets('a sample channel has no Open plugin action', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    await pumpUi(
+      tester,
+      ObChannelInspector(
+        vm: demoInspector,
+        onOpenPlugin: () => fail('sample channels must not open a window'),
+      ),
+      size: Size(1600, tokens.size.inspectorHeight),
+    );
+    expect(find.text('Open plugin'), findsNothing);
+  });
+
   testWidgets('the inspector omits the waveform and FX controls', (
     WidgetTester tester,
   ) async {
