@@ -58,6 +58,7 @@ class RackRowVm {
     this.powered = true,
     this.selected = false,
     this.previewNotes,
+    this.hostsPlugin = false,
   });
 
   final String name;
@@ -83,6 +84,12 @@ class RackRowVm {
   /// When non-null the row is a melody and shows a mini piano roll instead of
   /// the step grid.
   final List<RackPreviewNoteVm>? previewNotes;
+
+  /// Whether the lane hosts a plug-in (as opposed to the built-in sample
+  /// player or an empty lane). Only these lanes get a double-tap that opens the
+  /// plug-in window — and only these lanes pay for the double-tap recognizer
+  /// delaying their single-click select by the double-tap window.
+  final bool hostsPlugin;
 }
 
 class ObRackRow extends StatelessWidget {
@@ -91,6 +98,7 @@ class ObRackRow extends StatelessWidget {
     this.playingStep,
     this.playingTick,
     this.onTap,
+    this.onDoubleTap,
     this.onSecondaryTapDown,
     this.onPower,
     this.onStepTap,
@@ -121,6 +129,10 @@ class ObRackRow extends StatelessWidget {
   final int? playingTick;
 
   final VoidCallback? onTap;
+
+  /// Double-click opens the lane's plug-in window. Wired only for lanes that
+  /// host a plug-in — see [RackRowVm.hostsPlugin].
+  final VoidCallback? onDoubleTap;
   final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onPower;
   final ValueChanged<int>? onStepTap;
@@ -139,6 +151,7 @@ class ObRackRow extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onDoubleTap: onDoubleTap,
       onSecondaryTapDown: onSecondaryTapDown,
       child: Container(
         height: tokens.size.rackLaneHeight,

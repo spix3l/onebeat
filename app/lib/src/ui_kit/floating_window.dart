@@ -54,6 +54,7 @@ class ObFloatingWindow extends StatelessWidget {
     required this.child,
     this.width,
     this.height,
+    this.onDragUpdate,
     super.key,
   }) : reserveSystemControls = true;
 
@@ -65,6 +66,7 @@ class ObFloatingWindow extends StatelessWidget {
     required this.child,
     this.width,
     this.height,
+    this.onDragUpdate,
     super.key,
   }) : reserveSystemControls = false;
 
@@ -72,6 +74,7 @@ class ObFloatingWindow extends StatelessWidget {
   final Widget child;
   final double? width;
   final double? height;
+  final ValueChanged<Offset>? onDragUpdate;
 
   /// Leaves [SizeTokens.titleBarInset] clear at the header's left for the
   /// system's close/minimise/zoom buttons.
@@ -89,7 +92,10 @@ class ObFloatingWindow extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.surfacePanel,
         borderRadius: BorderRadius.all(tokens.radius.xl),
-        border: Border.all(color: color.lineStrong, width: tokens.border.hairline),
+        border: Border.all(
+          color: color.lineStrong,
+          width: tokens.border.hairline,
+        ),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: color.windowShadow,
@@ -115,30 +121,38 @@ class ObFloatingWindow extends StatelessWidget {
                   ),
                 ),
               ),
-              child: Row(
-                children: <Widget>[
-                  SizedBox(
-                    width:
-                        reserveSystemControls
-                            ? tokens.size.titleBarInset
-                            : tokens.spacing.md,
-                  ),
-                  Text(vm.title, style: tokens.type.windowTitle),
-                  if (subtitle != null) ...<Widget>[
-                    SizedBox(width: tokens.spacing.sm),
-                    Flexible(
-                      child: Text(
-                        '· $subtitle',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: tokens.type.windowSubtitle,
-                      ),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate:
+                    onDragUpdate == null
+                        ? null
+                        : (DragUpdateDetails details) =>
+                            onDragUpdate!(details.delta),
+                child: Row(
+                  children: <Widget>[
+                    SizedBox(
+                      width:
+                          reserveSystemControls
+                              ? tokens.size.titleBarInset
+                              : tokens.spacing.md,
                     ),
+                    Text(vm.title, style: tokens.type.windowTitle),
+                    if (subtitle != null) ...<Widget>[
+                      SizedBox(width: tokens.spacing.sm),
+                      Flexible(
+                        child: Text(
+                          '· $subtitle',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: tokens.type.windowSubtitle,
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    for (final ObWindowAction action in vm.actions)
+                      _HeaderButton(action: action),
                   ],
-                  const Spacer(),
-                  for (final ObWindowAction action in vm.actions)
-                    _HeaderButton(action: action),
-                ],
+                ),
               ),
             ),
             Expanded(child: child),

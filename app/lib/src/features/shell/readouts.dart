@@ -8,14 +8,58 @@ import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
 
-class ObReadout extends StatelessWidget {
-  const ObReadout({required this.value, required this.unit, super.key});
+class ObReadout extends StatefulWidget {
+  const ObReadout({
+    required this.value,
+    required this.unit,
+    this.onSubmitted,
+    super.key,
+  });
 
   /// The value, already formatted (`124.00`, `4/4`, `02:01:218`).
   final String value;
 
   /// The micro-caps unit label (`BPM`, `SIG`, `BAR · BEAT · TICK`).
   final String unit;
+
+  final ValueChanged<String>? onSubmitted;
+
+  @override
+  State<ObReadout> createState() => _ObReadoutState();
+}
+
+class _ObReadoutState extends State<ObReadout> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.value,
+  );
+  final FocusNode _focusNode = FocusNode(debugLabel: 'readout');
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_commitOnFocusLoss);
+  }
+
+  void _commitOnFocusLoss() {
+    if (!_focusNode.hasFocus) widget.onSubmitted?.call(_controller.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant ObReadout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value &&
+        _controller.text == oldWidget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_commitOnFocusLoss);
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +82,27 @@ class ObReadout extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          Text(value, maxLines: 1, style: tokens.type.readoutValue),
+          widget.onSubmitted == null
+              ? Text(widget.value, maxLines: 1, style: tokens.type.readoutValue)
+              : SizedBox(
+                width: 92,
+                height: 25,
+                child: EditableText(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  onSubmitted: widget.onSubmitted,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  style: tokens.type.readoutValue,
+                  cursorColor: tokens.color.accentBright,
+                  backgroundCursorColor: tokens.color.textSecondary,
+                ),
+              ),
           SizedBox(height: tokens.spacing.xxs),
-          Text(unit, maxLines: 1, style: tokens.type.readoutUnit),
+          Text(widget.unit, maxLines: 1, style: tokens.type.readoutUnit),
         ],
       ),
     );

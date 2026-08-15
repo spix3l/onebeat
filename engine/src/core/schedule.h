@@ -22,12 +22,12 @@ using InstrumentId = uint32_t;
 inline constexpr InstrumentId DefaultInstrument = 0;
 
 enum class EventType : uint16_t {
-  NoteOn = 0,          // value = velocity 0..1
-  NoteOff = 1,         // value unused
-  TempoChange = 2,     // value = bpm
-  ParamValue = 3,      // reserved = ParamId, value is the absolute value
-  ParamModulation = 4, // reserved = ParamId, value is a non-destructive offset
-  AudioStart = 5       // starts the whole sample loaded on `instrument`
+  NoteOn = 0,           // value = velocity 0..1
+  NoteOff = 1,          // value unused
+  TempoChange = 2,      // value = bpm
+  ParamValue = 3,       // reserved = ParamId, value is the absolute value
+  ParamModulation = 4,  // reserved = ParamId, value is a non-destructive offset
+  AudioStart = 5        // starts the whole sample loaded on `instrument`
 };
 
 // POD, 24 bytes, sorted by `frame`. Deliberately cache-friendly: a block scan

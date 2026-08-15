@@ -26,6 +26,7 @@ using onebeat::model::addMixerTrack;
 using onebeat::model::addPattern;
 using onebeat::model::ArrangementLane;
 using onebeat::model::ArrangementLaneId;
+using onebeat::model::AudioSource;
 using onebeat::model::ChangeField;
 using onebeat::model::checkReferentialIntegrity;
 using onebeat::model::Clip;
@@ -400,6 +401,45 @@ TEST_SUITE("unit") {
       REQUIRE(f.bus.undo());
       REQUIRE(f.bus.undo());
       CHECK(digest(f.project) == before);
+    }
+
+    // An audio clip covers a fixed number of seconds, so it must cover a
+    // different number of bars once the grid underneath it moves. Without this
+    // the block keeps its width while the sound does not, and everything
+    // aligned to its end is silently wrong.
+    SUBCASE("a tempo change rescales audio clips and nothing else") {
+      REQUIRE(f.bus.execute(addPattern(f.project, "Verse")));
+      const PatternId pattern = f.project.patterns().begin()->first;
+      REQUIRE(f.bus.execute(addLane(f.project, "Audio")));
+      const ArrangementLaneId lane = f.project.lanes().begin()->first;
+
+      AudioSource source;
+      source.path = "/tmp/loop.wav";
+      source.destination = f.project.masterTrack();
+      REQUIRE(f.bus.execute(
+          addClip(f.project, lane, source, TicksPerBarFourFour, TicksPerBarFourFour * 2)));
+      REQUIRE(
+          f.bus.execute(addClip(f.project, lane, PatternSource{pattern}, 0, TicksPerBarFourFour)));
+
+      ClipId audio_clip;
+      ClipId pattern_clip;
+      for (const auto& [id, clip] : f.project.clips()) {
+        (clip.audio() != nullptr ? audio_clip : pattern_clip) = id;
+      }
+      const uint64_t before_tempo = digest(f.project);
+
+      TransportState transport = f.project.transport();
+      const double original_tempo = transport.tempo;
+      transport.tempo = original_tempo * 2.0;
+      REQUIRE(f.bus.execute(setTransport(f.project, transport)));
+
+      // Twice the tempo, twice the bars — the same seconds of audio.
+      CHECK(f.project.findClip(audio_clip)->length == TicksPerBarFourFour * 4);
+      CHECK(f.project.findClip(audio_clip)->start == TicksPerBarFourFour);
+      CHECK(f.project.findClip(pattern_clip)->length == TicksPerBarFourFour);
+
+      REQUIRE(f.bus.undo());
+      CHECK(digest(f.project) == before_tempo);
     }
   }
 

@@ -494,13 +494,15 @@ TEST_SUITE("abi") {
     CHECK(clip.pattern_length_ticks == 3840);
     CHECK(clip.note_count == 3);
     CHECK(clip.usage_count == 2);
-    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) != 0U);
+    // A new clip does not loop: stretching one past its pattern leaves the
+    // extra room silent until the transform is asked for by name.
+    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) == 0U);
     const std::string placed_clip = clip.id;
 
     // OB-3-13's windowing and transform fields.
     REQUIRE(ob_engine_clip_resize(engine, placed_clip.c_str(), 1920) == OB_OK);
     REQUIRE(ob_engine_clip_set_window_start(engine, placed_clip.c_str(), 480) == OB_OK);
-    REQUIRE(ob_engine_clip_set_loop(engine, placed_clip.c_str(), 0) == OB_OK);
+    REQUIRE(ob_engine_clip_set_loop(engine, placed_clip.c_str(), 1) == OB_OK);
     REQUIRE(ob_engine_clip_set_transpose(engine, placed_clip.c_str(), 3) == OB_OK);
     REQUIRE(ob_engine_clip_set_muted(engine, placed_clip.c_str(), 1) == OB_OK);
     CHECK(ob_engine_clip_set_transpose(engine, placed_clip.c_str(), 96) == OB_ERR_INVALID_ARGUMENT);
@@ -512,7 +514,7 @@ TEST_SUITE("abi") {
     CHECK(clip.length_ticks == 1920);
     CHECK(clip.window_start_ticks == 480);
     CHECK(clip.transpose == 3);
-    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) == 0U);
+    CHECK((clip.flags & OB_CLIP_FLAG_LOOP) != 0U);
     CHECK((clip.flags & OB_CLIP_FLAG_MUTED) != 0U);
 
     // Copy-drag carries the transforms across.

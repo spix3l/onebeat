@@ -8,6 +8,7 @@
 // The panel is handed a tree and a selected id and reports taps and disclosure
 // toggles by id. Search is intentionally local to the panel so the field stays
 // focusable even when the shell has no search command to route.
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
@@ -401,6 +402,12 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
             rows.add(_disclosure(node, depth));
           }
         case BrowserSampleVm():
+          // A row that auditions fires on press, not on tap: waiting for the
+          // pointer to come up — and, when a double-tap handler is attached,
+          // for the double-tap window to expire — puts a quarter of a second
+          // between the click and the sound. Rows with no preview keep the
+          // tap/double-tap pair, since only those open anything.
+          final bool auditions = node.previewPath != null;
           rows.add(
             _dragWrap(
               node,
@@ -409,7 +416,8 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
                 depth: depth,
                 selected: selected,
                 onTap: tap,
-                onDoubleTap: doubleTap,
+                onDoubleTap: auditions ? null : doubleTap,
+                activateOnPress: auditions,
               ),
             ),
           );
@@ -504,6 +512,7 @@ class _Row extends StatefulWidget {
     required this.children,
     this.onTap,
     this.onDoubleTap,
+    this.activateOnPress = false,
   });
 
   final int depth;
@@ -518,6 +527,11 @@ class _Row extends StatefulWidget {
   final List<Widget> children;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
+
+  /// Fires [onTap] from the raw pointer-down rather than from the tap
+  /// recognizer. A tap recognizer only reports once the pointer is up and the
+  /// gesture arena has resolved, which for an auditioning row is heard as lag.
+  final bool activateOnPress;
 
   @override
   State<_Row> createState() => _RowState();
@@ -546,25 +560,35 @@ class _RowState extends State<_Row> {
           widget.onTap == null ? null : (_) => setState(() => _hover = true),
       onExit:
           widget.onTap == null ? null : (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        onDoubleTap: widget.onDoubleTap,
-        child: Padding(
-          // The indent sits outside the fill, so a selected child's pill
-          // starts where its name does rather than reaching back under its
-          // parent.
-          padding: EdgeInsets.only(
-            left: tokens.size.browserRowIndent * widget.depth,
-          ),
-          child: Container(
-            height: tokens.size.browserRowHeight,
-            padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
-            decoration: BoxDecoration(
-              color: fill,
-              borderRadius: tokens.radius.panelBorder,
+      child: Listener(
+        onPointerDown:
+            widget.activateOnPress && widget.onTap != null
+                ? (PointerDownEvent event) {
+                  // Only the primary button auditions; a right-click that opens
+                  // a context menu must not make noise.
+                  if (event.buttons == kPrimaryButton) widget.onTap!();
+                }
+                : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.activateOnPress ? null : widget.onTap,
+          onDoubleTap: widget.onDoubleTap,
+          child: Padding(
+            // The indent sits outside the fill, so a selected child's pill
+            // starts where its name does rather than reaching back under its
+            // parent.
+            padding: EdgeInsets.only(
+              left: tokens.size.browserRowIndent * widget.depth,
             ),
-            child: Row(children: widget.children),
+            child: Container(
+              height: tokens.size.browserRowHeight,
+              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: tokens.radius.panelBorder,
+              ),
+              child: Row(children: widget.children),
+            ),
           ),
         ),
       ),
@@ -701,6 +725,7 @@ class BrowserSampleRow extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.onDoubleTap,
+    this.activateOnPress = false,
     super.key,
   });
 
@@ -709,6 +734,10 @@ class BrowserSampleRow extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
+
+  /// Runs [onTap] on pointer-down instead of on tap. Auditioning rows use this
+  /// so the sample sounds the moment the mouse goes down.
+  final bool activateOnPress;
 
   @override
   Widget build(BuildContext context) {
@@ -719,6 +748,7 @@ class BrowserSampleRow extends StatelessWidget {
       accentSelection: false,
       onTap: onTap,
       onDoubleTap: onDoubleTap,
+      activateOnPress: activateOnPress,
       children: <Widget>[
         Container(
           width: tokens.size.browserDotSize,

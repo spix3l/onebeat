@@ -42,6 +42,7 @@ const ObTransportBarVm demoTransportBar = ObTransportBarVm(
   bpmText: '124.00',
   sigText: '4/4',
   positionText: '02:01:218',
+  durationText: '01:36',
   meterLeft: 0.55,
   meterRight: 0.48,
   searchHint: 'Search actions',
@@ -106,10 +107,7 @@ class UiFrame extends StatelessWidget {
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              ObSideRail(vm: rail),
-              Expanded(child: content),
-            ],
+            children: <Widget>[ObSideRail(vm: rail), Expanded(child: content)],
           ),
         ),
         ObStatusBar(vm: status),
@@ -119,9 +117,7 @@ class UiFrame extends StatelessWidget {
     return ColoredBox(
       color: tokens.color.surfaceSunken,
       child:
-          overlay == null
-              ? frame
-              : Stack(children: <Widget>[frame, overlay]),
+          overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
     );
   }
 }

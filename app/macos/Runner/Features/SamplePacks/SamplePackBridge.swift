@@ -100,6 +100,21 @@ final class SamplePackBridge {
       store.savePaths(paths)
       result(nil)
 
+    case "loadBrowserExpansion":
+      result(store.loadExpansion())
+
+    case "saveBrowserExpansion":
+      guard let expansion = call.arguments as? [String: Bool] else {
+        result(FlutterError(
+          code: "invalid_arguments",
+          message: "A map of browser row ids to their open state is required.",
+          details: nil
+        ))
+        return
+      }
+      store.saveExpansion(expansion)
+      result(nil)
+
     default:
       result(FlutterMethodNotImplemented)
     }

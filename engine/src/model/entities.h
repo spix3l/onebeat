@@ -187,7 +187,11 @@ using ClipSource = std::variant<PatternSource, AudioSource, AutomationSource>;
 // stored, round-tripped and ignored until OB-3-13 gives them semantics.
 struct ClipTransforms {
   int16_t transpose = 0;
-  bool loop = true;
+  // Off by default: stretching a clip past its source shows how much room it
+  // has, and silence is the honest result. Repeating the source is an edit the
+  // user asks for with the clip inspector's LOOP toggle, not something a drag
+  // of the right edge does on its own.
+  bool loop = false;
   Ticks window_start = 0;
   float velocity_scale = 1.0F;  // reserved, DM-Q3
   Ticks time_nudge = 0;         // reserved, DM-Q3

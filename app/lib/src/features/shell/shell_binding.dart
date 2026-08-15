@@ -82,6 +82,7 @@ class _ShellBindingState extends State<ShellBinding>
   HostedInstance? _openPlugin;
   List<HostedParameter> _openPluginParameters = const <HostedParameter>[];
   String? _openPluginTrackId;
+  Offset _pluginOffset = Offset.zero;
 
   // The channel rack is the composition home; the arrangement is secondary.
   // Piano roll is not a rail destination — it is opened from the rack or
@@ -119,6 +120,7 @@ class _ShellBindingState extends State<ShellBinding>
       onFolders: _onFoldersDropped,
       onAudioFiles: _onAudioFilesDropped,
     );
+    unawaited(_restoreBrowserExpansion());
     unawaited(_restoreSamplePacks());
   }
 
@@ -147,6 +149,23 @@ class _ShellBindingState extends State<ShellBinding>
               .toList();
     }
     return _builtins;
+  }
+
+  /// A folder the user opened stays open across restarts. Only the rows they
+  /// touched are restored, so a section added in a later build still appears
+  /// the way it was designed to.
+  Future<void> _restoreBrowserExpansion() async {
+    final Map<String, bool> stored =
+        await _samplePackPlatform.loadBrowserExpansion();
+    if (!mounted || stored.isEmpty) return;
+    setState(() {
+      // Anything toggled while the read was in flight wins: it is the more
+      // recent statement of what the user wants.
+      for (final MapEntry<String, bool> entry in stored.entries) {
+        _browserExpanded.putIfAbsent(entry.key, () => entry.value);
+      }
+      _browserNodes = _buildBrowserNodes();
+    });
   }
 
   Future<void> _restoreSamplePacks() async {
@@ -351,6 +370,11 @@ class _ShellBindingState extends State<ShellBinding>
       return;
     }
     _browserNodes = _buildBrowserNodes();
+    unawaited(
+      _samplePackPlatform.saveBrowserExpansion(
+        Map<String, bool>.of(_browserExpanded),
+      ),
+    );
     if (mounted) setState(() {});
   }
 
@@ -437,6 +461,38 @@ class _ShellBindingState extends State<ShellBinding>
     });
   }
 
+  void _movePlugin(Offset delta) {
+    setState(() => _pluginOffset += delta);
+  }
+
+  /// Opens the plug-in window for [instrumentId]'s lane. The engine's hosted-
+  /// instance surface follows the selection, so the lane is selected first —
+  /// which also moves the rack highlight, exactly as a click would. Sample and
+  /// empty lanes have nothing hosted, so they read as null and stay closed.
+  void _openPluginForInstrument(String instrumentId) {
+    if (instrumentId.isEmpty) return;
+    ProjectInstrument? instrument;
+    for (final ProjectInstrument candidate
+        in _controller.client.readInstruments()) {
+      if (candidate.id == instrumentId) {
+        instrument = candidate;
+        break;
+      }
+    }
+    if (instrument == null) return;
+    // A final capture: flow analysis does not carry the null-check promotion
+    // of a loop-assigned variable into the setState closure below.
+    final ProjectInstrument target = instrument;
+    _controller.client.selectInstrument(instrumentId);
+    final HostedInstance? hosted = _controller.client.readHostedInstance();
+    if (hosted == null || hosted.pluginId != target.pluginId) return;
+    setState(() {
+      _openPlugin = hosted;
+      _openPluginTrackId = target.id;
+      _openPluginParameters = _controller.client.readParameters(hosted);
+    });
+  }
+
   void _onControllerChanged() {
     if (++_framesSinceBrowserRefresh >= 20) {
       _framesSinceBrowserRefresh = 0;
@@ -516,11 +572,29 @@ class _ShellBindingState extends State<ShellBinding>
     }
   }
 
+  int _durationTicks() {
+    int end = 960 * 4 * 8;
+    for (final ArrangementClip clip in _controller.client.readClips()) {
+      if (clip.endTicks > end) end = clip.endTicks;
+    }
+    return end;
+  }
+
+  String _formatDuration(double seconds) {
+    final int totalSeconds = seconds.round().clamp(0, 359999);
+    final int minutes = totalSeconds ~/ 60;
+    final int remaining = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remaining.toString().padLeft(2, '0')}';
+  }
+
   ShellScreenVm _buildVm() {
     final EngineSnapshot snapshot = _controller.snapshot;
 
     final String bpmText = snapshot.tempoBpm.toStringAsFixed(2);
     const String sigText = '4/4';
+    final int durationTicks = _durationTicks();
+    final double durationSeconds =
+        durationTicks / 960.0 * 60.0 / snapshot.tempoBpm.clamp(1.0, 999.0);
 
     final int bar = snapshot.bar.clamp(1, 9999);
     final int beat = snapshot.beat.clamp(1, 4);
@@ -539,6 +613,7 @@ class _ShellBindingState extends State<ShellBinding>
       bpmText: bpmText,
       sigText: sigText,
       positionText: positionText,
+      durationText: _formatDuration(durationSeconds),
       meterLeft: meterLeft,
       meterRight: meterRight,
       searchHint: 'Search actions',
@@ -591,9 +666,7 @@ class _ShellBindingState extends State<ShellBinding>
                   'Press ⌘S to save',
               ],
       rightHint:
-          snapshot.playing
-              ? '⌘K Search actions'
-              : '⌘S save · ⌘K actions',
+          snapshot.playing ? '⌘K Search actions' : '⌘S save · ⌘K actions',
     );
 
     return ShellScreenVm(
@@ -713,6 +786,7 @@ class _ShellBindingState extends State<ShellBinding>
                   coreController: _controller,
                   onSelectRail: _onRailSelect,
                   onOpenPianoRoll: _openPianoRoll,
+                  onOpenPlugin: _openPluginForInstrument,
                   onOpenPattern: () => _openPianoRoll(),
                   onClosePianoRoll: _closePianoRoll,
                   externalAudioDrop: _audioFileDrop,
@@ -726,6 +800,12 @@ class _ShellBindingState extends State<ShellBinding>
                 onUndo: _controller.undoProject,
                 onRedo: _controller.redoProject,
                 onExport: () => setState(() => _showExportDialog = true),
+                onTempoSubmitted: (String value) {
+                  final double? bpm = double.tryParse(value);
+                  if (bpm != null && bpm >= 20 && bpm <= 999) {
+                    _controller.setTempo(bpm);
+                  }
+                },
                 onBrowserTap: _onBrowserTap,
                 onBrowserDoubleTap: _onBrowserDoubleTap,
                 onBrowserToggle: _onBrowserToggle,
@@ -754,38 +834,43 @@ class _ShellBindingState extends State<ShellBinding>
                   onClose: () => setState(() => _showRenameDialog = false),
                 ),
               if (_openPlugin case final HostedInstance plugin)
-                PluginBinding(
-                  client: widget.client,
-                  trackId: _openPluginTrackId ?? '',
-                  pluginName: plugin.name,
-                  trackName:
-                      _openPluginTrackId?.isNotEmpty == true
-                          ? (_controller.client
-                              .readInstruments()
-                              .firstWhere(
-                                (ProjectInstrument item) =>
-                                    item.id == _openPluginTrackId,
-                                orElse:
-                                    () => const ProjectInstrument(
-                                      id: '',
-                                      name: 'Instrument',
-                                      color: '',
-                                      order: 0,
-                                      pluginId: '',
-                                      pluginName: '',
-                                      pluginVendor: '',
-                                      pluginPath: '',
-                                      muted: false,
-                                      selected: false,
-                                      affectedPatterns: 0,
-                                      affectedClips: 0,
-                                      affectedNotes: 0,
-                                    ),
-                              )
-                              .name)
-                          : 'Instrument',
-                  parameters: _openPluginParameters,
-                  onClose: _closePlugin,
+                Positioned(
+                  left: _pluginOffset.dx,
+                  top: _pluginOffset.dy,
+                  child: PluginBinding(
+                    client: widget.client,
+                    trackId: _openPluginTrackId ?? '',
+                    pluginName: plugin.name,
+                    trackName:
+                        _openPluginTrackId?.isNotEmpty == true
+                            ? (_controller.client
+                                .readInstruments()
+                                .firstWhere(
+                                  (ProjectInstrument item) =>
+                                      item.id == _openPluginTrackId,
+                                  orElse:
+                                      () => const ProjectInstrument(
+                                        id: '',
+                                        name: 'Instrument',
+                                        color: '',
+                                        order: 0,
+                                        pluginId: '',
+                                        pluginName: '',
+                                        pluginVendor: '',
+                                        pluginPath: '',
+                                        muted: false,
+                                        selected: false,
+                                        affectedPatterns: 0,
+                                        affectedClips: 0,
+                                        affectedNotes: 0,
+                                      ),
+                                )
+                                .name)
+                            : 'Instrument',
+                    parameters: _openPluginParameters,
+                    onDragUpdate: _movePlugin,
+                    onClose: _closePlugin,
+                  ),
                 ),
             ],
           ),
@@ -802,6 +887,7 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.coreController,
     required this.onSelectRail,
     required this.onOpenPianoRoll,
+    required this.onOpenPlugin,
     required this.onOpenPattern,
     required this.onClosePianoRoll,
     this.externalAudioDrop,
@@ -812,6 +898,7 @@ class _WorkspaceSlot extends StatelessWidget {
   final core.EngineController coreController;
   final ValueChanged<int> onSelectRail;
   final ValueChanged<String> onOpenPianoRoll;
+  final ValueChanged<String> onOpenPlugin;
   final VoidCallback onOpenPattern;
   final VoidCallback onClosePianoRoll;
   final AudioFileDrop? externalAudioDrop;
@@ -826,6 +913,7 @@ class _WorkspaceSlot extends StatelessWidget {
         onBrowsePlugins: () => onSelectRail(0),
         onOpenMixer: () => onSelectRail(2),
         onOpenPianoRoll: onOpenPianoRoll,
+        onOpenPlugin: onOpenPlugin,
       ),
       1 => PlaylistBinding(
         client: coreController.client,
@@ -879,7 +967,9 @@ class _PlatformMenuHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PlatformMenuBar(
+    return _StablePlatformMenuBar(
+      menuVersion:
+          '${project.hasFile}:${controller.client.canUndoProject}:${controller.client.undoProjectName}:${controller.client.canRedoProject}:${controller.client.redoProjectName}',
       menus: <PlatformMenuItem>[
         PlatformMenu(
           label: 'OneBeat',
@@ -1019,4 +1109,62 @@ class _PlatformMenuHost extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// Keeps Flutter's native menu tracking alive while the engine ticker rebuilds
+/// the shell. Replacing PlatformMenuBar during a mouse-down menu interaction
+/// makes AppKit dismiss the currently open menu.
+class _StablePlatformMenuBar extends StatefulWidget {
+  const _StablePlatformMenuBar({
+    required this.menuVersion,
+    required this.menus,
+    required this.child,
+  });
+
+  final String menuVersion;
+  final List<PlatformMenuItem> menus;
+  final Widget child;
+
+  @override
+  State<_StablePlatformMenuBar> createState() => _StablePlatformMenuBarState();
+}
+
+class _StablePlatformMenuBarState extends State<_StablePlatformMenuBar> {
+  late final ValueNotifier<Widget> _child;
+  late Widget _platformMenuBar;
+
+  @override
+  void initState() {
+    super.initState();
+    _child = ValueNotifier<Widget>(widget.child);
+    _platformMenuBar = _buildPlatformMenuBar(widget.menus);
+  }
+
+  Widget _buildPlatformMenuBar(List<PlatformMenuItem> menus) {
+    return PlatformMenuBar(
+      menus: menus,
+      child: ValueListenableBuilder<Widget>(
+        valueListenable: _child,
+        builder: (_, Widget child, _) => child,
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _StablePlatformMenuBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _child.value = widget.child;
+    if (widget.menuVersion != oldWidget.menuVersion) {
+      _platformMenuBar = _buildPlatformMenuBar(widget.menus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _child.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _platformMenuBar;
 }

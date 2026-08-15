@@ -359,8 +359,7 @@ TEST_SUITE("engine") {
     schedule.addAudioStart(1, 0);
     engine->publishSchedule(schedule.setLengthFrames(48000).build(48000.0, 1));
     engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
-    CHECK(renderOffline(*engine, 12000, 128).peak() ==
-          doctest::Approx(0.25F).epsilon(0.02));
+    CHECK(renderOffline(*engine, 12000, 128).peak() == doctest::Approx(0.25F).epsilon(0.02));
 
     std::error_code ignored;
     std::filesystem::remove(path, ignored);

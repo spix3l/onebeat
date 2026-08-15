@@ -157,8 +157,7 @@ bool Engine::initialise(std::string& error) {
       return false;
     }
   }
-  if (!preview_channel_->instrument.configure(setup) ||
-      !preview_channel_->instrument.activate()) {
+  if (!preview_channel_->instrument.configure(setup) || !preview_channel_->instrument.activate()) {
     error = "The sample preview instrument could not be configured for this device format.";
     diagnostics_.log(LogLevel::Error, "plugin", error);
     return false;
@@ -323,8 +322,8 @@ bool Engine::createSandboxedInstrument(const std::string& bundle_path, const std
 
 bool Engine::installMissingInstrument(const std::string& name, const std::vector<uint8_t>& state,
                                       int channel, std::string& error) {
-  return installHostedInstrument(std::make_unique<plugin::MissingPlugin>(&host_bridge_, name, state),
-                                 channel, error);
+  return installHostedInstrument(
+      std::make_unique<plugin::MissingPlugin>(&host_bridge_, name, state), channel, error);
 }
 
 plugin::PluginInstance* Engine::hostedAt(int channel) const noexcept {
@@ -566,8 +565,7 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
           event.type == static_cast<uint16_t>(plugin::EventType::NoteOff) &&
           event.key == plugin::AnyKey;
       const bool is_preview = (event.flags & plugin::EventFlagDontRecord) != 0;
-      if (is_broadcast_release ||
-          (is_preview ? preview_voice : (!preview_voice && is_audition))) {
+      if (is_broadcast_release || (is_preview ? preview_voice : (!preview_voice && is_audition))) {
         events.push(event);
       }
     }
@@ -944,9 +942,31 @@ void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
 }
 
 bool Engine::loadSample(const std::string& path, std::string& error) {
+  // Clicking the same browser row again — or clicking back to a sample that is
+  // still in the preview voice — must not pay for another file read and decode.
+  // The sampler still holds it, so all that is owed is the completion event the
+  // UI waits on before it starts the audition.
+  if (!path.empty() && path == preview_loaded_path_) {
+    ob_event event{};
+    event.type = OB_EVT_SAMPLE_LOADED;
+    event.i64_a = preview_loaded_frames_;
+    copyText(event.text, sizeof(event.text), preview_loaded_name_);
+    events_.tryPush(event);
+    return true;
+  }
+
   // Browser previews use a dedicated voice so loading a preview can never
   // replace a song or an arrangement channel.
-  return loadSampleInto(preview_channel_->instrument.sampler(), -1, path, error);
+  std::string name;
+  int64_t frames = 0;
+  if (!loadSampleInto(preview_channel_->instrument.sampler(), -1, path, error, &name, &frames)) {
+    preview_loaded_path_.clear();
+    return false;
+  }
+  preview_loaded_path_ = path;
+  preview_loaded_name_ = std::move(name);
+  preview_loaded_frames_ = frames;
+  return true;
 }
 
 bool Engine::loadChannelSample(int index, const std::string& path, std::string& error) {
@@ -959,7 +979,7 @@ bool Engine::loadChannelSample(int index, const std::string& path, std::string& 
 }
 
 bool Engine::loadSampleInto(Sampler& target, int log_channel, const std::string& path,
-                            std::string& error) {
+                            std::string& error, std::string* out_name, int64_t* out_frames) {
   std::unique_ptr<SampleData> sample =
       path.empty() ? makeFallbackSample(config_.sample_rate) : loadAudioFile(path, error);
   if (sample == nullptr) {
@@ -988,6 +1008,8 @@ bool Engine::loadSampleInto(Sampler& target, int log_channel, const std::string&
   event.i64_a = frames;
   copyText(event.text, sizeof(event.text), name);
   events_.tryPush(event);
+  if (out_name != nullptr) *out_name = name;
+  if (out_frames != nullptr) *out_frames = frames;
   return true;
 }
 
@@ -1008,9 +1030,8 @@ void Engine::setChannels(std::vector<ChannelDesc> channels) {
     Channel& channel = *channels_[index];
     const ChannelDesc& desc = channels[index];
     channel.one_shot.store(desc.one_shot, std::memory_order_release);
-    if (desc.one_shot &&
-        samplePathHash(desc.sample_path) !=
-            channel.loaded_sample_hash.load(std::memory_order_acquire)) {
+    if (desc.one_shot && samplePathHash(desc.sample_path) !=
+                             channel.loaded_sample_hash.load(std::memory_order_acquire)) {
       channel.sample_ready.store(false, std::memory_order_release);
     }
   }
@@ -1061,8 +1082,8 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
         channel.loaded_sample_hash.store(0, std::memory_order_release);
         channel.sample_ready.store(true, std::memory_order_release);
       }
-    } else if (desc.one_shot && requested_hash ==
-                                  channel.loaded_sample_hash.load(std::memory_order_acquire)) {
+    } else if (desc.one_shot &&
+               requested_hash == channel.loaded_sample_hash.load(std::memory_order_acquire)) {
       // The schedule may have been republished while this clip was being
       // edited, but its decoded sample is still valid.
       channel.sample_ready.store(true, std::memory_order_release);

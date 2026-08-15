@@ -25,6 +25,7 @@ void main() {
         bpmText: '124.00',
         sigText: '4/4',
         positionText: '01:01:000',
+        durationText: '01:36',
         meterLeft: 0,
         meterRight: 0,
         searchHint: 'Search actions',

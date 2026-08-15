@@ -16,7 +16,7 @@ class ClipInspectorVm {
     this.startBar = 0,
     this.lengthBars = 1,
     this.offsetBeats = 0,
-    this.loop = true,
+    this.loop = false,
     this.muted = false,
     this.transpose = 0,
   });

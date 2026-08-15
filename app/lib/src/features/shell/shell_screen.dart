@@ -26,6 +26,7 @@ class ShellScreen extends StatelessWidget {
     this.onToggleLoop,
     this.onSearchTap,
     this.onExport,
+    this.onTempoSubmitted,
     this.onBrowserTap,
     this.onBrowserDoubleTap,
     this.onBrowserToggle,
@@ -50,6 +51,7 @@ class ShellScreen extends StatelessWidget {
   final VoidCallback? onToggleLoop;
   final VoidCallback? onSearchTap;
   final VoidCallback? onExport;
+  final ValueChanged<String>? onTempoSubmitted;
   final ValueChanged<String>? onBrowserTap;
   final ValueChanged<String>? onBrowserDoubleTap;
   final ValueChanged<String>? onBrowserToggle;
@@ -77,6 +79,7 @@ class ShellScreen extends StatelessWidget {
           onToggleLoop: onToggleLoop,
           onSearchTap: onSearchTap,
           onExport: onExport,
+          onTempoSubmitted: onTempoSubmitted,
         ),
         Expanded(
           child: Padding(

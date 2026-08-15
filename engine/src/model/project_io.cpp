@@ -1019,7 +1019,10 @@ class Loader {
       json::Value transforms_value = take(*fields, "transforms");
       if (json::Object* transforms = transforms_value.asObject(); transforms != nullptr) {
         clip.transforms.transpose = static_cast<int16_t>(takeInt(*transforms, "transpose"));
-        clip.transforms.loop = takeBool(*transforms, "loop", true);
+        // Every project this writer has ever produced states `loop`, so the
+        // fallback only covers hand-written files — which get the current
+        // default, not the old one.
+        clip.transforms.loop = takeBool(*transforms, "loop", false);
         clip.transforms.window_start = takeInt(*transforms, "window_start");
         clip.transforms.velocity_scale = takeFloat(*transforms, "velocity_scale", 1.0F);
         clip.transforms.time_nudge = takeInt(*transforms, "time_nudge");

@@ -24,6 +24,7 @@ class ObTransportBarVm {
     required this.bpmText,
     required this.sigText,
     required this.positionText,
+    required this.durationText,
     required this.meterLeft,
     required this.meterRight,
     required this.searchHint,
@@ -43,6 +44,7 @@ class ObTransportBarVm {
   final String bpmText;
   final String sigText;
   final String positionText;
+  final String durationText;
 
   /// Master meter levels, 0..1.
   final double meterLeft;
@@ -62,6 +64,7 @@ class ObTransportBar extends StatelessWidget {
     this.onToggleLoop,
     this.onSearchTap,
     this.onExport,
+    this.onTempoSubmitted,
     super.key,
   });
 
@@ -73,6 +76,7 @@ class ObTransportBar extends StatelessWidget {
   final VoidCallback? onToggleLoop;
   final VoidCallback? onSearchTap;
   final VoidCallback? onExport;
+  final ValueChanged<String>? onTempoSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -102,11 +106,17 @@ class ObTransportBar extends StatelessWidget {
             onToggleLoop: onToggleLoop,
           ),
           SizedBox(width: tokens.spacing.lg),
-          ObReadout(value: vm.bpmText, unit: 'BPM'),
+          ObReadout(
+            value: vm.bpmText,
+            unit: 'BPM',
+            onSubmitted: onTempoSubmitted,
+          ),
           SizedBox(width: tokens.spacing.xs),
           ObReadout(value: vm.sigText, unit: 'SIG'),
           SizedBox(width: tokens.spacing.xs),
           ObReadout(value: vm.positionText, unit: 'BAR · BEAT · TICK'),
+          SizedBox(width: tokens.spacing.xs),
+          ObReadout(value: vm.durationText, unit: 'DURATION'),
           const Spacer(),
           ObSearchField(
             hint: vm.searchHint,
@@ -339,15 +349,12 @@ class _ExportButtonState extends State<_ExportButton> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return MouseRegion(
-      cursor: widget.onTap != null
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
-      onEnter: widget.onTap == null
-          ? null
-          : (_) => setState(() => _hover = true),
-      onExit: widget.onTap == null
-          ? null
-          : (_) => setState(() => _hover = false),
+      cursor:
+          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter:
+          widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit:
+          widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,

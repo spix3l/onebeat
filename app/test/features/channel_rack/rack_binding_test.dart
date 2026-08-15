@@ -25,6 +25,7 @@ class _FakeRackEngineClient implements EngineClient {
     this.positionBeats = 0.0,
     this.loopStartBeats = 0,
     this.loopEndBeats = 4,
+    this.withPluginRow = false,
   }) {
     patterns = <PatternSummary>[
       const PatternSummary(
@@ -54,7 +55,7 @@ class _FakeRackEngineClient implements EngineClient {
         name: 'Kick 808',
         color: '#EF6F91',
         order: 0,
-        pluginId: 'sampler',
+        pluginId: 'onebeat.sample',
         pluginName: 'Sampler',
         pluginVendor: 'OneBeat',
         pluginPath: '/plugins/sampler',
@@ -69,7 +70,7 @@ class _FakeRackEngineClient implements EngineClient {
         name: 'Snare',
         color: '#4FAFF5',
         order: 1,
-        pluginId: 'sampler',
+        pluginId: 'onebeat.sample',
         pluginName: 'Sampler',
         pluginVendor: 'OneBeat',
         pluginPath: '/plugins/sampler',
@@ -110,12 +111,52 @@ class _FakeRackEngineClient implements EngineClient {
         ),
       ),
     ];
+    if (withPluginRow) {
+      instruments = <ProjectInstrument>[
+        ...instruments,
+        const ProjectInstrument(
+          id: 'reese',
+          name: 'Reese',
+          color: '#9FC65C',
+          order: 2,
+          pluginId: 'dev.onebeat.reese',
+          pluginName: 'Reese CLAP',
+          pluginVendor: 'OneBeat',
+          pluginPath: '/plugins/reese.clap',
+          muted: false,
+          selected: false,
+          affectedPatterns: 0,
+          affectedClips: 0,
+          affectedNotes: 0,
+        ),
+      ];
+      rows = <RackRow>[
+        ...rows,
+        RackRow(
+          instrumentId: 'reese',
+          gridTicks: 240,
+          hasSequence: false,
+          offGridCount: 0,
+          noteCount: 0,
+          steps: List<RackStep>.filled(
+            16,
+            const RackStep(active: false, velocity: 0),
+          ),
+        ),
+      ];
+    }
   }
 
   bool isPlaying;
   double positionBeats;
   double loopStartBeats;
   double loopEndBeats;
+
+  /// Adds a third lane that hosts a plug-in (as opposed to the two sample
+  /// lanes), so the double-click-to-open-plug-in behaviour has a row to act
+  /// on.
+  final bool withPluginRow;
+
   late List<PatternSummary> patterns;
   late List<ProjectInstrument> instruments;
   late List<RackRow> rows;
@@ -734,6 +775,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(client.reorders, isEmpty);
+  });
+
+  testWidgets('double-clicking a plug-in lane opens its plug-in window', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client =
+        _FakeRackEngineClient(withPluginRow: true);
+    final List<String> opened = <String>[];
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenPlugin: opened.add),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    // Two taps inside the double-tap window: the lane's instrument is handed
+    // to the shell, which is what opens the plug-in window.
+    await tester.tap(find.text('Reese'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Reese'));
+    await tester.pump();
+
+    expect(opened, <String>['reese']);
+
+    // The double-click selects the lane too, like a click would.
+    expect(find.byType(ObChannelInspector), findsOneWidget);
+
+    // A later single click must not re-open the window, even once its tap has
+    // fired after the double-tap window closes.
+    await tester.tap(find.text('Reese').first);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(opened, <String>['reese']);
   });
 
   testWidgets('right-clicking a lane offers duplicate and delete', (

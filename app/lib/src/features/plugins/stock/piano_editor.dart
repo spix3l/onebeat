@@ -1,11 +1,10 @@
-// PianoStockEditor — Stock acoustic & electric piano editor (UI-C-11 / UI-D-08).
+// PianoStockEditor — Premium Hardware-Inspired Piano Instrument (UI-C-11 / UI-D-08).
+import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-
-import '../../../design/tokens.dart';
-import '../../../ui_kit/knob.dart';
 
 class PianoPresetData {
   const PianoPresetData({
+    required this.id,
     required this.name,
     required this.description,
     required this.tone,
@@ -27,6 +26,7 @@ class PianoPresetData {
     required this.output,
   });
 
+  final String id;
   final String name;
   final String description;
   final double tone;
@@ -50,7 +50,8 @@ class PianoPresetData {
 
 const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
   PianoPresetData(
-    name: 'Concert Grand',
+    id: '01',
+    name: 'CONCERT GRAND',
     description: '9-foot acoustic grand with inharmonic string resonance',
     tone: 0.65,
     body: 0.60,
@@ -71,7 +72,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'Felt Upright',
+    id: '02',
+    name: 'FELT UPRIGHT',
     description: 'Intimate studio upright with soft felt hammers',
     tone: 0.35,
     body: 0.75,
@@ -92,7 +94,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.80,
   ),
   PianoPresetData(
-    name: 'Classic Rhodes',
+    id: '03',
+    name: 'CLASSIC RHODES',
     description: 'Vintage 70s tines with warm body and bell tone',
     tone: 0.55,
     body: 0.70,
@@ -113,7 +116,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'FM DX Tines',
+    id: '04',
+    name: 'FM DX TINES',
     description: '80s digital crystalline FM electric piano',
     tone: 0.80,
     body: 0.40,
@@ -134,7 +138,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'Vintage Wurlitzer',
+    id: '05',
+    name: 'VINTAGE WURLI',
     description: 'Classic reed piano with dynamic harmonic bark',
     tone: 0.60,
     body: 0.65,
@@ -155,7 +160,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'Honky-Tonk',
+    id: '06',
+    name: 'HONKY-TONK',
     description: 'Saloon piano with triple detuned strings',
     tone: 0.75,
     body: 0.55,
@@ -176,7 +182,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'Dream Cloud',
+    id: '07',
+    name: 'DREAM CLOUD',
     description: 'Ambient soundtrack felt piano with lush tail',
     tone: 0.40,
     body: 0.70,
@@ -197,7 +204,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.75,
   ),
   PianoPresetData(
-    name: 'Pop Grand',
+    id: '08',
+    name: 'POP GRAND',
     description: 'Snappy modern grand with presence and punch',
     tone: 0.85,
     body: 0.50,
@@ -218,7 +226,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.80,
   ),
   PianoPresetData(
-    name: 'Harpsichord',
+    id: '09',
+    name: 'HARPSICHORD',
     description: 'Plucked baroque keyboard with bright brilliance',
     tone: 0.90,
     body: 0.30,
@@ -239,7 +248,8 @@ const List<PianoPresetData> kPianoPresets = <PianoPresetData>[
     output: 0.70,
   ),
   PianoPresetData(
-    name: 'Synth Keys',
+    id: '10',
+    name: 'SYNTH KEYS',
     description: 'Warm analog synthesizer keys with resonant filter',
     tone: 0.65,
     body: 0.60,
@@ -349,184 +359,217 @@ class PianoStockEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final int activeIdx = _presetIndex;
+    final int currentIdx = _presetIndex;
+    final PianoPresetData currentPreset = kPianoPresets[currentIdx];
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.md,
-        vertical: tokens.spacing.sm,
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE4E1DA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFC7C3BA), width: 1.5),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // Preset selector strip
-          PianoPresetBar(
-            currentIndex: activeIdx,
-            onSelectPreset: onPresetChanged,
-          ),
-          SizedBox(height: tokens.spacing.sm),
-
-          // Macro controls row: Timbre & Character
-          const PianoSectionHeader(title: 'TIMBRE & ACOUSTICS'),
-          SizedBox(height: tokens.spacing.xs),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: <Widget>[
-              PianoKnobControl(
-                label: 'TONE',
-                value: tone,
-                displayValue: '${(tone * 100).toInt()} %',
-                onChanged: onToneChanged,
-              ),
-              PianoKnobControl(
-                label: 'BODY',
-                value: body,
-                displayValue: '${(body * 100).toInt()} %',
-                onChanged: onBodyChanged,
-              ),
-              PianoKnobControl(
-                label: 'HAMMER',
-                value: hammer,
-                displayValue: '${(hammer * 100).toInt()} %',
-                onChanged: onHammerChanged,
-              ),
-              PianoKnobControl(
-                label: 'DETUNE',
-                value: detune,
-                displayValue: '${(detune * 100).toInt()} %',
-                onChanged: onDetuneChanged,
-              ),
-              PianoKnobControl(
-                label: 'DRIVE',
-                value: drive,
-                displayValue: '${(drive * 100).toInt()} %',
-                onChanged: onDriveChanged,
-                accent: drive > 0.05,
-              ),
-            ],
-          ),
-          SizedBox(height: tokens.spacing.md),
-
-          // ADSR Envelope section with graph
-          const PianoSectionHeader(title: 'AMPLITUDE ENVELOPE (ADSR)'),
-          SizedBox(height: tokens.spacing.xs),
-          Row(
-            children: <Widget>[
-              // ADSR visual graph
-              Expanded(
-                flex: 4,
-                child: Container(
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: tokens.color.surfaceDeep,
-                    borderRadius: tokens.radius.controlBorder,
-                    border: Border.all(
-                      color: tokens.color.line,
-                      width: tokens.border.hairline,
+          // Top Hardware Chassis Panel (Matte Warm-Grey / Off-White)
+          Expanded(
+            child: Container(
+              color: const Color(0xFFE4E1DA),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: Column(
+                children: <Widget>[
+                  // Header Row: Brand Title, LCD Preset Display, Speaker Grille
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      // Brand Title
+                      const Text(
+                        'ONEBEAT PIANO',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2.2,
+                          color: Color(0xFF2C2A29),
+                        ),
+                      ),
+                      // Center LCD Preset Stepper
+                      PianoLcdPresetDisplay(
+                        presetId: currentPreset.id,
+                        presetName: currentPreset.name,
+                        currentIndex: currentIdx,
+                        onPrev: onPresetChanged == null
+                            ? null
+                            : () => onPresetChanged!(
+                                  (currentIdx - 1 + kPianoPresets.length) %
+                                      kPianoPresets.length,
+                                ),
+                        onNext: onPresetChanged == null
+                            ? null
+                            : () => onPresetChanged!(
+                                  (currentIdx + 1) % kPianoPresets.length,
+                                ),
+                        onSelectPreset: onPresetChanged,
+                      ),
+                      // Right Speaker Grille
+                      const PianoSpeakerGrille(),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Control Cards Grid
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        // Card 1: ACOUSTICS / MODEL
+                        Expanded(
+                          flex: 3,
+                          child: PianoHardwareCard(
+                            title: 'ACOUSTICS',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: <Widget>[
+                                PianoHardwareKnob(
+                                  label: 'TONE',
+                                  value: tone,
+                                  displayValue: '${(tone * 100).toInt()}%',
+                                  onChanged: onToneChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'BODY',
+                                  value: body,
+                                  displayValue: '${(body * 100).toInt()}%',
+                                  onChanged: onBodyChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'HAMMER',
+                                  value: hammer,
+                                  displayValue: '${(hammer * 100).toInt()}%',
+                                  onChanged: onHammerChanged,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Card 2: TIMBRE & DRIVE
+                        Expanded(
+                          flex: 3,
+                          child: PianoHardwareCard(
+                            title: 'TIMBRE',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: <Widget>[
+                                PianoHardwareKnob(
+                                  label: 'DETUNE',
+                                  value: detune,
+                                  displayValue: '${(detune * 100).toInt()}%',
+                                  onChanged: onDetuneChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'DRIVE',
+                                  value: drive,
+                                  displayValue: '${(drive * 100).toInt()}%',
+                                  onChanged: onDriveChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'VELOCITY',
+                                  value: velocitySens,
+                                  displayValue: '${(velocitySens * 100).toInt()}%',
+                                  onChanged: onVelocitySensChanged,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Card 3: ENVELOPE (Faders ADSR)
+                        Expanded(
+                          flex: 4,
+                          child: PianoHardwareCard(
+                            title: 'ENVELOPE',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: <Widget>[
+                                PianoHardwareFader(
+                                  label: 'A',
+                                  value: attack,
+                                  displayValue:
+                                      '${((0.001 + attack * attack * 0.4) * 1000).toInt()}MS',
+                                  onChanged: onAttackChanged,
+                                ),
+                                PianoHardwareFader(
+                                  label: 'D',
+                                  value: decay,
+                                  displayValue:
+                                      '${(0.12 + decay * decay * 12.0).toStringAsFixed(1)}S',
+                                  onChanged: onDecayChanged,
+                                ),
+                                PianoHardwareFader(
+                                  label: 'S',
+                                  value: sustain,
+                                  displayValue: '${(sustain * 100).toInt()}%',
+                                  onChanged: onSustainChanged,
+                                ),
+                                PianoHardwareFader(
+                                  label: 'R',
+                                  value: release,
+                                  displayValue:
+                                      '${(0.03 + release * release * 5.0).toStringAsFixed(1)}S',
+                                  onChanged: onReleaseChanged,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Card 4: SPACE / LFO (Reverb & Modulation)
+                        Expanded(
+                          flex: 3,
+                          child: PianoHardwareCard(
+                            title: 'SPACE / LFO',
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: <Widget>[
+                                PianoHardwareKnob(
+                                  label: 'REVERB',
+                                  value: room,
+                                  displayValue: '${(room * 100).toInt()}%',
+                                  onChanged: onRoomChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'SIZE',
+                                  value: reverbSize,
+                                  displayValue: '${(reverbSize * 100).toInt()}%',
+                                  onChanged: onReverbSizeChanged,
+                                ),
+                                PianoHardwareKnob(
+                                  label: 'MOD',
+                                  value: modDepth,
+                                  displayValue: '${(modDepth * 100).toInt()}%',
+                                  onChanged: onModDepthChanged,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  padding: EdgeInsets.all(tokens.spacing.xs),
-                  child: PianoAdsrGraph(
-                    attack: attack,
-                    decay: decay,
-                    sustain: sustain,
-                    release: release,
-                  ),
-                ),
+                ],
               ),
-              SizedBox(width: tokens.spacing.md),
-              // ADSR Knobs
-              Expanded(
-                flex: 6,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: <Widget>[
-                    PianoKnobControl(
-                      label: 'ATTACK',
-                      value: attack,
-                      displayValue:
-                          '${((0.001 + attack * attack * 0.4) * 1000).toInt()} ms',
-                      onChanged: onAttackChanged,
-                    ),
-                    PianoKnobControl(
-                      label: 'DECAY',
-                      value: decay,
-                      displayValue:
-                          '${(0.12 + decay * decay * 12.0).toStringAsFixed(1)} s',
-                      onChanged: onDecayChanged,
-                    ),
-                    PianoKnobControl(
-                      label: 'SUSTAIN',
-                      value: sustain,
-                      displayValue: '${(sustain * 100).toInt()} %',
-                      onChanged: onSustainChanged,
-                    ),
-                    PianoKnobControl(
-                      label: 'RELEASE',
-                      value: release,
-                      displayValue:
-                          '${(0.03 + release * release * 5.0).toStringAsFixed(1)} s',
-                      onChanged: onReleaseChanged,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-          SizedBox(height: tokens.spacing.md),
-
-          // Space, Modulation & Dynamics
-          const PianoSectionHeader(title: 'SPACE & DYNAMICS'),
-          SizedBox(height: tokens.spacing.xs),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: <Widget>[
-              PianoKnobControl(
-                label: 'REVERB',
-                value: room,
-                displayValue: '${(room * 100).toInt()} %',
-                onChanged: onRoomChanged,
-              ),
-              PianoKnobControl(
-                label: 'SIZE',
-                value: reverbSize,
-                displayValue: '${(reverbSize * 100).toInt()} %',
-                onChanged: onReverbSizeChanged,
-              ),
-              PianoKnobControl(
-                label: 'MOD DEPTH',
-                value: modDepth,
-                displayValue: '${(modDepth * 100).toInt()} %',
-                onChanged: onModDepthChanged,
-              ),
-              PianoKnobControl(
-                label: 'MOD RATE',
-                value: modRate,
-                displayValue:
-                    '${(0.2 + modRate * 7.8).toStringAsFixed(1)} Hz',
-                onChanged: onModRateChanged,
-              ),
-              PianoKnobControl(
-                label: 'WIDTH',
-                value: width,
-                displayValue: '${(width * 100).toInt()} %',
-                onChanged: onWidthChanged,
-              ),
-              PianoKnobControl(
-                label: 'OUTPUT',
-                value: output,
-                displayValue: '${(output * 100).toInt()} %',
-                onChanged: onOutputChanged,
-              ),
-            ],
-          ),
-          SizedBox(height: tokens.spacing.md),
-
-          // Interactive mini piano keyboard
-          PianoPreviewKeyboard(
-            onNoteOn: onAuditionNoteOn,
-            onNoteOff: onAuditionNoteOff,
+          // Bottom Hardware Chassis Strip (Dark Charcoal with Wheels, Octave Mode, Piano Keys & Master Vol)
+          Container(
+            color: const Color(0xFF2C2A29),
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+            child: PianoBottomSection(
+              output: output,
+              onOutputChanged: onOutputChanged,
+              onNoteOn: onAuditionNoteOn,
+              onNoteOff: onAuditionNoteOff,
+            ),
           ),
         ],
       ),
@@ -534,30 +577,53 @@ class PianoStockEditor extends StatelessWidget {
   }
 }
 
-class PianoSectionHeader extends StatelessWidget {
-  const PianoSectionHeader({required this.title, super.key});
+// ---------------------------------------------------------------------------
+// HARDWARE CARD (Framed Section with Notch Title)
+// ---------------------------------------------------------------------------
+class PianoHardwareCard extends StatelessWidget {
+  const PianoHardwareCard({
+    required this.title,
+    required this.child,
+    super.key,
+  });
 
   final String title;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return Row(
+    return Stack(
+      clipBehavior: Clip.none,
       children: <Widget>[
-        Text(
-          title,
-          style: tokens.type.label.copyWith(
-            color: tokens.color.textMuted,
-            fontSize: 9.5,
-            letterSpacing: 0.8,
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE4E1DA),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFB3ADA3), width: 1.2),
           ),
+          padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
+          child: child,
         ),
-        SizedBox(width: tokens.spacing.sm),
-        Expanded(
-          child: Container(
-            height: tokens.border.hairline,
-            color: tokens.color.line,
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              color: const Color(0xFFE4E1DA),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: Color(0xFF4A4643),
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -565,97 +631,16 @@ class PianoSectionHeader extends StatelessWidget {
   }
 }
 
-class PianoPresetBar extends StatelessWidget {
-  const PianoPresetBar({
-    required this.currentIndex,
-    this.onSelectPreset,
-    super.key,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int>? onSelectPreset;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.color.surfaceDeep,
-        borderRadius: tokens.radius.controlBorder,
-        border: Border.all(
-          color: tokens.color.line,
-          width: tokens.border.hairline,
-        ),
-      ),
-      padding: EdgeInsets.all(tokens.spacing.xxs),
-      child: Wrap(
-        spacing: tokens.spacing.xxs,
-        runSpacing: tokens.spacing.xxs,
-        children: <Widget>[
-          for (int i = 0; i < kPianoPresets.length; ++i)
-            PianoPresetChip(
-              index: i,
-              name: kPianoPresets[i].name,
-              isSelected: i == currentIndex,
-              onTap: onSelectPreset == null ? null : () => onSelectPreset!(i),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class PianoPresetChip extends StatelessWidget {
-  const PianoPresetChip({
-    required this.index,
-    required this.name,
-    required this.isSelected,
-    this.onTap,
-    super.key,
-  });
-
-  final int index;
-  final String name;
-  final bool isSelected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.xs,
-          vertical: tokens.spacing.xxs,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected ? tokens.color.accent : tokens.color.surfaceRaised,
-          borderRadius: tokens.radius.controlBorder,
-        ),
-        child: Text(
-          name,
-          style: tokens.type.listRow.copyWith(
-            color: isSelected ? tokens.color.surfaceDeep : tokens.color.textPrimary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            fontSize: 10.5,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class PianoKnobControl extends StatelessWidget {
-  const PianoKnobControl({
+// ---------------------------------------------------------------------------
+// HARDWARE ROTARY KNOB (Industrial Charcoal Dial)
+// ---------------------------------------------------------------------------
+class PianoHardwareKnob extends StatefulWidget {
+  const PianoHardwareKnob({
     required this.label,
     required this.value,
     required this.displayValue,
     this.onChanged,
-    this.accent = false,
+    this.diameter = 32.0,
     super.key,
   });
 
@@ -663,292 +648,218 @@ class PianoKnobControl extends StatelessWidget {
   final double value;
   final String displayValue;
   final ValueChanged<double>? onChanged;
-  final bool accent;
+  final double diameter;
 
   @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        ObKnob(
-          value: value,
-          onChanged: onChanged,
-          accent: accent,
-        ),
-        SizedBox(height: tokens.spacing.xxs),
-        Text(
-          label,
-          style: tokens.type.label.copyWith(fontSize: 8.5),
-        ),
-        Text(
-          displayValue,
-          style: tokens.type.numericSmall.copyWith(
-            color: tokens.color.textMuted,
-            fontSize: 9.0,
-          ),
-        ),
-      ],
-    );
-  }
+  State<PianoHardwareKnob> createState() => _PianoHardwareKnobState();
 }
 
-class PianoAdsrGraph extends StatelessWidget {
-  const PianoAdsrGraph({
-    required this.attack,
-    required this.decay,
-    required this.sustain,
-    required this.release,
-    super.key,
-  });
+class _PianoHardwareKnobState extends State<PianoHardwareKnob> {
+  double _dragValue = 0.0;
 
-  final double attack;
-  final double decay;
-  final double sustain;
-  final double release;
+  void _onDrag(DragUpdateDetails d) {
+    if (widget.onChanged == null) return;
+    _dragValue = (_dragValue - d.delta.dy * 0.006).clamp(0.0, 1.0);
+    widget.onChanged!(_dragValue);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    _dragValue = widget.value;
 
-    return CustomPaint(
-      painter: _PianoAdsrPainter(
-        attack: attack,
-        decay: decay,
-        sustain: sustain,
-        release: release,
-        lineColor: tokens.color.accent,
-        fillColor: tokens.color.accent.withValues(alpha: 0.15),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => _dragValue = widget.value,
+      onVerticalDragUpdate: _onDrag,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            widget.label,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 7.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              color: Color(0xFF4A4643),
+            ),
+          ),
+          const SizedBox(height: 3),
+          CustomPaint(
+            size: Size(widget.diameter, widget.diameter),
+            painter: _PianoKnobPainter(value: widget.value),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            widget.displayValue,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 7.5,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF6B655F),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _PianoAdsrPainter extends CustomPainter {
-  const _PianoAdsrPainter({
-    required this.attack,
-    required this.decay,
-    required this.sustain,
-    required this.release,
-    required this.lineColor,
-    required this.fillColor,
-  });
+class _PianoKnobPainter extends CustomPainter {
+  const _PianoKnobPainter({required this.value});
 
-  final double attack;
-  final double decay;
-  final double sustain;
-  final double release;
-  final Color lineColor;
-  final Color fillColor;
+  final double value;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
+    final double radius = size.width / 2.0;
+    final Offset center = Offset(radius, radius);
 
-    final double w = size.width;
-    final double h = size.height;
-
-    // Normalised partition
-    final double aW = (0.1 + attack * 0.25) * w;
-    final double dW = (0.1 + decay * 0.25) * w;
-    final double sW = 0.25 * w;
-    final double rW = (0.1 + release * 0.3) * w;
-
-    final double scale = w / (aW + dW + sW + rW);
-    final double aX = aW * scale;
-    final double dX = aX + dW * scale;
-    final double sX = dX + sW * scale;
-    final double rX = w;
-
-    final double sY = h * (1.0 - sustain.clamp(0.0, 1.0));
-
-    final Path path = Path();
-    path.moveTo(0, h);
-    path.lineTo(aX, 0); // Attack peak
-    path.lineTo(dX, sY); // Decay to sustain
-    path.lineTo(sX, sY); // Hold sustain
-    path.lineTo(rX, h); // Release to zero
-
-    final Paint fillPaint = Paint()
-      ..color = fillColor
+    // Outer subtle shadow/rim
+    final Paint rimPaint = Paint()
+      ..color = const Color(0xFFC7C3BA)
       ..style = PaintingStyle.fill;
-    final Path fillPath = Path.from(path)..lineTo(0, h);
-    canvas.drawPath(fillPath, fillPaint);
+    canvas.drawCircle(center, radius, rimPaint);
 
-    final Paint linePaint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-    canvas.drawPath(path, linePaint);
+    // Knob Cap (Charcoal matte)
+    final Paint capPaint = Paint()
+      ..color = const Color(0xFF33302E)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius - 1.0, capPaint);
+
+    // Pointer Angle (from -135 deg to +135 deg)
+    final double sweep = -2.35619 + value.clamp(0.0, 1.0) * 4.71239; // -135 to +135 deg in rad
+    final double pointerLength = radius * 0.72;
+    final Offset pointerEnd = Offset(
+      center.dx + pointerLength * math.sin(sweep),
+      center.dy - pointerLength * math.cos(sweep),
+    );
+
+    final Paint pointerPaint = Paint()
+      ..color = const Color(0xFFE4E1DA)
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(center, pointerEnd, pointerPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _PianoAdsrPainter oldDelegate) {
-    return oldDelegate.attack != attack ||
-        oldDelegate.decay != decay ||
-        oldDelegate.sustain != sustain ||
-        oldDelegate.release != release ||
-        oldDelegate.lineColor != lineColor;
-  }
+  bool shouldRepaint(covariant _PianoKnobPainter oldDelegate) =>
+      oldDelegate.value != value;
 }
 
-class PianoPreviewKeyboard extends StatefulWidget {
-  const PianoPreviewKeyboard({
-    this.onNoteOn,
-    this.onNoteOff,
+// ---------------------------------------------------------------------------
+// HARDWARE VERTICAL FADER (ADSR Sliders)
+// ---------------------------------------------------------------------------
+class PianoHardwareFader extends StatefulWidget {
+  const PianoHardwareFader({
+    required this.label,
+    required this.value,
+    required this.displayValue,
+    this.onChanged,
     super.key,
   });
 
-  final void Function(int key, double velocity)? onNoteOn;
-  final void Function(int key)? onNoteOff;
+  final String label;
+  final double value;
+  final String displayValue;
+  final ValueChanged<double>? onChanged;
 
   @override
-  State<PianoPreviewKeyboard> createState() => _PianoPreviewKeyboardState();
+  State<PianoHardwareFader> createState() => _PianoHardwareFaderState();
 }
 
-class _PianoPreviewKeyboardState extends State<PianoPreviewKeyboard> {
-  int _baseOctave = 4; // C4 default (key 60)
-  final Set<int> _activeKeys = <int>{};
-
-  void _shiftOctave(int delta) {
-    setState(() {
-      _baseOctave = (_baseOctave + delta).clamp(1, 6);
-    });
-  }
-
-  void _pressKey(int midiKey) {
-    if (_activeKeys.contains(midiKey)) return;
-    setState(() => _activeKeys.add(midiKey));
-    widget.onNoteOn?.call(midiKey, 0.85);
-  }
-
-  void _releaseKey(int midiKey) {
-    if (!_activeKeys.contains(midiKey)) return;
-    setState(() => _activeKeys.remove(midiKey));
-    widget.onNoteOff?.call(midiKey);
+class _PianoHardwareFaderState extends State<PianoHardwareFader> {
+  void _onDrag(DragUpdateDetails d, double trackHeight) {
+    if (widget.onChanged == null || trackHeight <= 0) return;
+    final double delta = -d.delta.dy / trackHeight;
+    final double next = (widget.value + delta).clamp(0.0, 1.0);
+    widget.onChanged!(next);
   }
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final int startNote = _baseOctave * 12; // e.g. 48 for C3, 60 for C4
-
     return Column(
+      mainAxisSize: MainAxisSize.max,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
-        // Octave shift toolbar
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(
-              'PREVIEW KEYBOARD',
-              style: tokens.type.label.copyWith(fontSize: 8.5),
-            ),
-            Row(
-              children: <Widget>[
-                PianoOctaveButton(
-                  label: '◀ OCT',
-                  onTap: _baseOctave > 1 ? () => _shiftOctave(-1) : null,
-                ),
-                SizedBox(width: tokens.spacing.xs),
-                Text(
-                  'C$_baseOctave - B${_baseOctave + 1}',
-                  style: tokens.type.numericSmall.copyWith(
-                    color: tokens.color.accent,
-                    fontSize: 9.5,
-                  ),
-                ),
-                SizedBox(width: tokens.spacing.xs),
-                PianoOctaveButton(
-                  label: 'OCT ▶',
-                  onTap: _baseOctave < 6 ? () => _shiftOctave(1) : null,
-                ),
-              ],
-            ),
-          ],
-        ),
-        SizedBox(height: tokens.spacing.xxs),
-        // 2-Octave (24 semitones, 14 white keys) piano keys strip
-        Container(
-          height: 64,
-          decoration: BoxDecoration(
-            color: tokens.color.surfaceDeep,
-            borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: tokens.color.line,
-              width: tokens.border.hairline,
-            ),
+        Text(
+          widget.label,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 8.0,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF4A4643),
           ),
+        ),
+        const SizedBox(height: 2),
+        Expanded(
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
-              final double width = constraints.maxWidth;
-              // 14 white keys in 2 octaves
-              const int whiteKeyCount = 14;
-              final double whiteKeyWidth = width / whiteKeyCount;
-              final double blackKeyWidth = whiteKeyWidth * 0.65;
-              const double blackKeyHeight = 38.0;
+              final double trackHeight = constraints.maxHeight;
+              final double thumbY =
+                  (1.0 - widget.value.clamp(0.0, 1.0)) * (trackHeight - 12.0);
 
-              // White note MIDI offsets in 2 octaves: C, D, E, F, G, A, B x2
-              const List<int> whiteKeyOffsets = <int>[
-                0, 2, 4, 5, 7, 9, 11,
-                12, 14, 16, 17, 19, 21, 23,
-              ];
-
-              // Black note MIDI offsets and white-key index positions
-              // C#, D#, F#, G#, A# for Octave 1 and Octave 2
-              const List<_BlackKeyInfo> blackKeyInfos = <_BlackKeyInfo>[
-                _BlackKeyInfo(semitoneOffset: 1, leftWhiteKeyIndex: 0),
-                _BlackKeyInfo(semitoneOffset: 3, leftWhiteKeyIndex: 1),
-                _BlackKeyInfo(semitoneOffset: 6, leftWhiteKeyIndex: 3),
-                _BlackKeyInfo(semitoneOffset: 8, leftWhiteKeyIndex: 4),
-                _BlackKeyInfo(semitoneOffset: 10, leftWhiteKeyIndex: 5),
-                _BlackKeyInfo(semitoneOffset: 13, leftWhiteKeyIndex: 7),
-                _BlackKeyInfo(semitoneOffset: 15, leftWhiteKeyIndex: 8),
-                _BlackKeyInfo(semitoneOffset: 18, leftWhiteKeyIndex: 10),
-                _BlackKeyInfo(semitoneOffset: 20, leftWhiteKeyIndex: 11),
-                _BlackKeyInfo(semitoneOffset: 22, leftWhiteKeyIndex: 12),
-              ];
-
-              return Stack(
-                children: <Widget>[
-                  // White keys row
-                  Row(
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: (DragUpdateDetails d) =>
+                    _onDrag(d, trackHeight - 12.0),
+                child: SizedBox(
+                  width: 22,
+                  height: trackHeight,
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: <Widget>[
-                      for (int i = 0; i < whiteKeyCount; ++i)
-                        Expanded(
-                          child: PianoWhiteKey(
-                            midiKey: startNote + whiteKeyOffsets[i],
-                            isPressed:
-                                _activeKeys.contains(startNote + whiteKeyOffsets[i]),
-                            onPointerDown: () =>
-                                _pressKey(startNote + whiteKeyOffsets[i]),
-                            onPointerUp: () =>
-                                _releaseKey(startNote + whiteKeyOffsets[i]),
+                      // Center groove line
+                      Container(
+                        width: 2.5,
+                        height: trackHeight,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4A4643),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                      // Draggable Fader Cap
+                      Positioned(
+                        top: thumbY,
+                        child: Container(
+                          width: 18,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2C2A29),
+                            borderRadius: BorderRadius.circular(2),
+                            boxShadow: const <BoxShadow>[
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                offset: Offset(0, 1),
+                                blurRadius: 1.5,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 14,
+                              height: 1.5,
+                              color: const Color(0xFFE4E1DA),
+                            ),
                           ),
                         ),
+                      ),
                     ],
                   ),
-                  // Black keys overlay
-                  for (final _BlackKeyInfo info in blackKeyInfos)
-                    Positioned(
-                      left: (info.leftWhiteKeyIndex + 1) * whiteKeyWidth -
-                          (blackKeyWidth / 2),
-                      top: 0,
-                      width: blackKeyWidth,
-                      height: blackKeyHeight,
-                      child: PianoBlackKey(
-                        midiKey: startNote + info.semitoneOffset,
-                        isPressed: _activeKeys
-                            .contains(startNote + info.semitoneOffset),
-                        onPointerDown: () =>
-                            _pressKey(startNote + info.semitoneOffset),
-                        onPointerUp: () =>
-                            _releaseKey(startNote + info.semitoneOffset),
-                      ),
-                    ),
-                ],
+                ),
               );
             },
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          widget.displayValue,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 7.0,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B655F),
           ),
         ),
       ],
@@ -956,14 +867,575 @@ class _PianoPreviewKeyboardState extends State<PianoPreviewKeyboard> {
   }
 }
 
-class _BlackKeyInfo {
-  const _BlackKeyInfo({
-    required this.semitoneOffset,
-    required this.leftWhiteKeyIndex,
+// ---------------------------------------------------------------------------
+// HARDWARE LCD PRESET DISPLAY
+// ---------------------------------------------------------------------------
+class PianoLcdPresetDisplay extends StatelessWidget {
+  const PianoLcdPresetDisplay({
+    required this.presetId,
+    required this.presetName,
+    required this.currentIndex,
+    this.onPrev,
+    this.onNext,
+    this.onSelectPreset,
+    super.key,
   });
 
-  final int semitoneOffset;
-  final int leftWhiteKeyIndex;
+  final String presetId;
+  final String presetName;
+  final int currentIndex;
+  final VoidCallback? onPrev;
+  final VoidCallback? onNext;
+  final ValueChanged<int>? onSelectPreset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2A29),
+        borderRadius: BorderRadius.circular(5),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x22000000),
+            offset: Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          // Menu button icon
+          const Icon(
+            IconData(0xe3dc, fontFamily: 'MaterialIcons'),
+            size: 14,
+            color: Color(0xFFA6A097),
+          ),
+          const SizedBox(width: 10),
+          // Preset Id & Name
+          Text(
+            '$presetId $presetName',
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: Color(0xFFE4E1DA),
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Stepper Left
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onPrev,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '<',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFA6A097),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Stepper Right
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onNext,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '>',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFA6A097),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SPEAKER GRILLE MATRIX
+// ---------------------------------------------------------------------------
+class PianoSpeakerGrille extends StatelessWidget {
+  const PianoSpeakerGrille({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        for (int r = 0; r < 4; ++r)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                for (int c = 0; c < 8; ++c)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 1.0),
+                    width: 2.8,
+                    height: 2.8,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF4A4643),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BOTTOM SECTION (Dark Chassis with Mod Wheels, Octave Mode & Keyboard)
+// ---------------------------------------------------------------------------
+class PianoBottomSection extends StatefulWidget {
+  const PianoBottomSection({
+    required this.output,
+    this.onOutputChanged,
+    this.onNoteOn,
+    this.onNoteOff,
+    super.key,
+  });
+
+  final double output;
+  final ValueChanged<double>? onOutputChanged;
+  final void Function(int key, double velocity)? onNoteOn;
+  final void Function(int key)? onNoteOff;
+
+  @override
+  State<PianoBottomSection> createState() => _PianoBottomSectionState();
+}
+
+class _PianoBottomSectionState extends State<PianoBottomSection> {
+  int _octave = 4; // C4 default
+
+  void _setOctave(int oct) {
+    setState(() => _octave = oct);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        // Top Toolbar: Octave Pills
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Text(
+              'OCTAVE',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 8.0,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: Color(0xFF8A847C),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1C1B),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0xFF4A4643), width: 1),
+              ),
+              padding: const EdgeInsets.all(1.5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  for (int oct = 2; oct <= 6; ++oct)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _setOctave(oct),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _octave == oct
+                              ? const Color(0xFFE4E1DA)
+                              : const Color(0xFF1E1C1B),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          'C$oct',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 8.0,
+                            fontWeight: FontWeight.w700,
+                            color: _octave == oct
+                                ? const Color(0xFF2C2A29)
+                                : const Color(0xFF8A847C),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        // Main Row: Pitch/Mod Wheels, Piano Keys, Master Vol
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            // Pitch & Mod Wheel Ribbons
+            const PianoPitchModWheels(),
+            const SizedBox(width: 8),
+            // Responsive Piano Keyboard
+            Expanded(
+              child: PianoHardwareKeyboard(
+                baseOctave: _octave,
+                onNoteOn: widget.onNoteOn,
+                onNoteOff: widget.onNoteOff,
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Big Master Vol Knob
+            PianoBigVolKnob(
+              value: widget.output,
+              onChanged: widget.onOutputChanged,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PITCH & MOD WHEELS
+// ---------------------------------------------------------------------------
+class PianoPitchModWheels extends StatefulWidget {
+  const PianoPitchModWheels({super.key});
+
+  @override
+  State<PianoPitchModWheels> createState() => _PianoPitchModWheelsState();
+}
+
+class _PianoPitchModWheelsState extends State<PianoPitchModWheels> {
+  double _pitch = 0.5;
+  double _mod = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _buildWheel(
+          'PITCH',
+          _pitch,
+          (double v) => setState(() => _pitch = v),
+          onDragEnd: () => setState(() => _pitch = 0.5), // spring back
+        ),
+        const SizedBox(width: 4),
+        _buildWheel(
+          'MOD',
+          _mod,
+          (double v) => setState(() => _mod = v),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWheel(
+    String label,
+    double val,
+    ValueChanged<double> onUpdate, {
+    VoidCallback? onDragEnd,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragUpdate: (DragUpdateDetails d) {
+            final double next = (val - d.delta.dy * 0.02).clamp(0.0, 1.0);
+            onUpdate(next);
+          },
+          onVerticalDragEnd: (_) => onDragEnd?.call(),
+          child: Container(
+            width: 14,
+            height: 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1C1B),
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: const Color(0xFF4A4643), width: 1),
+            ),
+            child: Stack(
+              children: <Widget>[
+                Positioned(
+                  top: (1.0 - val.clamp(0.0, 1.0)) * (52.0 - 14.0),
+                  left: 1,
+                  right: 1,
+                  child: Container(
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE4E1DA),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 6.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF8A847C),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BIG MASTER VOL KNOB (On Dark Chassis)
+// ---------------------------------------------------------------------------
+class PianoBigVolKnob extends StatefulWidget {
+  const PianoBigVolKnob({
+    required this.value,
+    this.onChanged,
+    super.key,
+  });
+
+  final double value;
+  final ValueChanged<double>? onChanged;
+
+  @override
+  State<PianoBigVolKnob> createState() => _PianoBigVolKnobState();
+}
+
+class _PianoBigVolKnobState extends State<PianoBigVolKnob> {
+  double _dragValue = 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    _dragValue = widget.value;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => _dragValue = widget.value,
+      onVerticalDragUpdate: (DragUpdateDetails d) {
+        if (widget.onChanged == null) return;
+        _dragValue = (_dragValue - d.delta.dy * 0.006).clamp(0.0, 1.0);
+        widget.onChanged!(_dragValue);
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Text(
+            'VOL',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 7.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF8A847C),
+            ),
+          ),
+          const SizedBox(height: 2),
+          CustomPaint(
+            size: const Size(36, 36),
+            painter: _BigVolPainter(value: widget.value),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${(widget.value * 100).toInt()}%',
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 7.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF8A847C),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BigVolPainter extends CustomPainter {
+  const _BigVolPainter({required this.value});
+
+  final double value;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double radius = size.width / 2.0;
+    final Offset center = Offset(radius, radius);
+
+    // Outer Dial Base (Light off-white dial cap)
+    final Paint capPaint = Paint()
+      ..color = const Color(0xFFE4E1DA)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, capPaint);
+
+    // Pointer line
+    final double sweep = -2.35619 + value.clamp(0.0, 1.0) * 4.71239;
+    final double pointerLength = radius * 0.75;
+    final Offset pointerEnd = Offset(
+      center.dx + pointerLength * math.sin(sweep),
+      center.dy - pointerLength * math.cos(sweep),
+    );
+
+    final Paint pointerPaint = Paint()
+      ..color = const Color(0xFF2C2A29)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(center, pointerEnd, pointerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BigVolPainter oldDelegate) =>
+      oldDelegate.value != value;
+}
+
+// ---------------------------------------------------------------------------
+// PRO-GRADE PIANO KEYBOARD
+// ---------------------------------------------------------------------------
+class PianoHardwareKeyboard extends StatefulWidget {
+  const PianoHardwareKeyboard({
+    required this.baseOctave,
+    this.onNoteOn,
+    this.onNoteOff,
+    super.key,
+  });
+
+  final int baseOctave;
+  final void Function(int key, double velocity)? onNoteOn;
+  final void Function(int key)? onNoteOff;
+
+  @override
+  State<PianoHardwareKeyboard> createState() => _PianoHardwareKeyboardState();
+}
+
+class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
+  final Set<int> _activeKeys = <int>{};
+
+  void _press(int key) {
+    if (_activeKeys.contains(key)) return;
+    setState(() => _activeKeys.add(key));
+    widget.onNoteOn?.call(key, 0.85);
+  }
+
+  void _release(int key) {
+    if (!_activeKeys.contains(key)) return;
+    setState(() => _activeKeys.remove(key));
+    widget.onNoteOff?.call(key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final int startMidi = widget.baseOctave * 12; // C_base
+
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1817),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final double totalWidth = constraints.maxWidth;
+          // 2.5 Octaves: 18 white keys (C to F)
+          const int whiteKeyCount = 18;
+          final double whiteKeyWidth = totalWidth / whiteKeyCount;
+          final double blackKeyWidth = whiteKeyWidth * 0.62;
+          const double blackKeyHeight = 33.0;
+
+          // 18 white keys semitone offsets from root
+          const List<int> whiteKeyOffsets = <int>[
+            0, 2, 4, 5, 7, 9, 11,
+            12, 14, 16, 17, 19, 21, 23,
+            24, 26, 28, 29,
+          ];
+
+          // Black keys offsets and left white key index
+          const List<_BlackKeyPos> blackKeys = <_BlackKeyPos>[
+            _BlackKeyPos(semitone: 1, whiteIdx: 0),
+            _BlackKeyPos(semitone: 3, whiteIdx: 1),
+            _BlackKeyPos(semitone: 6, whiteIdx: 3),
+            _BlackKeyPos(semitone: 8, whiteIdx: 4),
+            _BlackKeyPos(semitone: 10, whiteIdx: 5),
+            _BlackKeyPos(semitone: 13, whiteIdx: 7),
+            _BlackKeyPos(semitone: 15, whiteIdx: 8),
+            _BlackKeyPos(semitone: 18, whiteIdx: 10),
+            _BlackKeyPos(semitone: 20, whiteIdx: 11),
+            _BlackKeyPos(semitone: 22, whiteIdx: 12),
+            _BlackKeyPos(semitone: 25, whiteIdx: 14),
+            _BlackKeyPos(semitone: 27, whiteIdx: 15),
+          ];
+
+          return Stack(
+            children: <Widget>[
+              // White Keys
+              Row(
+                children: <Widget>[
+                  for (int i = 0; i < whiteKeyCount; ++i)
+                    Expanded(
+                      child: PianoWhiteKey(
+                        midiKey: startMidi + whiteKeyOffsets[i],
+                        isPressed:
+                            _activeKeys.contains(startMidi + whiteKeyOffsets[i]),
+                        onPointerDown: () =>
+                            _press(startMidi + whiteKeyOffsets[i]),
+                        onPointerUp: () =>
+                            _release(startMidi + whiteKeyOffsets[i]),
+                      ),
+                    ),
+                ],
+              ),
+              // Black Keys
+              for (final _BlackKeyPos bp in blackKeys)
+                Positioned(
+                  left: (bp.whiteIdx + 1) * whiteKeyWidth - (blackKeyWidth / 2),
+                  top: 0,
+                  width: blackKeyWidth,
+                  height: blackKeyHeight,
+                  child: PianoBlackKey(
+                    midiKey: startMidi + bp.semitone,
+                    isPressed:
+                        _activeKeys.contains(startMidi + bp.semitone),
+                    onPointerDown: () => _press(startMidi + bp.semitone),
+                    onPointerUp: () => _release(startMidi + bp.semitone),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BlackKeyPos {
+  const _BlackKeyPos({required this.semitone, required this.whiteIdx});
+  final int semitone;
+  final int whiteIdx;
 }
 
 class PianoWhiteKey extends StatelessWidget {
@@ -982,8 +1454,6 @@ class PianoWhiteKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
     return Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: (_) => onPointerDown(),
@@ -993,16 +1463,25 @@ class PianoWhiteKey extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 0.5),
         decoration: BoxDecoration(
           color: isPressed
-              ? tokens.color.accent
-              : const Color(0xFFDCDCDC),
+              ? const Color(0xFFC7C1B5)
+              : const Color(0xFFEDE9E3),
           borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(2),
-            bottomRight: Radius.circular(2),
+            bottomLeft: Radius.circular(2.5),
+            bottomRight: Radius.circular(2.5),
           ),
           border: Border.all(
-            color: const Color(0xFF222222),
+            color: const Color(0xFF2C2A29),
             width: 0.5,
           ),
+          boxShadow: isPressed
+              ? const <BoxShadow>[]
+              : const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x33000000),
+                    offset: Offset(0, 1),
+                    blurRadius: 1,
+                  ),
+                ],
         ),
       ),
     );
@@ -1025,8 +1504,6 @@ class PianoBlackKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
     return Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: (_) => onPointerDown(),
@@ -1034,62 +1511,20 @@ class PianoBlackKey extends StatelessWidget {
       onPointerCancel: (_) => onPointerUp(),
       child: Container(
         decoration: BoxDecoration(
-          color: isPressed ? tokens.color.accent : const Color(0xFF1E1E1E),
+          color: isPressed
+              ? const Color(0xFF4A4643)
+              : const Color(0xFF232120),
           borderRadius: const BorderRadius.only(
             bottomLeft: Radius.circular(2),
             bottomRight: Radius.circular(2),
           ),
-          border: Border.all(
-            color: const Color(0xFF111111),
-            width: 0.5,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class PianoOctaveButton extends StatelessWidget {
-  const PianoOctaveButton({
-    required this.label,
-    this.onTap,
-    super.key,
-  });
-
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.xs,
-          vertical: tokens.spacing.xxs,
-        ),
-        decoration: BoxDecoration(
-          color: onTap != null
-              ? tokens.color.surfaceRaised
-              : tokens.color.surfaceDeep,
-          borderRadius: tokens.radius.controlBorder,
-          border: Border.all(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
-        ),
-        child: Text(
-          label,
-          style: tokens.type.listRow.copyWith(
-            color: onTap != null
-                ? tokens.color.textPrimary
-                : tokens.color.textMuted,
-            fontSize: 9.0,
-            fontWeight: FontWeight.w600,
-          ),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x66000000),
+              offset: Offset(0, 2),
+              blurRadius: 2,
+            ),
+          ],
         ),
       ),
     );

@@ -58,16 +58,16 @@ void main() {
       ),
     );
 
-    expect(find.text('TIMBRE & ACOUSTICS'), findsOneWidget);
-    expect(find.text('AMPLITUDE ENVELOPE (ADSR)'), findsOneWidget);
-    expect(find.text('SPACE & DYNAMICS'), findsOneWidget);
-    expect(find.text('PREVIEW KEYBOARD'), findsOneWidget);
-    expect(find.text('Concert Grand'), findsWidgets);
-    expect(find.text('Classic Rhodes'), findsOneWidget);
-    expect(find.text('FM DX Tines'), findsOneWidget);
+    expect(find.text('ONEBEAT PIANO'), findsOneWidget);
+    expect(find.text('ACOUSTICS'), findsOneWidget);
+    expect(find.text('TIMBRE'), findsOneWidget);
+    expect(find.text('ENVELOPE'), findsOneWidget);
+    expect(find.text('SPACE / LFO'), findsOneWidget);
+    expect(find.text('01 CONCERT GRAND'), findsOneWidget);
+    expect(find.text('OCTAVE'), findsOneWidget);
 
-    // Tap on Classic Rhodes preset
-    await tester.tap(find.text('Classic Rhodes'));
+    // Tap on next preset stepper '>'
+    await tester.tap(find.text('>'));
     await tester.pump();
 
     // Verify preset parameter was updated

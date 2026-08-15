@@ -51,6 +51,31 @@ class SamplePackPlatform {
     }
   }
 
+  /// Which browser rows the user has opened or closed, by row id. Only rows
+  /// that were toggled appear; everything else keeps the panel's own default.
+  Future<Map<String, bool>> loadBrowserExpansion() async {
+    try {
+      return await _channel.invokeMapMethod<String, bool>(
+            'loadBrowserExpansion',
+          ) ??
+          const <String, bool>{};
+    } on MissingPluginException {
+      return const <String, bool>{};
+    } on PlatformException {
+      return const <String, bool>{};
+    }
+  }
+
+  Future<void> saveBrowserExpansion(Map<String, bool> expansion) async {
+    try {
+      await _channel.invokeMethod<void>('saveBrowserExpansion', expansion);
+    } on MissingPluginException {
+      // Widget tests and non-macOS hosts have no preference store.
+    } on PlatformException {
+      // A failed preference write must not interrupt editing.
+    }
+  }
+
   void setDropHandler({
     required ValueChanged<List<String>> onFolders,
     required ValueChanged<AudioFileDrop> onAudioFiles,

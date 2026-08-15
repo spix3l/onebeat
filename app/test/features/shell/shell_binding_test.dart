@@ -333,6 +333,56 @@ void main() {
     expect(find.text('Current Project'), findsNothing);
   });
 
+  testWidgets('the browser restores and stores which rows are open', (
+    WidgetTester tester,
+  ) async {
+    const MethodChannel channel = MethodChannel('onebeat/sample_packs');
+    Map<String, bool> stored = <String, bool>{'current-project': false};
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      MethodCall call,
+    ) async {
+      switch (call.method) {
+        case 'loadBrowserExpansion':
+          return stored;
+        case 'saveBrowserExpansion':
+          stored = Map<String, bool>.from(call.arguments as Map<Object?, Object?>);
+          return null;
+        case 'loadSampleFolders':
+          return <String>[];
+      }
+      return null;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+
+    await pumpForTest(
+      tester,
+      ShellBinding(client: _FakeEngineClient()),
+      size: const Size(1600, 1000),
+    );
+    // Two pumps: one for the shell's first frame, one for the restored
+    // expansion that the platform read hands back after it.
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('PLAYLIST'));
+    await tester.pump();
+
+    // Closed in the last session, so closed now: the section header is there
+    // and its patterns are not.
+    expect(find.text('Current Project'), findsOneWidget);
+    expect(find.text('Main Groove'), findsNothing);
+
+    await tester.tap(find.text('Current Project'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Main Groove'), findsOneWidget);
+    expect(stored['current-project'], isTrue);
+  });
+
   testWidgets('rail selection switches active index', (
     WidgetTester tester,
   ) async {

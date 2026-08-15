@@ -1328,8 +1328,8 @@ ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path) {
     const bool available = std::filesystem::exists(path);
     if (available) {
       if (!engine->engine->createSandboxedInstrument(
-              path, plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(), channel,
-              error) ||
+              path, plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(),
+              channel, error) ||
           !engine->engine->loadHostedState(channel, state))
         return fail(OB_ERR_FILE_UNSUPPORTED,
                     error.empty() ? "The saved plug-in could not be restored." : error.c_str());
@@ -2547,16 +2547,16 @@ ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id, const
   if (lane && engine->project.findLane(*lane) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
   }
-  const ob_status status = executeModel(
-      *engine,
-      onebeat::model::editClip(
-          engine->project, *id, onebeat::model::ChangeField::Start,
-          [lane, start_ticks](onebeat::model::Clip& clip) {
-            clip.start = start_ticks;
-            if (lane) clip.lane = *lane;
-          },
-          "Move clip"),
-      "The clip could not be moved.");
+  const ob_status status =
+      executeModel(*engine,
+                   onebeat::model::editClip(
+                       engine->project, *id, onebeat::model::ChangeField::Start,
+                       [lane, start_ticks](onebeat::model::Clip& clip) {
+                         clip.start = start_ticks;
+                         if (lane) clip.lane = *lane;
+                       },
+                       "Move clip"),
+                   "The clip could not be moved.");
   return status;
 }
 

@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow, NSDraggingDestination {
+  private let titlebarHitHeight: CGFloat = 24
   private var samplePackBridge: SamplePackBridge?
   private var projectFileBridge: ProjectFileBridge?
 
@@ -13,6 +14,9 @@ class MainFlutterWindow: NSWindow, NSDraggingDestination {
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
     self.styleMask.insert(.fullSizeContentView)
+    // The Flutter surface draws plugin titlebars under the transparent native
+    // titlebar. AppKit must not claim those drags as moves of the main window.
+    self.isMovable = false
     self.isMovableByWindowBackground = false
     self.minSize = NSSize(width: 1280, height: 720)
 
@@ -34,6 +38,19 @@ class MainFlutterWindow: NSWindow, NSDraggingDestination {
     registerForDraggedTypes([.fileURL])
 
     super.awakeFromNib()
+  }
+
+  override func sendEvent(_ event: NSEvent) {
+    if event.type == .leftMouseDown,
+       event.clickCount == 2,
+       event.window === self,
+       event.locationInWindow.y >= frame.height - titlebarHitHeight {
+      // fullSizeContentView puts Flutter's view over the titlebar, so AppKit
+      // never receives the native double-click that normally toggles zoom.
+      performZoom(nil)
+      return
+    }
+    super.sendEvent(event)
   }
 
   func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {

@@ -259,8 +259,8 @@ class Engine final : public audio_io::RenderCallback {
   // `offset` with that channel's gain and constant-power pan.
   void renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
                      int offset, int num_frames, const Schedule* schedule, int64_t chunk_start,
-                     const plugin::EventList* block_events,
-                     bool release_all, plugin::PluginInstance& instrument,
+                     const plugin::EventList* block_events, bool release_all,
+                     plugin::PluginInstance& instrument,
                      bool preview_voice = false) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
   // The plug-in hosted on `channel`, or null for a channel that plays its own
@@ -281,8 +281,10 @@ class Engine final : public audio_io::RenderCallback {
                        uint64_t render_nanos) noexcept OB_NONBLOCKING;
   void housekeepingLoop();
   void onDeviceNotification(audio_io::DeviceNotification notification, const std::string& detail);
-  bool loadSampleInto(Sampler& target, int log_channel, const std::string& path,
-                      std::string& error);
+  // `out_name` / `out_frames` report what was decoded, so the preview cache can
+  // re-announce a sample it did not have to read again.
+  bool loadSampleInto(Sampler& target, int log_channel, const std::string& path, std::string& error,
+                      std::string* out_name = nullptr, int64_t* out_frames = nullptr);
 
   EngineConfig config_;
   Diagnostics diagnostics_;
@@ -297,6 +299,11 @@ class Engine final : public audio_io::RenderCallback {
   std::array<std::unique_ptr<Channel>, MaxRackChannels> channels_;
   // Independent from the rack because slot 0 may host the default piano.
   std::unique_ptr<Channel> preview_channel_;
+  // Housekeeping thread only: what the preview voice already holds, so
+  // re-auditioning a loaded sample skips the file read and the decode.
+  std::string preview_loaded_path_;
+  std::string preview_loaded_name_;
+  int64_t preview_loaded_frames_ = 0;
   // A hosted CLAP plug-in replaces the built-in sampler of the one channel it
   // was loaded onto, and of no other. Null means that channel plays its own
   // sampler — which is what the rack is made of.
@@ -343,7 +350,6 @@ class Engine final : public audio_io::RenderCallback {
   // releases those voices before rendering the new schedule.
   // Schedule publication itself is intentionally not a global voice reset:
   // adding a second clip must leave already-playing clips uninterrupted.
-
 
   std::thread housekeeping_;
   std::mutex work_mutex_;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <map>
 #include <set>
 #include <utility>
@@ -484,10 +485,12 @@ class TransportCommand : public Command {
 
   bool apply(Project& project) override {
     project.setTransport(after_);
+    rescaleAudioClips(project, before_.tempo, after_.tempo);
     return true;
   }
   bool revert(Project& project) override {
     project.setTransport(before_);
+    restoreAudioClips(project);
     return true;
   }
   std::string name() const override { return "Change transport"; }
@@ -500,8 +503,50 @@ class TransportCommand : public Command {
   }
 
  private:
+  // An audio clip is anchored in real time: the file lasts as many seconds at
+  // 90 BPM as it does at 180. Its length in ticks was derived from the tempo in
+  // force when it was placed, so leaving it alone across a tempo change makes
+  // the block on the timeline stop describing what is heard — the clip after
+  // it looks adjacent while the audio runs under or short of it. Rescaling by
+  // the tempo ratio keeps the block over exactly the bars it sounds across.
+  // Clip *starts* are musical and deliberately left where they are.
+  void rescaleAudioClips(Project& project, double from_tempo, double to_tempo) {
+    original_lengths_.clear();
+    if (from_tempo <= 0.0 || to_tempo <= 0.0 || from_tempo == to_tempo) return;
+
+    const double ratio = to_tempo / from_tempo;
+    std::vector<std::pair<ClipId, Ticks>> resized;
+    for (const auto& [id, clip] : project.clips()) {
+      if (clip.audio() == nullptr || clip.length <= 0) continue;
+      // Every audio clip is recorded, not only the ones that moved: a tempo
+      // drag coalesces into this one command, and a clip too short to change
+      // on the first step may well change on the tenth.
+      original_lengths_.emplace_back(id, clip.length);
+      const auto scaled =
+          static_cast<Ticks>(std::llround(static_cast<double>(clip.length) * ratio));
+      const Ticks length = std::max<Ticks>(1, scaled);
+      if (length == clip.length) continue;
+      resized.emplace_back(id, length);
+    }
+    for (const auto& [id, length] : resized) {
+      project.updateClip(id, ChangeField::Length, [length](Clip& clip) { clip.length = length; });
+    }
+  }
+
+  // Undo puts the lengths back verbatim rather than dividing the ratio out:
+  // rounding a tick count twice does not always land where it started.
+  void restoreAudioClips(Project& project) {
+    for (const auto& [id, length] : original_lengths_) {
+      const Ticks restored = length;
+      project.updateClip(id, ChangeField::Length,
+                         [restored](Clip& clip) { clip.length = restored; });
+    }
+    original_lengths_.clear();
+  }
+
   TransportState before_;
   TransportState after_;
+  std::vector<std::pair<ClipId, Ticks>> original_lengths_;
 };
 
 class MetaCommand : public Command {

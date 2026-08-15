@@ -1,5 +1,6 @@
 // Browser panel (UI-B-04): one golden with every content variant in it, plus
 // the callbacks.
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
@@ -304,6 +305,42 @@ void main() {
 
     expect(sample.previewPath, '/tmp/Kick.wav');
     expect(sample.dragData, isNull);
+  });
+
+  testWidgets('an auditioning sample row fires on press, not on release', (
+    WidgetTester tester,
+  ) async {
+    final List<String> tapped = <String>[];
+    await pumpUi(
+      tester,
+      ObBrowserPanel(
+        vm: const ObBrowserPanelVm(
+          nodes: <BrowserNodeVm>[
+            BrowserSampleVm(
+              id: 'kick',
+              name: 'Kick 808',
+              color: Color(0xfff05a47),
+              previewPath: '/tmp/Kick.wav',
+            ),
+          ],
+        ),
+        onTap: tapped.add,
+        onDoubleTap: (_) {},
+      ),
+      size: _panel,
+    );
+
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text('Kick 808')),
+    );
+    // Nothing pumped, nothing released: the audition must already have been
+    // reported. Waiting for the tap — and, with a double-tap handler attached,
+    // for the double-tap window — is the preview latency this guards against.
+    expect(tapped, <String>['kick']);
+
+    await gesture.up();
+    await tester.pump(kDoubleTapTimeout);
+    expect(tapped, <String>['kick'], reason: 'the release must not re-fire');
   });
 
   testWidgets('empty browser nodes render empty state with add folder button', (

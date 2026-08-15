@@ -18,6 +18,7 @@ class PluginBinding extends StatefulWidget {
     this.trackName = 'Soft Keys',
     this.isBypassed = false,
     this.parameters = const <HostedParameter>[],
+    this.onDragUpdate,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class PluginBinding extends StatefulWidget {
   final String trackName;
   final bool isBypassed;
   final List<HostedParameter> parameters;
+  final ValueChanged<Offset>? onDragUpdate;
   final VoidCallback onClose;
 
   @override
@@ -217,10 +219,10 @@ class _PluginBindingState extends State<PluginBinding> {
 
     return ObFloatingWindow.plugin(
       vm: windowVm,
-      width: isPiano ? 540 : tokens.size.pluginWindowWidth,
-      height: isPiano ? 490 : tokens.size.pluginWindowHeight,
+      width: isPiano ? 720 : tokens.size.pluginWindowWidth,
+      height: isPiano ? 430 : tokens.size.pluginWindowHeight,
+      onDragUpdate: widget.onDragUpdate,
       child: editorContent,
     );
   }
 }
-

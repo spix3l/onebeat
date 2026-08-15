@@ -136,8 +136,8 @@ typedef enum ob_command_type {
   OB_CMD_PLUGIN_PARAM_END = 13,     /* i64_a = ParamId */
   OB_CMD_SET_INSTRUMENT_GAIN = 14,  /* f64_a = linear gain, 0..2 */
   OB_CMD_SET_INSTRUMENT_PAN = 15,   /* f64_a = pan -1..1 */
-  OB_CMD_PREVIEW_NOTE_ON = 16,     /* i64_a = midi note, f64_a = velocity */
-  OB_CMD_PREVIEW_NOTE_OFF = 17     /* i64_a = midi note */
+  OB_CMD_PREVIEW_NOTE_ON = 16,      /* i64_a = midi note, f64_a = velocity */
+  OB_CMD_PREVIEW_NOTE_OFF = 17      /* i64_a = midi note */
 } ob_command_type;
 
 /* Fixed layout, POD, 32 bytes. Frozen by the ABI layout test (OB-1-13).
@@ -502,12 +502,12 @@ OB_API ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* u
  * persisted in the instrument's plugin reference and loaded by the built-in
  * sampler when the row is selected. */
 OB_API ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_name,
-                                                const char* utf8_sample_path);
+                                                 const char* utf8_sample_path);
 /* Replaces an existing instrument with a sample-backed instrument. */
 OB_API ob_status ob_engine_instrument_replace_sample(ob_engine* engine,
-                                                    const char* utf8_instrument_id,
-                                                    const char* utf8_name,
-                                                    const char* utf8_sample_path);
+                                                     const char* utf8_instrument_id,
+                                                     const char* utf8_name,
+                                                     const char* utf8_sample_path);
 /* Per-channel gain (linear 0..2) and pan (-1..1), applied to the active voice.
  * v0.3 hosts one instrument, so these act on the hosted voice; the per-track
  * mixer (v0.4) replaces this. */
@@ -726,7 +726,7 @@ OB_API ob_status ob_engine_lane_set_collapsed(ob_engine* engine, const char* utf
 OB_API ob_status ob_engine_lane_remove(ob_engine* engine, const char* utf8_lane_id);
 
 #define OB_CLIP_FLAG_MUTED 0x1u
-#define OB_CLIP_FLAG_LOOP 0x2u /* clear => hold-off: the tail is silence */
+#define OB_CLIP_FLAG_LOOP 0x2u  /* clear => hold-off: the tail is silence */
 #define OB_CLIP_FLAG_AUDIO 0x4u /* source is an audio file, not a pattern */
 
 typedef struct ob_clip_info {
@@ -764,8 +764,7 @@ OB_API ob_status ob_engine_clip_add(ob_engine* engine, const char* utf8_lane_id,
  * file without decoding it a second time. Main/UI thread; may block while the
  * WAV header and samples are read. */
 OB_API ob_status ob_engine_audio_clip_add(ob_engine* engine, const char* utf8_lane_id,
-                                          const char* utf8_sample_path,
-                                          int64_t start_ticks);
+                                          const char* utf8_sample_path, int64_t start_ticks);
 /* Moving between lanes is deliberately the same call as moving in time, and
  * changes nothing audible: a lane carries no signal (ARCHITECTURE.md §4). */
 OB_API ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id,

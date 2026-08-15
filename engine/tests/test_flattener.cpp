@@ -273,8 +273,8 @@ TEST_SUITE("unit") {
     AudioSource source;
     source.path = "/tmp/song.wav";
     source.destination = scene.project.masterTrack();
-    const ClipId audio = scene.project.createClip(
-        scene.lane, source, TicksPerBarFourFour * 2, TicksPerBarFourFour * 8);
+    const ClipId audio = scene.project.createClip(scene.lane, source, TicksPerBarFourFour * 2,
+                                                  TicksPerBarFourFour * 8);
 
     const FlattenResult result = run(scene.project);
     REQUIRE(result.schedule != nullptr);

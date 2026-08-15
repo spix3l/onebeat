@@ -21,6 +21,11 @@ import 'rack_row.dart';
 import 'rack_store.dart';
 import 'rack_toolbar.dart';
 
+/// The engine's built-in sample player. A lane whose plug-in is this is a WAV
+/// channel, not a hosted plug-in, so double-clicking it has no plug-in window
+/// to open.
+const String _kSamplePluginId = 'onebeat.sample';
+
 class RackBinding extends StatefulWidget {
   const RackBinding({
     required this.client,
@@ -29,6 +34,7 @@ class RackBinding extends StatefulWidget {
     this.onBrowsePlugins,
     this.onOpenMixer,
     this.onOpenPianoRoll,
+    this.onOpenPlugin,
     super.key,
   });
 
@@ -38,6 +44,11 @@ class RackBinding extends StatefulWidget {
   final VoidCallback? onBrowsePlugins;
   final VoidCallback? onOpenMixer;
   final void Function(String instrumentId)? onOpenPianoRoll;
+
+  /// Opens the plug-in window for a lane's instrument. Double-clicking a lane
+  /// that hosts a plug-in reports the instrument here; the shell owns the
+  /// floating window.
+  final void Function(String instrumentId)? onOpenPlugin;
 
   @override
   State<RackBinding> createState() => _RackBindingState();
@@ -216,6 +227,10 @@ class _RackBindingState extends State<RackBinding>
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
           previewNotes: _previewNotesFor(row),
+          hostsPlugin:
+              inst != null &&
+              inst.pluginId.isNotEmpty &&
+              inst.pluginId != _kSamplePluginId,
         ),
       );
     }
@@ -334,6 +349,18 @@ class _RackBindingState extends State<RackBinding>
     if (rowIndex >= 0 && rowIndex < visible.length) {
       _store.selectInstrument(visible[rowIndex].instrumentId);
     }
+  }
+
+  /// A double-click on a lane that hosts a plug-in selects it and hands the
+  /// instrument to the shell, which opens the plug-in window. The row only
+  /// wires the double-tap for plug-in lanes ([RackRowVm.hostsPlugin]), but the
+  /// guard keeps this robust if that ever drifts.
+  void _onRowDoubleTap(int rowIndex) {
+    final List<RackRow> visible = _store.rows;
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    final String instrumentId = visible[rowIndex].instrumentId;
+    _store.selectInstrument(instrumentId);
+    widget.onOpenPlugin?.call(instrumentId);
   }
 
   /// Adds a new, empty channel (no plug-in) as a visible blank lane. Creating
@@ -615,6 +642,7 @@ class _RackBindingState extends State<RackBinding>
       vm: vm,
       onSelectPattern: (String id) => _store.selectPattern(id),
       onSelectRow: _onSelectRow,
+      onRowDoubleTap: _onRowDoubleTap,
       onTogglePower: _onTogglePower,
       onStepTap: _onStepTap,
       onVolChanged: _onVolChanged,

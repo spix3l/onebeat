@@ -272,17 +272,16 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
   const double drive = parameter(ParamDrive);
 
   // Derive preset index
-  const uint32_t preset = std::clamp(
-      static_cast<uint32_t>(preset_param * static_cast<double>(PresetCount)), 0U,
-      static_cast<uint32_t>(PresetCount - 1));
+  const uint32_t preset =
+      std::clamp(static_cast<uint32_t>(preset_param * static_cast<double>(PresetCount)), 0U,
+                 static_cast<uint32_t>(PresetCount - 1));
 
   // Time constants
-  const double attack_sec =
-      preset == PresetHarpsichord
-          ? 0.0005
-          : (preset == PresetDreamCloud || preset == PresetSynthKeys
-                 ? (0.002 + attack_param * attack_param * 0.8)
-                 : (0.001 + attack_param * attack_param * 0.4));
+  const double attack_sec = preset == PresetHarpsichord
+                                ? 0.0005
+                                : (preset == PresetDreamCloud || preset == PresetSynthKeys
+                                       ? (0.002 + attack_param * attack_param * 0.8)
+                                       : (0.001 + attack_param * attack_param * 0.4));
   const double attack_rate = 1.0 / (sample_rate_ * std::max(0.0005, attack_sec));
 
   const double decay_sec = 0.12 + decay_param * decay_param * 12.0;
@@ -371,7 +370,8 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
         case PresetPopStudioGrand:
         case PresetFeltUpright: {
           // Acoustic Piano Model with string stiffness inharmonicity
-          const double b_coeff = inharm_base * (1.0 + (voice.key > 60 ? (voice.key - 60) * 0.02 : 0.0));
+          const double b_coeff =
+              inharm_base * (1.0 + (voice.key > 60 ? (voice.key - 60) * 0.02 : 0.0));
           const double h2_mult = 2.0 * std::sqrt(1.0 + b_coeff * 4.0);
           const double h3_mult = 3.0 * std::sqrt(1.0 + b_coeff * 9.0);
           const double h4_mult = 4.0 * std::sqrt(1.0 + b_coeff * 16.0);
@@ -384,10 +384,12 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
           const double h5 = std::sin(voice.phase * h5_mult) * brightness * brightness * 0.08;
 
           // Soundboard sympathetic warmth
-          const double body_sub = std::sin(voice.phase * 0.5) * body * 0.08 * (voice.key < 55 ? 1.0 : 0.2);
+          const double body_sub =
+              std::sin(voice.phase * 0.5) * body * 0.08 * (voice.key < 55 ? 1.0 : 0.2);
 
           // Felt / pop brightness weighting
-          const double timbre_scale = (preset == PresetFeltUpright) ? 0.7 : (preset == PresetPopStudioGrand ? 1.25 : 1.0);
+          const double timbre_scale =
+              (preset == PresetFeltUpright) ? 0.7 : (preset == PresetPopStudioGrand ? 1.25 : 1.0);
           sample = (h1 + h2 + h3 + h4 + h5 + body_sub) * timbre_scale;
           break;
         }
@@ -397,8 +399,10 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
           const double tine_decay = std::exp(-voice.age * (8.0 - tone * 3.0));
           const double fundamental = std::sin(voice.phase);
           const double second = std::sin(voice.phase * 2.0) * 0.18;
-          const double tine = std::sin(voice.phase * 7.04) * tine_decay * (0.15 + hammer_param * 0.3);
-          const double tine2 = std::sin(voice.phase * 14.1) * tine_decay * (0.06 + hammer_param * 0.15);
+          const double tine =
+              std::sin(voice.phase * 7.04) * tine_decay * (0.15 + hammer_param * 0.3);
+          const double tine2 =
+              std::sin(voice.phase * 14.1) * tine_decay * (0.06 + hammer_param * 0.15);
           sample = fundamental + second + tine + tine2;
           break;
         }
@@ -476,9 +480,8 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
       voice.noise = voice.noise * 1664525U + 1013904223U;
       const double raw_noise =
           static_cast<double>((voice.noise >> 9U) & 0x7fffffU) / 4194304.0 - 1.0;
-      const double hammer_strike =
-          raw_noise * std::exp(-voice.age * (24.0 - tone * 10.0)) * (0.04 + hammer_param * 0.12) *
-          eff_vel;
+      const double hammer_strike = raw_noise * std::exp(-voice.age * (24.0 - tone * 10.0)) *
+                                   (0.04 + hammer_param * 0.12) * eff_vel;
 
       // Damper key-release noise
       if (voice.damper_noise > 0.0001) {
@@ -488,13 +491,15 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
 
       // One-pole lowpass filtering
       const double filter_cutoff = std::clamp(0.08 + brightness * 0.85, 0.05, 0.98);
-      voice.filter_state += filter_cutoff * (sample + hammer_strike + damper_sound - voice.filter_state);
+      voice.filter_state +=
+          filter_cutoff * (sample + hammer_strike + damper_sound - voice.filter_state);
 
-      const double voice_out = voice.filter_state * voice.envelope * (0.08 + eff_vel * eff_vel * 0.28);
+      const double voice_out =
+          voice.filter_state * voice.envelope * (0.08 + eff_vel * eff_vel * 0.28);
 
       // Stereo Acoustic Panning
-      const double pan =
-          std::clamp((static_cast<double>(voice.key) - 60.0) / 36.0, -1.0, 1.0) * width_param * 0.75;
+      const double pan = std::clamp((static_cast<double>(voice.key) - 60.0) / 36.0, -1.0, 1.0) *
+                         width_param * 0.75;
       left += voice_out * std::sqrt((1.0 - pan) * 0.5);
       right += voice_out * std::sqrt((1.0 + pan) * 0.5);
 

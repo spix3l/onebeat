@@ -18,6 +18,7 @@ class ChannelRackScreen extends StatelessWidget {
     required this.vm,
     this.onSelectPattern,
     this.onSelectRow,
+    this.onRowDoubleTap,
     this.onTogglePower,
     this.onStepTap,
     this.onVolChanged,
@@ -53,6 +54,10 @@ class ChannelRackScreen extends StatelessWidget {
   final ChannelRackScreenVm vm;
   final ValueChanged<String>? onSelectPattern;
   final ValueChanged<int>? onSelectRow;
+
+  /// Fired for a lane that hosts a plug-in when it is double-clicked, so the
+  /// shell can open the plug-in window. The index is the lane's row index.
+  final ValueChanged<int>? onRowDoubleTap;
   final ValueChanged<int>? onTogglePower;
   final void Function(int rowIndex, int stepIndex)? onStepTap;
   final void Function(int rowIndex, double value)? onVolChanged;
@@ -145,6 +150,7 @@ class ChannelRackScreen extends StatelessWidget {
                               playingStep: vm.playingStep,
                               playingTick: vm.playingTick,
                               onSelectRow: onSelectRow,
+                              onRowDoubleTap: onRowDoubleTap,
                               onTogglePower: onTogglePower,
                               onStepTap: onStepTap,
                               onVolChanged: onVolChanged,
@@ -462,6 +468,7 @@ class _RackRowsScrollArea extends StatelessWidget {
     required this.playingStep,
     required this.playingTick,
     this.onSelectRow,
+    this.onRowDoubleTap,
     this.onTogglePower,
     this.onStepTap,
     this.onVolChanged,
@@ -482,6 +489,7 @@ class _RackRowsScrollArea extends StatelessWidget {
   final int? playingStep;
   final int? playingTick;
   final ValueChanged<int>? onSelectRow;
+  final ValueChanged<int>? onRowDoubleTap;
   final ValueChanged<int>? onTogglePower;
   final void Function(int rowIndex, int stepIndex)? onStepTap;
   final void Function(int rowIndex, double value)? onVolChanged;
@@ -567,6 +575,7 @@ class _RackRowsScrollArea extends StatelessWidget {
                       playingStep: playingStep,
                       playingTick: playingTick,
                       onSelectRow: onSelectRow,
+                      onRowDoubleTap: onRowDoubleTap,
                       onTogglePower: onTogglePower,
                       onStepTap: onStepTap,
                       onVolChanged: onVolChanged,
@@ -597,6 +606,7 @@ class _RackRowItem extends StatelessWidget {
     this.reorderable = false,
     super.key,
     this.onSelectRow,
+    this.onRowDoubleTap,
     this.onTogglePower,
     this.onStepTap,
     this.onVolChanged,
@@ -616,6 +626,7 @@ class _RackRowItem extends StatelessWidget {
   final int? playingStep;
   final int? playingTick;
   final ValueChanged<int>? onSelectRow;
+  final ValueChanged<int>? onRowDoubleTap;
   final ValueChanged<int>? onTogglePower;
   final void Function(int rowIndex, int stepIndex)? onStepTap;
   final void Function(int rowIndex, double value)? onVolChanged;
@@ -667,6 +678,12 @@ class _RackRowItem extends StatelessWidget {
               playingStep: playingStep,
               playingTick: playingTick,
               onTap: onSelectRow == null ? null : () => onSelectRow!(index),
+              // Only plug-in lanes double-tap into their plug-in window; the
+              // recognizer would delay single-click selection everywhere else.
+              onDoubleTap:
+                  row.hostsPlugin && onRowDoubleTap != null
+                      ? () => onRowDoubleTap!(index)
+                      : null,
               onSecondaryTapDown:
                   onSecondaryTapDown == null
                       ? null
