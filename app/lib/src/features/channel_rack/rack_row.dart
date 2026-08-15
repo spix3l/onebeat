@@ -89,6 +89,7 @@ class ObRackRow extends StatelessWidget {
   const ObRackRow({
     required this.vm,
     this.playingStep,
+    this.playingTick,
     this.onTap,
     this.onSecondaryTapDown,
     this.onPower,
@@ -106,6 +107,11 @@ class ObRackRow extends StatelessWidget {
   /// The step column the transport is on, zero-based; null draws no ring.
   /// Passed per row rather than held here so every lane agrees about it.
   final int? playingStep;
+
+  /// The loop-wrapped transport tick, for rows that draw a piano-roll preview
+  /// instead of a step grid (where a step index has no meaning). Null hides the
+  /// read head.
+  final int? playingTick;
 
   final VoidCallback? onTap;
   final GestureTapDownCallback? onSecondaryTapDown;
@@ -185,6 +191,7 @@ class ObRackRow extends StatelessWidget {
                 notes: vm.previewNotes!,
                 color: vm.color,
                 stepCount: vm.steps.length,
+                playingTick: playingTick,
               )
             else
               ObStepGrid(
@@ -310,12 +317,16 @@ class RackPianoPreview extends StatelessWidget {
     required this.notes,
     required this.color,
     this.stepCount = 16,
+    this.playingTick,
     super.key,
   });
 
   final List<RackPreviewNoteVm> notes;
   final Color color;
   final int stepCount;
+
+  /// The loop-wrapped transport tick, drawn as a read head over the notes.
+  final int? playingTick;
 
   @override
   Widget build(BuildContext context) {
@@ -328,6 +339,9 @@ class RackPianoPreview extends StatelessWidget {
           notes: notes,
           color: color,
           noteRadius: tokens.radius.xs,
+          playingTick: playingTick,
+          playheadColor: tokens.color.playhead,
+          playheadWidth: tokens.size.playheadWidth,
         ),
       ),
     );
@@ -352,11 +366,17 @@ class _RackPianoPreviewPainter extends CustomPainter {
     required this.notes,
     required this.color,
     required this.noteRadius,
+    this.playingTick,
+    this.playheadColor,
+    this.playheadWidth = 1,
   });
 
   final List<RackPreviewNoteVm> notes;
   final Color color;
   final Radius noteRadius;
+  final int? playingTick;
+  final Color? playheadColor;
+  final double playheadWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -391,11 +411,29 @@ class _RackPianoPreviewPainter extends CustomPainter {
         paint,
       );
     }
+
+    final int? tick = playingTick;
+    final Color? head = playheadColor;
+    if (tick != null && head != null && end > 0) {
+      final double x = (tick / end) * size.width;
+      final Paint headPaint =
+          Paint()
+            ..color = head
+            ..strokeWidth = playheadWidth;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        headPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(_RackPianoPreviewPainter oldDelegate) =>
-      oldDelegate.notes != notes || oldDelegate.color != color;
+      oldDelegate.notes != notes ||
+      oldDelegate.color != color ||
+      oldDelegate.playingTick != playingTick ||
+      oldDelegate.playheadColor != playheadColor;
 }
 
 class _StepCell extends StatelessWidget {

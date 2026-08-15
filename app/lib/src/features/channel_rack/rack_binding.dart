@@ -14,6 +14,7 @@ import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/popover_menu.dart';
+import '../browser/sample_pack.dart';
 import 'channel_inspector.dart';
 import 'channel_rack_screen.dart';
 import 'channel_rack_screen_vm.dart';
@@ -111,13 +112,23 @@ class _RackBindingState extends State<RackBinding>
   }
 
   int? _calculatePlayingStep() {
-    final EngineSnapshot snapshot = _controller.snapshot;
-    if (!snapshot.playing) return null;
+    final int? tick = _calculatePlayingTick();
+    if (tick == null) return null;
     final RackPattern? pattern = _store.pattern;
     final int gridTicks = pattern?.baseGridTicks ?? 240;
     if (gridTicks <= 0) return null;
     final int stepCount = pattern?.baseStepCount ?? 16;
     if (stepCount <= 0) return null;
+    final int step = (tick / gridTicks).floor();
+    return step.clamp(0, stepCount - 1);
+  }
+
+  /// The transport's position wrapped onto the loop region, in ticks. Shared by
+  /// the step grid's column ring and the piano-roll preview's read head, so both
+  /// agree about where the audio actually is.
+  int? _calculatePlayingTick() {
+    final EngineSnapshot snapshot = _controller.snapshot;
+    if (!snapshot.playing) return null;
 
     // The playhead loops on the transport's *loop region* — the same [start,
     // end) the engine wraps the audio on — not on the pattern's stored length,
@@ -131,9 +142,7 @@ class _RackBindingState extends State<RackBinding>
         ? inLoop % loopLengthBeats
         : inLoop;
     final double currentTicks = (looped < 0.0 ? 0.0 : looped) * 960.0;
-
-    final int step = (currentTicks / gridTicks).floor();
-    return step.clamp(0, stepCount - 1);
+    return currentTicks.round();
   }
 
   Color _resolveInstrumentColor(int index, String? colorStr) {
@@ -173,6 +182,7 @@ class _RackBindingState extends State<RackBinding>
     final RackPattern? pattern = _store.pattern;
     final int stepCount = pattern?.baseStepCount ?? 16;
     final int? playingStep = _calculatePlayingStep();
+    final int? playingTick = _calculatePlayingTick();
 
     final List<PatternTabVm> patternTabs = <PatternTabVm>[];
     if (_store.patterns.isNotEmpty) {
@@ -221,8 +231,10 @@ class _RackBindingState extends State<RackBinding>
               : 'Empty channel',
           color: color,
           steps: stepVms,
-          vol: _gains[row.instrumentId] ?? 1.0,
-          pan: _pans[row.instrumentId] ?? 0.5,
+          vol: _gains[row.instrumentId] ??
+              (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
+          pan: _pans[row.instrumentId] ??
+              (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
           route: '→ D1',
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
@@ -248,10 +260,14 @@ class _RackBindingState extends State<RackBinding>
         subtitle: '${selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler"} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
         color: inspColor,
         waveform: _defaultWaveform(),
-        vol: 0.78,
-        volText: '78',
-        pan: 0.5,
-        panText: '· C',
+        vol: _gains[selectedId] ??
+            (selectedInst != null ? selectedInst.gain.clamp(0.0, 1.0) : 0.78),
+        volText: _volText(selectedId, selectedInst),
+        pan: _pans[selectedId] ??
+            (selectedInst != null
+                ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0)
+                : 0.5),
+        panText: _panText(selectedId, selectedInst),
         fx: <FxVm>[
           FxVm(name: 'Chorus', color: inspColor, active: true),
           FxVm(name: 'EQ 4', color: channelColors[2]),
@@ -275,10 +291,29 @@ class _RackBindingState extends State<RackBinding>
       stepCount: stepCount,
       rows: rowVms,
       playingStep: playingStep,
+      playingTick: playingTick,
       inspector: inspectorVm,
       canUndo: _store.canUndo,
       canRedo: _store.canRedo,
     );
+  }
+
+  /// The value under the inspector's VOL knob, formatted as the rounded
+  /// percentage the mockup shows.
+  String _volText(String id, ProjectInstrument? inst) {
+    final double v = _gains[id] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 0.78);
+    return '${(v * 100).round()}';
+  }
+
+  /// The value under the inspector's PAN knob: `· C` for centre, else `L`/`R`
+  /// with the magnitude.
+  String _panText(String id, ProjectInstrument? inst) {
+    final double p =
+        _pans[id] ??
+        (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5);
+    final double signed = (p - 0.5) * 2.0;
+    if (signed.abs() < 0.02) return '· C';
+    return signed < 0 ? '· L' : '· R';
   }
 
   /// A piano-roll preview for a row whose notes read as a melody rather than a
@@ -370,18 +405,77 @@ class _RackBindingState extends State<RackBinding>
     }
   }
 
-  void _onAddInstrument(Object data) {
-    if (data is! PluginListing) return;
+  void _onTogglePower(int rowIndex) {
+    final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    final String id = visible[rowIndex].instrumentId;
+    final ProjectInstrument? inst = _store.instrumentFor(id);
+    final bool next = !(inst?.muted ?? false);
     try {
-      widget.client.addPluginByPath(data.path, data.id);
+      widget.client.setInstrumentMuted(id, muted: next);
+    } catch (_) {
+      // Stub when the fake client has no mute command.
+    }
+    _store.refresh();
+  }
+
+  void _onInspectorVol(double value) {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    setState(() => _gains[id] = value.clamp(0.0, 1.0));
+    try {
+      widget.client.setInstrumentGain(id, value.clamp(0.0, 1.0));
+    } catch (_) {
+      // Stub when the fake client has no gain command.
+    }
+  }
+
+  void _onInspectorPan(double value) {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    setState(() => _pans[id] = value.clamp(0.0, 1.0));
+    try {
+      widget.client.setInstrumentPan(id, (value.clamp(0.0, 1.0) - 0.5) * 2.0);
+    } catch (_) {
+      // Stub when the fake client has no pan command.
+    }
+  }
+
+  void _onInspectorMute() {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    final ProjectInstrument? inst = _store.instrumentFor(id);
+    final bool next = !(inst?.muted ?? false);
+    try {
+      widget.client.setInstrumentMuted(id, muted: next);
+    } catch (_) {
+      // Stub when the fake client has no mute command.
+    }
+    _store.refresh();
+  }
+
+  void _onInspectorSolo() {
+    // Solo is a mixer-track audio gate (v0.4). No-op for now rather than
+    // faking a behaviour the engine cannot yet honour.
+  }
+
+  void _onAddInstrument(Object data) {
+    try {
+      if (data is PluginListing) {
+        widget.client.addPluginByPath(data.path, data.id);
+      } else if (data is SampleAsset) {
+        widget.client.addSampleInstrument(data.name, data.path);
+      } else {
+        return;
+      }
       _store.refresh();
       if (_store.instruments.isNotEmpty) {
-        // A dropped instrument becomes a visible lane, but selection remains a
+        // A dropped asset becomes a visible lane, but selection remains a
         // separate action so the preview does not appear unexpectedly.
         _store.includeInstrument(_store.instruments.last.id);
       }
     } catch (_) {
-      // Hosting failed; ignore the drop.
+      // Hosting or sample loading failed; ignore the drop.
     }
   }
 
@@ -392,13 +486,22 @@ class _RackBindingState extends State<RackBinding>
   }
 
   void _onDropInstrument(int rowIndex, Object data) {
-    if (data is! PluginListing) return;
     final List<RackRow> visible = _store.rows.where(_store.isVisible).toList();
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     try {
-      widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
+      if (data is PluginListing) {
+        widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
+      } else if (data is SampleAsset) {
+        widget.client.replaceSampleInstrument(
+          visible[rowIndex].instrumentId,
+          data.name,
+          data.path,
+        );
+      } else {
+        return;
+      }
     } catch (_) {
-      // Hosting failed; leave the lane as it was.
+      // Hosting or sample loading failed; leave the lane as it was.
     }
     _store.refresh();
   }
@@ -430,14 +533,33 @@ class _RackBindingState extends State<RackBinding>
                           label: 'Open in piano roll',
                           icon: ObKitGlyphKind.note,
                         ),
+                        ObMenuRowVm(
+                          label: 'Duplicate',
+                          icon: ObKitGlyphKind.plus,
+                        ),
+                      ],
+                    ),
+                    ObMenuSectionVm(
+                      separated: true,
+                      rows: <ObMenuRowVm>[
+                        ObMenuRowVm(
+                          label: 'Delete',
+                          icon: ObKitGlyphKind.trash,
+                          tone: ObMenuRowTone.danger,
+                        ),
                       ],
                     ),
                   ],
                 ),
                 onSelect: (int index) {
                   _hideContextMenu();
-                  if (index == 0) {
-                    widget.onOpenPianoRoll?.call(instrumentId);
+                  switch (index) {
+                    case 0:
+                      widget.onOpenPianoRoll?.call(instrumentId);
+                    case 1:
+                      _duplicateInstrument(instrumentId);
+                    case 2:
+                      _deleteInstrument(instrumentId);
                   }
                 },
               ),
@@ -447,6 +569,29 @@ class _RackBindingState extends State<RackBinding>
       },
     );
     overlay.insert(_contextMenuEntry!);
+  }
+
+  void _duplicateInstrument(String instrumentId) {
+    try {
+      widget.client.duplicateInstrument(instrumentId);
+    } catch (_) {
+      // Hosting failed or the command is a stub.
+      return;
+    }
+    _store.refresh();
+    if (_store.instruments.isNotEmpty) {
+      _store.includeInstrument(_store.instruments.last.id);
+    }
+  }
+
+  void _deleteInstrument(String instrumentId) {
+    try {
+      widget.client.deleteInstrument(instrumentId);
+    } catch (_) {
+      // The command is a stub on a fake client.
+      return;
+    }
+    _store.refresh();
   }
 
   void _hideContextMenu() {
@@ -462,6 +607,7 @@ class _RackBindingState extends State<RackBinding>
       vm: vm,
       onSelectPattern: (String id) => _store.selectPattern(id),
       onSelectRow: _onSelectRow,
+      onTogglePower: _onTogglePower,
       onStepTap: _onStepTap,
       onVolChanged: _onVolChanged,
       onPanChanged: _onPanChanged,
@@ -486,6 +632,10 @@ class _RackBindingState extends State<RackBinding>
         }
       },
       onMixerTap: widget.onOpenMixer,
+      onInspectorVol: _onInspectorVol,
+      onInspectorPan: _onInspectorPan,
+      onInspectorMute: _onInspectorMute,
+      onInspectorSolo: _onInspectorSolo,
       onInspectorKeyPress: (int note) => _store.auditionNote(note),
       onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
         final List<RackRow> visible =

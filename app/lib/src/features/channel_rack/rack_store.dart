@@ -72,10 +72,20 @@ class RackStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool isVisible(RackRow row) =>
-      showAll ||
-      row.hasSequence ||
-      _includedEmptyRows.contains(row.instrumentId);
+  bool isVisible(RackRow row) {
+    if (showAll ||
+        row.hasSequence ||
+        _includedEmptyRows.contains(row.instrumentId)) {
+      return true;
+    }
+    // An instrument that holds notes in *another* pattern still has notes the
+    // user made. Hiding its row behind the current pattern's scope makes those
+    // notes "lost" — present in the mixer, absent from the rack — so any
+    // instrument with notes anywhere stays visible. Truly empty channels are
+    // still hidden unless explicitly added or SHOW ALL is on.
+    final ProjectInstrument? inst = instrumentFor(row.instrumentId);
+    return inst != null && inst.affectedNotes > 0;
+  }
 
   void setShowAll({required bool value}) {
     if (showAll == value) return;

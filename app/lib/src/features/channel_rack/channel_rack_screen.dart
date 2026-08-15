@@ -109,6 +109,7 @@ class ChannelRackScreen extends StatelessWidget {
             child: _RackRowsScrollArea(
               rows: vm.rows,
               playingStep: vm.playingStep,
+              playingTick: vm.playingTick,
               footerLead: vm.footerLead,
               footerAction: vm.footerAction,
               footerTrail: vm.footerTrail,
@@ -349,6 +350,7 @@ class _RackRowsScrollArea extends StatelessWidget {
   const _RackRowsScrollArea({
     required this.rows,
     required this.playingStep,
+    required this.playingTick,
     required this.footerLead,
     required this.footerAction,
     required this.footerTrail,
@@ -372,6 +374,7 @@ class _RackRowsScrollArea extends StatelessWidget {
 
   final List<RackRowVm> rows;
   final int? playingStep;
+  final int? playingTick;
   final String footerLead;
   final String footerAction;
   final String footerTrail;
@@ -426,6 +429,7 @@ class _RackRowsScrollArea extends StatelessWidget {
                         index: i,
                         row: rows[i],
                         playingStep: playingStep,
+                        playingTick: playingTick,
                         onSelectRow: onSelectRow,
                         onTogglePower: onTogglePower,
                         onStepTap: onStepTap,
@@ -467,6 +471,7 @@ class _RackRowItem extends StatelessWidget {
     required this.index,
     required this.row,
     required this.playingStep,
+    required this.playingTick,
     this.onSelectRow,
     this.onTogglePower,
     this.onStepTap,
@@ -484,6 +489,7 @@ class _RackRowItem extends StatelessWidget {
   final int index;
   final RackRowVm row;
   final int? playingStep;
+  final int? playingTick;
   final ValueChanged<int>? onSelectRow;
   final ValueChanged<int>? onTogglePower;
   final void Function(int rowIndex, int stepIndex)? onStepTap;
@@ -530,6 +536,7 @@ class _RackRowItem extends StatelessWidget {
             child: ObRackRow(
               vm: row,
               playingStep: playingStep,
+              playingTick: playingTick,
               onTap: onSelectRow == null ? null : () => onSelectRow!(index),
               onSecondaryTapDown: onSecondaryTapDown == null
                   ? null

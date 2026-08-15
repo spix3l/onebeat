@@ -33,6 +33,7 @@ class ChannelRackScreenVm {
     this.stepCount = 16,
     required this.rows,
     this.playingStep,
+    this.playingTick,
     this.footerLead = 'Drop a sample from the browser, or',
     this.footerAction = 'Add channel',
     this.footerTrail = 'to grow the rack',
@@ -49,6 +50,11 @@ class ChannelRackScreenVm {
   final int stepCount;
   final List<RackRowVm> rows;
   final int? playingStep;
+
+  /// The loop-wrapped transport tick, for rows drawing a piano-roll preview
+  /// (the read head). [playingStep] is the grid-cell equivalent.
+  final int? playingTick;
+
   final String footerLead;
   final String footerAction;
   final String footerTrail;
