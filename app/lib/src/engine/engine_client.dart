@@ -312,6 +312,7 @@ abstract interface class ProjectFileClient {
   /// [ProjectStore] does — rather than calling it every frame.
   bool get isProjectModified;
 
+  void newProject();
   void saveProject(String path);
   void openProject(String path);
 }
@@ -1426,6 +1427,10 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   );
 
   // --- project files (OB-3-05's writer, reachable from the UI) --------------
+
+  /// Replaces the current session with a clean Pattern 1 project.
+  @override
+  void newProject() => _check(_bindings.ob_engine_project_new(_engine));
 
   /// Writes the project bundle. Distinct from [saveSession], which is the v0.2
   /// scratch file holding one hosted plug-in's opaque chunk.

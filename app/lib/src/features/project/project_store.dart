@@ -113,6 +113,17 @@ class ProjectStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Starts a clean project after the shell has handled any save prompt.
+  ProjectResult newProject() {
+    try {
+      _client.newProject();
+    } on EngineException catch (error) {
+      return _report(ProjectResult.failed('The new project could not be created. ${error.message}'));
+    }
+    _modified = false;
+    return _report(const ProjectResult.done('Started a new project.'));
+  }
+
   /// ⌘S. Writes in place, or asks where to write the first time.
   Future<ProjectResult> save() async {
     if (!hasFile) return saveAs();

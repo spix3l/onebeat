@@ -127,7 +127,6 @@ class ObRackRow extends StatelessWidget {
   /// instead of a step grid (where a step index has no meaning). Null hides the
   /// read head.
   final int? playingTick;
-
   final VoidCallback? onTap;
 
   /// Double-click opens the lane's plug-in window. Wired only for lanes that

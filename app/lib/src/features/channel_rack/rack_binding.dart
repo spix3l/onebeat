@@ -10,13 +10,15 @@ import 'package:flutter/widgets.dart';
 import '../../core/engine_controller.dart' as core;
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
-import '../../core/snap_grid.dart';
+import '../../core/action_registry.dart';
+import '../../core/shortcuts.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/popover_menu.dart';
 import '../browser/sample_pack.dart';
 import 'channel_inspector.dart';
 import 'channel_rack_screen.dart';
 import 'channel_rack_screen_vm.dart';
+import 'delete_pattern_dialog.dart';
 import 'rack_row.dart';
 import 'rack_store.dart';
 import 'rack_toolbar.dart';
@@ -36,6 +38,7 @@ class RackBinding extends StatefulWidget {
     this.onOpenMixer,
     this.onOpenPianoRoll,
     this.onOpenPlugin,
+    this.onOpenSampler,
     super.key,
   });
 
@@ -51,6 +54,10 @@ class RackBinding extends StatefulWidget {
   /// floating window.
   final void Function(String instrumentId)? onOpenPlugin;
 
+  /// Opens the built-in sampler editor for a sample lane. Kept separate from
+  /// hosted plug-ins so a sample lane never masquerades as a CLAP instance.
+  final void Function(String instrumentId)? onOpenSampler;
+
   @override
   State<RackBinding> createState() => _RackBindingState();
 }
@@ -60,10 +67,6 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   late final RackStore _store;
   bool _ownsController = false;
   bool _ownsStore = false;
-
-  String _selectedGroup = 'All';
-  String _selectedType = 'Sampler';
-  String _selectedSnap = '1/16';
 
   final Map<String, double> _gains = <String, double>{};
   final Map<String, double> _pans = <String, double>{};
@@ -75,7 +78,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   /// the same way the mixer does — so the menu's check and the inspector's S
   /// chip can at least reflect the choice.
   bool _showRenameDialog = false;
+  bool _renamePattern = false;
+  bool _showDeletePatternDialog = false;
+  String? _deletePatternId;
   String? _renameInstrumentId;
+  String? _renamePatternId;
   final Set<String> _soloedInstrumentIds = <String>{};
 
   @override
@@ -84,11 +91,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (widget.controller != null) {
       _controller = widget.controller!;
     } else {
-      _controller = core.EngineController(
-        client: widget.client,
-        vsync: this,
-        motion: OneBeatTokens.dark().motion,
-      );
+      _controller = core.EngineController(client: widget.client, vsync: this, motion: OneBeatTokens.dark().motion);
       _ownsController = true;
     }
 
@@ -130,6 +133,46 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _onCreatePattern() {
+    final int nextNumber = _store.patterns.length + 1;
+    widget.client.createPattern('Pattern $nextNumber');
+    _store.refresh();
+  }
+
+  void _requestDeletePattern([String? patternId]) {
+    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+      (PatternSummary? item) => item?.id == (patternId ?? _store.pattern?.id),
+      orElse: () => null,
+    );
+    if (pattern == null) return;
+    setState(() {
+      _deletePatternId = pattern.id;
+      _showDeletePatternDialog = true;
+    });
+  }
+
+  void _confirmDeletePattern() {
+    final String? patternId = _deletePatternId;
+    if (patternId == null) return;
+    try {
+      widget.client.removePattern(patternId);
+    } catch (_) {
+      return;
+    }
+    _store.refresh();
+    setState(() {
+      _deletePatternId = null;
+      _showDeletePatternDialog = false;
+    });
+  }
+
+  void _closeDeletePatternDialog() {
+    setState(() {
+      _deletePatternId = null;
+      _showDeletePatternDialog = false;
+    });
   }
 
   int? _calculatePlayingStep() {
@@ -182,19 +225,10 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final List<PatternTabVm> patternTabs = <PatternTabVm>[];
     if (_store.patterns.isNotEmpty) {
       for (final PatternSummary p in _store.patterns) {
-        patternTabs.add(
-          PatternTabVm(
-            id: p.id,
-            name: p.name,
-            selected: p.isCurrent,
-            count: p.usageCount,
-          ),
-        );
+        patternTabs.add(PatternTabVm(id: p.id, name: p.name, selected: p.isCurrent, count: p.usageCount));
       }
     } else if (pattern != null) {
-      patternTabs.add(
-        PatternTabVm(id: pattern.id, name: pattern.name, selected: true),
-      );
+      patternTabs.add(PatternTabVm(id: pattern.id, name: pattern.name, selected: true));
     }
 
     final List<RackRow> visibleRows = _store.rows;
@@ -207,16 +241,17 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
       final List<StepVm> stepVms = <StepVm>[
         for (int s = 0; s < row.steps.length; s++)
-          StepVm(
-            on: row.steps[s].active,
-            velocity: row.steps[s].velocity / 16383.0,
-          ),
+          StepVm(on: row.steps[s].active, velocity: row.steps[s].velocity / 16383.0),
       ];
 
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type: inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel',
+          type:
+              inst?.pluginId == _kSamplePluginId
+                  ? 'Sampler'
+                  : (inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel'),
+
           color: color,
           steps: stepVms,
           vol: _gains[row.instrumentId] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
@@ -224,8 +259,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           route: '→ D1',
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
-          previewNotes: _previewNotesFor(row),
-          hostsPlugin: inst != null && inst.pluginId.isNotEmpty && inst.pluginId != _kSamplePluginId,
+          previewNotes: _previewNotesFor(row), // Sample lanes open the built-in sampler; hosted lanes open their
+          // plug-in editor. Empty lanes remain non-openable.
+          hostsPlugin: inst != null && inst.pluginId.isNotEmpty,
         ),
       );
     }
@@ -234,18 +270,13 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final String? selectedId = _store.selectedInstrumentId;
     if (selectedId != null) {
       final ProjectInstrument? selectedInst = _store.instrumentFor(selectedId);
-      final int instIndex = _store.instruments.indexWhere(
-        (ProjectInstrument inst) => inst.id == selectedId,
-      );
-      final Color inspColor = _resolveInstrumentColor(
-        instIndex >= 0 ? instIndex : 0,
-        selectedInst?.color,
-      );
+      final int instIndex = _store.instruments.indexWhere((ProjectInstrument inst) => inst.id == selectedId);
+      final Color inspColor = _resolveInstrumentColor(instIndex >= 0 ? instIndex : 0, selectedInst?.color);
 
       inspectorVm = ChannelInspectorVm(
         name: selectedInst?.name ?? selectedId,
         subtitle:
-            '${selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler"} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
+            '${selectedInst?.pluginId == _kSamplePluginId ? "Sampler" : (selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler")} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
         color: inspColor,
         vol: _gains[selectedId] ?? (selectedInst != null ? selectedInst.gain.clamp(0.0, 1.0) : 0.78),
         volText: _volText(selectedId, selectedInst),
@@ -254,15 +285,19 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         route: 'M1 · Music',
         muted: selectedInst?.muted ?? false,
         soloed: _soloedInstrumentIds.contains(selectedId),
+        // The row itself can open a sample's built-in editor, but the
+        // inspector's hosted-plugin action is reserved for real plug-ins.
         hostsPlugin:
             selectedInst != null && selectedInst.pluginId.isNotEmpty && selectedInst.pluginId != _kSamplePluginId,
       );
     }
 
     final RackToolbarVm toolbarVm = RackToolbarVm(
-      channelType: _selectedType,
-      group: _selectedGroup,
-      snap: _selectedSnap,
+      // These legacy fields are retained for older view-model fixtures; the
+      // toolbar deliberately does not render them.
+      channelType: 'Sampler',
+      group: 'All',
+      snap: '1/16',
       steps: stepCount,
     );
 
@@ -317,11 +352,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
     return <RackPreviewNoteVm>[
       for (final SequenceNote note in notes)
-        RackPreviewNoteVm(
-          startTick: note.startTicks,
-          lengthTicks: note.lengthTicks,
-          midiNote: note.key,
-        ),
+        RackPreviewNoteVm(startTick: note.startTicks, lengthTicks: note.lengthTicks, midiNote: note.key),
     ];
   }
 
@@ -348,7 +379,12 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String instrumentId = visible[rowIndex].instrumentId;
     _store.selectInstrument(instrumentId);
-    widget.onOpenPlugin?.call(instrumentId);
+    final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
+    if (inst?.pluginId == _kSamplePluginId) {
+      widget.onOpenSampler?.call(instrumentId);
+    } else {
+      widget.onOpenPlugin?.call(instrumentId);
+    }
   }
 
   /// Adds a new, empty channel (no plug-in) as a visible blank lane. Creating
@@ -468,9 +504,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final String? id = _store.selectedInstrumentId;
     if (id == null) return;
     final ProjectInstrument? inst = _store.instrumentFor(id);
-    if (inst == null || inst.pluginId.isEmpty || inst.pluginId == _kSamplePluginId) {
-      return;
-    }
+    if (inst == null || inst.pluginId.isEmpty) return;
     _openPluginFromMenu(id);
   }
 
@@ -511,6 +545,59 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _showContextMenu(visible[rowIndex].instrumentId, details.globalPosition);
   }
 
+  void _onPatternSecondaryTapDown(String patternId, TapDownDetails details) {
+    _hideContextMenu();
+    final OverlayState overlay = Overlay.of(context);
+    _contextMenuEntry = OverlayEntry(
+      builder:
+          (BuildContext overlayContext) => Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _hideContextMenu,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Positioned(
+                left: details.globalPosition.dx,
+                top: details.globalPosition.dy,
+                child: ObPopoverMenu(
+                  vm: const ObPopoverMenuVm(
+                    sections: <ObMenuSectionVm>[
+                      ObMenuSectionVm(
+                        rows: <ObMenuRowVm>[
+                          ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
+                          ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
+                        ],
+                      ),
+                    ],
+                  ),
+                  onSelect: (int index) {
+                    _hideContextMenu();
+                    if (index == 0) {
+                      _beginPatternRename(patternId);
+                    } else {
+                      _requestDeletePattern(patternId);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+    );
+    overlay.insert(_contextMenuEntry!);
+  }
+
+  void _beginPatternRename(String patternId) {
+    _store.selectPattern(patternId);
+    setState(() {
+      _renamePatternId = patternId;
+      _renamePattern = true;
+      _showRenameDialog = true;
+    });
+  }
+
   void _onDropInstrument(int rowIndex, Object data) {
     final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
@@ -518,11 +605,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       if (data is PluginListing) {
         widget.client.replaceInstrument(visible[rowIndex].instrumentId, data);
       } else if (data is SampleAsset) {
-        widget.client.replaceSampleInstrument(
-          visible[rowIndex].instrumentId,
-          data.name,
-          data.path,
-        );
+        widget.client.replaceSampleInstrument(visible[rowIndex].instrumentId, data.name, data.path);
       } else {
         return;
       }
@@ -535,9 +618,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   void _showContextMenu(String instrumentId, Offset globalPosition) {
     _hideContextMenu();
     final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
-    // A lane that hosts a plug-in gets the window-opening row; a sample or
-    // empty lane has no window to open, so the row is simply absent.
-    final bool hostsPlugin = inst != null && inst.pluginId.isNotEmpty && inst.pluginId != _kSamplePluginId;
+    // A lane that hosts a plug-in gets the window-opening row; a sample lane
+    // opens the built-in sampler, while an empty lane has no editor.
+    final bool hostsPlugin = inst != null && inst.pluginId.isNotEmpty;
+    final bool isSample = inst?.pluginId == _kSamplePluginId;
+
     final bool soloed = _soloedInstrumentIds.contains(instrumentId);
 
     // The channel rows, with their actions in the same order. The flat index
@@ -545,9 +630,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final List<ObMenuRowVm> actionRows = <ObMenuRowVm>[
       const ObMenuRowVm(label: 'Open in piano roll', icon: ObKitGlyphKind.note),
       if (hostsPlugin)
-        const ObMenuRowVm(
-          label: 'Open plugin window',
-          icon: ObKitGlyphKind.keyboard,
+        ObMenuRowVm(
+          label: isSample ? 'Open sampler' : 'Open plugin window',
+          icon: isSample ? ObKitGlyphKind.waveform : ObKitGlyphKind.keyboard,
         ),
       const ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
       const ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
@@ -590,31 +675,15 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                       header: 'Step actions',
                       separated: true,
                       rows: <ObMenuRowVm>[
-                        ObMenuRowVm(
-                          label: 'Add note every 2 steps',
-                          icon: ObKitGlyphKind.plus,
-                          shortcut: '2',
-                        ),
-                        ObMenuRowVm(
-                          label: 'Add note every 4 steps',
-                          icon: ObKitGlyphKind.plus,
-                          shortcut: '4',
-                        ),
-                        ObMenuRowVm(
-                          label: 'Add note every 8 steps',
-                          icon: ObKitGlyphKind.plus,
-                          shortcut: '8',
-                        ),
+                        ObMenuRowVm(label: 'Add note every 2 steps', icon: ObKitGlyphKind.plus, shortcut: '2'),
+                        ObMenuRowVm(label: 'Add note every 4 steps', icon: ObKitGlyphKind.plus, shortcut: '4'),
+                        ObMenuRowVm(label: 'Add note every 8 steps', icon: ObKitGlyphKind.plus, shortcut: '8'),
                       ],
                     ),
                     const ObMenuSectionVm(
                       separated: true,
                       rows: <ObMenuRowVm>[
-                        ObMenuRowVm(
-                          label: 'Delete',
-                          icon: ObKitGlyphKind.trash,
-                          tone: ObMenuRowTone.danger,
-                        ),
+                        ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
                       ],
                     ),
                   ],
@@ -661,6 +730,14 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _submitRename(String name) {
+    if (_renamePattern && _renamePatternId != null) {
+      final String trimmed = name.trim();
+      if (trimmed.isEmpty) return;
+      widget.client.renamePattern(_renamePatternId!, trimmed);
+      _store.refresh();
+      _closeRenameDialog();
+      return;
+    }
     final String? id = _renameInstrumentId;
     if (id == null) return;
     final String trimmed = name.trim();
@@ -674,6 +751,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     setState(() {
       _showRenameDialog = false;
       _renameInstrumentId = null;
+      _renamePattern = false;
+      _renamePatternId = null;
     });
   }
 
@@ -681,6 +760,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     setState(() {
       _showRenameDialog = false;
       _renameInstrumentId = null;
+      _renamePattern = false;
+      _renamePatternId = null;
     });
   }
 
@@ -714,92 +795,103 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final ChannelRackScreenVm vm = _buildVm();
     final String? renameId = _renameInstrumentId;
 
-    return Stack(
-      children: <Widget>[
-        ChannelRackScreen(
-          vm: vm,
-          onSelectPattern: (String id) => _store.selectPattern(id),
-          onSelectRow: _onSelectRow,
-          onRowDoubleTap: _onRowDoubleTap,
-          onTogglePower: _onTogglePower,
-          onStepTap: _onStepTap,
-          onVolChanged: _onVolChanged,
-          onPanChanged: _onPanChanged,
-          onAddChannel: _onAddChannel,
-          onRowSecondaryTapDown: _onRowSecondaryTapDown,
-          onDropInstrument: _onDropInstrument,
-          onAddInstrument: _onAddInstrument,
-          onReorderRow: _onReorderRow,
-          onChannelType: (String val) => setState(() => _selectedType = val),
-          onGroup: (String val) => setState(() => _selectedGroup = val),
-          onSnap: (String val) {
-            setState(() => _selectedSnap = val);
-            final SnapGridChoice choice = SnapGridChoice.all.firstWhere(
-              (SnapGridChoice value) => value.label == val,
-              orElse: () => SnapGridChoice.all[4],
-            );
-            if (_store.selectedInstrumentId != null) {
-              _store.setGrid(_store.selectedInstrumentId!, choice.ticks);
-            }
-          },
-          onSteps: (int steps) => _store.setLength(steps),
-          onMixerTap: widget.onOpenMixer,
-          onInspectorVol: _onInspectorVol,
-          onInspectorPan: _onInspectorPan,
-          onInspectorMute: _onInspectorMute,
-          onInspectorSolo: _onInspectorSolo,
-          onInspectorOpenPlugin: _onInspectorOpenPlugin,
-          onInspectorKeyPress: (int note) => _store.auditionNote(note),
-          onPointerDownStep:
-              (
-                PointerDownEvent event,
-                int rowIndex,
-                int stepIndex,
-              ) {
-                final List<RackRow> visible = _store.rows;
-                if (rowIndex < 0 || rowIndex >= visible.length) return;
-                final RackRow row = visible[rowIndex];
-                final bool velocityMode =
-                    event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
-                if (velocityMode) {
-                  _store.beginVelocityPaint();
-                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
-                } else {
-                  final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
-                  _store.beginPaint(row.instrumentId, stepIndex, active: active);
-                }
-              },
-          onPointerMoveStep:
-              (
-                PointerMoveEvent event,
-                int rowIndex,
-                int stepIndex,
-              ) {
-                final List<RackRow> visible = _store.rows;
-                if (rowIndex < 0 || rowIndex >= visible.length) return;
-                final RackRow row = visible[rowIndex];
-                if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
-                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
-                } else {
-                  _store.paintStep(row.instrumentId, stepIndex);
-                }
-              },
-          onPointerUpStep: () {
-            _store.commitPaint();
-            _store.commitVelocityPaint();
-          },
-          onPointerCancelStep: () {
-            _store.abortPaint();
-            _store.abortVelocityPaint();
-          },
-        ),
-        if (_showRenameDialog)
-          RenameChannelDialog(
-            initialName: renameId == null ? '' : (_store.instrumentFor(renameId)?.name ?? ''),
-            onSubmit: _submitRename,
-            onClose: _closeRenameDialog,
+    return ScopedShortcuts(
+      shortcuts: shortcutsForArea(ActionArea.pattern),
+      handlers: <String, VoidCallback>{'pattern.create': _onCreatePattern},
+      child: Stack(
+        children: <Widget>[
+          ChannelRackScreen(
+            vm: vm,
+            onSelectPattern: (String id) => _store.selectPattern(id),
+            onPatternSecondaryTapDown: _onPatternSecondaryTapDown,
+            onSelectRow: _onSelectRow,
+            onRowDoubleTap: _onRowDoubleTap,
+            onTogglePower: _onTogglePower,
+            onStepTap: _onStepTap,
+            onVolChanged: _onVolChanged,
+            onPanChanged: _onPanChanged,
+            onAddChannel: _onAddChannel,
+            onCreatePattern: _onCreatePattern,
+            onRowSecondaryTapDown: _onRowSecondaryTapDown,
+            onDropInstrument: _onDropInstrument,
+            onAddInstrument: _onAddInstrument,
+            onReorderRow: _onReorderRow,
+            onSteps: (int steps) => _store.setLength(steps),
+            onInspectorVol: _onInspectorVol,
+            onInspectorPan: _onInspectorPan,
+            onInspectorMute: _onInspectorMute,
+            onInspectorSolo: _onInspectorSolo,
+            onInspectorOpenPlugin: _onInspectorOpenPlugin,
+            onInspectorKeyPress: (int note) => _store.auditionNote(note),
+            onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
+              final List<RackRow> visible = _store.rows;
+              if (rowIndex < 0 || rowIndex >= visible.length) return;
+              final RackRow row = visible[rowIndex];
+              final bool velocityMode =
+                  event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
+              if (velocityMode) {
+                _store.beginVelocityPaint();
+                _store.setVelocity(row.instrumentId, stepIndex, 12900);
+              } else {
+                final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
+                _store.beginPaint(row.instrumentId, stepIndex, active: active);
+              }
+            },
+            onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
+              final List<RackRow> visible = _store.rows;
+              if (rowIndex < 0 || rowIndex >= visible.length) return;
+              final RackRow row = visible[rowIndex];
+              if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
+                _store.setVelocity(row.instrumentId, stepIndex, 12900);
+              } else {
+                _store.paintStep(row.instrumentId, stepIndex);
+              }
+            },
+            onPointerUpStep: () {
+              _store.commitPaint();
+              _store.commitVelocityPaint();
+            },
+            onPointerCancelStep: () {
+              _store.abortPaint();
+              _store.abortVelocityPaint();
+            },
           ),
-      ],
+          if (_showRenameDialog)
+            RenameChannelDialog(
+              initialName:
+                  _renamePattern
+                      ? (_store.patterns
+                              .cast<PatternSummary?>()
+                              .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
+                              ?.name ??
+                          '')
+                      : renameId == null
+                      ? ''
+                      : (_store.instrumentFor(renameId)?.name ?? ''),
+              onSubmit: _submitRename,
+              onClose: _closeRenameDialog,
+              title: _renamePattern ? 'Rename pattern' : 'Rename channel',
+              fieldLabel: _renamePattern ? 'Pattern name' : 'Channel name',
+            ),
+          if (_showDeletePatternDialog)
+            DeletePatternDialog(
+              patternName:
+                  _store.patterns
+                      .cast<PatternSummary?>()
+                      .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
+                      ?.name ??
+                  'Pattern',
+              usageCount:
+                  _store.patterns
+                      .cast<PatternSummary?>()
+                      .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
+                      ?.usageCount ??
+                  0,
+              onDelete: _confirmDeletePattern,
+              onClose: _closeDeletePatternDialog,
+            ),
+        ],
+      ),
     );
   }
 }

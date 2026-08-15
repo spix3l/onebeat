@@ -28,6 +28,7 @@ import '../plugins/plugin_binding.dart';
 import '../preferences/preferences_binding.dart';
 import '../project/project_store.dart';
 import '../project/rename_project_dialog.dart';
+import '../project/unsaved_project_dialog.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
 import 'shell_screen_vm.dart';
@@ -42,6 +43,7 @@ import 'transport_bar.dart';
 /// switch below cannot drift apart: when they did, opening the piano roll fell
 /// through to the empty default and rendered a black screen.
 const int _pianoRollIndex = 3;
+const String _samplePluginId = 'onebeat.sample';
 
 class ShellBinding extends StatefulWidget {
   const ShellBinding({required this.client, this.controller, super.key});
@@ -75,6 +77,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
   int _framesSinceBrowserRefresh = 0;
   int _framesSinceProjectRefresh = 0;
   bool _showRenameDialog = false;
+  bool _showNewProjectDialog = false;
   late final ProjectStore _project;
   int _builtinsGeneration = -1;
   List<PluginListing> _builtins = const <PluginListing>[];
@@ -472,6 +475,29 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     // of a loop-assigned variable into the setState closure below.
     final ProjectInstrument target = instrument;
     _controller.client.selectInstrument(instrumentId);
+    if (target.pluginId == _samplePluginId) {
+      // Samples are first-class rack channels too, but they do not have a
+      // hosted CLAP instance to expose through readHostedInstance(). Give the
+      // shared plugin window a small built-in sampler instance instead.
+      final HostedInstance sampler = HostedInstance(
+        id: 0,
+        pluginId: _samplePluginId,
+        name: 'OneBeat Sampler',
+        vendor: 'OneBeat',
+        path: target.pluginPath,
+        format: PluginFormat.builtin,
+        missing: false,
+        hasEditor: false,
+        needsRestart: false,
+        paramCount: 0,
+      );
+      setState(() {
+        _openPlugin = sampler;
+        _openPluginTrackId = target.id;
+        _openPluginParameters = const <HostedParameter>[];
+      });
+      return;
+    }
     final HostedInstance? hosted = _controller.client.readHostedInstance();
     if (hosted == null || hosted.pluginId != target.pluginId) return;
     setState(() {
@@ -502,9 +528,36 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
 
   // ----- project files (OB-3-05 §4) -----------------------------------------
 
-  Future<void> _saveProject() async {
-    await _project.save();
+  Future<ProjectResult> _saveProject() async {
+    final ProjectResult result = await _project.save();
     _project.refresh();
+    return result;
+  }
+
+  Future<void> _startNewProject() async {
+    final ProjectResult result = _project.newProject();
+    if (!mounted) return;
+    if (result.isFailure) return;
+    _browserNodes = _buildBrowserNodes();
+    setState(() => _showNewProjectDialog = false);
+  }
+
+  Future<void> _newProject() async {
+    // The shell normally polls the dirty bit on a human cadence. Ask once more
+    // at the destructive action boundary so a just-finished rack edit cannot
+    // slip past the prompt.
+    _project.refresh();
+    if (_project.modified) {
+      setState(() => _showNewProjectDialog = true);
+      return;
+    }
+    await _startNewProject();
+  }
+
+  Future<void> _saveBeforeNewProject() async {
+    final ProjectResult result = await _saveProject();
+    if (!mounted || result.outcome != ProjectOutcome.done) return;
+    await _startNewProject();
   }
 
   Future<void> _saveProjectAs() async {
@@ -672,6 +725,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       onOpenPreferences: () => setState(() => _showPreferencesDialog = true),
       onSaveProject: () => unawaited(_saveProject()),
       onSaveProjectAs: () => unawaited(_saveProjectAs()),
+      onNewProject: () => unawaited(_newProject()),
       onOpenProject: () => unawaited(_openProject()),
       onRenameProject: () => setState(() => _showRenameDialog = true),
       onSelectRail: _onRailSelect,
@@ -797,6 +851,13 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
                   controller: _controller,
                   onClose: () => setState(() => _showPreferencesDialog = false),
                 ),
+              if (_showNewProjectDialog)
+                UnsavedProjectDialog(
+                  projectName: _project.name,
+                  onSave: () => unawaited(_saveBeforeNewProject()),
+                  onDiscard: () => unawaited(_startNewProject()),
+                  onCancel: () => setState(() => _showNewProjectDialog = false),
+                ),
               if (_showRenameDialog)
                 RenameProjectDialog(
                   initialName: _project.name,
@@ -882,6 +943,7 @@ class _WorkspaceSlot extends StatelessWidget {
         onOpenMixer: () => onSelectRail(2),
         onOpenPianoRoll: onOpenPianoRoll,
         onOpenPlugin: onOpenPlugin,
+        onOpenSampler: onOpenPlugin,
       ),
       1 => PlaylistBinding(
         client: coreController.client,
@@ -914,6 +976,7 @@ class _PlatformMenuHost extends StatelessWidget {
     required this.project,
     required this.onOpenExport,
     required this.onOpenPreferences,
+    required this.onNewProject,
     required this.onSaveProject,
     required this.onSaveProjectAs,
     required this.onOpenProject,
@@ -926,6 +989,7 @@ class _PlatformMenuHost extends StatelessWidget {
   final ProjectStore project;
   final VoidCallback onOpenExport;
   final VoidCallback onOpenPreferences;
+  final VoidCallback onNewProject;
   final VoidCallback onSaveProject;
   final VoidCallback onSaveProjectAs;
   final VoidCallback onOpenProject;
@@ -937,7 +1001,7 @@ class _PlatformMenuHost extends StatelessWidget {
   Widget build(BuildContext context) {
     return _StablePlatformMenuBar(
       menuVersion:
-          '${project.hasFile}:${controller.client.canUndoProject}:${controller.client.undoProjectName}:${controller.client.canRedoProject}:${controller.client.redoProjectName}',
+          '${project.hasFile}:${project.modified}:${controller.client.canUndoProject}:${controller.client.undoProjectName}:${controller.client.canRedoProject}:${controller.client.redoProjectName}',
       menus: <PlatformMenuItem>[
         PlatformMenu(
           label: 'OneBeat',
@@ -959,13 +1023,14 @@ class _PlatformMenuHost extends StatelessWidget {
         PlatformMenu(
           label: 'File',
           menus: <PlatformMenuItem>[
-            // The shortcuts here and in the action registry are the same
-            // bindings twice over — the menu is what macOS handles while a
-            // native panel is up, the registry is what the app handles. The
-            // shortcut sheet reads the registry, so it stays the source of
-            // truth for what a user is told.
+            // New Project is intentionally a menu action rather than ⌘N:
+            // ⌘N remains the pattern-creation shortcut in the editor scope.
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
+                PlatformMenuItem(
+                  label: 'New Project',
+                  onSelected: onNewProject,
+                ),
                 PlatformMenuItem(
                   label: 'Open…',
                   shortcut: const SingleActivator(

@@ -946,7 +946,7 @@ class _MainControlCanvas extends StatelessWidget {
         children: <Widget>[
           // Dual Vertical Faders
           SizedBox(
-            width: 140,
+            width: 180,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
@@ -1063,6 +1063,18 @@ class _VerticalFaderState extends State<_VerticalFader> {
 
         // Geometric Emblem Glyph
         _GeometricGlyph(kind: widget.glyphKind, color: widget.accentColor),
+        const SizedBox(height: 4),
+        Text(
+          widget.label,
+          style: const TextStyle(
+            color: Color(0xFF4A4E55),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+            fontFamily: 'Inter',
+          ),
+          maxLines: 1,
+        ),
       ],
     );
   }

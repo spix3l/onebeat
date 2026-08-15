@@ -794,6 +794,11 @@ OB_API ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8
 /* Project files (added in ABI 1.7, OB-3-05's writer reaching the UI)         */
 /* ------------------------------------------------------------------------- */
 
+/* Main/UI thread. May block: replaces the session with a fresh project
+ * containing Pattern 1 and its arrangement lane. The new project has no file
+ * path and is considered saved until the user edits it. */
+OB_API ob_status ob_engine_project_new(ob_engine* engine);
+
 /* Main/UI thread. May block: writes the project bundle at `utf8_path`.
  *
  * Distinct from ob_engine_session_save, which is the v0.2 scratch file holding

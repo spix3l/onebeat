@@ -150,6 +150,10 @@ struct ob_engine {
     bool failed = false;
   };
   std::map<onebeat::model::InstrumentId, HostedSlot> hosted;
+  // Project-open state is collected before hosting is reconciled. Keeping it
+  // keyed by instrument ID lets a missing or reordered lane receive the same
+  // opaque bytes without coupling persistence to a dense channel index.
+  std::map<onebeat::model::InstrumentId, std::vector<uint8_t>> pending_project_state;
 };
 
 namespace {
@@ -380,7 +384,11 @@ void syncHostedInstruments(ob_engine& handle) {
     if (slot.missing) {
       /* The bundle is not on this machine. A silent stand-in keeps the lane, its
        * notes and its saved state rather than dropping them. */
-      slot.failed = !handle.engine->installMissingInstrument(instrument->plugin.name, {}, channel,
+      const auto state = handle.pending_project_state.find(id);
+      static const std::vector<uint8_t> empty_state;
+      const std::vector<uint8_t>& bytes =
+          state == handle.pending_project_state.end() ? empty_state : state->second;
+      slot.failed = !handle.engine->installMissingInstrument(instrument->plugin.name, bytes, channel,
                                                              host_error);
     } else {
       slot.failed = !handle.engine->createSandboxedInstrument(
@@ -455,6 +463,18 @@ void publishModel(ob_engine& handle) {
   /* And every edit that can change which lane a plug-in belongs to reconciles
    * hosting here, for the same reason. */
   syncHostedInstruments(handle);
+  // A project load supplies state by stable instrument ID. Hosting happens as
+  // part of this publish, so restore any chunks that could not be handed to a
+  // MissingPlugin constructor before exposing the instance to the UI.
+  for (auto it = handle.pending_project_state.begin();
+       it != handle.pending_project_state.end();) {
+    const int channel = channelIndexOf(handle, it->first);
+    if (channel >= 0 && handle.engine->loadHostedState(channel, it->second)) {
+      it = handle.pending_project_state.erase(it);
+    } else {
+      ++it;
+    }
+  }
   refreshInstanceView(handle);
   if (flattened.schedule != nullptr) {
     handle.engine->publishSchedule(std::move(flattened.schedule));
@@ -1577,15 +1597,9 @@ ob_status ob_engine_instrument_add_empty(ob_engine* engine, const char* utf8_nam
                      "Could not add the channel.") != OB_OK) {
       return fail(OB_ERR_INTERNAL, "Could not add the channel.");
     }
-    // Select the newest channel so the rack highlights the empty lane.
-    const int32_t count = static_cast<int32_t>(engine->project.instruments().size());
-    for (const auto& [id, instrument] : engine->project.instruments()) {
-      (void)instrument;
-      if (instrument.order == count - 1) {
-        engine->selected_instrument = id;
-        break;
-      }
-    }
+    // An empty lane is a blank work surface, not an implicit selection. Keep
+    // the current inspector selection unchanged so adding a channel cannot
+    // make an unrelated inspector appear or jump to the new row.
     return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
@@ -2749,6 +2763,42 @@ ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8_clip_i
   return OB_OK;
 }
 
+ob_status ob_engine_project_new(ob_engine* engine) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  try {
+    onebeat::model::Project fresh;
+    const onebeat::model::PatternId pattern =
+        fresh.createPattern("Pattern 1", onebeat::model::TicksPerBarFourFour);
+    const onebeat::model::ArrangementLaneId lane = fresh.createLane("Patterns");
+    if (!fresh.createClip(lane, onebeat::model::PatternSource{pattern}, 0,
+                          onebeat::model::TicksPerBarFourFour)
+             .valid()) {
+      return fail(OB_ERR_INTERNAL, "The new project could not be created.");
+    }
+
+    engine->project.adopt(fresh.copyTables());
+    engine->commands.clear();
+    engine->rack_grids.clear();
+    engine->selected_instrument = std::nullopt;
+    engine->current_pattern = pattern;
+    engine->project_path.clear();
+    engine->residue = onebeat::model::Residue{};
+    engine->pending_project_state.clear();
+    engine->hosted.clear();
+    engine->has_instance = false;
+    engine->instance_missing = false;
+    engine->instance_state.clear();
+    publishModel(*engine);
+    engine->saved_project_hash = projectHash(*engine);
+    g_last_error.clear();
+    return OB_OK;
+  } catch (const std::exception& exception) {
+    return fail(OB_ERR_INTERNAL, exception.what());
+  } catch (...) {
+    return fail(OB_ERR_INTERNAL, "Unknown failure while creating the project.");
+  }
+}
+
 ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path) {
   if (engine == nullptr || utf8_path == nullptr || utf8_path[0] == '\0') {
     return fail(OB_ERR_INVALID_ARGUMENT, "A project path is required.");
@@ -2760,12 +2810,35 @@ ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path) {
     // instrument plug-in state through the project writer (that lands with the
     // Stage 4 mixer), and dropping them on save would be data loss.
     options.copy_state_from = engine->project_path;
+    options.state_provider = [engine](onebeat::model::InstrumentId id) {
+      const int channel = channelIndexOf(*engine, id);
+      std::vector<uint8_t> bytes;
+      if (channel < 0 || !engine->engine->saveHostedState(channel, bytes)) {
+        return std::vector<std::byte>{};
+      }
+      std::vector<std::byte> state(bytes.size());
+      if (!bytes.empty()) {
+        std::memcpy(state.data(), bytes.data(), bytes.size());
+      }
+      return state;
+    };
 
     const onebeat::model::SaveReport report =
         onebeat::model::saveProject(utf8_path, engine->project, engine->residue, options);
     if (!report.ok) {
       return fail(OB_ERR_INTERNAL,
                   report.error.empty() ? "The project could not be saved." : report.error.c_str());
+    }
+    // State references are persistence bookkeeping, not a user edit. Fold the
+    // records into the model without adding undo commands so the dirty hash
+    // agrees with the project.json just written.
+    for (const auto& [id, record] : report.state_written) {
+      (void)engine->project.updateInstrument(
+          id, onebeat::model::ChangeField::Plugin,
+          [&record](onebeat::model::Instrument& instrument) {
+            instrument.plugin.state_ref = record.state_ref;
+            instrument.plugin.state_sha256 = record.sha256;
+          });
     }
     engine->project_path = utf8_path;
     engine->saved_project_hash = projectHash(*engine);
@@ -2787,8 +2860,18 @@ ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path) {
       return fail(OB_ERR_FILE_NOT_FOUND, "The project does not exist.");
     }
     onebeat::model::Residue residue;
+    engine->pending_project_state.clear();
+    onebeat::model::LoadOptions load_options;
+    load_options.state_sink = [engine](onebeat::model::InstrumentId id,
+                                       const std::vector<std::byte>& bytes) {
+      std::vector<uint8_t> state(bytes.size());
+      if (!bytes.empty()) {
+        std::memcpy(state.data(), bytes.data(), bytes.size());
+      }
+      engine->pending_project_state[id] = std::move(state);
+    };
     const onebeat::model::LoadReport report =
-        onebeat::model::loadProject(utf8_path, engine->project, residue, {});
+        onebeat::model::loadProject(utf8_path, engine->project, residue, load_options);
     if (!report.ok) {
       // loadProject leaves the project untouched on failure, so the session the
       // user already had open survives an unreadable file.
@@ -2798,6 +2881,10 @@ ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path) {
     }
     engine->residue = std::move(residue);
     engine->project_path = utf8_path;
+    engine->hosted.clear();
+    engine->has_instance = false;
+    engine->instance_missing = false;
+    engine->instance_state.clear();
 
     // The history belongs to the session that made it: an opened file has no
     // edits to undo, and keeping the old stack would let undo reach back into a

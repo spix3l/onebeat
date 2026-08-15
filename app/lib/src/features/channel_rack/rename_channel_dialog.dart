@@ -15,6 +15,8 @@ class RenameChannelDialog extends StatefulWidget {
     required this.initialName,
     required this.onSubmit,
     required this.onClose,
+    this.title = 'Rename channel',
+    this.fieldLabel = 'Channel name',
     super.key,
   });
 
@@ -23,6 +25,8 @@ class RenameChannelDialog extends StatefulWidget {
   /// Fired with the trimmed name when the user confirms.
   final ValueChanged<String> onSubmit;
   final VoidCallback onClose;
+  final String title;
+  final String fieldLabel;
 
   @override
   State<RenameChannelDialog> createState() => _RenameChannelDialogState();
@@ -36,10 +40,7 @@ class _RenameChannelDialogState extends State<RenameChannelDialog> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialName)
-      ..selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: widget.initialName.length,
-      );
+      ..selection = TextSelection(baseOffset: 0, extentOffset: widget.initialName.length);
     _focusNode = FocusNode(debugLabel: 'rename-channel');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusNode.requestFocus();
@@ -82,14 +83,14 @@ class _RenameChannelDialogState extends State<RenameChannelDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _DialogHeader(title: 'Rename channel', onClose: widget.onClose),
+            _DialogHeader(title: widget.title, onClose: widget.onClose),
             Padding(
               padding: EdgeInsets.all(tokens.spacing.lg),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text('Channel name', style: tokens.type.microCaps),
+                  Text(widget.fieldLabel, style: tokens.type.microCaps),
                   SizedBox(height: tokens.spacing.xs),
                   _NameField(
                     controller: _controller,
@@ -101,9 +102,7 @@ class _RenameChannelDialogState extends State<RenameChannelDialog> {
                   SizedBox(height: tokens.spacing.sm),
                   Text(
                     valid ? 'Applies everywhere this channel appears.' : 'Give the channel a name.',
-                    style: tokens.type.label.copyWith(
-                      color: valid ? color.textMuted : color.danger,
-                    ),
+                    style: tokens.type.label.copyWith(color: valid ? color.textMuted : color.danger),
                   ),
                   SizedBox(height: tokens.spacing.lg),
                   Row(
@@ -111,11 +110,7 @@ class _RenameChannelDialogState extends State<RenameChannelDialog> {
                     children: <Widget>[
                       ObButton(label: 'Cancel', onTap: widget.onClose),
                       SizedBox(width: tokens.spacing.sm),
-                      ObButton(
-                        label: 'Rename',
-                        tone: ObButtonTone.primary,
-                        onTap: valid ? _submit : null,
-                      ),
+                      ObButton(label: 'Rename', tone: ObButtonTone.primary, onTap: valid ? _submit : null),
                     ],
                   ),
                 ],
@@ -156,17 +151,12 @@ class _NameField extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.surfaceWell,
         borderRadius: tokens.radius.controlBorder,
-        border: Border.all(
-          color: color.lineStrong,
-          width: tokens.border.hairline,
-        ),
+        border: Border.all(color: color.lineStrong, width: tokens.border.hairline),
       ),
       // Escape closes from the field, which is where the keyboard is. Without
       // it the only way out of a modal with focus in a text box is the mouse.
       child: Shortcuts(
-        shortcuts: <ShortcutActivator, Intent>{
-          const SingleActivator(LogicalKeyboardKey.escape): const DismissIntent(),
-        },
+        shortcuts: <ShortcutActivator, Intent>{const SingleActivator(LogicalKeyboardKey.escape): const DismissIntent()},
         child: Actions(
           actions: <Type, Action<Intent>>{
             DismissIntent: CallbackAction<DismissIntent>(
@@ -206,11 +196,7 @@ class _DialogHeader extends StatelessWidget {
     return Container(
       height: tokens.size.dialogHeaderHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.lg),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: color.line, width: tokens.border.hairline),
-        ),
-      ),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: color.line, width: tokens.border.hairline))),
       child: Row(
         children: <Widget>[
           Text(title, style: tokens.type.dialogTitle),
@@ -219,11 +205,7 @@ class _DialogHeader extends StatelessWidget {
             onTap: onClose,
             child: MouseRegion(
               cursor: SystemMouseCursors.click,
-              child: ObKitGlyph(
-                kind: ObKitGlyphKind.close,
-                color: color.textMuted,
-                size: ObKitGlyphSize.inline,
-              ),
+              child: ObKitGlyph(kind: ObKitGlyphKind.close, color: color.textMuted, size: ObKitGlyphSize.inline),
             ),
           ),
         ],

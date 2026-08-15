@@ -806,6 +806,26 @@ void main() {
     expect(client.reorders, isEmpty);
   });
 
+  testWidgets('clicking a sample lane opens its sampler', (
+    WidgetTester tester,
+  ) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+    final List<String> opened = <String>[];
+
+    await pumpForTest(
+      tester,
+      RackBinding(client: client, onOpenSampler: opened.add),
+      size: const Size(1520, 880),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Kick 808'));
+    await tester.pump();
+
+    expect(opened, <String>['kick']);
+    expect(find.byType(ObChannelInspector), findsOneWidget);
+  });
+
   testWidgets('double-clicking a plug-in lane opens its plug-in window', (
     WidgetTester tester,
   ) async {

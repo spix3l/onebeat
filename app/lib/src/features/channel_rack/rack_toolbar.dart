@@ -8,9 +8,9 @@
 // drift out of alignment with the columns it names.
 import 'package:flutter/widgets.dart';
 
+import '../../core/snap_grid.dart';
 import '../../design/tokens.dart';
 import '../../ui_kit/dropdown.dart';
-import '../../core/snap_grid.dart';
 
 /// The dropdown row above the grid.
 @immutable
@@ -42,6 +42,8 @@ class RackToolbarVm {
   final List<String> groups;
   final List<String>? snaps;
 
+  // Legacy values remain in the VM so older fixtures can still construct it;
+  // the rack no longer renders the non-functional filters in production.
   List<String> get snapLabels => snaps ?? SnapGridChoice.rackLabels;
 }
 
@@ -84,40 +86,20 @@ class ObRackToolbar extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          ObDropdown(
-            label: 'Channel type',
-            value: vm.channelType,
-            items: vm.channelTypes,
-            width: tokens.size.rackTypeFieldWidth,
-            onSelected: onChannelType,
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          ObDropdown(
-            label: 'Group',
-            value: vm.group,
-            items: vm.groups,
-            width: tokens.size.rackGroupFieldWidth,
-            onSelected: onGroup,
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          ObDropdown(
-            label: 'Snap',
-            value: vm.snap,
-            items: vm.snapLabels,
-            width: tokens.size.rackSnapFieldWidth,
-            onSelected: onSnap,
-          ),
-          SizedBox(width: tokens.spacing.md),
-          _IconButton(kind: RackToolKind.mixer, onTap: onMixerTap),
-          SizedBox(width: tokens.spacing.sm),
-          _IconButton(
-            kind: RackToolKind.add,
-            accent: true,
-            onTap: onAddChannel,
-          ),
-          SizedBox(width: tokens.spacing.sm),
-          _IconButton(kind: RackToolKind.automation, onTap: onAutomationTap),
-          SizedBox(width: tokens.spacing.sm),
+          // Channel type, group, mixer and automation were never wired to rack
+          // behaviour. They are intentionally absent rather than disabled.
+          // Keep the callback-gated snap control for older isolated widget
+          // fixtures; RackBinding does not provide this callback anymore.
+          if (onSnap != null) ...<Widget>[
+            ObDropdown(
+              label: 'Snap',
+              value: vm.snap,
+              items: vm.snapLabels,
+              width: tokens.size.rackSnapFieldWidth,
+              onSelected: onSnap,
+            ),
+            SizedBox(width: tokens.spacing.md),
+          ],
           const Spacer(),
           ObDropdown(
             label: 'Steps',
@@ -133,8 +115,6 @@ class ObRackToolbar extends StatelessWidget {
                     if (parsed != null) onSteps!(parsed);
                   },
           ),
-          SizedBox(width: tokens.spacing.sm),
-          Text('· loop', maxLines: 1, style: tokens.type.numericSmall),
         ],
       ),
     );
@@ -275,7 +255,7 @@ class ObRackFooter extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            _IconButton(kind: RackToolKind.add, onTap: onAddChannel),
+            Text('+', style: tokens.type.title),
             SizedBox(width: tokens.spacing.md),
             Text(lead, maxLines: 1, style: tokens.type.bodySecondary),
             SizedBox(width: tokens.spacing.sm),
@@ -293,136 +273,4 @@ class ObRackFooter extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Which glyph a toolbar button carries.
-enum RackToolKind { mixer, add, automation }
-
-class _IconButton extends StatefulWidget {
-  const _IconButton({required this.kind, this.accent = false, this.onTap});
-
-  final RackToolKind kind;
-
-  /// The one accented button in the row: adding a channel is the action the
-  /// toolbar exists for.
-  final bool accent;
-  final VoidCallback? onTap;
-
-  @override
-  State<_IconButton> createState() => _IconButtonState();
-}
-
-class _IconButtonState extends State<_IconButton> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final ColorTokens color = tokens.color;
-    final bool enabled = widget.onTap != null;
-    final Color fill;
-    if (widget.accent) {
-      fill = _hover && enabled ? color.accentBright : color.accent;
-    } else {
-      fill = _hover && enabled ? color.surfaceHover : color.surfaceWell;
-    }
-
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
-      onExit: enabled ? (_) => setState(() => _hover = false) : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: Container(
-          width: tokens.size.microFieldHeight,
-          height: tokens.size.microFieldHeight,
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: widget.accent ? color.accentBright : color.lineStrong,
-              width: tokens.border.hairline,
-            ),
-          ),
-          child: CustomPaint(
-            painter: _RackToolPainter(
-              kind: widget.kind,
-              color: widget.accent ? color.textPrimary : color.textSecondary,
-              stroke: tokens.border.glyph,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RackToolPainter extends CustomPainter {
-  _RackToolPainter({
-    required this.kind,
-    required this.color,
-    required this.stroke,
-  });
-
-  final RackToolKind kind;
-  final Color color;
-  final double stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint line = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    final double w = size.width;
-    final double h = size.height;
-
-    switch (kind) {
-      case RackToolKind.mixer:
-        // Three rails with caps: the same idea as the rail's mixer glyph, at
-        // button scale.
-        final List<double> rows = <double>[h * 0.34, h * 0.5, h * 0.66];
-        final List<double> caps = <double>[w * 0.62, w * 0.38, w * 0.56];
-        for (int i = 0; i < rows.length; i++) {
-          canvas.drawLine(
-            Offset(w * 0.28, rows[i]),
-            Offset(w * 0.72, rows[i]),
-            line,
-          );
-          canvas.drawLine(
-            Offset(caps[i], rows[i] - h * 0.07),
-            Offset(caps[i], rows[i] + h * 0.07),
-            line,
-          );
-        }
-      case RackToolKind.add:
-        canvas.drawLine(
-          Offset(w * 0.5, h * 0.28),
-          Offset(w * 0.5, h * 0.72),
-          line,
-        );
-        canvas.drawLine(
-          Offset(w * 0.28, h * 0.5),
-          Offset(w * 0.72, h * 0.5),
-          line,
-        );
-      case RackToolKind.automation:
-        // A single pulse: flat, spike, flat — automation as "a value that
-        // moves".
-        final Path path = Path()
-          ..moveTo(w * 0.24, h * 0.5)
-          ..lineTo(w * 0.38, h * 0.5)
-          ..lineTo(w * 0.46, h * 0.28)
-          ..lineTo(w * 0.56, h * 0.72)
-          ..lineTo(w * 0.64, h * 0.5)
-          ..lineTo(w * 0.76, h * 0.5);
-        canvas.drawPath(path, line);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RackToolPainter oldDelegate) =>
-      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

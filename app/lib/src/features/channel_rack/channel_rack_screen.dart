@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../../core/action_registry.dart';
 import '../../design/tokens.dart';
 import '../../ui_kit/button.dart';
 import '../../ui_kit/empty_state.dart';
@@ -17,6 +18,7 @@ class ChannelRackScreen extends StatelessWidget {
   const ChannelRackScreen({
     required this.vm,
     this.onSelectPattern,
+    this.onPatternSecondaryTapDown,
     this.onSelectRow,
     this.onRowDoubleTap,
     this.onTogglePower,
@@ -25,11 +27,11 @@ class ChannelRackScreen extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     this.onAddChannel,
+    this.onCreatePattern,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
     this.onAddInstrument,
     this.onReorderRow,
-    this.onSearchTap,
     this.onChannelType,
     this.onGroup,
     this.onSnap,
@@ -54,6 +56,7 @@ class ChannelRackScreen extends StatelessWidget {
 
   final ChannelRackScreenVm vm;
   final ValueChanged<String>? onSelectPattern;
+  final void Function(String patternId, TapDownDetails details)? onPatternSecondaryTapDown;
   final ValueChanged<int>? onSelectRow;
 
   /// Fired for a lane that hosts a plug-in when it is double-clicked, so the
@@ -65,11 +68,11 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
+  final VoidCallback? onCreatePattern;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(Object data)? onAddInstrument;
   final void Function(int oldIndex, int newIndex)? onReorderRow;
-  final VoidCallback? onSearchTap;
   final ValueChanged<String>? onChannelType;
   final ValueChanged<String>? onGroup;
   final ValueChanged<String>? onSnap;
@@ -105,20 +108,16 @@ class ChannelRackScreen extends StatelessWidget {
           _ChannelRackHeader(
             title: vm.title,
             patterns: vm.patterns,
-            hint: vm.hint,
             onSelectPattern: onSelectPattern,
+            onPatternSecondaryTapDown: onPatternSecondaryTapDown,
             onAddChannel: onAddChannel,
-            onSearchTap: onSearchTap,
+            onCreatePattern: onCreatePattern,
           ),
           ObRackToolbar(
             vm: vm.toolbar,
-            onChannelType: onChannelType,
-            onGroup: onGroup,
-            onSnap: onSnap,
+            // The rack keeps only controls that change the pattern: step count
+            // and the visible Add channel action in the header.
             onSteps: onSteps,
-            onMixerTap: onMixerTap,
-            onAddChannel: onAddChannel,
-            onAutomationTap: onAutomationTap,
           ),
           Expanded(
             child: LayoutBuilder(
@@ -128,11 +127,7 @@ class ChannelRackScreen extends StatelessWidget {
                 // Republished for the grid below, so the number strip, the
                 // cells, their painter and their hit-test all read one size.
                 final OneBeatTokens rackTokens = currentTokens.withSize(
-                  fitRackSteps(
-                    currentTokens.size,
-                    vm.stepCount,
-                    constraints.maxWidth - chrome,
-                  ),
+                  fitRackSteps(currentTokens.size, vm.stepCount, constraints.maxWidth - chrome),
                 );
                 final double contentWidth = chrome + rackGridWidth(rackTokens.size, vm.stepCount);
                 return OneBeatTheme(
@@ -277,19 +272,18 @@ class _ChannelRackHeader extends StatelessWidget {
   const _ChannelRackHeader({
     required this.title,
     required this.patterns,
-    required this.hint,
     this.onSelectPattern,
+    this.onPatternSecondaryTapDown,
     this.onAddChannel,
-    this.onSearchTap,
+    this.onCreatePattern,
   });
 
   final String title;
   final List<PatternTabVm> patterns;
-  final String hint;
   final ValueChanged<String>? onSelectPattern;
+  final void Function(String patternId, TapDownDetails details)? onPatternSecondaryTapDown;
   final VoidCallback? onAddChannel;
-  final VoidCallback? onSearchTap;
-
+  final VoidCallback? onCreatePattern;
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
@@ -300,9 +294,7 @@ class _ChannelRackHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: color.surfacePanel,
-        border: Border(
-          bottom: BorderSide(color: color.line, width: tokens.border.hairline),
-        ),
+        border: Border(bottom: BorderSide(color: color.line, width: tokens.border.hairline)),
       ),
       child: Row(
         children: <Widget>[
@@ -312,26 +304,56 @@ class _ChannelRackHeader extends StatelessWidget {
             _PatternTab(
               tab: pattern,
               onTap: onSelectPattern == null ? null : () => onSelectPattern!(pattern.id),
+              onSecondaryTapDown:
+                  onPatternSecondaryTapDown == null
+                      ? null
+                      : (TapDownDetails details) => onPatternSecondaryTapDown!(pattern.id, details),
             ),
             SizedBox(width: tokens.spacing.xs),
           ],
           const Spacer(),
-          Text(hint, style: tokens.type.rackCaption),
-          SizedBox(width: tokens.spacing.md),
+          _NewPatternButton(onTap: onCreatePattern),
+          SizedBox(width: tokens.spacing.xs),
           _AddChannelAccentButton(onTap: onAddChannel),
-          SizedBox(width: tokens.spacing.sm),
-          _RoundSearchButton(onTap: onSearchTap),
         ],
       ),
     );
   }
 }
 
+class _NewPatternButton extends StatelessWidget {
+  const _NewPatternButton({this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ColorTokens color = tokens.color;
+
+    return GestureDetector(
+      key: actionKey('pattern.create'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.xs),
+        decoration: BoxDecoration(
+          color: color.surfaceWell,
+          borderRadius: tokens.radius.controlBorder,
+          border: Border.all(color: color.line, width: tokens.border.hairline),
+        ),
+        child: Text('+ New pattern  \u2318N', style: tokens.type.body.copyWith(color: color.textSecondary)),
+      ),
+    );
+  }
+}
+
 class _PatternTab extends StatelessWidget {
-  const _PatternTab({required this.tab, this.onTap});
+  const _PatternTab({required this.tab, this.onTap, this.onSecondaryTapDown});
 
   final PatternTabVm tab;
   final VoidCallback? onTap;
+  final ValueChanged<TapDownDetails>? onSecondaryTapDown;
 
   @override
   Widget build(BuildContext context) {
@@ -341,18 +363,13 @@ class _PatternTab extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onSecondaryTapDown: onSecondaryTapDown,
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.sm,
-          vertical: tokens.spacing.xs,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm, vertical: tokens.spacing.xs),
         decoration: BoxDecoration(
           color: tab.selected ? color.accent : color.surfaceWell,
           borderRadius: tokens.radius.controlBorder,
-          border: Border.all(
-            color: tab.selected ? color.accentBright : color.line,
-            width: tokens.border.hairline,
-          ),
+          border: Border.all(color: tab.selected ? color.accentBright : color.line, width: tokens.border.hairline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -374,9 +391,7 @@ class _PatternTab extends StatelessWidget {
                 ),
                 child: Text(
                   '${tab.count}',
-                  style: tokens.type.numericSmall.copyWith(
-                    color: tab.selected ? color.textPrimary : color.textMuted,
-                  ),
+                  style: tokens.type.numericSmall.copyWith(color: tab.selected ? color.textPrimary : color.textMuted),
                 ),
               ),
             ],
@@ -401,60 +416,21 @@ class _AddChannelAccentButton extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.md,
-          vertical: tokens.spacing.xs,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.xs),
         decoration: BoxDecoration(
           color: color.accent,
           borderRadius: tokens.radius.controlBorder,
-          border: Border.all(
-            color: color.accentBright,
-            width: tokens.border.hairline,
-          ),
+          border: Border.all(color: color.accentBright, width: tokens.border.hairline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Text(
               '+ Add channel',
-              style: tokens.type.body.copyWith(
-                color: color.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
+              style: tokens.type.body.copyWith(color: color.textPrimary, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RoundSearchButton extends StatelessWidget {
-  const _RoundSearchButton({this.onTap});
-
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final ColorTokens color = tokens.color;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        width: tokens.size.rackPowerSize,
-        height: tokens.size.rackPowerSize,
-        decoration: BoxDecoration(
-          color: color.surfaceWell,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: color.lineStrong,
-            width: tokens.border.hairline,
-          ),
-        ),
-        child: Center(child: Text('⌕', style: tokens.type.microCaps)),
       ),
     );
   }
@@ -507,9 +483,7 @@ class _RackRowsScrollArea extends StatelessWidget {
     icon: ObKitGlyphKind.note,
     heading: 'Add your first instrument',
     body: <ObProseRun>[
-      ObProseRun(
-        'Drop a sample from the browser, or add an empty channel to start building Pattern 1.',
-      ),
+      ObProseRun('Drop a sample from the browser, or add an empty channel to start building Pattern 1.'),
     ],
   );
 
@@ -520,46 +494,42 @@ class _RackRowsScrollArea extends StatelessWidget {
 
     return DragTarget<Object>(
       onAcceptWithDetails: add == null ? null : (DragTargetDetails<Object> details) => add(details.data),
-      builder:
-          (
-            BuildContext context,
-            List<Object?> candidates,
-            List<Object?> rejected,
-          ) {
-            if (rows.isEmpty) {
-              return Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(tokens.spacing.lg),
-                  child: ObEmptyState(
-                    vm: _emptyVm,
-                    actions: <Widget>[
-                      ObButton(
-                        label: 'Add channel',
-                        icon: ObKitGlyphKind.plus,
-                        tone: ObButtonTone.primary,
-                        onTap: onAddChannel,
-                      ),
-                    ],
+      builder: (BuildContext context, List<Object?> candidates, List<Object?> rejected) {
+        if (rows.isEmpty) {
+          return Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(tokens.spacing.lg),
+              child: ObEmptyState(
+                vm: _emptyVm,
+                actions: <Widget>[
+                  ObButton(
+                    label: 'Add channel',
+                    icon: ObKitGlyphKind.plus,
+                    tone: ObButtonTone.primary,
+                    onTap: onAddChannel,
                   ),
-                ),
-              );
-            }
+                ],
+              ),
+            ),
+          );
+        }
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                // A reorderable list rather than a plain Column: the lanes are the
-                // channel order, and the order is data the user edits. This list
-                // adds no drag handles of its own — the name block opts in via
-                // ObRackRow.reorderIndex — so dragging across the step cells still
-                // paints steps.
-                Expanded(
-                  child: ReorderableList(
-                    itemCount: rows.length,
-                    // onReorderItem, not onReorder: it hands back a newIndex that
-                    // already accounts for the dragged row being lifted out.
-                    onReorderItem: onReorderRow ?? (int _, int _) {},
-                    itemBuilder: (BuildContext context, int i) => _RackRowItem(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            // A reorderable list rather than a plain Column: the lanes are the
+            // channel order, and the order is data the user edits. This list
+            // adds no drag handles of its own — the name block opts in via
+            // ObRackRow.reorderIndex — so dragging across the step cells still
+            // paints steps.
+            Expanded(
+              child: ReorderableList(
+                itemCount: rows.length,
+                // onReorderItem, not onReorder: it hands back a newIndex that
+                // already accounts for the dragged row being lifted out.
+                onReorderItem: onReorderRow ?? (int _, int _) {},
+                itemBuilder:
+                    (BuildContext context, int i) => _RackRowItem(
                       key: ValueKey<String>('rack-row-${rows[i].name}-$i'),
                       index: i,
                       row: rows[i],
@@ -580,11 +550,11 @@ class _RackRowsScrollArea extends StatelessWidget {
                       onPointerUpStep: onPointerUpStep,
                       onPointerCancelStep: onPointerCancelStep,
                     ),
-                  ),
-                ),
-              ],
-            );
-          },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -638,50 +608,60 @@ class _RackRowItem extends StatelessWidget {
 
     return DragTarget<Object>(
       onAcceptWithDetails: drop == null ? null : (DragTargetDetails<Object> details) => drop(index, details.data),
-      builder:
-          (
-            BuildContext context,
-            List<Object?> candidates,
-            List<Object?> rejected,
-          ) {
-            final bool hovering = candidates.isNotEmpty;
-            return Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: hovering ? tokens.color.accent : tokens.color.none,
-                  width: hovering ? tokens.border.emphasis : 0,
-                ),
-              ),
-              child: Listener(
-                onPointerUp: onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
-                onPointerCancel: onPointerCancelStep == null ? null : (_) => onPointerCancelStep!(),
-                child: ObRackRow(
-                  vm: row,
-                  reorderIndex: reorderable ? index : null,
-                  playingStep: playingStep,
-                  playingTick: playingTick,
-                  onTap: onSelectRow == null ? null : () => onSelectRow!(index),
-                  // Only plug-in lanes double-tap into their plug-in window; the
-                  // recognizer would delay single-click selection everywhere else.
-                  onDoubleTap: row.hostsPlugin && onRowDoubleTap != null ? () => onRowDoubleTap!(index) : null,
-                  onSecondaryTapDown: onSecondaryTapDown == null
+      builder: (BuildContext context, List<Object?> candidates, List<Object?> rejected) {
+        final bool hovering = candidates.isNotEmpty;
+        return Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: hovering ? tokens.color.accent : tokens.color.none,
+              width: hovering ? tokens.border.emphasis : 0,
+            ),
+          ),
+          child: Listener(
+            onPointerUp: onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
+            onPointerCancel: onPointerCancelStep == null ? null : (_) => onPointerCancelStep!(),
+            child: ObRackRow(
+              vm: row,
+              reorderIndex: reorderable ? index : null,
+              playingStep: playingStep,
+              playingTick: playingTick,
+              onTap:
+                  onSelectRow == null
                       ? null
-                      : (TapDownDetails details) => onSecondaryTapDown!(index, details),
-                  onPower: onTogglePower == null ? null : () => onTogglePower!(index),
-                  onStepTap: onStepTap == null ? null : (int step) => onStepTap!(index, step),
-                  onPointerDownStep: onPointerDownStep == null
+                      : () {
+                        onSelectRow!(index);
+                        // Samples have a built-in editor rather than a
+                        // hosted instance, so opening them on the row tap
+                        // avoids making every ordinary sample click wait
+                        // for a double-tap timeout.
+                        if (row.hostsPlugin && row.type.toLowerCase().contains('sampler')) {
+                          onRowDoubleTap?.call(index);
+                        }
+                      },
+              // Only hosted plug-in lanes use a double-tap recognizer.
+              onDoubleTap:
+                  row.hostsPlugin && !row.type.toLowerCase().contains('sampler') && onRowDoubleTap != null
+                      ? () => onRowDoubleTap!(index)
+                      : null,
+              onSecondaryTapDown:
+                  onSecondaryTapDown == null ? null : (TapDownDetails details) => onSecondaryTapDown!(index, details),
+              onPower: onTogglePower == null ? null : () => onTogglePower!(index),
+              onStepTap: onStepTap == null ? null : (int step) => onStepTap!(index, step),
+              onPointerDownStep:
+                  onPointerDownStep == null
                       ? null
                       : (PointerDownEvent event, int step) => onPointerDownStep!(event, index, step),
-                  onPointerMoveStep: onPointerMoveStep == null
+              onPointerMoveStep:
+                  onPointerMoveStep == null
                       ? null
                       : (PointerMoveEvent event, int step) => onPointerMoveStep!(event, index, step),
-                  onVol: onVolChanged == null ? null : (double val) => onVolChanged!(index, val),
-                  onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
-                  onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
-                ),
-              ),
-            );
-          },
+              onVol: onVolChanged == null ? null : (double val) => onVolChanged!(index, val),
+              onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
+              onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
+            ),
+          ),
+        );
+      },
     );
   }
 }
