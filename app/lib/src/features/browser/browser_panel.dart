@@ -28,8 +28,9 @@ sealed class BrowserNodeVm {
   final String id;
   final String name;
 
-  /// Payload carried by a drag that starts on this row (a plug-in to drop into
-  /// the channel rack). Rows with a null payload are not draggable.
+  /// Payload carried by a drag that starts on this row (a plug-in or sample
+  /// asset to drop into the channel rack). Rows with a null payload are not
+  /// draggable.
   final Object? dragData;
 
   /// Rows nested under this one. Only shown when the node is expanded.
@@ -96,8 +97,11 @@ class ObBrowserPanelVm {
     this.selectedId,
     this.title = 'Browser',
     this.searchHint = 'Search samples, presets…',
+    this.searchQuery = '',
+    this.scrollOffset = 0,
     this.emptyHeading = 'No sound folders yet.',
     this.emptyButtonLabel = 'Add sound folder...',
+    this.message,
   });
 
   final List<BrowserNodeVm> nodes;
@@ -106,21 +110,33 @@ class ObBrowserPanelVm {
   /// Micro-caps panel title; upper-cased on render.
   final String title;
   final String searchHint;
+
+  /// Shell-owned browser state, restored when the panel is recreated.
+  final String searchQuery;
+  final double scrollOffset;
   final String emptyHeading;
   final String emptyButtonLabel;
+  final String? message;
 }
 
 class ObBrowserPanel extends StatefulWidget {
   const ObBrowserPanel({
     required this.vm,
+    this.width,
     this.onTap,
     this.onToggle,
     this.onSearchTap,
+    this.onSearchChanged,
+    this.onScrollChanged,
     this.onAddFolder,
     super.key,
   });
 
   final ObBrowserPanelVm vm;
+
+  /// Width supplied by the shell's horizontal resize handle. Defaults to the
+  /// design width when the panel is used on its own in a test or another host.
+  final double? width;
 
   /// Fired with the tapped node's id.
   final ValueChanged<String>? onTap;
@@ -129,6 +145,8 @@ class ObBrowserPanel extends StatefulWidget {
   final ValueChanged<String>? onToggle;
 
   final VoidCallback? onSearchTap;
+  final ValueChanged<String>? onSearchChanged;
+  final ValueChanged<double>? onScrollChanged;
   final VoidCallback? onAddFolder;
 
   @override
@@ -137,10 +155,35 @@ class ObBrowserPanel extends StatefulWidget {
 
 class _ObBrowserPanelState extends State<ObBrowserPanel> {
   final FocusNode _searchFocus = FocusNode(debugLabel: 'browser-search');
-  String _query = '';
+  late final ScrollController _scrollController;
+  late String _query;
+
+  @override
+  void initState() {
+    super.initState();
+    _query = widget.vm.searchQuery;
+    _scrollController = ScrollController(initialScrollOffset: widget.vm.scrollOffset)
+      ..addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant ObBrowserPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.vm.searchQuery != oldWidget.vm.searchQuery &&
+        widget.vm.searchQuery != _query) {
+      _query = widget.vm.searchQuery;
+    }
+  }
+
+  void _onScroll() {
+    widget.onScrollChanged?.call(_scrollController.offset);
+  }
 
   @override
   void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     _searchFocus.dispose();
     super.dispose();
   }
@@ -205,12 +248,26 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
     final List<BrowserNodeVm> nodes = _filteredNodes(widget.vm.nodes);
 
     return Container(
-      width: tokens.size.browserWidth,
+      width: widget.width ?? tokens.size.browserWidth,
       decoration: BoxDecoration(color: color.surfacePanel),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           _Header(title: widget.vm.title, onSearchTap: _focusSearch),
+          if (widget.vm.message != null)
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.spacing.sm,
+                vertical: tokens.spacing.xs,
+              ),
+              color: color.dangerWash,
+              child: Text(
+                widget.vm.message!,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tokens.type.label.copyWith(color: color.danger),
+              ),
+            ),
           if (widget.vm.nodes.isNotEmpty) ...<Widget>[
             Padding(
               padding: EdgeInsets.symmetric(
@@ -225,7 +282,10 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
                 width: double.infinity,
                 focusNode: _searchFocus,
                 onTap: _focusSearch,
-                onChanged: (String value) => setState(() => _query = value),
+                onChanged: (String value) {
+                  setState(() => _query = value);
+                  widget.onSearchChanged?.call(value);
+                },
               ),
             ),
             Container(height: tokens.border.hairline, color: color.line),
@@ -237,13 +297,42 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
                     buttonLabel: widget.vm.emptyButtonLabel,
                     onAddFolder: widget.onAddFolder,
                   )
-                : ListView(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: tokens.spacing.sm,
-                      vertical: tokens.spacing.sm,
-                    ),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      for (final Widget row in _rows(nodes, 0)) row,
+                      // The empty-state CTA becomes a compact action once the
+                      // first pack exists. It must stay reachable so users can
+                      // import a second pack without deleting the first one.
+                      if (widget.onAddFolder != null)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            tokens.spacing.sm,
+                            tokens.spacing.sm,
+                            tokens.spacing.sm,
+                            0,
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ObButton(
+                              label: widget.vm.emptyButtonLabel,
+                              icon: ObKitGlyphKind.folder,
+                              tone: ObButtonTone.secondary,
+                              onTap: widget.onAddFolder,
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: ListView(
+                          controller: _scrollController,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: tokens.spacing.sm,
+                            vertical: tokens.spacing.sm,
+                          ),
+                          children: <Widget>[
+                            for (final Widget row in _rows(nodes, 0)) row,
+                          ],
+                        ),
+                      ),
                     ],
                   ),
           ),
@@ -680,13 +769,15 @@ class _BrowserEmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: tokens.type.body.copyWith(color: color.textMuted),
             ),
-            SizedBox(height: tokens.spacing.lg),
-            ObButton(
-              label: buttonLabel,
-              icon: ObKitGlyphKind.folder,
-              tone: ObButtonTone.primary,
-              onTap: onAddFolder,
-            ),
+            if (onAddFolder != null) ...<Widget>[
+              SizedBox(height: tokens.spacing.lg),
+              ObButton(
+                label: buttonLabel,
+                icon: ObKitGlyphKind.folder,
+                tone: ObButtonTone.primary,
+                onTap: onAddFolder,
+              ),
+            ],
           ],
         ),
       ),

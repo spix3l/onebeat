@@ -219,6 +219,41 @@ void main() {
     expect(find.text('Snare'), findsNothing);
   });
 
+  testWidgets('add packs stays available after a pack is imported', (
+    WidgetTester tester,
+  ) async {
+    bool addFolderClicked = false;
+    await pumpUi(
+      tester,
+      ObBrowserPanel(
+        vm: ObBrowserPanelVm(
+          nodes: <BrowserNodeVm>[
+            BrowserFolderVm(
+              id: 'pack:drums',
+              name: 'Drums',
+              count: 1,
+              children: <BrowserNodeVm>[
+                BrowserSampleVm(
+                  id: 'kick',
+                  name: 'Kick',
+                  color: channelColors[0],
+                ),
+              ],
+            ),
+          ],
+          emptyButtonLabel: 'Add packs',
+        ),
+        onAddFolder: () => addFolderClicked = true,
+      ),
+      size: _panel,
+    );
+
+    expect(find.text('Add packs'), findsOneWidget);
+    expect(find.text('Drums'), findsOneWidget);
+    await tester.tap(find.text('Add packs'));
+    expect(addFolderClicked, isTrue);
+  });
+
   testWidgets('sample rows carry a waveform mark', (
     WidgetTester tester,
   ) async {
