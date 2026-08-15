@@ -1,5 +1,6 @@
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -281,6 +282,68 @@ TEST_SUITE("engine") {
     CHECK(result.rms() > 0.20F);
   }
 
+  TEST_CASE("Arrangement sample loading targets its channel, not the preview voice") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    rack[1].one_shot = true;
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+
+    const std::string path = "/tmp/onebeat-arrangement-channel.wav";
+    onebeat::testing::RenderResult source;
+    source.left.assign(48000, 0.25F);
+    source.right.assign(48000, 0.25F);
+    REQUIRE(onebeat::testing::writeWav(source, path));
+    std::string error;
+    REQUIRE(engine->loadChannelSample(1, path, error));
+
+    onebeat::core::ScheduleBuilder schedule;
+    schedule.addAudioStart(1, 0);
+    engine->publishSchedule(schedule.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    CHECK(renderOffline(*engine, 12000, 128).peak() ==
+          doctest::Approx(0.25F).epsilon(0.02));
+
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
+  }
+
+  TEST_CASE("Two audio clips play in parallel on independent channels") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    auto plateau = [](float level) {
+      auto sample = std::make_unique<onebeat::core::SampleData>();
+      sample->channels = 1;
+      sample->sample_rate = 48000.0;
+      sample->frames = 48000;
+      sample->name = "parallel";
+      sample->samples.assign(static_cast<size_t>(sample->frames), level);
+      return sample;
+    };
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(3);
+    rack[1].one_shot = true;
+    rack[2].one_shot = true;
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+    engine->channelSampler(1).setSample(plateau(0.25F));
+    engine->channelSampler(2).setSample(plateau(0.5F));
+    engine->channelSampler(1).collectRetiredSamples(false);
+    engine->channelSampler(2).collectRetiredSamples(false);
+
+    onebeat::core::ScheduleBuilder schedule;
+    schedule.addAudioStart(1, 0);
+    schedule.addAudioStart(2, 0);
+    engine->publishSchedule(schedule.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    const auto result = renderOffline(*engine, 12000, 128);
+    CHECK(result.peak() == doctest::Approx(0.75F).epsilon(0.02));
+  }
+
   TEST_CASE("Replacing a schedule releases voices from clips that were moved") {
     auto engine = makeOfflineEngine();
     REQUIRE(engine != nullptr);
@@ -305,8 +368,10 @@ TEST_SUITE("engine") {
     CHECK(renderOffline(*engine, 1024, 128).peak() > 0.20F);
 
     // A move/edit publishes a replacement schedule while transport is already
-    // running. The old song must not continue from its previous position.
+    // running. The old song must not continue from its previous position. The
+    // ABI requests this channel-specific reset for the moved clip.
     onebeat::core::ScheduleBuilder moved_schedule;
+    engine->requestChannelReset(1);
     engine->publishSchedule(moved_schedule.setLengthFrames(48000 * 4).build(48000.0, 2));
     // Let the sampler's click-safe release fade finish before measuring the
     // replacement schedule. The old voice must not remain at full level.

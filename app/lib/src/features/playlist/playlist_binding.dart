@@ -8,6 +8,7 @@ import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../browser/sample_pack.dart';
 import '../browser/sample_pack_platform.dart';
+import 'audio_waveform.dart';
 import 'clip_card.dart';
 import 'playlist_canvas.dart';
 import 'playlist_screen.dart';
@@ -45,6 +46,8 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   String _draggingClipId = '';
   int _dragStartLane = 0;
   Offset _dragPixels = Offset.zero;
+  final Map<String, List<double>> _waveforms = <String, List<double>>{};
+  final Set<String> _waveformLoads = <String>{};
 
   @override
   void initState() {
@@ -106,6 +109,19 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     if (mounted) setState(() {});
   }
 
+  void _requestWaveform(String path) {
+    if (path.isEmpty ||
+        _waveforms.containsKey(path) ||
+        !_waveformLoads.add(path)) {
+      return;
+    }
+    loadAudioWaveform(path).then((List<double> waveform) {
+      _waveformLoads.remove(path);
+      if (!mounted) return;
+      setState(() => _waveforms[path] = waveform);
+    });
+  }
+
   Color _resolveColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
       final int parsed =
@@ -136,6 +152,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
         (() {
           final ArrangementClip clip = _store.clips[i];
           final int laneIndex = laneOrderMap[clip.laneId] ?? 0;
+          if (clip.isAudio) _requestWaveform(clip.audioPath);
           return ClipVm(
             id: clip.id.hashCode,
             name: clip.name.isNotEmpty ? clip.name : 'Clip ${i + 1}',
@@ -145,6 +162,8 @@ class _PlaylistBindingState extends State<PlaylistBinding>
             lengthBars: clip.lengthTicks / ticksPerBar,
             lane: laneIndex,
             selected: _store.selectedClipIds.contains(clip.id),
+            isAudio: clip.isAudio,
+            waveform: _waveforms[clip.audioPath] ?? const <double>[],
           );
         })(),
     ];

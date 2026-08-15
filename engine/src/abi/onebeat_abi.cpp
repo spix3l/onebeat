@@ -249,6 +249,7 @@ void syncChannels(ob_engine& handle) {
     desc.sample_path = audio->path;
     desc.gain = audio->gain;
     desc.muted = clip->muted;
+    desc.one_shot = true;
     if (channel_index != static_cast<onebeat::core::InstrumentId>(channels.size())) {
       // This should only be possible after a malformed model/map mismatch; do
       // not silently route a song to the wrong sampler if it ever happens.
@@ -536,7 +537,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.9.0";
+  return "1.10.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -2266,6 +2267,7 @@ ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_
   if (const onebeat::model::AudioSource* audio = clip.audio()) {
     copyText(out_info->name, sizeof(out_info->name), fileName(audio->path).c_str());
     copyText(out_info->color, sizeof(out_info->color), "#50B8C6");
+    copyText(out_info->audio_path, sizeof(out_info->audio_path), audio->path.c_str());
     g_last_error.clear();
     return OB_OK;
   }
@@ -2362,15 +2364,17 @@ ob_status ob_engine_clip_move(ob_engine* engine, const char* utf8_clip_id, const
   if (lane && engine->project.findLane(*lane) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The lane does not exist.");
   }
-  return executeModel(*engine,
-                      onebeat::model::editClip(
-                          engine->project, *id, onebeat::model::ChangeField::Start,
-                          [lane, start_ticks](onebeat::model::Clip& clip) {
-                            clip.start = start_ticks;
-                            if (lane) clip.lane = *lane;
-                          },
-                          "Move clip"),
-                      "The clip could not be moved.");
+  const ob_status status = executeModel(
+      *engine,
+      onebeat::model::editClip(
+          engine->project, *id, onebeat::model::ChangeField::Start,
+          [lane, start_ticks](onebeat::model::Clip& clip) {
+            clip.start = start_ticks;
+            if (lane) clip.lane = *lane;
+          },
+          "Move clip"),
+      "The clip could not be moved.");
+  return status;
 }
 
 ob_status ob_engine_clip_resize(ob_engine* engine, const char* utf8_clip_id, int64_t length_ticks) {
@@ -2437,7 +2441,18 @@ ob_status ob_engine_clip_remove(ob_engine* engine, const char* utf8_clip_id) {
   if (!id || engine->project.findClip(*id) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
   }
-  return executeModel(*engine, onebeat::model::removeClip(*id), "The clip could not be deleted.");
+  const bool audio_clip = engine->project.findClip(*id)->audio() != nullptr;
+  std::optional<onebeat::core::InstrumentId> audio_channel;
+  if (const auto found = engine->audio_channel_indices.find(*id);
+      found != engine->audio_channel_indices.end()) {
+    audio_channel = found->second;
+  }
+  const ob_status status =
+      executeModel(*engine, onebeat::model::removeClip(*id), "The clip could not be deleted.");
+  if (status == OB_OK && audio_clip && audio_channel.has_value()) {
+    engine->engine->requestChannelReset(static_cast<int>(*audio_channel));
+  }
+  return status;
 }
 
 namespace {

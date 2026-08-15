@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 9
+#define OB_ABI_VERSION_MINOR 10
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -747,6 +747,9 @@ typedef struct ob_clip_info {
   char pattern_id[32];
   char name[128]; /* the pattern's name — a clip has no name of its own */
   char color[8];  /* the pattern's colour, likewise */
+  /* Absolute/source path for audio clips; empty for pattern and automation
+   * clips. Appended in ABI 1.10 so the existing fields keep their offsets. */
+  char audio_path[512];
 } ob_clip_info;
 
 OB_API int32_t ob_engine_clip_count(ob_engine* engine);

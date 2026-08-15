@@ -91,6 +91,10 @@ class Engine final : public audio_io::RenderCallback {
     float gain = 1.0F;
     float pan = 0.0F;
     bool muted = false;
+    // Arrangement audio clips are one-shot sources, not MIDI/sample-rack
+    // instruments. This lets the loader and render path defer their start until
+    // the file is ready without delaying ordinary note channels.
+    bool one_shot = false;
   };
 
   Engine(const Engine&) = delete;
@@ -129,6 +133,10 @@ class Engine final : public audio_io::RenderCallback {
   // keeps the sample it already has, so reordering the rack does not re-read
   // every file.
   void setChannels(std::vector<ChannelDesc> channels);
+  // Requests a click-safe reset for one arrangement channel after a clip move,
+  // delete, or mute edit. Unlike a global reset, adding another audio clip does
+  // not interrupt clips that are already sounding.
+  void requestChannelReset(int index) noexcept;
   // Which channel manual note commands (the audition path) sound on.
   void setAuditionChannel(int index) noexcept;
 
@@ -224,6 +232,13 @@ class Engine final : public audio_io::RenderCallback {
     std::atomic<float> gain{1.0F};
     std::atomic<float> pan{0.0F};
     std::atomic<bool> muted{false};
+    std::atomic<bool> one_shot{false};
+    std::atomic<bool> sample_ready{true};
+    std::atomic<uint64_t> loaded_sample_hash{0};
+    std::atomic<bool> reset_requested{false};
+    // Audio-thread-only: an AudioStart that arrived before its file finished
+    // loading is replayed once the worker marks the channel ready.
+    bool deferred_audio_start = false;
     // Whether this slot is part of the rack at all. Slot 0 starts active so an
     // engine with no project still sounds — that is the audition path every
     // test and the v0.1 single-sampler behaviour rely on.
@@ -238,7 +253,8 @@ class Engine final : public audio_io::RenderCallback {
   void renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
                      int offset, int num_frames, const Schedule* schedule, int64_t chunk_start,
                      const plugin::EventList* block_events,
-                     bool release_all) noexcept OB_NONBLOCKING;
+                     bool release_all, plugin::PluginInstance& instrument,
+                     bool preview_voice = false) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
 
   void drainCommands(plugin::EventList& block_events) noexcept OB_NONBLOCKING;
@@ -255,6 +271,8 @@ class Engine final : public audio_io::RenderCallback {
                        uint64_t render_nanos) noexcept OB_NONBLOCKING;
   void housekeepingLoop();
   void onDeviceNotification(audio_io::DeviceNotification notification, const std::string& detail);
+  bool loadSampleInto(Sampler& target, int log_channel, const std::string& path,
+                      std::string& error);
 
   EngineConfig config_;
   Diagnostics diagnostics_;
@@ -267,6 +285,8 @@ class Engine final : public audio_io::RenderCallback {
   // `instrument()` below still name it, so the audition path and every caller
   // that predates the rack keep working unchanged.
   std::array<std::unique_ptr<Channel>, MaxRackChannels> channels_;
+  // Independent from the rack because slot 0 may host the default piano.
+  std::unique_ptr<Channel> preview_channel_;
   // A hosted CLAP plug-in still replaces exactly one channel's voice. Per-channel
   // hosting is a Stage 7 concern; what matters here is that the *built-in*
   // sampler is per-channel, which is what the rack is made of today.
@@ -312,7 +332,9 @@ class Engine final : public audio_io::RenderCallback {
   // Replacing a schedule while playing must reconcile voices from the old
   // arrangement. The audio thread consumes this flag at the next block and
   // releases those voices before rendering the new schedule.
-  std::atomic<bool> schedule_changed_{false};
+  // Schedule publication itself is intentionally not a global voice reset:
+  // adding a second clip must leave already-playing clips uninterrupted.
+
 
   std::thread housekeeping_;
   std::mutex work_mutex_;

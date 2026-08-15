@@ -19,10 +19,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.9.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.10.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.9.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.10.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -183,7 +183,7 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_lane_info, name) == 56);
     CHECK(offsetof(ob_lane_info, color) == 184);
 
-    CHECK(sizeof(ob_clip_info) == 288);
+    CHECK(sizeof(ob_clip_info) == 800);
     CHECK(offsetof(ob_clip_info, start_ticks) == 8);
     CHECK(offsetof(ob_clip_info, length_ticks) == 16);
     CHECK(offsetof(ob_clip_info, window_start_ticks) == 24);

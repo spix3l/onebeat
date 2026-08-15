@@ -159,6 +159,35 @@ void main() {
     expect(drops.single.$3, 0);
   });
 
+  testWidgets('audio clips render a waveform painter', (WidgetTester tester) async {
+    final ClipVm audio = ClipVm(
+      id: 9,
+      name: 'loop.wav',
+      duration: '0:04',
+      color: channelColors[0],
+      startBar: 0,
+      lengthBars: 2,
+      lane: 0,
+      isAudio: true,
+      waveform: const <double>[0.1, 0.8, 0.3, 1.0, 0.2],
+    );
+    await pumpUi(
+      tester,
+      PlaylistCanvas(
+        vm: PlaylistVm(clips: <ClipVm>[audio], pxPerBar: 100),
+      ),
+      size: const Size(400, 120),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (Widget widget) =>
+            widget is CustomPaint && widget.painter is AudioWaveformPainter,
+      ),
+      findsOneWidget,
+    );
+  });
+
   test('the vm reports how many lanes the canvas has to make room for', () {
     expect(demoPlaylist.laneCount, 5);
     expect(const PlaylistVm(clips: <ClipVm>[], pxPerBar: 38.3).laneCount, 0);

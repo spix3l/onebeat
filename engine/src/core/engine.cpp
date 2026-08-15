@@ -19,6 +19,16 @@ void copyText(char* destination, size_t capacity, const std::string& source) {
   destination[length] = '\0';
 }
 
+uint64_t samplePathHash(const std::string& path) {
+  if (path.empty()) return 0;
+  uint64_t hash = 0xCBF29CE484222325ULL;
+  for (const char character : path) {
+    hash ^= static_cast<unsigned char>(character);
+    hash *= 0x100000001B3ULL;
+  }
+  return hash;
+}
+
 }  // namespace
 
 // --------------------------------------------------------------------------
@@ -72,6 +82,8 @@ Engine::Engine(EngineConfig config) : config_(std::move(config)) {
   for (auto& channel : channels_) {
     channel = std::make_unique<Channel>(&host_bridge_, &rt_log_);
   }
+  preview_channel_ = std::make_unique<Channel>(&host_bridge_, &rt_log_);
+  preview_channel_->active.store(true, std::memory_order_release);
   // Slot 0 is the engine's voice when there is no project rack at all: the
   // audition path, the v0.1 behaviour, and every test that loads one sample.
   channels_[0]->active.store(true, std::memory_order_release);
@@ -142,6 +154,12 @@ bool Engine::initialise(std::string& error) {
       diagnostics_.log(LogLevel::Error, "plugin", error);
       return false;
     }
+  }
+  if (!preview_channel_->instrument.configure(setup) ||
+      !preview_channel_->instrument.activate()) {
+    error = "The sample preview instrument could not be configured for this device format.";
+    diagnostics_.log(LogLevel::Error, "plugin", error);
+    return false;
   }
 
   // One channel's worth of interleaved-by-plane stereo scratch.
@@ -347,16 +365,10 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
     if (!channel.active.load(std::memory_order_acquire)) continue;
     channelInstrument(index).beginAudioBlock();
   }
+  preview_channel_->instrument.beginAudioBlock();
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
-  if (schedule_changed_.exchange(false, std::memory_order_acq_rel) && transport_.playing()) {
-    // A moved/deleted clip must not leave the voice that belonged to its old
-    // position playing after the model has been replaced. Releasing at the
-    // block boundary keeps the update sample-safe and click-free. Do not cancel
-    // a manual audition while stopped: the schedule is unrelated to that voice.
-    block_events.push(plugin::PluginEvent::allNotesOff(0));
-  }
 
   const AudioBufferView& output = context.output;
   output.clear();
@@ -445,9 +457,12 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
     Channel& channel = *channels_[static_cast<size_t>(index)];
     if (!channel.active.load(std::memory_order_acquire)) continue;
     renderChannel(channel, static_cast<InstrumentId>(index), output, offset, num_frames, schedule,
-                  chunk_start, block_events, release_all);
+                  chunk_start, block_events, release_all, channelInstrument(index));
     voices += channelInstrument(index).activeVoiceCount();
   }
+  renderChannel(*preview_channel_, 0, output, offset, num_frames, nullptr, chunk_start,
+                block_events, release_all, preview_channel_->instrument, true);
+  voices += preview_channel_->instrument.activeVoiceCount();
   active_voices_ = voices;
 }
 
@@ -459,8 +474,18 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
 void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
                            int offset, int num_frames, const Schedule* schedule,
                            int64_t chunk_start, const plugin::EventList* block_events,
-                           bool release_all) noexcept OB_NONBLOCKING {
+                           bool release_all, plugin::PluginInstance& instrument,
+                           bool preview_voice) noexcept OB_NONBLOCKING {
   plugin::EventList events = chunk_events_.list();
+
+  if (channel.reset_requested.exchange(false, std::memory_order_acq_rel)) {
+    // Only the moved/removed channel is released. This keeps a newly added
+    // second song from interrupting the first song that is already sounding.
+    events.push(plugin::PluginEvent::allNotesOff(0));
+  }
+  if (!channel.one_shot.load(std::memory_order_acquire)) {
+    channel.deferred_audio_start = false;
+  }
 
   // A loop wrap that landed on the previous block boundary releases here, before
   // anything else, so it still precedes every note this chunk starts.
@@ -482,23 +507,36 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
           event.type == static_cast<uint16_t>(plugin::EventType::NoteOff) &&
           event.key == plugin::AnyKey;
       const bool is_preview = (event.flags & plugin::EventFlagDontRecord) != 0;
-      if (is_broadcast_release || (is_preview ? index == 0 : is_audition)) {
+      if (is_broadcast_release ||
+          (is_preview ? preview_voice : (!preview_voice && is_audition))) {
         events.push(event);
       }
     }
   }
 
-  if (schedule != nullptr) {
+  if (!preview_voice && schedule != nullptr) {
     const int32_t event_count = schedule->eventCount();
     const ScheduleEvent* schedule_events = schedule->events();
     const int64_t chunk_end = chunk_start + num_frames;
+    const bool one_shot = channel.one_shot.load(std::memory_order_acquire);
+    const bool sample_ready = !one_shot || channel.sample_ready.load(std::memory_order_acquire);
+    bool scheduled_audio_start = false;
     for (int32_t cursor = schedule->lowerBound(chunk_start);
          cursor < event_count && schedule_events[cursor].frame < chunk_end; ++cursor) {
       const ScheduleEvent& event = schedule_events[cursor];
       // The whole point of the rack: an event belongs to exactly one channel.
       if (event.instrument != index) continue;
+      const EventType type = static_cast<EventType>(event.type);
+      if (one_shot && !sample_ready) {
+        if (type == EventType::AudioStart) {
+          // The worker may finish decoding after the one-shot's timeline event
+          // has passed. Remember it and start from frame zero when ready.
+          channel.deferred_audio_start = true;
+        }
+        continue;
+      }
       const auto time = static_cast<uint32_t>(event.frame - chunk_start);
-      switch (static_cast<EventType>(event.type)) {
+      switch (type) {
         case EventType::NoteOn:
           events.push(
               plugin::PluginEvent::noteOn(time, event.note, static_cast<double>(event.value)));
@@ -508,6 +546,7 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
           // rate and the voice ends when the decoded source reaches EOF.
           events.push(plugin::PluginEvent::noteOn(time, Sampler::RootNote,
                                                   static_cast<double>(event.value)));
+          scheduled_audio_start = true;
           break;
         case EventType::NoteOff:
           events.push(plugin::PluginEvent::noteOff(time, event.note));
@@ -523,6 +562,12 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
                                                            static_cast<double>(event.value)));
           break;
       }
+    }
+    if (one_shot && sample_ready && channel.deferred_audio_start && !scheduled_audio_start) {
+      events.push(plugin::PluginEvent::noteOn(0, Sampler::RootNote, 1.0));
+      channel.deferred_audio_start = false;
+    } else if (scheduled_audio_start) {
+      channel.deferred_audio_start = false;
     }
   }
 
@@ -565,7 +610,7 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
   transport.loop_start_beats = transport_.loopStartBeats();
   transport.loop_end_beats = transport_.loopEndBeats();
 
-  const plugin::ProcessStatus status = channelInstrument(static_cast<int>(index)).process(block);
+  const plugin::ProcessStatus status = instrument.process(block);
   if (status == plugin::ProcessStatus::Error) {
     rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed,
                 static_cast<int64_t>(index), 0);
@@ -829,10 +874,8 @@ bool Engine::pushEvent(const ob_event& event) noexcept {
 void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
   const uint64_t generation = schedule->generation();
   const int32_t count = schedule->eventCount();
-  // Set this before publication: if the audio callback races the swap, either
-  // it releases voices against the old schedule before the next block, or it
-  // sees the new schedule and releases them in the same block.
-  schedule_changed_.store(true, std::memory_order_release);
+  // Publishing a schedule is independent from voice resets. Adding a second
+  // audio clip must not cut off clips that are already playing.
   schedule_.publish(std::move(schedule));
   ob_event event{};
   event.type = OB_EVT_SCHEDULE_PUBLISHED;
@@ -842,7 +885,9 @@ void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
 }
 
 bool Engine::loadSample(const std::string& path, std::string& error) {
-  return loadChannelSample(0, path, error);
+  // Browser previews use a dedicated voice so loading a preview can never
+  // replace a song or an arrangement channel.
+  return loadSampleInto(preview_channel_->instrument.sampler(), -1, path, error);
 }
 
 bool Engine::loadChannelSample(int index, const std::string& path, std::string& error) {
@@ -850,6 +895,12 @@ bool Engine::loadChannelSample(int index, const std::string& path, std::string& 
     error = "The channel index is out of range.";
     return false;
   }
+  return loadSampleInto(channels_[static_cast<size_t>(index)]->instrument.sampler(), index, path,
+                        error);
+}
+
+bool Engine::loadSampleInto(Sampler& target, int log_channel, const std::string& path,
+                            std::string& error) {
   std::unique_ptr<SampleData> sample =
       path.empty() ? makeFallbackSample(config_.sample_rate) : loadAudioFile(path, error);
   if (sample == nullptr) {
@@ -864,9 +915,14 @@ bool Engine::loadChannelSample(int index, const std::string& path, std::string& 
 
   const std::string name = sample->name;
   const int64_t frames = sample->frames;
-  channels_[static_cast<size_t>(index)]->instrument.sampler().setSample(std::move(sample));
-  diagnostics_.logf(LogLevel::Info, "sampler", "channel %d loaded '%s' (%lld frames)", index,
-                    name.c_str(), static_cast<long long>(frames));
+  target.setSample(std::move(sample));
+  if (log_channel >= 0) {
+    diagnostics_.logf(LogLevel::Info, "sampler", "channel %d loaded '%s' (%lld frames)",
+                      log_channel, name.c_str(), static_cast<long long>(frames));
+  } else {
+    diagnostics_.logf(LogLevel::Info, "sampler", "preview loaded '%s' (%lld frames)", name.c_str(),
+                      static_cast<long long>(frames));
+  }
 
   ob_event event{};
   event.type = OB_EVT_SAMPLE_LOADED;
@@ -885,12 +941,31 @@ void Engine::requestSampleLoad(const std::string& path) {
 }
 
 void Engine::setChannels(std::vector<ChannelDesc> channels) {
+  // Publish the loading state before the schedule that references these
+  // channels. A newly added audio clip can therefore defer its AudioStart
+  // instead of triggering the fallback/old sample while the worker decodes.
+  const size_t count = std::min(channels.size(), static_cast<size_t>(MaxRackChannels));
+  for (size_t index = 0; index < count; ++index) {
+    Channel& channel = *channels_[index];
+    const ChannelDesc& desc = channels[index];
+    channel.one_shot.store(desc.one_shot, std::memory_order_release);
+    if (desc.one_shot &&
+        samplePathHash(desc.sample_path) !=
+            channel.loaded_sample_hash.load(std::memory_order_acquire)) {
+      channel.sample_ready.store(false, std::memory_order_release);
+    }
+  }
   {
     std::lock_guard<std::mutex> lock(work_mutex_);
     pending_channels_ = std::move(channels);
     has_pending_channels_ = true;
   }
   work_signal_.notify_one();
+}
+
+void Engine::requestChannelReset(int index) noexcept {
+  if (index < 0 || index >= MaxRackChannels) return;
+  channels_[static_cast<size_t>(index)]->reset_requested.store(true, std::memory_order_release);
 }
 
 void Engine::setAuditionChannel(int index) noexcept {
@@ -909,7 +984,10 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
     channel.gain.store(std::clamp(desc.gain, 0.0F, 2.0F), std::memory_order_release);
     channel.pan.store(std::clamp(desc.pan, -1.0F, 1.0F), std::memory_order_release);
     channel.muted.store(desc.muted, std::memory_order_release);
+    channel.one_shot.store(desc.one_shot, std::memory_order_release);
+    const uint64_t requested_hash = samplePathHash(desc.sample_path);
     if (desc.sample_path != channel.loaded_path) {
+      if (desc.one_shot) channel.sample_ready.store(false, std::memory_order_release);
       std::string error;
       // A channel with no sample yet (an empty lane, or a hosted plug-in) is
       // left silent rather than given the fallback tone: an empty lane that
@@ -917,9 +995,18 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
       if (!desc.sample_path.empty() &&
           loadChannelSample(static_cast<int>(index), desc.sample_path, error)) {
         channel.loaded_path = desc.sample_path;
+        channel.loaded_sample_hash.store(requested_hash, std::memory_order_release);
+        channel.sample_ready.store(true, std::memory_order_release);
       } else if (desc.sample_path.empty()) {
         channel.loaded_path.clear();
+        channel.loaded_sample_hash.store(0, std::memory_order_release);
+        channel.sample_ready.store(true, std::memory_order_release);
       }
+    } else if (desc.one_shot && requested_hash ==
+                                  channel.loaded_sample_hash.load(std::memory_order_acquire)) {
+      // The schedule may have been republished while this clip was being
+      // edited, but its decoded sample is still valid.
+      channel.sample_ready.store(true, std::memory_order_release);
     }
     channel.active.store(true, std::memory_order_release);
   }
@@ -927,6 +1014,8 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
   // the project is empty so the audition path always has a voice.
   for (size_t index = std::max<size_t>(count, 1); index < MaxRackChannels; ++index) {
     channels_[index]->active.store(false, std::memory_order_release);
+    channels_[index]->one_shot.store(false, std::memory_order_release);
+    channels_[index]->sample_ready.store(true, std::memory_order_release);
   }
 }
 
@@ -982,6 +1071,7 @@ void Engine::housekeepingLoop() {
     for (auto& channel : channels_) {
       channel->instrument.sampler().collectRetiredSamples(rt_running);
     }
+    preview_channel_->instrument.sampler().collectRetiredSamples(rt_running);
   }
 }
 
@@ -1026,6 +1116,12 @@ void Engine::onDeviceNotification(audio_io::DeviceNotification notification,
           diagnostics_.logf(LogLevel::Error, "plugin", "channel %d rejected the new device format",
                             index);
         }
+      }
+      preview_channel_->instrument.deactivate();
+      if (!preview_channel_->instrument.configure(setup) ||
+          !preview_channel_->instrument.activate()) {
+        diagnostics_.log(LogLevel::Error, "plugin",
+                         "sample preview rejected the new device format");
       }
     }
     config_.block_frames = granted.block_frames;

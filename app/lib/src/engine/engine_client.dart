@@ -1361,6 +1361,7 @@ class EngineClient
           patternId: _readFixedUtf8(value.pattern_id, 32),
           name: _readFixedUtf8(value.name, 128),
           color: _readFixedUtf8(value.color, 8),
+          audioPath: _readFixedUtf8(value.audio_path, 512),
           startTicks: value.start_ticks,
           lengthTicks: value.length_ticks,
           windowStartTicks: value.window_start_ticks,
@@ -1925,6 +1926,7 @@ class ArrangementClip {
     required this.muted,
     required this.loop,
     this.isAudio = false,
+    this.audioPath = '',
   });
 
   final String id;
@@ -1950,6 +1952,7 @@ class ArrangementClip {
   final bool muted;
   final bool loop;
   final bool isAudio;
+  final String audioPath;
 
   int get endTicks => startTicks + lengthTicks;
   bool get isPattern => !isAudio && patternId.isNotEmpty;
