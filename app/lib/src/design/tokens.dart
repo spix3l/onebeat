@@ -254,6 +254,10 @@ class ColorTokens {
   Color get clipInk => surfaceDeep;
   Color get clipInkMuted => surfaceDeep.withValues(alpha: 0.62);
 
+  /// The identity spine on a muted playlist lane keeps the lane colour visible
+  /// without competing with readable text.
+  Color mutedLaneSpine(Color identity) => identity.withValues(alpha: 0.35);
+
   /// Velocity reads as opacity on a note. The ramp lives here because "how
   /// loud looks how solid" is a design decision, not a painter detail; `unit`
   /// is 0..1.
@@ -436,6 +440,7 @@ class SizeTokens {
 
   /// The mono route chip at the lane's right edge (`→ D1`).
   double get rackRouteChipWidth => 42;
+  double get rackNudgeButtonWidth => 28;
   double get rackCompactBreakpoint => 900;
 
   /// The accent bar down the left edge of the selected lane.
@@ -833,6 +838,7 @@ class MotionTokens {
   /// itself. Long enough that sweeping across a toolbar stays quiet, short
   /// enough that stopping on a glyph feels like asking a question.
   Duration get tooltipDelay => const Duration(milliseconds: 400);
+  Duration get doubleTapWindow => const Duration(milliseconds: 300);
 
   /// Meter ballistics, in decibels per second, applied against wall-clock time
   /// so that a dropped frame cannot change the decay rate (OB-1-11 §3).

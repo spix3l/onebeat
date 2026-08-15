@@ -189,12 +189,7 @@ class ObRackRow extends StatelessWidget {
             SizedBox(width: tokens.spacing.md),
             _NameBlock(vm: vm, reorderIndex: reorderIndex),
             if (vm.previewNotes != null)
-              RackPianoPreview(
-                notes: vm.previewNotes!,
-                color: vm.color,
-                width: width,
-                playingTick: playingTick,
-              )
+              RackPianoPreview(notes: vm.previewNotes!, color: vm.color, width: width, playingTick: playingTick)
             else
               ObStepGrid(
                 steps: vm.steps,
@@ -240,13 +235,20 @@ class _RackGestureLayer extends StatefulWidget {
 class _RackGestureLayerState extends State<_RackGestureLayer> {
   Duration? _lastTapTime;
   Offset? _lastTapPosition;
+  late Duration _doubleTapWindow;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _doubleTapWindow = OneBeatTheme.of(context).motion.doubleTapWindow;
+  }
 
   void _onPointerUp(PointerUpEvent event) {
     final Duration? lastTime = _lastTapTime;
     final Offset? lastPosition = _lastTapPosition;
     final bool isDouble =
         lastTime != null &&
-        event.timeStamp - lastTime < const Duration(milliseconds: 300) &&
+        event.timeStamp - lastTime < _doubleTapWindow &&
         lastPosition != null &&
         (event.position - lastPosition).distance < 24;
     if (isDouble) {
@@ -351,9 +353,8 @@ class ObStepGrid extends StatelessWidget {
     // off the edge of it. Republished so the cells, the hit-test below and
     // anything the cells build all read the same pitch.
     final double? target = width;
-    final OneBeatTokens tokens = target == null
-        ? outer
-        : outer.withSize(fitRackStepsToWidth(outer.size, steps.length, target));
+    final OneBeatTokens tokens =
+        target == null ? outer : outer.withSize(fitRackStepsToWidth(outer.size, steps.length, target));
     final bool painting = onPointerDownStep != null || onPointerMoveStep != null;
     final List<Widget> cells = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
@@ -377,22 +378,21 @@ class ObStepGrid extends StatelessWidget {
       tokens: tokens,
       child: Listener(
         behavior: HitTestBehavior.opaque,
-        onPointerDown: onPointerDownStep == null
-            ? null
-            : (PointerDownEvent event) {
-                final int? step = _stepAt(event.localPosition, tokens.size);
-                if (step != null) onPointerDownStep!(event, step);
-              },
-        onPointerMove: onPointerMoveStep == null
-            ? null
-            : (PointerMoveEvent event) {
-                final int? step = _stepAt(event.localPosition, tokens.size);
-                if (step != null) onPointerMoveStep!(event, step);
-              },
-        child: SizedBox(
-          width: target,
-          child: Row(children: <Widget>[for (final Widget cell in cells) cell]),
-        ),
+        onPointerDown:
+            onPointerDownStep == null
+                ? null
+                : (PointerDownEvent event) {
+                  final int? step = _stepAt(event.localPosition, tokens.size);
+                  if (step != null) onPointerDownStep!(event, step);
+                },
+        onPointerMove:
+            onPointerMoveStep == null
+                ? null
+                : (PointerMoveEvent event) {
+                  final int? step = _stepAt(event.localPosition, tokens.size);
+                  if (step != null) onPointerMoveStep!(event, step);
+                },
+        child: SizedBox(width: target, child: Row(children: <Widget>[for (final Widget cell in cells) cell])),
       ),
     );
   }
@@ -620,9 +620,10 @@ class _RackPianoPreviewPainter extends CustomPainter {
     final Color? head = playheadColor;
     if (tick != null && head != null && end > 0) {
       final double x = (tick / end) * size.width;
-      final Paint headPaint = Paint()
-        ..color = head
-        ..strokeWidth = playheadWidth;
+      final Paint headPaint =
+          Paint()
+            ..color = head
+            ..strokeWidth = playheadWidth;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), headPaint);
     }
   }
@@ -663,13 +664,14 @@ class _StepCell extends StatelessWidget {
           height: side,
           decoration: BoxDecoration(
             color: step.on ? null : (lifted ? color.stepRestLifted : color.stepRest),
-            gradient: step.on
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: color.stepGradient(step.velocity),
-                  )
-                : null,
+            gradient:
+                step.on
+                    ? LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: color.stepGradient(step.velocity),
+                    )
+                    : null,
             // The corner follows the cell. r8 on the design's 30px square is a
             // rounded square; the same 8 on a shrunk cell is a circle, and a
             // grid of circles stops reading as a row of steps.
@@ -732,11 +734,12 @@ class _PowerGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
     final double w = size.width;
     final double h = size.height;
     // A ring broken at the top, with the stem through the break.

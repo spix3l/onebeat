@@ -97,9 +97,7 @@ class ObRackToolbar extends StatelessWidget {
       height: tokens.size.rackToolbarBarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
-        ),
+        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
       ),
       child: Builder(
         builder: (BuildContext context) {
@@ -150,19 +148,18 @@ class ObRackToolbar extends StatelessWidget {
                 value: '${vm.steps}',
                 items: vm.stepItems,
                 width: tokens.size.rackSnapFieldWidth,
-                onSelected: onSteps == null
-                    ? null
-                    : (String value) {
-                        final int? parsed = int.tryParse(value);
-                        if (parsed != null) onSteps!(parsed);
-                      },
+                onSelected:
+                    onSteps == null
+                        ? null
+                        : (String value) {
+                          final int? parsed = int.tryParse(value);
+                          if (parsed != null) onSteps!(parsed);
+                        },
               ),
             ],
           );
           return compact
-              ? ClipRect(
-                  child: OverflowBox(alignment: Alignment.centerLeft, maxWidth: double.infinity, child: row),
-                )
+              ? ClipRect(child: OverflowBox(alignment: Alignment.centerLeft, maxWidth: double.infinity, child: row))
               : row;
         },
       ),
@@ -186,9 +183,9 @@ class _RackNudgeControl extends StatelessWidget {
       children: <Widget>[
         Text('$label $value', style: tokens.type.microCaps),
         SizedBox(width: tokens.spacing.xs),
-        ObButton(label: '−', width: 28, onTap: onMinus),
+        ObButton(label: '−', width: tokens.size.rackNudgeButtonWidth, onTap: onMinus),
         SizedBox(width: tokens.spacing.xxs),
-        ObButton(label: '+', width: 28, onTap: onPlus),
+        ObButton(label: '+', width: tokens.size.rackNudgeButtonWidth, onTap: onPlus),
       ],
     );
   }
@@ -213,9 +210,7 @@ class ObRackHeader extends StatelessWidget {
       height: size.rackColumnHeaderHeight,
       decoration: BoxDecoration(
         color: tokens.color.surfaceColumnHead,
-        border: Border(
-          bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline),
-        ),
+        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
       ),
       child: Row(
         children: <Widget>[
@@ -230,10 +225,7 @@ class ObRackHeader extends StatelessWidget {
             width: size.rackPowerSize + tokens.spacing.sm + size.rackColorChipSize + tokens.spacing.md,
             child: Text('PWR', style: style, maxLines: 1),
           ),
-          SizedBox(
-            width: size.rackNameWidth,
-            child: Text('CHANNEL', style: style, maxLines: 1),
-          ),
+          SizedBox(width: size.rackNameWidth, child: Text('CHANNEL', style: style, maxLines: 1)),
           // One number per column, centred on the cell it names.
           for (int i = 0; i < stepCount; i++) ...<Widget>[
             if (i > 0) SizedBox(width: i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap),
@@ -243,15 +235,9 @@ class ObRackHeader extends StatelessWidget {
             ),
           ],
           SizedBox(width: tokens.spacing.md),
-          SizedBox(
-            width: size.knobSmall,
-            child: Text('VOL', style: style, textAlign: TextAlign.center, maxLines: 1),
-          ),
+          SizedBox(width: size.knobSmall, child: Text('VOL', style: style, textAlign: TextAlign.center, maxLines: 1)),
           SizedBox(width: tokens.spacing.sm),
-          SizedBox(
-            width: size.knobSmall,
-            child: Text('PAN', style: style, textAlign: TextAlign.center, maxLines: 1),
-          ),
+          SizedBox(width: size.knobSmall, child: Text('PAN', style: style, textAlign: TextAlign.center, maxLines: 1)),
           SizedBox(width: tokens.spacing.sm),
           SizedBox(
             width: size.rackRouteChipWidth,

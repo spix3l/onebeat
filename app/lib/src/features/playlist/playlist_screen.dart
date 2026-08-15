@@ -234,13 +234,7 @@ class PlaylistLaneHeaders extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   for (int i = 0; i < lanes.length; i++)
-                    _LaneHeaderRow(
-                      lane: lanes[i],
-                      index: i,
-                      onMute: onMute,
-                      onSolo: onSolo,
-                      onCollapse: onCollapse,
-                    ),
+                    _LaneHeaderRow(lane: lanes[i], index: i, onMute: onMute, onSolo: onSolo, onCollapse: onCollapse),
                 ],
               ),
             ),
@@ -254,13 +248,7 @@ class PlaylistLaneHeaders extends StatelessWidget {
 /// One track header: identity spine, disclosure, number, name over a caption,
 /// then the mute and solo squares the rest of the app uses.
 class _LaneHeaderRow extends StatefulWidget {
-  const _LaneHeaderRow({
-    required this.lane,
-    required this.index,
-    this.onMute,
-    this.onSolo,
-    this.onCollapse,
-  });
+  const _LaneHeaderRow({required this.lane, required this.index, this.onMute, this.onSolo, this.onCollapse});
 
   final PlaylistLaneVm lane;
   final int index;
@@ -284,7 +272,7 @@ class _LaneHeaderRowState extends State<_LaneHeaderRow> {
     // A muted lane keeps its colour but loses its ink: the row stays findable
     // in the column while reading as switched off.
     final Color nameInk = lane.muted ? color.textMuted : color.textPrimary;
-    final Color spine = lane.muted ? lane.color.withValues(alpha: 0.35) : lane.color;
+    final Color spine = lane.muted ? color.mutedLaneSpine(lane.color) : lane.color;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -306,11 +294,7 @@ class _LaneHeaderRowState extends State<_LaneHeaderRow> {
             SizedBox(width: tokens.spacing.xs),
             SizedBox(
               width: tokens.size.playlistLaneIndexWidth,
-              child: Text(
-                '${widget.index + 1}',
-                textAlign: TextAlign.right,
-                style: tokens.type.numericSmall,
-              ),
+              child: Text('${widget.index + 1}', textAlign: TextAlign.right, style: tokens.type.numericSmall),
             ),
             SizedBox(width: tokens.spacing.sm),
             Expanded(
@@ -324,12 +308,7 @@ class _LaneHeaderRowState extends State<_LaneHeaderRow> {
                     overflow: TextOverflow.ellipsis,
                     style: tokens.type.rackName.copyWith(color: nameInk),
                   ),
-                  Text(
-                    _caption(lane),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.rackCaption,
-                  ),
+                  Text(_caption(lane), maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackCaption),
                 ],
               ),
             ),
@@ -627,10 +606,7 @@ class _SingleClipInspectorContent extends StatelessWidget {
           SizedBox(height: tokens.spacing.md),
           ObButton(label: 'Split by channel', onTap: onSplitByChannel, width: double.infinity),
           SizedBox(height: tokens.spacing.xs),
-          Text(
-            'Gives every channel in the pattern its own pattern, on its own track.',
-            style: tokens.type.label,
-          ),
+          Text('Gives every channel in the pattern its own pattern, on its own track.', style: tokens.type.label),
         ],
       ],
     );
