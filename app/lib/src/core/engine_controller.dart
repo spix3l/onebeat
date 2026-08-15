@@ -14,11 +14,7 @@ import 'frame_stats.dart';
 import 'meter_state.dart';
 
 class EngineController extends ChangeNotifier {
-  EngineController({
-    required this.client,
-    required TickerProvider vsync,
-    required this.motion,
-  }) {
+  EngineController({required this.client, required TickerProvider vsync, required this.motion}) {
     _ticker = vsync.createTicker(_onFrame)..start();
   }
 
@@ -33,6 +29,7 @@ class EngineController extends ChangeNotifier {
   String status = '';
   bool showPerformanceOverlay = false;
   bool _previewAfterSampleLoad = false;
+  bool _patternPreviewing = false;
   Timer? _samplePreviewTimer;
   static const int _samplePreviewKey = 60;
 
@@ -69,10 +66,10 @@ class EngineController extends ChangeNotifier {
   /// always starts from the top — the "restart the timer on stop" behaviour.
   void togglePlay() {
     if (snapshot.playing) {
-      client.stop();
+      stop();
       client.seekFrames(0);
     } else {
-      client.play();
+      play();
     }
   }
 
@@ -82,20 +79,72 @@ class EngineController extends ChangeNotifier {
     if (snapshot.playing) {
       client.stop();
     } else {
-      client.play();
+      if (_patternPreviewing) {
+        final String? patternId = _previewPatternId;
+        final String? instrumentId = _previewInstrumentId;
+        if (patternId != null && instrumentId != null) {
+          client.playPatternChannelPreview(patternId, instrumentId);
+        } else if (patternId != null) {
+          client.playPatternPreview(patternId);
+        }
+      } else {
+        client.play();
+      }
     }
   }
 
-  void play() => client.play();
+  String? _previewPatternId;
+  String? _previewInstrumentId;
 
-  void stop() => client.stop();
+  bool get patternPreviewing => _patternPreviewing;
+
+  void play() {
+    _patternPreviewing = false;
+    _previewPatternId = null;
+    _previewInstrumentId = null;
+    client.play();
+  }
+
+  void playPatternPreview(String patternId) {
+    if (patternId.isEmpty) return;
+    client.stop();
+    _patternPreviewing = true;
+    _previewPatternId = patternId;
+    _previewInstrumentId = null;
+    client.playPatternPreview(patternId);
+  }
+
+  void playPatternChannelPreview(String patternId, String instrumentId) {
+    if (patternId.isEmpty || instrumentId.isEmpty) return;
+    client.stop();
+    _patternPreviewing = true;
+    _previewPatternId = patternId;
+    _previewInstrumentId = instrumentId;
+    client.playPatternChannelPreview(patternId, instrumentId);
+  }
+
+  void stopPatternPreview() {
+    _patternPreviewing = false;
+    _previewPatternId = null;
+    _previewInstrumentId = null;
+    client.stopPatternPreview();
+    client.stop();
+    client.seekFrames(0);
+  }
+
+  void stop() {
+    if (_patternPreviewing) {
+      client.stopPatternPreview();
+    }
+    _patternPreviewing = false;
+    _previewPatternId = null;
+    _previewInstrumentId = null;
+    client.stop();
+    client.seekFrames(0);
+  }
 
   void toggleLoop() {
-    client.setLoop(
-      snapshot.loopStartBeats,
-      snapshot.loopEndBeats,
-      enabled: !snapshot.loopEnabled,
-    );
+    client.setLoop(snapshot.loopStartBeats, snapshot.loopEndBeats, enabled: !snapshot.loopEnabled);
   }
 
   void seekFrames(int frames) => client.seekFrames(frames);

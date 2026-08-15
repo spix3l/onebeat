@@ -70,6 +70,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
   final Map<String, double> _gains = <String, double>{};
   final Map<String, double> _pans = <String, double>{};
+  final FocusNode _focus = FocusNode(debugLabel: 'channel-rack-binding');
 
   OverlayEntry? _contextMenuEntry;
 
@@ -109,6 +110,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   @override
   void dispose() {
     _hideContextMenu();
+    _focus.dispose();
     _controller.removeListener(_onEngineChanged);
     _store.removeListener(_onStoreChanged);
     if (_ownsStore) {
@@ -139,6 +141,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final int nextNumber = _store.patterns.length + 1;
     widget.client.createPattern('Pattern $nextNumber');
     _store.refresh();
+  }
+
+  void _onSelectPattern(String patternId) {
+    FocusPolicy.take(_focus);
+    _store.selectPattern(patternId);
   }
 
   void _requestDeletePattern([String? patternId]) {
@@ -364,9 +371,14 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _onSelectRow(int rowIndex) {
+    FocusPolicy.take(_focus);
     final List<RackRow> visible = _store.rows;
     if (rowIndex >= 0 && rowIndex < visible.length) {
       _store.selectInstrument(visible[rowIndex].instrumentId);
+      final RackPattern? pattern = _store.pattern;
+      if (_controller.patternPreviewing && pattern != null) {
+        _controller.playPatternChannelPreview(pattern.id, visible[rowIndex].instrumentId);
+      }
     }
   }
 
@@ -796,102 +808,126 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final String? renameId = _renameInstrumentId;
 
     return ScopedShortcuts(
-      shortcuts: shortcutsForArea(ActionArea.pattern),
+      shortcuts: <ShortcutActivator, Intent>{
+        ...shortcutsForArea(ActionArea.pattern),
+        const SingleActivator(LogicalKeyboardKey.space): const _TogglePatternPreviewIntent(),
+      },
       handlers: <String, VoidCallback>{'pattern.create': _onCreatePattern},
-      child: Stack(
-        children: <Widget>[
-          ChannelRackScreen(
-            vm: vm,
-            onSelectPattern: (String id) => _store.selectPattern(id),
-            onPatternSecondaryTapDown: _onPatternSecondaryTapDown,
-            onSelectRow: _onSelectRow,
-            onRowDoubleTap: _onRowDoubleTap,
-            onTogglePower: _onTogglePower,
-            onStepTap: _onStepTap,
-            onVolChanged: _onVolChanged,
-            onPanChanged: _onPanChanged,
-            onAddChannel: _onAddChannel,
-            onCreatePattern: _onCreatePattern,
-            onRowSecondaryTapDown: _onRowSecondaryTapDown,
-            onDropInstrument: _onDropInstrument,
-            onAddInstrument: _onAddInstrument,
-            onReorderRow: _onReorderRow,
-            onSteps: (int steps) => _store.setLength(steps),
-            onInspectorVol: _onInspectorVol,
-            onInspectorPan: _onInspectorPan,
-            onInspectorMute: _onInspectorMute,
-            onInspectorSolo: _onInspectorSolo,
-            onInspectorOpenPlugin: _onInspectorOpenPlugin,
-            onInspectorKeyPress: (int note) => _store.auditionNote(note),
-            onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
-              final List<RackRow> visible = _store.rows;
-              if (rowIndex < 0 || rowIndex >= visible.length) return;
-              final RackRow row = visible[rowIndex];
-              final bool velocityMode =
-                  event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
-              if (velocityMode) {
-                _store.beginVelocityPaint();
-                _store.setVelocity(row.instrumentId, stepIndex, 12900);
-              } else {
-                final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
-                _store.beginPaint(row.instrumentId, stepIndex, active: active);
-              }
-            },
-            onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
-              final List<RackRow> visible = _store.rows;
-              if (rowIndex < 0 || rowIndex >= visible.length) return;
-              final RackRow row = visible[rowIndex];
-              if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
-                _store.setVelocity(row.instrumentId, stepIndex, 12900);
-              } else {
-                _store.paintStep(row.instrumentId, stepIndex);
-              }
-            },
-            onPointerUpStep: () {
-              _store.commitPaint();
-              _store.commitVelocityPaint();
-            },
-            onPointerCancelStep: () {
-              _store.abortPaint();
-              _store.abortVelocityPaint();
-            },
-          ),
-          if (_showRenameDialog)
-            RenameChannelDialog(
-              initialName:
-                  _renamePattern
-                      ? (_store.patterns
-                              .cast<PatternSummary?>()
-                              .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
-                              ?.name ??
-                          '')
-                      : renameId == null
-                      ? ''
-                      : (_store.instrumentFor(renameId)?.name ?? ''),
-              onSubmit: _submitRename,
-              onClose: _closeRenameDialog,
-              title: _renamePattern ? 'Rename pattern' : 'Rename channel',
-              fieldLabel: _renamePattern ? 'Pattern name' : 'Channel name',
+      extraActions: <Type, Action<Intent>>{
+        _TogglePatternPreviewIntent: CallbackAction<_TogglePatternPreviewIntent>(
+          onInvoke: (_) {
+            final RackPattern? pattern = _store.pattern;
+            if (pattern == null) return null;
+            if (_controller.patternPreviewing) {
+              _controller.stopPatternPreview();
+            } else {
+              _controller.playPatternPreview(pattern.id);
+            }
+            return null;
+          },
+        ),
+      },
+      child: Focus(
+        focusNode: _focus,
+        child: Stack(
+          children: <Widget>[
+            ChannelRackScreen(
+              vm: vm,
+              onSelectPattern: _onSelectPattern,
+              onPatternSecondaryTapDown: _onPatternSecondaryTapDown,
+              onSelectRow: _onSelectRow,
+              onRowDoubleTap: _onRowDoubleTap,
+              onTogglePower: _onTogglePower,
+              onStepTap: _onStepTap,
+              onVolChanged: _onVolChanged,
+              onPanChanged: _onPanChanged,
+              onAddChannel: _onAddChannel,
+              onCreatePattern: _onCreatePattern,
+              onRowSecondaryTapDown: _onRowSecondaryTapDown,
+              onDropInstrument: _onDropInstrument,
+              onAddInstrument: _onAddInstrument,
+              onReorderRow: _onReorderRow,
+              onSteps: (int steps) => _store.setLength(steps),
+              onInspectorVol: _onInspectorVol,
+              onInspectorPan: _onInspectorPan,
+              onInspectorMute: _onInspectorMute,
+              onInspectorSolo: _onInspectorSolo,
+              onInspectorOpenPlugin: _onInspectorOpenPlugin,
+              onInspectorKeyPress: (int note) => _store.auditionNote(note),
+              onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
+                final List<RackRow> visible = _store.rows;
+                if (rowIndex < 0 || rowIndex >= visible.length) return;
+                final RackRow row = visible[rowIndex];
+                final bool velocityMode =
+                    event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
+                if (velocityMode) {
+                  _store.beginVelocityPaint();
+                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
+                } else {
+                  final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
+                  _store.beginPaint(row.instrumentId, stepIndex, active: active);
+                }
+              },
+              onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
+                final List<RackRow> visible = _store.rows;
+                if (rowIndex < 0 || rowIndex >= visible.length) return;
+                final RackRow row = visible[rowIndex];
+                if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
+                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
+                } else {
+                  _store.paintStep(row.instrumentId, stepIndex);
+                }
+              },
+              onPointerUpStep: () {
+                _store.commitPaint();
+                _store.commitVelocityPaint();
+              },
+              onPointerCancelStep: () {
+                _store.abortPaint();
+                _store.abortVelocityPaint();
+              },
             ),
-          if (_showDeletePatternDialog)
-            DeletePatternDialog(
-              patternName:
-                  _store.patterns
-                      .cast<PatternSummary?>()
-                      .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
-                      ?.name ??
-                  'Pattern',
-              usageCount:
-                  _store.patterns
-                      .cast<PatternSummary?>()
-                      .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
-                      ?.usageCount ??
-                  0,
-              onDelete: _confirmDeletePattern,
-              onClose: _closeDeletePatternDialog,
-            ),
-        ],
+            if (_showRenameDialog)
+              RenameChannelDialog(
+                initialName:
+                    _renamePattern
+                        ? (_store.patterns
+                                .cast<PatternSummary?>()
+                                .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
+                                ?.name ??
+                            '')
+                        : renameId == null
+                        ? ''
+                        : (_store.instrumentFor(renameId)?.name ?? ''),
+                onSubmit: _submitRename,
+                onClose: _closeRenameDialog,
+                title: _renamePattern ? 'Rename pattern' : 'Rename channel',
+                fieldLabel: _renamePattern ? 'Pattern name' : 'Channel name',
+              ),
+            if (_showDeletePatternDialog)
+              DeletePatternDialog(
+                patternName:
+                    _store.patterns
+                        .cast<PatternSummary?>()
+                        .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
+                        ?.name ??
+                    'Pattern',
+                usageCount:
+                    _store.patterns
+                        .cast<PatternSummary?>()
+                        .firstWhere((PatternSummary? item) => item?.id == _deletePatternId, orElse: () => null)
+                        ?.usageCount ??
+                    0,
+                onDelete: _confirmDeletePattern,
+                onClose: _closeDeletePatternDialog,
+              ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _TogglePatternPreviewIntent extends Intent {
+  const _TogglePatternPreviewIntent();
 }

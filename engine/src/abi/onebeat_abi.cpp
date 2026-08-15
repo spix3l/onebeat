@@ -95,6 +95,8 @@ struct ob_engine {
   onebeat::model::FlattenScheduler flattener{project};
   std::optional<onebeat::model::InstrumentId> selected_instrument;
   std::optional<onebeat::model::PatternId> current_pattern;
+  bool pattern_preview = false;
+  std::optional<onebeat::model::InstrumentId> preview_instrument;
   std::map<onebeat::model::InstrumentId, onebeat::model::Ticks> rack_grids;
   // Dense channels assigned by the flattener to arrangement audio clips. Kept
   // between publishes so a transport-only update rebuilds the same rack even
@@ -388,8 +390,8 @@ void syncHostedInstruments(ob_engine& handle) {
       static const std::vector<uint8_t> empty_state;
       const std::vector<uint8_t>& bytes =
           state == handle.pending_project_state.end() ? empty_state : state->second;
-      slot.failed = !handle.engine->installMissingInstrument(instrument->plugin.name, bytes, channel,
-                                                             host_error);
+      slot.failed = !handle.engine->installMissingInstrument(instrument->plugin.name, bytes,
+                                                             channel, host_error);
     } else {
       slot.failed = !handle.engine->createSandboxedInstrument(
           slot.path, slot.plugin_id, onebeat::plugin::scan::SubprocessProbe::discoverHelperPath(),
@@ -451,8 +453,42 @@ void publishModel(ob_engine& handle) {
   /* Before the flatten, so the schedule is built from the grown pattern rather
    * than from the one that was too short to hold the edit just made. */
   growPatternToFit(handle);
-  onebeat::model::FlattenResult flattened =
-      handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
+  onebeat::model::FlattenResult flattened;
+  if (handle.pattern_preview && handle.current_pattern.has_value()) {
+    onebeat::model::Project preview;
+    onebeat::model::Project::Tables tables = handle.project.copyTables();
+    tables.clips.clear();
+    const onebeat::model::Pattern* pattern = currentPattern(handle);
+    if (pattern != nullptr) {
+      for (const auto& [clip_id, source_clip] : handle.project.clips()) {
+        const auto* source = source_clip.pattern();
+        if (source == nullptr || source->pattern != *handle.current_pattern) continue;
+        onebeat::model::Clip clip = source_clip;
+        clip.start = 0;
+        clip.length = pattern->length;
+        tables.clips.emplace(clip_id, std::move(clip));
+        break;
+      }
+      if (handle.preview_instrument.has_value()) {
+        auto preview_pattern = tables.patterns.find(*handle.current_pattern);
+        if (preview_pattern != tables.patterns.end()) {
+          for (auto sequence = preview_pattern->second.sequences.begin();
+               sequence != preview_pattern->second.sequences.end();) {
+            if (sequence->first == *handle.preview_instrument) {
+              ++sequence;
+            } else {
+              sequence = preview_pattern->second.sequences.erase(sequence);
+            }
+          }
+        }
+      }
+    }
+    preview.adopt(std::move(tables));
+    flattened = onebeat::model::flatten(
+        preview, onebeat::model::FlattenOptions{handle.engine->config().sample_rate, 1});
+  } else {
+    flattened = handle.flattener.flushIfDirty(handle.engine->config().sample_rate);
+  }
   if (flattened.schedule != nullptr) {
     handle.audio_channel_indices = std::move(flattened.audio_channel_index);
   }
@@ -466,8 +502,7 @@ void publishModel(ob_engine& handle) {
   // A project load supplies state by stable instrument ID. Hosting happens as
   // part of this publish, so restore any chunks that could not be handed to a
   // MissingPlugin constructor before exposing the instance to the UI.
-  for (auto it = handle.pending_project_state.begin();
-       it != handle.pending_project_state.end();) {
+  for (auto it = handle.pending_project_state.begin(); it != handle.pending_project_state.end();) {
     const int channel = channelIndexOf(handle, it->first);
     if (channel >= 0 && handle.engine->loadHostedState(channel, it->second)) {
       it = handle.pending_project_state.erase(it);
@@ -2205,6 +2240,64 @@ ob_status ob_engine_pattern_select(ob_engine* engine, const char* utf8_pattern_i
   return OB_OK;
 }
 
+ob_status ob_engine_pattern_preview_start(ob_engine* engine, const char* utf8_pattern_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  engine->current_pattern = *id;
+  engine->pattern_preview = true;
+  engine->preview_instrument.reset();
+  publishModel(*engine);
+  ob_command seek{};
+  seek.type = OB_CMD_TRANSPORT_SEEK_BEATS;
+  seek.f64_a = 0.0;
+  engine->engine->postCommand(seek);
+  ob_command play{};
+  play.type = OB_CMD_TRANSPORT_PLAY;
+  engine->engine->postCommand(play);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_preview_channel_start(ob_engine* engine,
+                                                  const char* utf8_pattern_id,
+                                                  const char* utf8_instrument_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto pattern = patternId(utf8_pattern_id);
+  const auto instrument = instrumentId(utf8_instrument_id);
+  if (!pattern || engine->project.findPattern(*pattern) == nullptr ||
+      !instrument || engine->project.findInstrument(*instrument) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern or instrument does not exist.");
+  }
+  engine->current_pattern = *pattern;
+  engine->preview_instrument = *instrument;
+  engine->pattern_preview = true;
+  publishModel(*engine);
+  ob_command seek{};
+  seek.type = OB_CMD_TRANSPORT_SEEK_BEATS;
+  seek.f64_a = 0.0;
+  engine->engine->postCommand(seek);
+  ob_command play{};
+  play.type = OB_CMD_TRANSPORT_PLAY;
+  engine->engine->postCommand(play);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_preview_stop(ob_engine* engine) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  if (engine->pattern_preview) {
+    engine->pattern_preview = false;
+    engine->preview_instrument.reset();
+    engine->flattener.markDirty();
+    publishModel(*engine);
+  }
+  g_last_error.clear();
+  return OB_OK;
+}
+
 ob_status ob_engine_pattern_create(ob_engine* engine, const char* utf8_name) {
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
   const std::string name = (utf8_name == nullptr || utf8_name[0] == '\0')
@@ -2770,8 +2863,9 @@ ob_status ob_engine_project_new(ob_engine* engine) {
     const onebeat::model::PatternId pattern =
         fresh.createPattern("Pattern 1", onebeat::model::TicksPerBarFourFour);
     const onebeat::model::ArrangementLaneId lane = fresh.createLane("Patterns");
-    if (!fresh.createClip(lane, onebeat::model::PatternSource{pattern}, 0,
-                          onebeat::model::TicksPerBarFourFour)
+    if (!fresh
+             .createClip(lane, onebeat::model::PatternSource{pattern}, 0,
+                         onebeat::model::TicksPerBarFourFour)
              .valid()) {
       return fail(OB_ERR_INTERNAL, "The new project could not be created.");
     }
@@ -2833,12 +2927,11 @@ ob_status ob_engine_project_save(ob_engine* engine, const char* utf8_path) {
     // records into the model without adding undo commands so the dirty hash
     // agrees with the project.json just written.
     for (const auto& [id, record] : report.state_written) {
-      (void)engine->project.updateInstrument(
-          id, onebeat::model::ChangeField::Plugin,
-          [&record](onebeat::model::Instrument& instrument) {
-            instrument.plugin.state_ref = record.state_ref;
-            instrument.plugin.state_sha256 = record.sha256;
-          });
+      (void)engine->project.updateInstrument(id, onebeat::model::ChangeField::Plugin,
+                                             [&record](onebeat::model::Instrument& instrument) {
+                                               instrument.plugin.state_ref = record.state_ref;
+                                               instrument.plugin.state_sha256 = record.sha256;
+                                             });
     }
     engine->project_path = utf8_path;
     engine->saved_project_hash = projectHash(*engine);

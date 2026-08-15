@@ -16,9 +16,9 @@
 namespace {
 
 using onebeat::stock::guitar::clampParameter;
+using onebeat::stock::guitar::GuitarEngine;
 using onebeat::stock::guitar::parameterIndex;
 using onebeat::stock::guitar::ParameterSpecs;
-using onebeat::stock::guitar::GuitarEngine;
 
 struct GuitarPlugin {
   clap_plugin_t plugin{};

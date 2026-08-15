@@ -664,6 +664,14 @@ OB_API ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_patte
 /* Which pattern the rack and the piano roll edit. Presentation state: not
  * undoable, because selecting is not an edit. */
 OB_API ob_status ob_engine_pattern_select(ob_engine* engine, const char* utf8_pattern_id);
+
+/* Editor preview: schedules only the selected pattern once at tick zero and
+ * loops it at the pattern's own length. Playlist transport remains separate. */
+OB_API ob_status ob_engine_pattern_preview_start(ob_engine* engine, const char* utf8_pattern_id);
+OB_API ob_status ob_engine_pattern_preview_channel_start(ob_engine* engine,
+                                                         const char* utf8_pattern_id,
+                                                         const char* utf8_instrument_id);
+OB_API ob_status ob_engine_pattern_preview_stop(ob_engine* engine);
 /* May block briefly (flattens). Creates and selects; the new ID is readable by
  * re-reading the list and looking for OB_PATTERN_FLAG_CURRENT. */
 OB_API ob_status ob_engine_pattern_create(ob_engine* engine, const char* utf8_name);

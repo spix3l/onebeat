@@ -160,9 +160,7 @@ class GuitarEngine {
     float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a1 = 0.0f, a2 = 0.0f;
     float x1 = 0.0f, x2 = 0.0f, y1 = 0.0f, y2 = 0.0f;
 
-    void reset() noexcept {
-      x1 = x2 = y1 = y2 = 0.0f;
-    }
+    void reset() noexcept { x1 = x2 = y1 = y2 = 0.0f; }
 
     [[nodiscard]] float process(float in) noexcept {
       const float out = b0 * in + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;

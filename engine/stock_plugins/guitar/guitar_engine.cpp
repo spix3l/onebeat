@@ -314,11 +314,13 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
   // Release damping factor
   const float release_damping = static_cast<float>(0.80 - release_param * 0.45);
   // Damping coefficient for loop filter
-  const float tone_cutoff_coef = static_cast<float>(0.10 + tone_param * 0.75 - damping_param * 0.45);
+  const float tone_cutoff_coef =
+      static_cast<float>(0.10 + tone_param * 0.75 - damping_param * 0.45);
   const float loop_filter_a = std::clamp(tone_cutoff_coef, 0.05f, 0.88f);
 
   // Reverb parameters
-  const float rev_feedback = static_cast<float>(std::clamp(0.65 + reverb_size_param * 0.28, 0.5, 0.96));
+  const float rev_feedback =
+      static_cast<float>(std::clamp(0.65 + reverb_size_param * 0.28, 0.5, 0.96));
   const float rev_damp = 0.35f;
 
   for (uint32_t frame = 0; frame < frame_count; ++frame) {
@@ -329,15 +331,18 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
       if (!v.active) continue;
 
       const double delay_len = (sample_rate_ / std::max(20.0, v.frequency)) - 0.5;
-      const double pick_comb_delay = std::clamp(delay_len * (0.05 + pick_pos_param * 0.45), 1.0, delay_len * 0.5);
+      const double pick_comb_delay =
+          std::clamp(delay_len * (0.05 + pick_pos_param * 0.45), 1.0, delay_len * 0.5);
 
       float excitation = 0.0f;
       if (v.stage == EnvStage::Excitation) {
         if (v.excitation_counter < v.excitation_length) {
           // LFSR white noise shaped with pick impulse
           v.rng_state = v.rng_state * 1664525u + 1013904223u;
-          const float raw_noise = static_cast<float>(static_cast<int32_t>(v.rng_state >> 16)) / 32768.0f;
-          const float phase_norm = static_cast<float>(v.excitation_counter) / static_cast<float>(v.excitation_length);
+          const float raw_noise =
+              static_cast<float>(static_cast<int32_t>(v.rng_state >> 16)) / 32768.0f;
+          const float phase_norm =
+              static_cast<float>(v.excitation_counter) / static_cast<float>(v.excitation_length);
           const float window = std::sin(phase_norm * 3.14159265f);
           excitation = raw_noise * window * static_cast<float>(v.velocity) * 1.5f;
 
@@ -353,22 +358,26 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
       const float delayed_sample_sec = v.delay_line_secondary.readFractional(delay_len * 0.9975);
 
       // Lowpass loss filter in loop
-      const float filtered = v.filter_prev * (1.0f - loop_filter_a) + delayed_sample * loop_filter_a;
+      const float filtered =
+          v.filter_prev * (1.0f - loop_filter_a) + delayed_sample * loop_filter_a;
       v.filter_prev = filtered;
 
-      const float filtered_sec = v.filter_prev_secondary * (1.0f - loop_filter_a) + delayed_sample_sec * loop_filter_a;
+      const float filtered_sec =
+          v.filter_prev_secondary * (1.0f - loop_filter_a) + delayed_sample_sec * loop_filter_a;
       v.filter_prev_secondary = filtered_sec;
 
       // Dispersion (inharmonicity / string stiffness)
       constexpr float dispersion_c = 0.15f;
-      const float dispersed = -dispersion_c * filtered + v.dispersion_prev + dispersion_c * filtered;
+      const float dispersed =
+          -dispersion_c * filtered + v.dispersion_prev + dispersion_c * filtered;
       v.dispersion_prev = filtered;
 
       // Loop gain calculation
       float current_feedback = base_feedback;
       if (v.released) {
         v.release_time += 1.0 / sample_rate_;
-        current_feedback *= std::max(0.0f, 1.0f - static_cast<float>(v.release_time) * (1.0f + release_damping * 8.0f));
+        current_feedback *= std::max(
+            0.0f, 1.0f - static_cast<float>(v.release_time) * (1.0f + release_damping * 8.0f));
         if (current_feedback <= 0.0001f || v.release_time > 2.0) {
           v.active = false;
           continue;
@@ -395,7 +404,8 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
       }
 
       // Voice pan spread based on note key (lower strings left, higher strings right)
-      const float note_pan = static_cast<float>(v.key - 60) / 48.0f * static_cast<float>(width_param) * 0.5f;
+      const float note_pan =
+          static_cast<float>(v.key - 60) / 48.0f * static_cast<float>(width_param) * 0.5f;
       const float pan_l = std::clamp(0.5f - note_pan, 0.05f, 0.95f);
       const float pan_r = std::clamp(0.5f + note_pan, 0.05f, 0.95f);
 
@@ -447,8 +457,12 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
       const double delay_samples_l = 180.0 + std::sin(chorus_l_.lfo_phase) * mod_depth_samples;
       const double delay_samples_r = 180.0 + std::cos(chorus_r_.lfo_phase) * mod_depth_samples;
 
-      const size_t read_idx_l = (chorus_l_.write_pos + MaxChorusSize - static_cast<size_t>(delay_samples_l)) % MaxChorusSize;
-      const size_t read_idx_r = (chorus_r_.write_pos + MaxChorusSize - static_cast<size_t>(delay_samples_r)) % MaxChorusSize;
+      const size_t read_idx_l =
+          (chorus_l_.write_pos + MaxChorusSize - static_cast<size_t>(delay_samples_l)) %
+          MaxChorusSize;
+      const size_t read_idx_r =
+          (chorus_r_.write_pos + MaxChorusSize - static_cast<size_t>(delay_samples_r)) %
+          MaxChorusSize;
 
       chorus_l_.write_pos = (chorus_l_.write_pos + 1) % MaxChorusSize;
       chorus_r_.write_pos = (chorus_r_.write_pos + 1) % MaxChorusSize;
@@ -502,8 +516,10 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
     }
 
     const float room_wet = static_cast<float>(room_param);
-    const float out_l = (mix_l * (1.0f - room_wet * 0.3f) + rev_mix_l * room_wet * 0.25f) * static_cast<float>(output_param);
-    const float out_r = (mix_r * (1.0f - room_wet * 0.3f) + rev_mix_r * room_wet * 0.25f) * static_cast<float>(output_param);
+    const float out_l = (mix_l * (1.0f - room_wet * 0.3f) + rev_mix_l * room_wet * 0.25f) *
+                        static_cast<float>(output_param);
+    const float out_r = (mix_r * (1.0f - room_wet * 0.3f) + rev_mix_r * room_wet * 0.25f) *
+                        static_cast<float>(output_param);
 
     outputs[0][offset + frame] = out_l;
     if (channel_count > 1) {
