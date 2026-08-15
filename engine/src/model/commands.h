@@ -26,10 +26,14 @@ struct PatternMeta {
   std::string name;
   ColorHex color;
   Ticks length = 0;
+  int32_t order = 0;
+  std::string group;
+  TimeSignature time_signature;
   double swing = 0.0;
 
   static PatternMeta from(const Pattern& pattern) {
-    return PatternMeta{pattern.name, pattern.color, pattern.length, pattern.swing};
+    return PatternMeta{pattern.name, pattern.color, pattern.length, pattern.order, pattern.group,
+                       pattern.time_signature, pattern.swing};
   }
 };
 

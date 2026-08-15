@@ -49,6 +49,16 @@ class _FakeRackEngineClient implements EngineClient {
         noteCount: 2,
         isCurrent: false,
       ),
+      const PatternSummary(
+        id: 'pat_empty',
+        name: 'Empty Pattern',
+        color: '#9FC65C',
+        lengthTicks: 3840,
+        swing: 0.0,
+        usageCount: 0,
+        noteCount: 0,
+        isCurrent: false,
+      ),
     ];
     instruments = <ProjectInstrument>[
       const ProjectInstrument(
@@ -965,6 +975,11 @@ void main() {
 
     expect(client.patternRecolorCalls, 1);
     expect(client.patterns.first.color, isNot('#EF6F91'));
+
+    await rightClickPattern(tester, 'Main Groove');
+    await tester.tap(find.text('Select next empty'));
+    await tester.pump();
+    expect(client.pattern.name, 'Empty Pattern');
   });
 
   testWidgets('editing a shared pattern shows a dismissible notice once', (WidgetTester tester) async {

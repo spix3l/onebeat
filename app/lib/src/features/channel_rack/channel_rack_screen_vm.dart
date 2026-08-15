@@ -8,11 +8,20 @@ import 'rack_toolbar.dart';
 /// One tab in the pattern switcher header.
 @immutable
 class PatternTabVm {
-  const PatternTabVm({required this.id, required this.name, this.selected = false, this.count});
+  const PatternTabVm({
+    required this.id,
+    required this.name,
+    this.selected = false,
+    this.count,
+    this.group = '',
+    this.timeSignature = '4/4',
+  });
 
   final String id;
   final String name;
   final bool selected;
+  final String group;
+  final String timeSignature;
 
   /// Optional count badge (e.g. 4 for 4 active sequences).
   final int? count;

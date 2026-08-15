@@ -219,6 +219,9 @@ abstract interface class PatternClient {
   /// (FR-UX-11's consistent action vocabulary).
   void duplicatePattern(String patternId);
   void removePattern(String patternId);
+  void setPatternTimeSignature(String patternId, int numerator, int denominator);
+  void reorderPattern(String patternId, int order);
+  void setPatternGroup(String patternId, String group);
 
   /// FR-SEQ-04: one clone, every listed clip repointed at it, one undo entry.
   void makeClipsUnique(List<String> clipIds);
@@ -998,6 +1001,10 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
           swing: value.swing,
           usageCount: value.usage_count,
           noteCount: value.note_count,
+          order: value.order,
+          group: _readFixedUtf8(value.group, 64),
+          timeSignatureNumerator: value.time_signature_numerator,
+          timeSignatureDenominator: value.time_signature_denominator,
           isCurrent: (value.flags & patternFlagCurrent) != 0,
         ),
       );
@@ -1056,6 +1063,26 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   @override
   void removePattern(String patternId) =>
       _withNativeString(patternId, (Pointer<Char> native) => _bindings.ob_engine_pattern_remove(_engine, native));
+
+  @override
+  void setPatternTimeSignature(String patternId, int numerator, int denominator) => _withNativeString(
+    patternId,
+    (Pointer<Char> native) =>
+        _bindings.ob_engine_pattern_set_time_signature(_engine, native, numerator, denominator),
+  );
+
+  @override
+  void reorderPattern(String patternId, int order) => _withNativeString(
+    patternId,
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_reorder(_engine, native, order),
+  );
+
+  @override
+  void setPatternGroup(String patternId, String group) => _withTwoNativeStrings(
+    patternId,
+    group,
+    (Pointer<Char> id, Pointer<Char> value) => _bindings.ob_engine_pattern_set_group(_engine, id, value),
+  );
 
   @override
   void makeClipsUnique(List<String> clipIds) {
@@ -1619,6 +1646,10 @@ class PatternSummary {
     required this.swing,
     required this.usageCount,
     required this.noteCount,
+    this.order = 0,
+    this.group = '',
+    this.timeSignatureNumerator = 4,
+    this.timeSignatureDenominator = 4,
     required this.isCurrent,
   });
 
@@ -1632,7 +1663,13 @@ class PatternSummary {
   /// what the selector's badge and D-M6's notice are warning about.
   final int usageCount;
   final int noteCount;
+  final int order;
+  final String group;
+  final int timeSignatureNumerator;
+  final int timeSignatureDenominator;
   final bool isCurrent;
+
+  String get timeSignature => '$timeSignatureNumerator/$timeSignatureDenominator';
 
   bool get isShared => usageCount > 1;
 }

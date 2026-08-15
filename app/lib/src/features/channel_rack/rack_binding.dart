@@ -3,6 +3,8 @@
 // Owns the mapping from the engine snapshot and RackStore to ChannelRackScreenVm.
 // Listens to the EngineController for real-time playback cursor updates,
 // and routes gestures and user interactions to RackStore commands.
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -161,10 +163,35 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
   void _noteEditStarted() => _patternStore.noteEditStarted();
 
+  void _selectNextEmptyPattern() {
+    final List<PatternSummary> patterns = _store.patterns;
+    if (patterns.isEmpty) return;
+    final int currentIndex = patterns.indexWhere((PatternSummary pattern) => pattern.isCurrent);
+    for (int offset = 1; offset <= patterns.length; offset++) {
+      final int index = (currentIndex + offset) % patterns.length;
+      if (patterns[index].noteCount == 0) {
+        _onSelectPattern(patterns[index].id);
+        return;
+      }
+    }
+  }
+
   String _nextPatternColor(String current) {
     const List<String> palette = <String>['#EF6F91', '#4FAFF5', '#9FC65C', '#F5A623', '#9B8CFF', '#55C2A5'];
     final int index = palette.indexOf(current.toUpperCase());
     return palette[(index + 1) % palette.length];
+  }
+
+  String _nextPatternGroup(String current) {
+    const List<String> groups = <String>['', 'Drums', 'Music'];
+    final int index = groups.indexOf(current);
+    return groups[(index + 1) % groups.length];
+  }
+
+  String _nextPatternTimeSignature(PatternSummary pattern) {
+    const List<String> choices = <String>['4/4', '3/4', '6/8', '7/8'];
+    final int index = choices.indexOf(pattern.timeSignature);
+    return choices[(index + 1) % choices.length];
   }
 
   void _requestDeletePattern([String? patternId]) {
@@ -279,7 +306,16 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final List<PatternTabVm> patternTabs = <PatternTabVm>[];
     if (_store.patterns.isNotEmpty) {
       for (final PatternSummary p in _store.patterns) {
-        patternTabs.add(PatternTabVm(id: p.id, name: p.name, selected: p.isCurrent, count: p.usageCount));
+        patternTabs.add(
+          PatternTabVm(
+            id: p.id,
+            name: p.name,
+            selected: p.isCurrent,
+            count: p.usageCount,
+            group: p.group,
+            timeSignature: p.timeSignature,
+          ),
+        );
       }
     } else if (pattern != null) {
       patternTabs.add(PatternTabVm(id: pattern.id, name: pattern.name, selected: true));
@@ -670,6 +706,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                           ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
                           ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
                           ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
+                          ObMenuRowVm(label: 'Time signature', icon: ObKitGlyphKind.note),
+                          ObMenuRowVm(label: 'Group', icon: ObKitGlyphKind.grid),
+                          ObMenuRowVm(label: 'Move earlier', icon: ObKitGlyphKind.chevronRight),
+                          ObMenuRowVm(label: 'Move later', icon: ObKitGlyphKind.chevronRight),
+                          ObMenuRowVm(label: 'Select next empty', icon: ObKitGlyphKind.chevronRight),
                           ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
                         ],
                       ),
@@ -693,6 +734,50 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                           _store.refresh();
                         }
                       case 3:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          final String next = _nextPatternTimeSignature(pattern);
+                          final List<String> nextParts = next.split('/');
+                          _patternStore.setTimeSignature(
+                            patternId,
+                            int.parse(nextParts[0]),
+                            int.parse(nextParts[1]),
+                          );
+                          _store.refresh();
+                        }
+                      case 4:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.setGroup(patternId, _nextPatternGroup(pattern.group));
+                          _store.refresh();
+                        }
+                      case 5:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.reorder(patternId, math.max(0, pattern.order - 1));
+                          _store.refresh();
+                        }
+                      case 6:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.reorder(patternId, pattern.order + 1);
+                          _store.refresh();
+                        }
+                      case 7:
+                        _selectNextEmptyPattern();
+                      case 8:
                         _requestDeletePattern(patternId);
                     }
                   },

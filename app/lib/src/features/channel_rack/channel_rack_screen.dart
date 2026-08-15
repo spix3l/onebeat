@@ -428,6 +428,9 @@ class _PatternTab extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            if (tab.group.isNotEmpty) ...<Widget>[
+              Text('${tab.group} · ', style: tokens.type.microCaps.copyWith(color: color.textMuted)),
+            ],
             Text(
               tab.name,
               style: tokens.type.body.copyWith(
@@ -435,6 +438,10 @@ class _PatternTab extends StatelessWidget {
                 fontWeight: tab.selected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
+            if (tab.timeSignature != '4/4') ...<Widget>[
+              SizedBox(width: tokens.spacing.xs),
+              Text(tab.timeSignature, style: tokens.type.microCaps.copyWith(color: color.textMuted)),
+            ],
             if (tab.count != null) ...<Widget>[
               SizedBox(width: tokens.spacing.xs),
               Container(

@@ -103,6 +103,21 @@ class PatternStore extends ChangeNotifier {
     refresh();
   }
 
+  void setTimeSignature(String patternId, int numerator, int denominator) {
+    _client.setPatternTimeSignature(patternId, numerator, denominator);
+    refresh();
+  }
+
+  void reorder(String patternId, int order) {
+    _client.reorderPattern(patternId, order);
+    refresh();
+  }
+
+  void setGroup(String patternId, String group) {
+    _client.setPatternGroup(patternId, group);
+    refresh();
+  }
+
   void duplicate(String patternId) {
     _client.duplicatePattern(patternId);
     editingFromClipId = '';

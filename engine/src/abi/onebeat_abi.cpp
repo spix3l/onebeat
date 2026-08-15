@@ -211,6 +211,20 @@ const onebeat::model::Instrument* orderedInstrument(const ob_engine& handle, int
   return nullptr;
 }
 
+std::vector<const onebeat::model::Pattern*> orderedPatterns(const ob_engine& handle) {
+  std::vector<const onebeat::model::Pattern*> patterns;
+  patterns.reserve(handle.project.patterns().size());
+  for (const auto& [id, pattern] : handle.project.patterns()) {
+    (void)id;
+    patterns.push_back(&pattern);
+  }
+  std::stable_sort(patterns.begin(), patterns.end(), [](const auto* left, const auto* right) {
+    if (left->order != right->order) return left->order < right->order;
+    return left->id < right->id;
+  });
+  return patterns;
+}
+
 const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
   return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
 }
@@ -762,11 +776,15 @@ std::optional<onebeat::model::PatternId> clonePattern(ob_engine& handle,
 
   const onebeat::model::ColorHex color = source.color;
   const double swing = source.swing;
+  const std::string group = source.group;
+  const onebeat::model::TimeSignature time_signature = source.time_signature;
   if (!handle.commands.execute(onebeat::model::editPatternMeta(
           handle.project, *created, onebeat::model::ChangeField::Color,
-          [&color, swing](onebeat::model::PatternMeta& meta) {
+          [&color, swing, &group, time_signature](onebeat::model::PatternMeta& meta) {
             meta.color = color;
             meta.swing = swing;
+            meta.group = group;
+            meta.time_signature = time_signature;
           },
           "Copy pattern settings"))) {
     return std::nullopt;
@@ -791,7 +809,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.12.0";
+  return "1.14.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -1956,9 +1974,8 @@ ob_status ob_engine_rack_set_row_grid(ob_engine* engine, const char* utf8_instru
 }
 
 ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) {
-  if (engine == nullptr ||
-      (base_step_count != 16 && base_step_count != 32 && base_step_count != 64)) {
-    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern length must be 16, 32, or 64 steps.");
+  if (engine == nullptr || base_step_count < 1 || base_step_count > 512) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern length must be between 1 and 512 steps.");
   }
   const onebeat::model::Pattern* pattern = currentPattern(*engine);
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
@@ -2280,7 +2297,8 @@ ob_status ob_engine_notes_duplicate(ob_engine* engine, const char* utf8_instrume
 /* ------------------------------------------------------------------------- */
 
 int32_t ob_engine_pattern_count(ob_engine* engine) {
-  return engine == nullptr ? 0 : static_cast<int32_t>(engine->project.patterns().size());
+  if (engine == nullptr) return 0;
+  return static_cast<int32_t>(orderedPatterns(*engine).size());
 }
 
 ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info* out_info) {
@@ -2288,9 +2306,8 @@ ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info
       static_cast<size_t>(index) >= engine->project.patterns().size()) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Pattern index is out of range.");
   }
-  auto entry = engine->project.patterns().begin();
-  std::advance(entry, index);
-  const onebeat::model::Pattern& pattern = entry->second;
+  const std::vector<const onebeat::model::Pattern*> patterns = orderedPatterns(*engine);
+  const onebeat::model::Pattern& pattern = *patterns[static_cast<size_t>(index)];
 
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
@@ -2304,6 +2321,10 @@ ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info
   copyText(out_info->id, sizeof(out_info->id), pattern.id.str().c_str());
   copyText(out_info->name, sizeof(out_info->name), pattern.name.c_str());
   copyText(out_info->color, sizeof(out_info->color), pattern.color.c_str());
+  out_info->order = pattern.order;
+  out_info->time_signature_numerator = pattern.time_signature.numerator;
+  out_info->time_signature_denominator = pattern.time_signature.denominator;
+  copyText(out_info->group, sizeof(out_info->group), pattern.group.c_str());
   g_last_error.clear();
   return OB_OK;
 }
@@ -2463,10 +2484,87 @@ ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pattern_i
   if (status != OB_OK) return status;
   // The selection has to land somewhere real, or every subsequent read fails.
   if (engine->current_pattern.has_value() && *engine->current_pattern == *id) {
-    engine->current_pattern = engine->project.patterns().begin()->first;
+    const std::vector<const onebeat::model::Pattern*> remaining = orderedPatterns(*engine);
+    if (!remaining.empty()) engine->current_pattern = remaining.front()->id;
     publishModel(*engine);
   }
   return OB_OK;
+}
+
+ob_status ob_engine_pattern_set_time_signature(ob_engine* engine, const char* utf8_pattern_id,
+                                               int32_t numerator, int32_t denominator) {
+  if (engine == nullptr || numerator < 1 || numerator > 32 ||
+      (denominator != 1 && denominator != 2 && denominator != 4 && denominator != 8 && denominator != 16 &&
+       denominator != 32)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern time signature is not supported.");
+  }
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  return executeModel(
+      *engine,
+      onebeat::model::editPatternMeta(
+          engine->project, *id, onebeat::model::ChangeField::Meta,
+          [numerator, denominator](onebeat::model::PatternMeta& meta) {
+            meta.time_signature = onebeat::model::TimeSignature{numerator, denominator};
+          },
+          "Set pattern time signature"),
+      "The pattern time signature could not be changed.");
+}
+
+ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_id, int32_t order) {
+  if (engine == nullptr || order < 0) return fail(OB_ERR_INVALID_ARGUMENT, "Pattern order is invalid.");
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  const std::vector<const onebeat::model::Pattern*> before = orderedPatterns(*engine);
+  const int32_t maximum = static_cast<int32_t>(before.size() - 1);
+  const int32_t target = std::clamp(order, int32_t{0}, maximum);
+  const auto moving = std::find_if(before.begin(), before.end(), [id](const auto* pattern) {
+    return pattern->id == *id;
+  });
+  if (moving == before.end()) return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  const int32_t source = static_cast<int32_t>(std::distance(before.begin(), moving));
+  if (source == target) return OB_OK;
+  std::vector<const onebeat::model::Pattern*> after = before;
+  const auto selected = after[static_cast<size_t>(source)];
+  after.erase(after.begin() + source);
+  after.insert(after.begin() + target, selected);
+
+  engine->commands.beginTransaction("Reorder pattern");
+  for (size_t index = 0; index < after.size(); ++index) {
+    const auto* pattern = after[index];
+    const int32_t next = static_cast<int32_t>(index);
+    if (pattern->order == next) continue;
+    if (!engine->commands.execute(onebeat::model::editPatternMeta(
+            engine->project, pattern->id, onebeat::model::ChangeField::Order,
+            [next](onebeat::model::PatternMeta& meta) { meta.order = next; }, "Reorder pattern"))) {
+      engine->commands.abortTransaction();
+      return fail(OB_ERR_INTERNAL, "The pattern order could not be changed.");
+    }
+  }
+  engine->commands.commitTransaction();
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_pattern_set_group(ob_engine* engine, const char* utf8_pattern_id,
+                                      const char* utf8_group) {
+  if (engine == nullptr || utf8_group == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "A pattern group is required.");
+  const auto id = patternId(utf8_pattern_id);
+  if (!id || engine->project.findPattern(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The pattern does not exist.");
+  }
+  const std::string group = utf8_group;
+  return executeModel(
+      *engine,
+      onebeat::model::editPatternMeta(
+          engine->project, *id, onebeat::model::ChangeField::Meta,
+          [&group](onebeat::model::PatternMeta& meta) { meta.group = group; }, "Set pattern group"),
+      "The pattern group could not be changed.");
 }
 
 /* ------------------------------------------------------------------------- */

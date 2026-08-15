@@ -248,6 +248,15 @@ class FakeEngineClient implements EngineClient {
   }
 
   @override
+  void setPatternTimeSignature(String patternId, int numerator, int denominator) {}
+
+  @override
+  void reorderPattern(String patternId, int order) {}
+
+  @override
+  void setPatternGroup(String patternId, String group) {}
+
+  @override
   void makeClipsUnique(List<String> clipIds) {
     if (clipIds.isEmpty) return;
     final MutableClip? first = clips[clipIds.first];

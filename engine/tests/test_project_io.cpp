@@ -151,6 +151,10 @@ struct Fixture {
         [&](Instrument& instrument) { instrument.routing = {OutputRoute{1, bus}}; });
 
     verse = project.createPattern("Verse", TicksPerBarFourFour * 2);
+    project.updatePattern(verse, onebeat::model::ChangeField::Meta, [](Pattern& pattern) {
+      pattern.group = "Music";
+      pattern.time_signature = {7, 8};
+    });
     project.updateSequence(verse, piano, [](NoteSequence& sequence) {
       sequence.insert(Note{0, 480, 60, velocityFromMidi1(100)});
       sequence.insert(Note{480, 240, 64, velocityFromMidi1(80)});
@@ -233,6 +237,11 @@ void requireSameModel(const Project& a, const Project& b) {
     CHECK(left.name == right->name);
     CHECK(left.color == right->color);
     CHECK(left.length == right->length);
+    CHECK(left.order == right->order);
+    CHECK(left.group == right->group);
+    CHECK(left.time_signature.numerator == right->time_signature.numerator);
+    CHECK(left.time_signature.denominator == right->time_signature.denominator);
+    CHECK(left.swing == doctest::Approx(right->swing));
     REQUIRE(left.sequences.size() == right->sequences.size());
     for (const auto& [instrument, sequence] : left.sequences) {
       const auto other = right->sequences.find(instrument);

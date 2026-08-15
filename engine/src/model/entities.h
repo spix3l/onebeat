@@ -104,6 +104,11 @@ struct MixerTrack {
 // Time axis
 // --------------------------------------------------------------------------
 
+struct TimeSignature {
+  int32_t numerator = 4;
+  int32_t denominator = 4;
+};
+
 // A horizontal slice across instruments, not a container belonging to one. The
 // map is **sparse**: a pattern stores sequences only for the instruments it
 // actually uses (D-M5's "show only what the pattern uses" is a view over this,
@@ -113,6 +118,10 @@ struct Pattern {
   std::string name;
   ColorHex color = "#6C8CFF";
   Ticks length = TicksPerBarFourFour * 4;
+  // Presentation order and grouping are persisted pattern metadata, not map order.
+  int32_t order = 0;
+  std::string group;
+  TimeSignature time_signature;
   // 0..1. At 1, every odd sixteenth is delayed by half a sixteenth.
   // Stored on the pattern because swing is part of the groove, not transport.
   double swing = 0.0;
@@ -258,11 +267,6 @@ inline Ticks patternEffectiveLength(const Pattern& pattern) {
   const Ticks content = patternContentEnd(pattern);
   return content <= declared ? declared : patternLoopLength(pattern);
 }
-
-struct TimeSignature {
-  int32_t numerator = 4;
-  int32_t denominator = 4;
-};
 
 struct TransportState {
   double tempo = 120.0;

@@ -20,10 +20,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.12.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.14.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.12.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.14.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -153,11 +153,11 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_rack_pattern_info, length_ticks) == 8);
     CHECK(offsetof(ob_rack_pattern_info, swing) == 24);
     CHECK(offsetof(ob_rack_pattern_info, id) == 32);
-    CHECK(sizeof(ob_rack_row_info) == 832);
+    CHECK(sizeof(ob_rack_row_info) == 1600);
     CHECK(offsetof(ob_rack_row_info, grid_ticks) == 8);
     CHECK(offsetof(ob_rack_row_info, instrument_id) == 28);
     CHECK(offsetof(ob_rack_row_info, step_active) == 60);
-    CHECK(offsetof(ob_rack_row_info, step_velocity) == 316);
+    CHECK(offsetof(ob_rack_row_info, step_velocity) == 572);
   }
 
   // Every field is naturally aligned with no implicit padding, which is what
@@ -170,13 +170,17 @@ TEST_SUITE("abi") {
     CHECK(offsetof(ob_note, key) == 16);
     CHECK(offsetof(ob_note, velocity) == 20);
 
-    CHECK(sizeof(ob_pattern_info) == 200);
+    CHECK(sizeof(ob_pattern_info) == 280);
     CHECK(offsetof(ob_pattern_info, length_ticks) == 8);
     CHECK(offsetof(ob_pattern_info, swing) == 16);
     CHECK(offsetof(ob_pattern_info, usage_count) == 24);
     CHECK(offsetof(ob_pattern_info, id) == 32);
     CHECK(offsetof(ob_pattern_info, name) == 64);
     CHECK(offsetof(ob_pattern_info, color) == 192);
+    CHECK(offsetof(ob_pattern_info, order) == 200);
+    CHECK(offsetof(ob_pattern_info, time_signature_numerator) == 204);
+    CHECK(offsetof(ob_pattern_info, time_signature_denominator) == 208);
+    CHECK(offsetof(ob_pattern_info, group) == 212);
 
     CHECK(sizeof(ob_lane_info) == 192);
     CHECK(offsetof(ob_lane_info, order) == 8);
@@ -437,6 +441,12 @@ TEST_SUITE("abi") {
     REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
     CHECK(std::string(pattern.name) == "Verse Drums");
     CHECK(std::string(pattern.color) == "#EF6F91");
+    REQUIRE(ob_engine_pattern_set_time_signature(engine, first_pattern.c_str(), 7, 8) == OB_OK);
+    REQUIRE(ob_engine_pattern_set_group(engine, first_pattern.c_str(), "Drums") == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.time_signature_numerator == 7);
+    CHECK(pattern.time_signature_denominator == 8);
+    CHECK(std::string(pattern.group) == "Drums");
 
     // Duplicate is the *unreferenced* clone: the notes come along, the clip
     // count does not.
@@ -636,6 +646,15 @@ TEST_SUITE("abi") {
     CHECK(pattern.length_ticks == started_at);
     REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
     CHECK(clip.length_ticks == started_at);
+
+    // The ABI supports the full documented 512-step range and exposes every
+    // cell through the fixed rack row buffer.
+    REQUIRE_MESSAGE(ob_engine_rack_set_length(engine, 512) == OB_OK, ob_last_error_message());
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 32 * Bar);
+    ob_rack_row_info long_row{};
+    REQUIRE(ob_engine_rack_row_at(engine, 0, &long_row) == OB_OK);
+    CHECK(long_row.step_count == 512);
 
     // A length the user set is a floor, not a target: clearing the pattern
     // leaves the 32 steps they asked for rather than collapsing to one bar.

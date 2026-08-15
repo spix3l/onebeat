@@ -38,9 +38,9 @@ class RackToolbarVm {
   /// 16 wide, which read as a setting but was only ever a label.
   final int steps;
 
-  /// The lengths `ob_engine_rack_set_length` accepts. Anything else is rejected
-  /// at the ABI, so the control offers exactly these.
-  static const List<int> stepOptions = <int>[16, 32, 64];
+  /// Common lengths in the 1–512-step range accepted by the ABI. The current
+  /// value is appended by [stepItems] when it is an arbitrary length.
+  static const List<int> stepOptions = <int>[16, 32, 64, 128, 256, 512];
 
   /// What the dropdown lists: the settable lengths, plus the current one when a
   /// note running past the end is holding the pattern open at a size that is

@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 12
+#define OB_ABI_VERSION_MINOR 14
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -535,7 +535,7 @@ OB_API ob_status ob_engine_project_redo(ob_engine* engine);
 /* Channel rack (added in ABI 1.6, OB-3-09)                                  */
 /* ------------------------------------------------------------------------- */
 
-#define OB_RACK_MAX_STEPS 256
+#define OB_RACK_MAX_STEPS 512
 
 typedef struct ob_rack_pattern_info {
   uint32_t struct_size;
@@ -663,6 +663,10 @@ typedef struct ob_pattern_info {
   char id[32];
   char name[128];
   char color[8];
+  int32_t order;
+  int32_t time_signature_numerator;
+  int32_t time_signature_denominator;
+  char group[64];
 } ob_pattern_info;
 
 /* Main/UI thread. Never blocks. Patterns in creation (ULID) order. */
@@ -694,6 +698,15 @@ OB_API ob_status ob_engine_pattern_duplicate(ob_engine* engine, const char* utf8
 /* Deletes the pattern and every clip referencing it, as one undo entry. The
  * caller is expected to have shown the clip count first (D-M6). */
 OB_API ob_status ob_engine_pattern_remove(ob_engine* engine, const char* utf8_pattern_id);
+/* Pattern metadata edits are undoable and persist with the project. */
+OB_API ob_status ob_engine_pattern_set_time_signature(ob_engine* engine,
+                                                      const char* utf8_pattern_id,
+                                                      int32_t numerator,
+                                                      int32_t denominator);
+OB_API ob_status ob_engine_pattern_reorder(ob_engine* engine, const char* utf8_pattern_id,
+                                           int32_t order);
+OB_API ob_status ob_engine_pattern_set_group(ob_engine* engine, const char* utf8_pattern_id,
+                                             const char* utf8_group);
 
 /* ------------------------------------------------------------------------- */
 /* Arrangement: lanes and clips (added in ABI 1.7, OB-3-12/13)                */

@@ -406,6 +406,13 @@ json::Value writePattern(const Pattern& pattern, const Residue& residue) {
   out.emplace("name", json::Value::string(pattern.name));
   out.emplace("color", json::Value::string(pattern.color));
   out.emplace("length", json::Value::integer(pattern.length));
+  if (pattern.order != 0) out.emplace("order", json::Value::integer(pattern.order));
+  if (!pattern.group.empty()) out.emplace("group", json::Value::string(pattern.group));
+  if (pattern.time_signature.numerator != 4 || pattern.time_signature.denominator != 4) {
+    out.emplace("time_signature",
+                json::Value::array({json::Value::integer(pattern.time_signature.numerator),
+                                    json::Value::integer(pattern.time_signature.denominator)}));
+  }
   out.emplace("swing", json::Value::real(pattern.swing));
   out.emplace("sequences", json::Value::object(std::move(sequences)));
   return json::Value::object(std::move(out));
@@ -852,6 +859,17 @@ class Loader {
       pattern.name = takeString(*fields, "name", "Pattern");
       pattern.color = takeString(*fields, "color", "#6C8CFF");
       pattern.length = takeInt(*fields, "length", TicksPerBarFourFour * 4);
+      pattern.order = static_cast<int32_t>(takeInt(*fields, "order"));
+      pattern.group = takeString(*fields, "group");
+      const json::Value signature = take(*fields, "time_signature");
+      if (const json::Array* pair = signature.asArray(); pair != nullptr && pair->size() == 2) {
+        pattern.time_signature.numerator = static_cast<int32_t>((*pair)[0].asInt(4));
+        pattern.time_signature.denominator = static_cast<int32_t>((*pair)[1].asInt(4));
+      }
+      if (pattern.time_signature.numerator <= 0 || pattern.time_signature.denominator <= 0) {
+        warn("Pattern '" + pattern.name + "' has an invalid time signature; using 4/4.");
+        pattern.time_signature = TimeSignature{};
+      }
       if (pattern.length <= 0) {
         warn("Pattern '" + pattern.name + "' has no length; using one bar.");
         pattern.length = TicksPerBarFourFour;

@@ -1738,6 +1738,51 @@ class OneBeatBindings {
   late final _ob_engine_pattern_remove = _ob_engine_pattern_removePtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>();
 
+  ob_status ob_engine_pattern_set_time_signature(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    int numerator,
+    int denominator,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_pattern_set_time_signature(engine, utf8_pattern_id, numerator, denominator),
+    );
+  }
+
+  late final _ob_engine_pattern_set_time_signaturePtr = _lookup<
+    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32, ffi.Int32)>
+  >('ob_engine_pattern_set_time_signature');
+  late final _ob_engine_pattern_set_time_signature = _ob_engine_pattern_set_time_signaturePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int, int)>();
+
+  ob_status ob_engine_pattern_reorder(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    int order,
+  ) {
+    return ob_status.fromValue(_ob_engine_pattern_reorder(engine, utf8_pattern_id, order));
+  }
+
+  late final _ob_engine_pattern_reorderPtr = _lookup<
+    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>
+  >('ob_engine_pattern_reorder');
+  late final _ob_engine_pattern_reorder = _ob_engine_pattern_reorderPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_pattern_set_group(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_pattern_id,
+    ffi.Pointer<ffi.Char> utf8_group,
+  ) {
+    return ob_status.fromValue(_ob_engine_pattern_set_group(engine, utf8_pattern_id, utf8_group));
+  }
+
+  late final _ob_engine_pattern_set_groupPtr = _lookup<
+    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>
+  >('ob_engine_pattern_set_group');
+  late final _ob_engine_pattern_set_group = _ob_engine_pattern_set_groupPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+
   int ob_engine_lane_count(
     ffi.Pointer<ob_engine> engine,
   ) {
@@ -2953,10 +2998,10 @@ final class ob_rack_row_info extends ffi.Struct {
   @ffi.Array.multi([32])
   external ffi.Array<ffi.Char> instrument_id;
 
-  @ffi.Array.multi([256])
+  @ffi.Array.multi([512])
   external ffi.Array<ffi.Uint8> step_active;
 
-  @ffi.Array.multi([256])
+  @ffi.Array.multi([512])
   external ffi.Array<ffi.Uint16> step_velocity;
 }
 
@@ -3001,6 +3046,18 @@ final class ob_pattern_info extends ffi.Struct {
 
   @ffi.Array.multi([8])
   external ffi.Array<ffi.Char> color;
+
+  @ffi.Int32()
+  external int order;
+
+  @ffi.Int32()
+  external int time_signature_numerator;
+
+  @ffi.Int32()
+  external int time_signature_denominator;
+
+  @ffi.Array.multi([64])
+  external ffi.Array<ffi.Char> group;
 }
 
 final class ob_lane_info extends ffi.Struct {
@@ -3084,11 +3141,11 @@ final class ob_clip_info extends ffi.Struct {
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 11;
+const int OB_ABI_VERSION_MINOR = 14;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 68352;
+const int OB_ABI_VERSION_PACKED = 69120;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -3102,7 +3159,7 @@ const int OB_INSTANCE_FLAG_HAS_EDITOR = 4;
 
 const int OB_INSTANCE_FLAG_NEEDS_RESTART = 8;
 
-const int OB_RACK_MAX_STEPS = 256;
+const int OB_RACK_MAX_STEPS = 512;
 
 const int OB_PATTERN_FLAG_CURRENT = 1;
 

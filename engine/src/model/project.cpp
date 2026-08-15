@@ -116,6 +116,12 @@ PatternId Project::createPattern(const std::string& name, Ticks length) {
   pattern.id = generator_.next<EntityKind::Pattern>();
   pattern.name = name;
   pattern.length = length;
+  int32_t highest = -1;
+  for (const auto& [pattern_id, existing] : patterns_) {
+    (void)pattern_id;
+    highest = std::max(highest, existing.order);
+  }
+  pattern.order = highest + 1;
 
   const PatternId id = pattern.id;
   patterns_.emplace(id, std::move(pattern));

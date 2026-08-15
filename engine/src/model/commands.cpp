@@ -381,6 +381,9 @@ struct PatternMetaTraits {
       live.name = value.name;
       live.color = value.color;
       live.length = value.length;
+      live.order = value.order;
+      live.group = value.group;
+      live.time_signature = value.time_signature;
       live.swing = value.swing;
     });
   }
@@ -664,6 +667,12 @@ CommandPtr addPattern(Project& project, const std::string& name, Ticks length) {
   pattern.id = project.mintId<EntityKind::Pattern>();
   pattern.name = name;
   pattern.length = length;
+  int32_t highest = -1;
+  for (const auto& [pattern_id, existing] : project.patterns()) {
+    (void)pattern_id;
+    highest = std::max(highest, existing.order);
+  }
+  pattern.order = highest + 1;
   return std::make_unique<AddCommand<Pattern>>(std::move(pattern), "Add pattern");
 }
 
