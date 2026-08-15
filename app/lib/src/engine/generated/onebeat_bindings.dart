@@ -2575,7 +2575,9 @@ enum ob_command_type {
   OB_CMD_PLUGIN_PARAM_VALUE(12),
   OB_CMD_PLUGIN_PARAM_END(13),
   OB_CMD_SET_INSTRUMENT_GAIN(14),
-  OB_CMD_SET_INSTRUMENT_PAN(15);
+  OB_CMD_SET_INSTRUMENT_PAN(15),
+  OB_CMD_PREVIEW_NOTE_ON(16),
+  OB_CMD_PREVIEW_NOTE_OFF(17);
 
   final int value;
   const ob_command_type(this.value);
@@ -2597,6 +2599,8 @@ enum ob_command_type {
     13 => OB_CMD_PLUGIN_PARAM_END,
     14 => OB_CMD_SET_INSTRUMENT_GAIN,
     15 => OB_CMD_SET_INSTRUMENT_PAN,
+    16 => OB_CMD_PREVIEW_NOTE_ON,
+    17 => OB_CMD_PREVIEW_NOTE_OFF,
     _ => throw ArgumentError('Unknown value for ob_command_type: $value'),
   };
 }
@@ -3205,15 +3209,18 @@ final class ob_clip_info extends ffi.Struct {
 
   @ffi.Array.multi([8])
   external ffi.Array<ffi.Char> color;
+
+  @ffi.Array.multi([512])
+  external ffi.Array<ffi.Char> audio_path;
 }
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 9;
+const int OB_ABI_VERSION_MINOR = 10;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 67584;
+const int OB_ABI_VERSION_PACKED = 68096;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
