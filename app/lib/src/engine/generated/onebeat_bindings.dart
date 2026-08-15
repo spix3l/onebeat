@@ -893,6 +893,29 @@ class OneBeatBindings {
   late final _ob_engine_instrument_set_pan = _ob_engine_instrument_set_panPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)>();
 
+  ob_status ob_engine_instrument_set_route(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ffi.Char> utf8_mixer_track_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_set_route(
+        engine,
+        utf8_instrument_id,
+        utf8_mixer_track_id,
+      ),
+    );
+  }
+
+  late final _ob_engine_instrument_set_routePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+        >
+      >('ob_engine_instrument_set_route');
+  late final _ob_engine_instrument_set_route = _ob_engine_instrument_set_routePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+
   int ob_engine_project_can_undo(
     ffi.Pointer<ob_engine> engine,
   ) {
@@ -2880,6 +2903,12 @@ final class ob_instrument_info extends ffi.Struct {
 
   @ffi.Float()
   external double pan;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> route_id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> route_name;
 }
 
 final class ob_rack_pattern_info extends ffi.Struct {

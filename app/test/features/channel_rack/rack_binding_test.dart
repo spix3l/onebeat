@@ -89,13 +89,7 @@ class _FakeRackEngineClient implements EngineClient {
         hasSequence: true,
         offGridCount: 0,
         noteCount: 4,
-        steps: List<RackStep>.generate(
-          16,
-          (int i) => RackStep(
-            active: i % 4 == 0,
-            velocity: i % 4 == 0 ? 12900 : 0,
-          ),
-        ),
+        steps: List<RackStep>.generate(16, (int i) => RackStep(active: i % 4 == 0, velocity: i % 4 == 0 ? 12900 : 0)),
       ),
       RackRow(
         instrumentId: 'snare',
@@ -105,10 +99,7 @@ class _FakeRackEngineClient implements EngineClient {
         noteCount: 2,
         steps: List<RackStep>.generate(
           16,
-          (int i) => RackStep(
-            active: i == 4 || i == 12,
-            velocity: i == 4 || i == 12 ? 12900 : 0,
-          ),
+          (int i) => RackStep(active: i == 4 || i == 12, velocity: i == 4 || i == 12 ? 12900 : 0),
         ),
       ),
     ];
@@ -139,10 +130,7 @@ class _FakeRackEngineClient implements EngineClient {
           hasSequence: false,
           offGridCount: 0,
           noteCount: 0,
-          steps: List<RackStep>.filled(
-            16,
-            const RackStep(active: false, velocity: 0),
-          ),
+          steps: List<RackStep>.filled(16, const RackStep(active: false, velocity: 0)),
         ),
       ];
     }
@@ -176,6 +164,10 @@ class _FakeRackEngineClient implements EngineClient {
   int undoCalls = 0;
   int redoCalls = 0;
   final List<int> auditionedNotes = <int>[];
+  final List<String> selectedInstruments = <String>[];
+
+  @override
+  void selectInstrument(String id) => selectedInstruments.add(id);
 
   @override
   bool get canUndoProject => transactionCommits > undoCalls;
@@ -237,10 +229,7 @@ class _FakeRackEngineClient implements EngineClient {
         hasSequence: false,
         offGridCount: 0,
         noteCount: 0,
-        steps: List<RackStep>.filled(
-          16,
-          const RackStep(active: false, velocity: 0),
-        ),
+        steps: List<RackStep>.filled(16, const RackStep(active: false, velocity: 0)),
       ),
     );
   }
@@ -262,30 +251,32 @@ class _FakeRackEngineClient implements EngineClient {
   /// muting a lane cannot silently clear its solo, the way two hand-written
   /// copies of this rebuild did.
   void _setFlags(String id, {bool? muted, bool? soloed}) {
-    instruments = instruments
-        .map(
-          (ProjectInstrument inst) => inst.id == id
-              ? ProjectInstrument(
-                  id: inst.id,
-                  name: inst.name,
-                  color: inst.color,
-                  order: inst.order,
-                  pluginId: inst.pluginId,
-                  pluginName: inst.pluginName,
-                  pluginVendor: inst.pluginVendor,
-                  pluginPath: inst.pluginPath,
-                  muted: muted ?? inst.muted,
-                  soloed: soloed ?? inst.soloed,
-                  selected: inst.selected,
-                  affectedPatterns: inst.affectedPatterns,
-                  affectedClips: inst.affectedClips,
-                  affectedNotes: inst.affectedNotes,
-                  gain: inst.gain,
-                  pan: inst.pan,
-                )
-              : inst,
-        )
-        .toList();
+    instruments =
+        instruments
+            .map(
+              (ProjectInstrument inst) =>
+                  inst.id == id
+                      ? ProjectInstrument(
+                        id: inst.id,
+                        name: inst.name,
+                        color: inst.color,
+                        order: inst.order,
+                        pluginId: inst.pluginId,
+                        pluginName: inst.pluginName,
+                        pluginVendor: inst.pluginVendor,
+                        pluginPath: inst.pluginPath,
+                        muted: muted ?? inst.muted,
+                        soloed: soloed ?? inst.soloed,
+                        selected: inst.selected,
+                        affectedPatterns: inst.affectedPatterns,
+                        affectedClips: inst.affectedClips,
+                        affectedNotes: inst.affectedNotes,
+                        gain: inst.gain,
+                        pan: inst.pan,
+                      )
+                      : inst,
+            )
+            .toList();
   }
 
   @override
@@ -303,45 +294,48 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void renameInstrument(String id, String name) {
     renames.add((id, name));
-    instruments = instruments
-        .map(
-          (ProjectInstrument inst) => inst.id == id
-              ? ProjectInstrument(
-                  id: inst.id,
-                  name: name,
-                  color: inst.color,
-                  order: inst.order,
-                  pluginId: inst.pluginId,
-                  pluginName: inst.pluginName,
-                  pluginVendor: inst.pluginVendor,
-                  pluginPath: inst.pluginPath,
-                  muted: inst.muted,
-                  selected: inst.selected,
-                  affectedPatterns: inst.affectedPatterns,
-                  affectedClips: inst.affectedClips,
-                  affectedNotes: inst.affectedNotes,
-                )
-              : inst,
-        )
-        .toList();
+    instruments =
+        instruments
+            .map(
+              (ProjectInstrument inst) =>
+                  inst.id == id
+                      ? ProjectInstrument(
+                        id: inst.id,
+                        name: name,
+                        color: inst.color,
+                        order: inst.order,
+                        pluginId: inst.pluginId,
+                        pluginName: inst.pluginName,
+                        pluginVendor: inst.pluginVendor,
+                        pluginPath: inst.pluginPath,
+                        muted: inst.muted,
+                        selected: inst.selected,
+                        affectedPatterns: inst.affectedPatterns,
+                        affectedClips: inst.affectedClips,
+                        affectedNotes: inst.affectedNotes,
+                      )
+                      : inst,
+            )
+            .toList();
   }
 
   @override
   void selectPattern(String patternId) {
-    patterns = patterns
-        .map(
-          (PatternSummary p) => PatternSummary(
-            id: p.id,
-            name: p.name,
-            color: p.color,
-            lengthTicks: p.lengthTicks,
-            swing: p.swing,
-            usageCount: p.usageCount,
-            noteCount: p.noteCount,
-            isCurrent: p.id == patternId,
-          ),
-        )
-        .toList();
+    patterns =
+        patterns
+            .map(
+              (PatternSummary p) => PatternSummary(
+                id: p.id,
+                name: p.name,
+                color: p.color,
+                lengthTicks: p.lengthTicks,
+                swing: p.swing,
+                usageCount: p.usageCount,
+                noteCount: p.noteCount,
+                isCurrent: p.id == patternId,
+              ),
+            )
+            .toList();
     final PatternSummary selected = patterns.firstWhere((PatternSummary p) => p.id == patternId);
     pattern = RackPattern(
       id: selected.id,
@@ -350,6 +344,70 @@ class _FakeRackEngineClient implements EngineClient {
       baseGridTicks: pattern.baseGridTicks,
       swing: pattern.swing,
     );
+  }
+
+  int patternDuplicateCalls = 0;
+  int patternRecolorCalls = 0;
+
+  @override
+  void duplicatePattern(String patternId) {
+    patternDuplicateCalls++;
+    final PatternSummary source = patterns.firstWhere((PatternSummary p) => p.id == patternId);
+    const String id = 'pat_copy';
+    patterns = <PatternSummary>[
+      ...patterns.map(
+        (PatternSummary p) => PatternSummary(
+          id: p.id,
+          name: p.name,
+          color: p.color,
+          lengthTicks: p.lengthTicks,
+          swing: p.swing,
+          usageCount: p.usageCount,
+          noteCount: p.noteCount,
+          isCurrent: false,
+        ),
+      ),
+      PatternSummary(
+        id: id,
+        name: '${source.name} 2',
+        color: source.color,
+        lengthTicks: source.lengthTicks,
+        swing: source.swing,
+        usageCount: 0,
+        noteCount: source.noteCount,
+        isCurrent: true,
+      ),
+    ];
+    pattern = RackPattern(
+      id: id,
+      name: '${source.name} 2',
+      lengthTicks: source.lengthTicks,
+      baseGridTicks: 240,
+      swing: source.swing,
+    );
+  }
+
+  @override
+  void recolorPattern(String patternId, String color) {
+    patternRecolorCalls++;
+    patterns =
+        patterns
+            .map(
+              (PatternSummary p) =>
+                  p.id == patternId
+                      ? PatternSummary(
+                        id: p.id,
+                        name: p.name,
+                        color: color,
+                        lengthTicks: p.lengthTicks,
+                        swing: p.swing,
+                        usageCount: p.usageCount,
+                        noteCount: p.noteCount,
+                        isCurrent: p.isCurrent,
+                      )
+                      : p,
+            )
+            .toList();
   }
 
   @override
@@ -415,10 +473,7 @@ class _FakeRackEngineClient implements EngineClient {
       final RackRow current = rows[idx];
       final List<RackStep> steps = List<RackStep>.of(current.steps);
       final bool nextActive = !steps[step].active;
-      steps[step] = RackStep(
-        active: nextActive,
-        velocity: nextActive ? 12900 : 0,
-      );
+      steps[step] = RackStep(active: nextActive, velocity: nextActive ? 12900 : 0);
       rows[idx] = RackRow(
         instrumentId: current.instrumentId,
         gridTicks: current.gridTicks,
@@ -441,10 +496,7 @@ class _FakeRackEngineClient implements EngineClient {
         hasSequence: false,
         offGridCount: 0,
         noteCount: 0,
-        steps: List<RackStep>.filled(
-          current.steps.length,
-          const RackStep(active: false, velocity: 0),
-        ),
+        steps: List<RackStep>.filled(current.steps.length, const RackStep(active: false, velocity: 0)),
       );
     }
   }
@@ -500,16 +552,10 @@ class _FakeRackEngineClient implements EngineClient {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('RackBinding keeps the inspector closed until a lane is selected', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('RackBinding keeps the inspector closed until a lane is selected', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     // The rack can show lanes without implying that one is selected.
@@ -523,21 +569,16 @@ void main() {
     await tester.tap(find.text('Kick 808'));
     await tester.pump();
 
+    expect(client.selectedInstruments, <String>['kick']);
     expect(find.text('Kick 808'), findsNWidgets(2));
     expect(find.byType(ObChannelInspector), findsOneWidget);
     expect(find.byType(MiniKeyboard), findsOneWidget);
   });
 
-  testWidgets('Add channel creates a visible empty lane without opening the inspector', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Add channel creates a visible empty lane without opening the inspector', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     await tester.tap(find.text('+ Add channel'));
@@ -547,17 +588,11 @@ void main() {
     expect(find.byType(ObChannelInspector), findsNothing);
   });
 
-  testWidgets('step toggle updates store and reflects on UI', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('step toggle updates store and reflects on UI', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, store: store),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, store: store), size: const Size(1520, 880));
     await tester.pump();
 
     // Step 1 of Kick 808 is initially inactive (index 1)
@@ -569,17 +604,13 @@ void main() {
 
     final Rect kickGrid = tester.getRect(grids.first);
     const double stepCellPitch = 34.0;
-    await tester.tapAt(
-      Offset(kickGrid.left + stepCellPitch * 1.5, kickGrid.center.dy),
-    );
+    await tester.tapAt(Offset(kickGrid.left + stepCellPitch * 1.5, kickGrid.center.dy));
     await tester.pump();
 
     expect(client.rows.first.steps[1].active, isTrue);
   });
 
-  testWidgets('drag paint performs single transaction begin and commit', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('drag paint performs single transaction begin and commit', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
@@ -595,17 +626,11 @@ void main() {
     expect(client.rows.first.steps[3].active, isTrue);
   });
 
-  testWidgets('click-drag paints every crossed step cell', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('click-drag paints every crossed step cell', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, store: store),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, store: store), size: const Size(1520, 880));
     await tester.pump();
 
     final Rect grid = tester.getRect(find.byType(ObStepGrid).first);
@@ -613,10 +638,7 @@ void main() {
     const double gap = 4;
     const double groupGap = 8;
     final Offset start = Offset(grid.left + cell * 1.5 + gap, grid.center.dy);
-    final Offset end = Offset(
-      grid.left + cell * 4 + gap * 3 + groupGap + cell / 2,
-      grid.center.dy,
-    );
+    final Offset end = Offset(grid.left + cell * 4 + gap * 3 + groupGap + cell / 2, grid.center.dy);
 
     final TestGesture gesture = await tester.startGesture(start);
     await gesture.moveTo(end);
@@ -631,9 +653,7 @@ void main() {
     expect(client.rows.first.steps[4].active, isTrue);
   });
 
-  testWidgets('velocity setting updates step velocity', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('velocity setting updates step velocity', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final RackStore store = RackStore(client)..load();
 
@@ -644,16 +664,10 @@ void main() {
     expect(client.rows.first.steps[0].velocity, 9216);
   });
 
-  testWidgets('switching pattern tabs re-scopes pattern and rows', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('switching pattern tabs re-scopes pattern and rows', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     expect(client.pattern.name, 'Main Groove');
@@ -665,28 +679,20 @@ void main() {
     expect(client.pattern.name, 'Verse Drums');
   });
 
-  testWidgets('playing step calculates cursor position when transport is playing', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('playing step calculates cursor position when transport is playing', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient(
       isPlaying: true,
       positionBeats: 1.5, // Beat 1.5 in 4-beat bar = step index 6
     );
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     final ChannelRackScreen screen = tester.widget(find.byType(ChannelRackScreen));
     expect(screen.vm.playingStep, 6);
   });
 
-  testWidgets('playhead loops on the loop region, not the stored length', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('playhead loops on the loop region, not the stored length', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient(
       isPlaying: true,
       positionBeats: 3.5, // past the end of a [1, 3) loop region
@@ -694,11 +700,7 @@ void main() {
       loopEndBeats: 3,
     );
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     final ChannelRackScreen screen = tester.widget(find.byType(ChannelRackScreen));
@@ -707,16 +709,10 @@ void main() {
     expect(screen.vm.playingStep, 2);
   });
 
-  testWidgets('mini keyboard in inspector triggers audition', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('mini keyboard in inspector triggers audition', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     await tester.tap(find.text('Kick 808'));
@@ -726,24 +722,16 @@ void main() {
     final double whiteKeyWidth = keysRect.width / 14;
 
     // Tap first white key (Middle C, 60)
-    await tester.tapAt(
-      Offset(keysRect.left + whiteKeyWidth * 0.5, keysRect.center.dy),
-    );
+    await tester.tapAt(Offset(keysRect.left + whiteKeyWidth * 0.5, keysRect.center.dy));
     await tester.pump();
 
     expect(client.auditionedNotes, contains(60));
   });
 
-  testWidgets('the row power button toggles the instrument mute', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the row power button toggles the instrument mute', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     // The power button is the first control in each row: the left edge plus the
@@ -755,24 +743,16 @@ void main() {
     expect(client.instruments.first.muted, isTrue);
   });
 
-  testWidgets('dragging a lane by its name reorders the channel', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('dragging a lane by its name reorders the channel', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     // The name block is the drag handle. Grab the first lane's name and drag it
     // down past the second lane.
     final Rect firstRow = tester.getRect(find.byType(ObRackRow).first);
-    final TestGesture gesture = await tester.startGesture(
-      tester.getCenter(find.text('Kick 808')),
-    );
+    final TestGesture gesture = await tester.startGesture(tester.getCenter(find.text('Kick 808')));
     // The handle uses an immediate drag recognizer, so one pump to let it
     // claim the pointer, then a move past the touch slop.
     await tester.pump(const Duration(milliseconds: 50));
@@ -790,16 +770,10 @@ void main() {
     expect(client.reorders, <(String, int)>[('kick', 1)]);
   });
 
-  testWidgets('dragging across the step cells paints instead of reordering', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('dragging across the step cells paints instead of reordering', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     // A vertical drag starting on a step cell must not move the lane: the grid
@@ -818,49 +792,36 @@ void main() {
     expect(client.reorders, isEmpty);
   });
 
-  testWidgets('a sample lane selects without opening an editor window', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('a sample lane opens the sampler from a double-click', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final List<String> opened = <String>[];
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, onOpenSampler: opened.add),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, onOpenSampler: opened.add), size: const Size(1520, 880));
     await tester.pump();
 
-    // Only lanes that host a real plug-in carry a double-tap recognizer
-    // (channel_rack_screen.dart). A sample lane therefore stays responsive to a
-    // single click and opens nothing — neither on one click nor on two.
+    // A sample lane selects on the first tap and opens its built-in editor on
+    // the second; it must never be sent through the hosted-plugin callback.
     await tester.tap(find.text('Kick 808').first);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.text('Kick 808').first);
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(opened, isEmpty);
+    expect(opened, <String>['kick']);
     expect(find.byType(ObChannelInspector), findsOneWidget);
   });
 
-  testWidgets('double-clicking a plug-in lane opens its plug-in window', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('double-clicking a plug-in lane opens its plug-in window', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, onOpenPlugin: opened.add),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
     await tester.pump();
 
     // Two taps inside the double-tap window: the lane's instrument is handed
     // to the shell, which is what opens the plug-in window.
-    await tester.tap(find.text('Reese'));
+    await tester.tap(find.text('Reese').first);
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('Reese'));
+    await tester.tap(find.text('Reese').first);
     await tester.pump();
 
     expect(opened, <String>['reese']);
@@ -877,23 +838,17 @@ void main() {
 
   Future<void> rightClickRow(WidgetTester tester, String name) async {
     final TestGesture gesture = await tester.startGesture(
-      tester.getCenter(find.text(name)),
+      tester.getCenter(find.text(name).first),
       buttons: kSecondaryMouseButton,
     );
     await gesture.up();
     await tester.pump();
   }
 
-  testWidgets('right-clicking a lane offers the channel actions', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('right-clicking a lane offers the channel actions', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     await rightClickRow(tester, 'Kick 808');
@@ -921,16 +876,10 @@ void main() {
     expect(client.deleteCalls, 1);
   });
 
-  testWidgets('a step fill from the context menu fills the channel grid', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('a step fill from the context menu fills the channel grid', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     // Kick starts with steps 0/4/8/12 lit.
@@ -946,17 +895,11 @@ void main() {
     expect(client.rows.first.steps[4].active, isTrue);
   });
 
-  testWidgets('right-clicking a plug-in lane offers Open plugin window', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('right-clicking a plug-in lane offers Open plugin window', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, onOpenPlugin: opened.add),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
     await tester.pump();
 
     await rightClickRow(tester, 'Reese');
@@ -968,17 +911,11 @@ void main() {
     expect(opened, <String>['reese']);
   });
 
-  testWidgets('the inspector opens the plug-in window for a plug-in lane', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('the inspector opens the plug-in window for a plug-in lane', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client, onOpenPlugin: opened.add),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client, onOpenPlugin: opened.add), size: const Size(1520, 880));
     await tester.pump();
 
     // A sample lane's inspector has no window to open.
@@ -998,16 +935,63 @@ void main() {
     expect(opened, <String>['reese']);
   });
 
-  testWidgets('Rename from the context menu renames the channel', (
-    WidgetTester tester,
-  ) async {
+  Future<void> rightClickPattern(WidgetTester tester, String name) async {
+    final TestGesture gesture = await tester.startGesture(
+      tester.getCenter(find.text(name).first),
+      buttons: kSecondaryMouseButton,
+    );
+    await gesture.up();
+    await tester.pump();
+  }
+
+  testWidgets('pattern context menu duplicates and recolors patterns', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    await rightClickPattern(tester, 'Main Groove');
+    expect(find.text('Duplicate'), findsOneWidget);
+    expect(find.text('Recolor'), findsOneWidget);
+    await tester.tap(find.text('Duplicate'));
+    await tester.pump();
+
+    expect(client.patternDuplicateCalls, 1);
+    expect(find.text('Main Groove 2'), findsOneWidget);
+
+    await rightClickPattern(tester, 'Main Groove');
+    await tester.tap(find.text('Recolor'));
+    await tester.pump();
+
+    expect(client.patternRecolorCalls, 1);
+    expect(client.patterns.first.color, isNot('#EF6F91'));
+  });
+
+  testWidgets('editing a shared pattern shows a dismissible notice once', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    final Rect grid = tester.getRect(find.byType(ObStepGrid).first);
+    await tester.tapAt(Offset(grid.left + 1.5 * 30 + 4, grid.center.dy));
+    await tester.pump();
+
+    expect(find.text("Editing 'Main Groove' — used in 4 places. Changes apply to all of them."), findsOneWidget);
+    await tester.tap(find.text('Dismiss'));
+    await tester.pump();
+    expect(find.text("Editing 'Main Groove' — used in 4 places. Changes apply to all of them."), findsNothing);
+
+    final Rect gridAfterDismiss = tester.getRect(find.byType(ObStepGrid).first);
+    await tester.tapAt(Offset(gridAfterDismiss.left + 5.5 * 30 + 4, gridAfterDismiss.center.dy));
+    await tester.pump();
+    expect(find.text("Editing 'Main Groove' — used in 4 places. Changes apply to all of them."), findsNothing);
+  });
+
+  testWidgets('Rename from the context menu renames the channel', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     await rightClickRow(tester, 'Kick 808');
@@ -1024,16 +1008,10 @@ void main() {
     expect(find.text('Kick Heavy'), findsOneWidget);
   });
 
-  testWidgets('Solo from the context menu toggles the channel solo state', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Solo from the context menu toggles the channel solo state', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
-    await pumpForTest(
-      tester,
-      RackBinding(client: client),
-      size: const Size(1520, 880),
-    );
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
     await rightClickRow(tester, 'Kick 808');
@@ -1043,9 +1021,7 @@ void main() {
     // Re-open: the row is now ticked.
     await rightClickRow(tester, 'Kick 808');
     final ObPopoverMenu menu = tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
-    final ObMenuRowVm soloRow = menu.vm.rows.firstWhere(
-      (ObMenuRowVm row) => row.label == 'Solo',
-    );
+    final ObMenuRowVm soloRow = menu.vm.rows.firstWhere((ObMenuRowVm row) => row.label == 'Solo');
     expect(soloRow.checked, isTrue);
 
     // Toggling again clears the tick.
@@ -1053,9 +1029,7 @@ void main() {
     await tester.pump();
     await rightClickRow(tester, 'Kick 808');
     final ObPopoverMenu reopened = tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
-    final ObMenuRowVm cleared = reopened.vm.rows.firstWhere(
-      (ObMenuRowVm row) => row.label == 'Solo',
-    );
+    final ObMenuRowVm cleared = reopened.vm.rows.firstWhere((ObMenuRowVm row) => row.label == 'Solo');
     expect(cleared.checked, isFalse);
   });
 }

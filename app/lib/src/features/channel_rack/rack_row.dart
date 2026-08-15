@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../ui_kit/dropdown.dart';
 import '../../ui_kit/knob.dart';
 
 /// One step cell.
@@ -34,11 +35,7 @@ class StepVm {
 /// plain integers so the rack row needs no engine types.
 @immutable
 class RackPreviewNoteVm {
-  const RackPreviewNoteVm({
-    required this.startTick,
-    required this.lengthTicks,
-    required this.midiNote,
-  });
+  const RackPreviewNoteVm({required this.startTick, required this.lengthTicks, required this.midiNote});
 
   final int startTick;
   final int lengthTicks;
@@ -59,6 +56,10 @@ class RackRowVm {
     this.selected = false,
     this.previewNotes,
     this.hostsPlugin = false,
+    this.gridLabel = '1/16',
+    this.hasSequence = true,
+    this.onGrid,
+    this.onRemoveSequence,
   });
 
   final String name;
@@ -90,6 +91,12 @@ class RackRowVm {
   /// plug-in window — and only these lanes pay for the double-tap recognizer
   /// delaying their single-click select by the double-tap window.
   final bool hostsPlugin;
+
+  /// The visible per-row divisor, independent of the pattern length.
+  final String gridLabel;
+  final bool hasSequence;
+  final ValueChanged<String>? onGrid;
+  final VoidCallback? onRemoveSequence;
 }
 
 class ObRackRow extends StatelessWidget {
@@ -98,6 +105,7 @@ class ObRackRow extends StatelessWidget {
     this.playingStep,
     this.playingTick,
     this.onTap,
+    this.onPointerDown,
     this.onDoubleTap,
     this.onSecondaryTapDown,
     this.onPower,
@@ -107,6 +115,8 @@ class ObRackRow extends StatelessWidget {
     this.onVol,
     this.onPan,
     this.onRouteTap,
+    this.onGrid,
+    this.onRemoveSequence,
     this.reorderIndex,
     super.key,
   });
@@ -128,6 +138,7 @@ class ObRackRow extends StatelessWidget {
   /// read head.
   final int? playingTick;
   final VoidCallback? onTap;
+  final void Function(PointerDownEvent event)? onPointerDown;
 
   /// Double-click opens the lane's plug-in window. Wired only for lanes that
   /// host a plug-in — see [RackRowVm.hostsPlugin].
@@ -140,14 +151,16 @@ class ObRackRow extends StatelessWidget {
   final ValueChanged<double>? onVol;
   final ValueChanged<double>? onPan;
   final VoidCallback? onRouteTap;
+  final ValueChanged<String>? onGrid;
+  final VoidCallback? onRemoveSequence;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return _RackGestureLayer(
+      onPointerDown: onPointerDown,
       onTap: onTap,
       onDoubleTap: onDoubleTap,
       onSecondaryTapDown: onSecondaryTapDown,
@@ -159,10 +172,7 @@ class ObRackRow extends StatelessWidget {
           // would drown them.
           color: vm.selected ? color.accentWash : color.none,
           border: Border(
-            bottom: BorderSide(
-              color: color.line,
-              width: tokens.border.hairline,
-            ),
+            bottom: BorderSide(color: color.line, width: tokens.border.hairline),
             left: BorderSide(
               color: vm.selected ? color.accentBright : color.none,
               width: tokens.size.rackSelectedEdgeWidth,
@@ -177,13 +187,10 @@ class ObRackRow extends StatelessWidget {
             Container(
               width: tokens.size.rackColorChipSize,
               height: tokens.size.rackColorChipSize,
-              decoration: BoxDecoration(
-                color: vm.color,
-                borderRadius: tokens.radius.controlBorder,
-              ),
+              decoration: BoxDecoration(color: vm.color, borderRadius: tokens.radius.controlBorder),
             ),
             SizedBox(width: tokens.spacing.md),
-            _NameBlock(vm: vm, reorderIndex: reorderIndex),
+            _NameBlock(vm: vm, reorderIndex: reorderIndex, onGrid: onGrid, onRemoveSequence: onRemoveSequence),
             if (vm.previewNotes != null)
               RackPianoPreview(
                 notes: vm.previewNotes!,
@@ -213,13 +220,76 @@ class ObRackRow extends StatelessWidget {
   }
 }
 
+class _RackGestureLayer extends StatefulWidget {
+  const _RackGestureLayer({
+    required this.child,
+    this.onPointerDown,
+    this.onTap,
+    this.onDoubleTap,
+    this.onSecondaryTapDown,
+  });
+
+  final Widget child;
+  final void Function(PointerDownEvent event)? onPointerDown;
+  final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  State<_RackGestureLayer> createState() => _RackGestureLayerState();
+}
+
+class _RackGestureLayerState extends State<_RackGestureLayer> {
+  Duration? _lastTapTime;
+  Offset? _lastTapPosition;
+
+  void _onPointerUp(PointerUpEvent event) {
+    final Duration? lastTime = _lastTapTime;
+    final Offset? lastPosition = _lastTapPosition;
+    final bool isDouble =
+        lastTime != null &&
+        event.timeStamp - lastTime < const Duration(milliseconds: 300) &&
+        lastPosition != null &&
+        (event.position - lastPosition).distance < 24;
+    if (isDouble) {
+      _lastTapTime = null;
+      _lastTapPosition = null;
+      widget.onDoubleTap?.call();
+    } else {
+      _lastTapTime = event.timeStamp;
+      _lastTapPosition = event.position;
+    }
+  }
+
+  void _onPointerCancel(PointerCancelEvent event) {
+    _lastTapTime = null;
+    _lastTapPosition = null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.opaque,
+    onPointerDown: widget.onPointerDown,
+    onPointerUp: _onPointerUp,
+    onPointerCancel: _onPointerCancel,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      onSecondaryTapDown: widget.onSecondaryTapDown,
+      child: widget.child,
+    ),
+  );
+}
+
 /// The lane's name and instrument caption, and — when the rack is reorderable
 /// — the grip the lane is dragged by.
 class _NameBlock extends StatelessWidget {
-  const _NameBlock({required this.vm, this.reorderIndex});
+  const _NameBlock({required this.vm, this.reorderIndex, this.onGrid, this.onRemoveSequence});
 
   final RackRowVm vm;
   final int? reorderIndex;
+  final ValueChanged<String>? onGrid;
+  final VoidCallback? onRemoveSequence;
 
   @override
   Widget build(BuildContext context) {
@@ -230,17 +300,25 @@ class _NameBlock extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            vm.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.type.rackName,
-          ),
-          Text(
-            vm.type,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: tokens.type.rackCaption,
+          Text(vm.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackName),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(vm.type, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.rackCaption),
+              ),
+              if (onGrid != null) ...<Widget>[
+                ObDropdown(
+                  label: '',
+                  value: vm.gridLabel,
+                  items: const <String>['1/8', '1/16', '1/32'],
+                  width: 52,
+                  onSelected: onGrid,
+                ),
+                if (onRemoveSequence != null) SizedBox(width: tokens.spacing.xs),
+              ],
+              if (onRemoveSequence != null)
+                _SequenceButton(enabled: vm.hasSequence, width: 28, compact: true, onTap: onRemoveSequence),
+            ],
           ),
         ],
       ),
@@ -288,11 +366,7 @@ class ObStepGrid extends StatelessWidget {
     final List<Widget> cells = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
       if (i > 0) {
-        cells.add(
-          SizedBox(
-            width: i % groupSize == 0 ? tokens.size.rackStepGroupGap : tokens.size.rackStepGap,
-          ),
-        );
+        cells.add(SizedBox(width: i % groupSize == 0 ? tokens.size.rackStepGroupGap : tokens.size.rackStepGap));
       }
       cells.add(
         _StepCell(
@@ -309,23 +383,21 @@ class ObStepGrid extends StatelessWidget {
     }
     return Listener(
       behavior: HitTestBehavior.opaque,
-      onPointerDown: onPointerDownStep == null
-          ? null
-          : (PointerDownEvent event) {
-              final int? step = _stepAt(event.localPosition, tokens.size);
-              if (step != null) onPointerDownStep!(event, step);
-            },
-      onPointerMove: onPointerMoveStep == null
-          ? null
-          : (PointerMoveEvent event) {
-              final int? step = _stepAt(event.localPosition, tokens.size);
-              if (step != null) onPointerMoveStep!(event, step);
-            },
-      child: Row(
-        children: <Widget>[
-          for (final Widget cell in cells) cell,
-        ],
-      ),
+      onPointerDown:
+          onPointerDownStep == null
+              ? null
+              : (PointerDownEvent event) {
+                final int? step = _stepAt(event.localPosition, tokens.size);
+                if (step != null) onPointerDownStep!(event, step);
+              },
+      onPointerMove:
+          onPointerMoveStep == null
+              ? null
+              : (PointerMoveEvent event) {
+                final int? step = _stepAt(event.localPosition, tokens.size);
+                if (step != null) onPointerMoveStep!(event, step);
+              },
+      child: Row(children: <Widget>[for (final Widget cell in cells) cell]),
     );
   }
 
@@ -347,13 +419,7 @@ class ObStepGrid extends StatelessWidget {
 /// The compact piano-roll preview a melody channel shows in place of its step
 /// grid: the same notes as the piano roll, scaled into one strip.
 class RackPianoPreview extends StatelessWidget {
-  const RackPianoPreview({
-    required this.notes,
-    required this.color,
-    this.stepCount = 16,
-    this.playingTick,
-    super.key,
-  });
+  const RackPianoPreview({required this.notes, required this.color, this.stepCount = 16, this.playingTick, super.key});
 
   final List<RackPreviewNoteVm> notes;
   final Color color;
@@ -434,12 +500,7 @@ class _RackPianoPreviewPainter extends CustomPainter {
       final double y = (high - note.midiNote) * rowHeight;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(
-            x,
-            y + rowHeight * 0.15,
-            width < 2 ? 2 : width,
-            rowHeight * 0.7,
-          ),
+          Rect.fromLTWH(x, y + rowHeight * 0.15, width < 2 ? 2 : width, rowHeight * 0.7),
           noteRadius,
         ),
         paint,
@@ -450,14 +511,11 @@ class _RackPianoPreviewPainter extends CustomPainter {
     final Color? head = playheadColor;
     if (tick != null && head != null && end > 0) {
       final double x = (tick / end) * size.width;
-      final Paint headPaint = Paint()
-        ..color = head
-        ..strokeWidth = playheadWidth;
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        headPaint,
-      );
+      final Paint headPaint =
+          Paint()
+            ..color = head
+            ..strokeWidth = playheadWidth;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), headPaint);
     }
   }
 
@@ -470,12 +528,7 @@ class _RackPianoPreviewPainter extends CustomPainter {
 }
 
 class _StepCell extends StatelessWidget {
-  const _StepCell({
-    required this.step,
-    required this.playing,
-    required this.lifted,
-    this.onTap,
-  });
+  const _StepCell({required this.step, required this.playing, required this.lifted, this.onTap});
 
   final StepVm step;
   final bool playing;
@@ -502,19 +555,18 @@ class _StepCell extends StatelessWidget {
           height: side,
           decoration: BoxDecoration(
             color: step.on ? null : (lifted ? color.stepRestLifted : color.stepRest),
-            gradient: step.on
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: color.stepGradient(step.velocity),
-                  )
-                : null,
+            gradient:
+                step.on
+                    ? LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: color.stepGradient(step.velocity),
+                    )
+                    : null,
             // The corner follows the cell. r8 on the design's 30px square is a
             // rounded square; the same 8 on a shrunk cell is a circle, and a
             // grid of circles stops reading as a row of steps.
-            borderRadius: BorderRadius.circular(
-              math.min(tokens.radius.lg.x, side * 0.27),
-            ),
+            borderRadius: BorderRadius.circular(math.min(tokens.radius.lg.x, side * 0.27)),
             border: Border.all(
               // The playing column outlines every cell in it, lit or not —
               // that is what makes it read as a column rather than as a
@@ -554,16 +606,10 @@ class _PowerButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: color.surfaceWell,
             shape: BoxShape.circle,
-            border: Border.all(
-              color: color.lineStrong,
-              width: tokens.border.hairline,
-            ),
+            border: Border.all(color: color.lineStrong, width: tokens.border.hairline),
           ),
           child: CustomPaint(
-            painter: _PowerGlyphPainter(
-              color: on ? color.danger : color.textMuted,
-              stroke: tokens.border.glyph,
-            ),
+            painter: _PowerGlyphPainter(color: on ? color.danger : color.textMuted, stroke: tokens.border.glyph),
           ),
         ),
       ),
@@ -579,19 +625,17 @@ class _PowerGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
     final double w = size.width;
     final double h = size.height;
     // A ring broken at the top, with the stem through the break.
     canvas.drawArc(
-      Rect.fromCircle(
-        center: Offset(w / 2, h * 0.54),
-        radius: w * 0.26,
-      ),
+      Rect.fromCircle(center: Offset(w / 2, h * 0.54), radius: w * 0.26),
       -math.pi / 2 + _arcGap,
       math.pi * 2 - _arcGap * 2,
       false,
@@ -609,6 +653,40 @@ class _PowerGlyphPainter extends CustomPainter {
 const double _arcGap = 0.9;
 
 /// The mono destination chip at the lane's right edge.
+class _SequenceButton extends StatelessWidget {
+  const _SequenceButton({required this.enabled, this.width, this.compact = false, this.onTap});
+
+  final bool enabled;
+  final double? width;
+  final bool compact;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: width ?? tokens.size.rackRouteChipWidth,
+        height: tokens.size.tagHeight,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: tokens.color.surfaceRaised,
+          borderRadius: BorderRadius.all(tokens.radius.md),
+          border: Border.all(color: tokens.color.line, width: tokens.border.hairline),
+        ),
+        child: Text(
+          compact ? '−' : '− PAT',
+          style: tokens.type.numericSmall.copyWith(
+            color: enabled ? tokens.color.textSecondary : tokens.color.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RouteChip extends StatefulWidget {
   const _RouteChip({required this.label, this.onTap});
 
@@ -641,17 +719,10 @@ class _RouteChipState extends State<_RouteChip> {
           decoration: BoxDecoration(
             color: _hover ? color.surfaceWell : color.surfaceRaised,
             borderRadius: BorderRadius.all(tokens.radius.md),
-            border: Border.all(
-              color: color.line,
-              width: tokens.border.hairline,
-            ),
+            border: Border.all(color: color.line, width: tokens.border.hairline),
           ),
           alignment: Alignment.center,
-          child: Text(
-            widget.label,
-            maxLines: 1,
-            style: tokens.type.numericSmall,
-          ),
+          child: Text(widget.label, maxLines: 1, style: tokens.type.numericSmall),
         ),
       ),
     );

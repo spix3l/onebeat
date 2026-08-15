@@ -140,12 +140,7 @@ class _ObDropdownState extends State<ObDropdown> {
 }
 
 class _Field extends StatefulWidget {
-  const _Field({
-    required this.label,
-    required this.value,
-    required this.open,
-    required this.onTap,
-  });
+  const _Field({required this.label, required this.value, required this.open, required this.onTap});
 
   final String label;
   final String value;
@@ -185,8 +180,10 @@ class _FieldState extends State<_Field> {
           ),
           child: Row(
             children: <Widget>[
-              Text(widget.label.toUpperCase(), style: tokens.type.microCaps),
-              SizedBox(width: tokens.spacing.sm),
+              if (widget.label.isNotEmpty) ...<Widget>[
+                Text(widget.label.toUpperCase(), style: tokens.type.microCaps),
+                SizedBox(width: tokens.spacing.sm),
+              ],
               Expanded(
                 child: Text(
                   widget.value,
@@ -198,10 +195,7 @@ class _FieldState extends State<_Field> {
               SizedBox(width: tokens.spacing.xs),
               CustomPaint(
                 size: Size(tokens.size.iconSize, tokens.size.iconSize),
-                painter: _ChevronPainter(
-                  color: color.textSecondary,
-                  stroke: tokens.border.glyph,
-                ),
+                painter: _ChevronPainter(color: color.textSecondary, stroke: tokens.border.glyph),
               ),
             ],
           ),
@@ -229,10 +223,7 @@ class _Menu extends StatelessWidget {
       decoration: BoxDecoration(
         color: tokens.color.surfaceOverlay,
         borderRadius: tokens.radius.panelBorder,
-        border: Border.all(
-          color: tokens.color.line,
-          width: tokens.border.hairline,
-        ),
+        border: Border.all(color: tokens.color.line, width: tokens.border.hairline),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -286,21 +277,15 @@ class _MenuRowState extends State<_MenuRow> {
               SizedBox(
                 width: tokens.size.iconSize,
                 height: tokens.size.iconSize,
-                child: widget.checked
-                    ? CustomPaint(
-                        painter: _CheckPainter(
-                          color: color.accentBright,
-                          stroke: tokens.border.glyph,
-                        ),
-                      )
-                    : null,
+                child:
+                    widget.checked
+                        ? CustomPaint(painter: _CheckPainter(color: color.accentBright, stroke: tokens.border.glyph))
+                        : null,
               ),
               SizedBox(width: tokens.spacing.xs),
               Text(
                 widget.label,
-                style: tokens.type.bodySecondary.copyWith(
-                  color: highlight ? color.textPrimary : color.textSecondary,
-                ),
+                style: tokens.type.bodySecondary.copyWith(color: highlight ? color.textPrimary : color.textSecondary),
               ),
             ],
           ),
@@ -318,11 +303,12 @@ class _ChevronPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
     final double cx = size.width / 2;
     final double cy = size.height / 2;
     canvas.drawLine(Offset(cx - 3, cy - 1), Offset(cx, cy + 2), paint);
@@ -341,15 +327,17 @@ class _CheckPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..color = color;
-    final Path path = Path()
-      ..moveTo(size.width * 0.22, size.height * 0.52)
-      ..lineTo(size.width * 0.44, size.height * 0.74)
-      ..lineTo(size.width * 0.8, size.height * 0.3);
+    final Paint paint =
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..color = color;
+    final Path path =
+        Path()
+          ..moveTo(size.width * 0.22, size.height * 0.52)
+          ..lineTo(size.width * 0.44, size.height * 0.74)
+          ..lineTo(size.width * 0.8, size.height * 0.3);
     canvas.drawPath(path, paint);
   }
 

@@ -8,12 +8,7 @@ import 'rack_toolbar.dart';
 /// One tab in the pattern switcher header.
 @immutable
 class PatternTabVm {
-  const PatternTabVm({
-    required this.id,
-    required this.name,
-    this.selected = false,
-    this.count,
-  });
+  const PatternTabVm({required this.id, required this.name, this.selected = false, this.count});
 
   final String id;
   final String name;
@@ -21,6 +16,13 @@ class PatternTabVm {
 
   /// Optional count badge (e.g. 4 for 4 active sequences).
   final int? count;
+}
+
+@immutable
+class SharedPatternNoticeVm {
+  const SharedPatternNoticeVm({required this.message});
+
+  final String message;
 }
 
 @immutable
@@ -40,6 +42,7 @@ class ChannelRackScreenVm {
     this.inspector,
     this.canUndo = false,
     this.canRedo = false,
+    this.sharedPatternNotice,
   });
 
   final String title;
@@ -60,4 +63,5 @@ class ChannelRackScreenVm {
   final ChannelInspectorVm? inspector;
   final bool canUndo;
   final bool canRedo;
+  final SharedPatternNoticeVm? sharedPatternNotice;
 }

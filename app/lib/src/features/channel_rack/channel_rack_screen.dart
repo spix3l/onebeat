@@ -26,6 +26,8 @@ class ChannelRackScreen extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
+    this.onGridChanged,
+    this.onRemoveSequence,
     this.onAddChannel,
     this.onCreatePattern,
     this.onRowSecondaryTapDown,
@@ -36,13 +38,17 @@ class ChannelRackScreen extends StatelessWidget {
     this.onGroup,
     this.onSnap,
     this.onSteps,
+    this.onSwing,
+    this.onVelocityDelta,
     this.onMixerTap,
     this.onAutomationTap,
+    this.onDismissSharedPatternNotice,
     this.onInspectorVol,
     this.onInspectorPan,
     this.onInspectorMute,
     this.onInspectorSolo,
     this.onInspectorOpenPlugin,
+    this.onInspectorOpenSampler,
     this.onInspectorFxTap,
     this.onInspectorAddFx,
     this.onInspectorRouteTap,
@@ -67,6 +73,8 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
+  final void Function(int rowIndex, String grid)? onGridChanged;
+  final ValueChanged<int>? onRemoveSequence;
   final VoidCallback? onAddChannel;
   final VoidCallback? onCreatePattern;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
@@ -77,8 +85,11 @@ class ChannelRackScreen extends StatelessWidget {
   final ValueChanged<String>? onGroup;
   final ValueChanged<String>? onSnap;
   final ValueChanged<int>? onSteps;
+  final ValueChanged<double>? onSwing;
+  final ValueChanged<int>? onVelocityDelta;
   final VoidCallback? onMixerTap;
   final VoidCallback? onAutomationTap;
+  final VoidCallback? onDismissSharedPatternNotice;
   final ValueChanged<double>? onInspectorVol;
   final ValueChanged<double>? onInspectorPan;
   final VoidCallback? onInspectorMute;
@@ -87,6 +98,7 @@ class ChannelRackScreen extends StatelessWidget {
   /// Opens the selected channel's plug-in window; only wired for channels
   /// that host a plug-in.
   final VoidCallback? onInspectorOpenPlugin;
+  final VoidCallback? onInspectorOpenSampler;
   final ValueChanged<int>? onInspectorFxTap;
   final VoidCallback? onInspectorAddFx;
   final VoidCallback? onInspectorRouteTap;
@@ -117,8 +129,14 @@ class ChannelRackScreen extends StatelessWidget {
             vm: vm.toolbar,
             // The rack keeps only controls that change the pattern: step count
             // and the visible Add channel action in the header.
+            onGroup: onGroup,
+            onSnap: onSnap,
             onSteps: onSteps,
+            onSwing: onSwing,
+            onVelocityDelta: onVelocityDelta,
           ),
+          if (vm.sharedPatternNotice != null)
+            _SharedPatternNotice(message: vm.sharedPatternNotice!.message, onDismiss: onDismissSharedPatternNotice),
           Expanded(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
@@ -152,6 +170,8 @@ class ChannelRackScreen extends StatelessWidget {
                               onVolChanged: onVolChanged,
                               onPanChanged: onPanChanged,
                               onRouteTap: onRouteTap,
+                              onGridChanged: onGridChanged,
+                              onRemoveSequence: onRemoveSequence,
                               onAddChannel: onAddChannel,
                               onRowSecondaryTapDown: onRowSecondaryTapDown,
                               onDropInstrument: onDropInstrument,
@@ -179,6 +199,7 @@ class ChannelRackScreen extends StatelessWidget {
               onMute: onInspectorMute,
               onSolo: onInspectorSolo,
               onOpenPlugin: onInspectorOpenPlugin,
+              onOpenSampler: onInspectorOpenSampler,
               onFxTap: onInspectorFxTap,
               onAddFx: onInspectorAddFx,
               onRouteTap: onInspectorRouteTap,
@@ -265,6 +286,39 @@ class _RackStepSizes extends SizeTokens {
     // thing telling you where the beat is.
     final double floor = rackStepGap + 2;
     return scaled < floor ? floor : scaled;
+  }
+}
+
+class _SharedPatternNotice extends StatelessWidget {
+  const _SharedPatternNotice({required this.message, this.onDismiss});
+
+  final String message;
+  final VoidCallback? onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Container(
+      height: tokens.size.microFieldHeight + tokens.spacing.xs,
+      padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
+      color: tokens.color.accentWash,
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(message, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.bodySecondary),
+          ),
+          if (onDismiss != null)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onDismiss,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
+                child: Text('Dismiss', style: tokens.type.microCaps),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -448,6 +502,8 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
+    this.onGridChanged,
+    this.onRemoveSequence,
     this.onAddChannel,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
@@ -469,6 +525,8 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
+  final void Function(int rowIndex, String grid)? onGridChanged;
+  final ValueChanged<int>? onRemoveSequence;
   final VoidCallback? onAddChannel;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
@@ -543,6 +601,8 @@ class _RackRowsScrollArea extends StatelessWidget {
                       onVolChanged: onVolChanged,
                       onPanChanged: onPanChanged,
                       onRouteTap: onRouteTap,
+                      onGridChanged: onGridChanged,
+                      onRemoveSequence: onRemoveSequence,
                       onSecondaryTapDown: onRowSecondaryTapDown,
                       onDropInstrument: onDropInstrument,
                       onPointerDownStep: onPointerDownStep,
@@ -574,6 +634,8 @@ class _RackRowItem extends StatelessWidget {
     this.onVolChanged,
     this.onPanChanged,
     this.onRouteTap,
+    this.onGridChanged,
+    this.onRemoveSequence,
     this.onSecondaryTapDown,
     this.onDropInstrument,
     this.onPointerDownStep,
@@ -594,6 +656,8 @@ class _RackRowItem extends StatelessWidget {
   final void Function(int rowIndex, double value)? onVolChanged;
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
+  final void Function(int rowIndex, String grid)? onGridChanged;
+  final ValueChanged<int>? onRemoveSequence;
   final void Function(int rowIndex, TapDownDetails details)? onSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
@@ -625,17 +689,17 @@ class _RackRowItem extends StatelessWidget {
               reorderIndex: reorderable ? index : null,
               playingStep: playingStep,
               playingTick: playingTick,
-              onTap:
+              // Selection is driven by the row's raw pointer-down handler so
+              // it is immediate even when a double-click editor is available.
+              onTap: null,
+              onPointerDown:
                   onSelectRow == null
                       ? null
-                      : () {
-                        onSelectRow!(index);
+                      : (PointerDownEvent event) {
+                        if (event.buttons == 1) onSelectRow!(index);
                       },
               // Only hosted plug-in lanes use a double-tap recognizer.
-              onDoubleTap:
-                  row.hostsPlugin && !row.type.toLowerCase().contains('sampler') && onRowDoubleTap != null
-                      ? () => onRowDoubleTap!(index)
-                      : null,
+              onDoubleTap: row.hostsPlugin && onRowDoubleTap != null ? () => onRowDoubleTap!(index) : null,
               onSecondaryTapDown:
                   onSecondaryTapDown == null ? null : (TapDownDetails details) => onSecondaryTapDown!(index, details),
               onPower: onTogglePower == null ? null : () => onTogglePower!(index),
@@ -651,6 +715,8 @@ class _RackRowItem extends StatelessWidget {
               onVol: onVolChanged == null ? null : (double val) => onVolChanged!(index, val),
               onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
               onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
+              onGrid: onGridChanged == null ? null : (String grid) => onGridChanged!(index, grid),
+              onRemoveSequence: onRemoveSequence == null ? null : () => onRemoveSequence!(index),
             ),
           ),
         );

@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 11
+#define OB_ABI_VERSION_MINOR 12
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -475,6 +475,8 @@ typedef struct ob_instrument_info {
   char plugin_path[512];
   float gain; /* linear 0..2, the channel rack VOL knob */
   float pan;  /* -1..1, the channel rack PAN knob */
+  char route_id[32];   /* stable mixer-track ID for output port 0 */
+  char route_name[128]; /* display name for output port 0 */
 } ob_instrument_info;
 
 /* Main/UI thread. The rows are project-global and ordered by `order`. */
@@ -517,6 +519,9 @@ OB_API ob_status ob_engine_instrument_set_gain(ob_engine* engine, const char* ut
                                                float gain);
 OB_API ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instrument_id,
                                               float pan);
+/* Routes output port 0 to an existing mixer track by stable ID. */
+OB_API ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_instrument_id,
+                                                const char* utf8_mixer_track_id);
 OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
 OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);
 /* Main/UI thread. Never blocks. Engine-owned UTF-8, valid until the next call

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../core/engine_controller.dart' as core;
+import '../../core/pattern_store.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../../core/action_registry.dart';
@@ -65,6 +66,7 @@ class RackBinding extends StatefulWidget {
 class _RackBindingState extends State<RackBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   late final RackStore _store;
+  late final PatternStore _patternStore;
   bool _ownsController = false;
   bool _ownsStore = false;
 
@@ -74,10 +76,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
   OverlayEntry? _contextMenuEntry;
 
-  /// The channel the rename dialog is pointed at, while it is open. Solo is a
-  /// mixer-track audio gate (v0.4), so the rack models it locally for now —
-  /// the same way the mixer does — so the menu's check and the inspector's S
-  /// chip can at least reflect the choice.
+  /// The channel the rename dialog is pointed at, while it is open. Solo is
+  /// persisted by the engine and gates non-solo instrument channels during
+  /// rendering; the rack mirrors the model state for its menu and inspector.
   bool _showRenameDialog = false;
   bool _renamePattern = false;
   bool _showDeletePatternDialog = false;
@@ -101,9 +102,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       _store = RackStore(widget.client)..load();
       _ownsStore = true;
     }
+    _patternStore = PatternStore(widget.client)..load();
 
     _controller.addListener(_onEngineChanged);
     _store.addListener(_onStoreChanged);
+    _patternStore.addListener(_onPatternStoreChanged);
   }
 
   @override
@@ -112,6 +115,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _focus.dispose();
     _controller.removeListener(_onEngineChanged);
     _store.removeListener(_onStoreChanged);
+    _patternStore.removeListener(_onPatternStoreChanged);
+    _patternStore.dispose();
     if (_ownsStore) {
       _store.dispose();
     }
@@ -136,15 +141,30 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     }
   }
 
+  void _onPatternStoreChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   void _onCreatePattern() {
     final int nextNumber = _store.patterns.length + 1;
-    widget.client.createPattern('Pattern $nextNumber');
+    _patternStore.create('Pattern $nextNumber');
     _store.refresh();
   }
 
   void _onSelectPattern(String patternId) {
     FocusPolicy.take(_focus);
     _store.selectPattern(patternId);
+    _patternStore.select(patternId);
+  }
+
+  void _noteEditStarted() => _patternStore.noteEditStarted();
+
+  String _nextPatternColor(String current) {
+    const List<String> palette = <String>['#EF6F91', '#4FAFF5', '#9FC65C', '#F5A623', '#9B8CFF', '#55C2A5'];
+    final int index = palette.indexOf(current.toUpperCase());
+    return palette[(index + 1) % palette.length];
   }
 
   void _requestDeletePattern([String? patternId]) {
@@ -163,7 +183,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final String? patternId = _deletePatternId;
     if (patternId == null) return;
     try {
-      widget.client.removePattern(patternId);
+      _patternStore.remove(patternId);
     } catch (_) {
       return;
     }
@@ -212,6 +232,34 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     return currentTicks.round();
   }
 
+  String _gridLabel(int ticks) {
+    switch (ticks) {
+      case 480:
+        return '1/8';
+      case 120:
+        return '1/32';
+      default:
+        return '1/16';
+    }
+  }
+
+  int _gridTicks(String label) {
+    switch (label) {
+      case '1/8':
+        return 480;
+      case '1/32':
+        return 120;
+      default:
+        return 240;
+    }
+  }
+
+  String _routeLabel(ProjectInstrument? instrument, {required bool inspector}) {
+    final String name = instrument?.routeName.trim() ?? '';
+    if (name.isEmpty) return inspector ? 'Unrouted' : '→ —';
+    return inspector ? name : '→ $name';
+  }
+
   Color _resolveInstrumentColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
       final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
@@ -237,7 +285,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       patternTabs.add(PatternTabVm(id: pattern.id, name: pattern.name, selected: true));
     }
 
-    final List<RackRow> visibleRows = _store.rows;
+    final List<RackRow> visibleRows = _store.visibleRows;
 
     final List<RackRowVm> rowVms = <RackRowVm>[];
     for (int i = 0; i < visibleRows.length; i++) {
@@ -262,12 +310,14 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           steps: stepVms,
           vol: _gains[row.instrumentId] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
           pan: _pans[row.instrumentId] ?? (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
-          route: '→ D1',
+          route: _routeLabel(inst, inspector: false),
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
           previewNotes: _previewNotesFor(row), // Sample lanes open the built-in sampler; hosted lanes open their
           // plug-in editor. Empty lanes remain non-openable.
           hostsPlugin: inst != null && inst.pluginId.isNotEmpty,
+          gridLabel: _gridLabel(row.gridTicks),
+          hasSequence: row.hasSequence,
         ),
       );
     }
@@ -288,23 +338,34 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         volText: _volText(selectedId, selectedInst),
         pan: _pans[selectedId] ?? (selectedInst != null ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
         panText: _panText(selectedId, selectedInst),
-        route: 'M1 · Music',
+        route: _routeLabel(selectedInst, inspector: true),
         muted: selectedInst?.muted ?? false,
         soloed: _store.instrumentFor(selectedId)?.soloed ?? false,
         // The row itself can open a sample's built-in editor, but the
         // inspector's hosted-plugin action is reserved for real plug-ins.
         hostsPlugin:
             selectedInst != null && selectedInst.pluginId.isNotEmpty && selectedInst.pluginId != _kSamplePluginId,
+        hostsSampler: selectedInst?.pluginId == _kSamplePluginId,
       );
     }
 
+    final String? velocityInstrument = _store.selectedVelocityInstrument;
+    final int? velocityStep = _store.selectedVelocityStep;
+    final RackRow? velocityRow = velocityInstrument == null ? null : _store.rowFor(velocityInstrument);
+    final RackStep? selectedStep =
+        velocityRow != null && velocityStep != null && velocityStep < velocityRow.steps.length
+            ? velocityRow.steps[velocityStep]
+            : null;
+
     final RackToolbarVm toolbarVm = RackToolbarVm(
-      // These legacy fields are retained for older view-model fixtures; the
-      // toolbar deliberately does not render them.
       channelType: 'Sampler',
-      group: 'All',
+      group: _store.showAll ? 'All' : 'Used',
       snap: '1/16',
       steps: stepCount,
+      groups: const <String>['All', 'Used'],
+      swing: pattern?.swing ?? 0.0,
+      velocity: selectedStep?.active == true ? selectedStep!.velocity : null,
+      velocityStep: velocityStep,
     );
 
     return ChannelRackScreenVm(
@@ -315,6 +376,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       playingStep: playingStep,
       playingTick: playingTick,
       inspector: inspectorVm,
+      sharedPatternNotice:
+          _patternStore.notice == null ? null : SharedPatternNoticeVm(message: _patternStore.notice!.message),
       canUndo: _store.canUndo,
       canRedo: _store.canRedo,
     );
@@ -362,18 +425,46 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     ];
   }
 
+  void _onShowFilter(String value) => _store.setShowAll(value == 'All');
+
+  void _onSwingChanged(double value) {
+    _noteEditStarted();
+    _store.setSwing(value);
+  }
+
+  void _onVelocityDelta(int delta) {
+    _noteEditStarted();
+    _store.nudgeVelocity(delta);
+  }
+
+  void _onGridChanged(int rowIndex, String label) {
+    final List<RackRow> visible = _store.visibleRows;
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    _store.setGrid(visible[rowIndex].instrumentId, _gridTicks(label));
+  }
+
+  void _onRemoveSequence(int rowIndex) {
+    final List<RackRow> visible = _store.visibleRows;
+    if (rowIndex < 0 || rowIndex >= visible.length) return;
+    _noteEditStarted();
+    _store.removeSequence(visible[rowIndex].instrumentId);
+  }
+
   void _onStepTap(int rowIndex, int stepIndex) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex >= 0 && rowIndex < visible.length) {
+      _noteEditStarted();
       _store.toggleStep(visible[rowIndex].instrumentId, stepIndex);
     }
   }
 
   void _onSelectRow(int rowIndex) {
     FocusPolicy.take(_focus);
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex >= 0 && rowIndex < visible.length) {
-      _store.selectInstrument(visible[rowIndex].instrumentId);
+      final String instrumentId = visible[rowIndex].instrumentId;
+      widget.client.selectInstrument(instrumentId);
+      _store.selectInstrument(instrumentId);
       final RackPattern? pattern = _store.pattern;
       if (_controller.patternPreviewing && pattern != null) {
         _controller.playPatternChannelPreview(pattern.id, visible[rowIndex].instrumentId);
@@ -386,9 +477,10 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   /// wires the double-tap for plug-in lanes ([RackRowVm.hostsPlugin]), but the
   /// guard keeps this robust if that ever drifts.
   void _onRowDoubleTap(int rowIndex) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String instrumentId = visible[rowIndex].instrumentId;
+    widget.client.selectInstrument(instrumentId);
     _store.selectInstrument(instrumentId);
     final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
     if (inst?.pluginId == _kSamplePluginId) {
@@ -415,7 +507,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   /// Moves the lane at [oldIndex] to [newIndex]. Rack rows are in instrument
   /// order, so the row's new position *is* the instrument's new `order`.
   void _onReorderRow(int oldIndex, int newIndex) {
-    final List<RackRow> rows = _store.rows;
+    final List<RackRow> rows = _store.visibleRows;
     if (oldIndex < 0 || oldIndex >= rows.length) return;
     if (newIndex == oldIndex || newIndex < 0 || newIndex >= rows.length) return;
     try {
@@ -430,7 +522,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   void _onAddChannel() => _addChannelLane();
 
   void _onVolChanged(int rowIndex, double value) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     setState(() => _gains[id] = value.clamp(0.0, 1.0));
@@ -442,7 +534,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _onPanChanged(int rowIndex, double value) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     setState(() => _pans[id] = value.clamp(0.0, 1.0));
@@ -454,7 +546,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _onTogglePower(int rowIndex) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     final String id = visible[rowIndex].instrumentId;
     final ProjectInstrument? inst = _store.instrumentFor(id);
@@ -519,9 +611,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _openPluginFromMenu(id);
   }
 
-  /// Flips the local solo flag for [instrumentId]. Engine-backed solo arrives
-  /// with mixer-track audio gates (v0.4); until then this is UI state so the
-  /// channel rack and mixer can draw the choice without faking audio.
+  /// Flips the engine-backed solo gate for [instrumentId]. The native publish
+  /// path reapplies all channel gates so turning solo on or off is audible
+  /// immediately and remains undoable.
   void _toggleSolo(String instrumentId) {
     final ProjectInstrument? instrument = _store.instrumentFor(instrumentId);
     if (instrument == null) return;
@@ -548,7 +640,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _onRowSecondaryTapDown(int rowIndex, TapDownDetails details) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     _showContextMenu(visible[rowIndex].instrumentId, details.globalPosition);
   }
@@ -576,6 +668,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                       ObMenuSectionVm(
                         rows: <ObMenuRowVm>[
                           ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
+                          ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+                          ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
                           ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
                         ],
                       ),
@@ -583,10 +677,23 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                   ),
                   onSelect: (int index) {
                     _hideContextMenu();
-                    if (index == 0) {
-                      _beginPatternRename(patternId);
-                    } else {
-                      _requestDeletePattern(patternId);
+                    switch (index) {
+                      case 0:
+                        _beginPatternRename(patternId);
+                      case 1:
+                        _patternStore.duplicate(patternId);
+                        _store.refresh();
+                      case 2:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.recolor(patternId, _nextPatternColor(pattern.color));
+                          _store.refresh();
+                        }
+                      case 3:
+                        _requestDeletePattern(patternId);
                     }
                   },
                 ),
@@ -599,6 +706,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
 
   void _beginPatternRename(String patternId) {
     _store.selectPattern(patternId);
+    _patternStore.select(patternId);
     setState(() {
       _renamePatternId = patternId;
       _renamePattern = true;
@@ -607,7 +715,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _onDropInstrument(int rowIndex, Object data) {
-    final List<RackRow> visible = _store.rows;
+    final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
     try {
       if (data is PluginListing) {
@@ -726,8 +834,19 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   /// selected first so the engine's hosted-instance surface follows, exactly as
   /// a double-click on the lane does.
   void _openPluginFromMenu(String instrumentId) {
+    widget.client.selectInstrument(instrumentId);
     _store.selectInstrument(instrumentId);
-    widget.onOpenPlugin?.call(instrumentId);
+    if (_store.instrumentFor(instrumentId)?.pluginId == _kSamplePluginId) {
+      widget.onOpenSampler?.call(instrumentId);
+    } else {
+      widget.onOpenPlugin?.call(instrumentId);
+    }
+  }
+
+  void _onInspectorOpenSampler() {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null || _store.instrumentFor(id)?.pluginId != _kSamplePluginId) return;
+    widget.onOpenSampler?.call(id);
   }
 
   void _beginRename(String instrumentId) {
@@ -741,7 +860,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (_renamePattern && _renamePatternId != null) {
       final String trimmed = name.trim();
       if (trimmed.isEmpty) return;
-      widget.client.renamePattern(_renamePatternId!, trimmed);
+      _patternStore.rename(_renamePatternId!, trimmed);
       _store.refresh();
       _closeRenameDialog();
       return;
@@ -837,6 +956,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
               onStepTap: _onStepTap,
               onVolChanged: _onVolChanged,
               onPanChanged: _onPanChanged,
+              onRouteTap: (_) => widget.onOpenMixer?.call(),
               onAddChannel: _onAddChannel,
               onCreatePattern: _onCreatePattern,
               onRowSecondaryTapDown: _onRowSecondaryTapDown,
@@ -844,31 +964,43 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
               onAddInstrument: _onAddInstrument,
               onReorderRow: _onReorderRow,
               onSteps: (int steps) => _store.setLength(steps),
+              onSwing: _onSwingChanged,
+              onVelocityDelta: _onVelocityDelta,
               onInspectorVol: _onInspectorVol,
               onInspectorPan: _onInspectorPan,
               onInspectorMute: _onInspectorMute,
               onInspectorSolo: _onInspectorSolo,
               onInspectorOpenPlugin: _onInspectorOpenPlugin,
+              onInspectorOpenSampler: _onInspectorOpenSampler,
+              onInspectorRouteTap: widget.onOpenMixer,
+              onGroup: _onShowFilter,
+              onGridChanged: _onGridChanged,
+              onRemoveSequence: _onRemoveSequence,
+              onDismissSharedPatternNotice: _patternStore.dismissNotice,
               onInspectorKeyPress: (int note) => _store.auditionNote(note),
               onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
-                final List<RackRow> visible = _store.rows;
+                final List<RackRow> visible = _store.visibleRows;
                 if (rowIndex < 0 || rowIndex >= visible.length) return;
                 final RackRow row = visible[rowIndex];
                 final bool velocityMode =
                     event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
                 if (velocityMode) {
+                  _noteEditStarted();
                   _store.beginVelocityPaint();
                   _store.setVelocity(row.instrumentId, stepIndex, 12900);
                 } else {
+                  _noteEditStarted();
                   final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
+
                   _store.beginPaint(row.instrumentId, stepIndex, active: active);
                 }
               },
               onPointerMoveStep: (PointerMoveEvent event, int rowIndex, int stepIndex) {
-                final List<RackRow> visible = _store.rows;
+                final List<RackRow> visible = _store.visibleRows;
                 if (rowIndex < 0 || rowIndex >= visible.length) return;
                 final RackRow row = visible[rowIndex];
                 if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
+                  _noteEditStarted();
                   _store.setVelocity(row.instrumentId, stepIndex, 12900);
                 } else {
                   _store.paintStep(row.instrumentId, stepIndex);

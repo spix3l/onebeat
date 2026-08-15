@@ -39,7 +39,7 @@ class DeletePatternDialog extends StatelessWidget {
             children: <Widget>[
               Text('Delete pattern?', style: tokens.type.title),
               SizedBox(height: tokens.spacing.md),
-              Text('Delete “$patternName” and its $placements? This cannot be undone.', style: tokens.type.body),
+              Text('Delete “$patternName” and its $placements? The playlist clips will also be removed. You can restore this with Undo.', style: tokens.type.body),
               SizedBox(height: tokens.spacing.lg),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,

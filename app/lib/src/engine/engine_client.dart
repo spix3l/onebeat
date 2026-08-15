@@ -675,6 +675,8 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
           affectedNotes: value.affected_note_count,
           gain: value.gain,
           pan: value.pan,
+          routeId: _readFixedUtf8(value.route_id, 32),
+          routeName: _readFixedUtf8(value.route_name, 128),
         ),
       );
     }
@@ -749,6 +751,14 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   /// Per-channel pan (-1..1) applied to the active voice.
   void setInstrumentPan(String id, double pan) =>
       _withNativeString(id, (Pointer<Char> native) => _bindings.ob_engine_instrument_set_pan(_engine, native, pan));
+
+  /// Routes the instrument's first output to an existing mixer track by stable ID.
+  void setInstrumentRoute(String id, String mixerTrackId) => _withTwoNativeStrings(
+    id,
+    mixerTrackId,
+    (Pointer<Char> instrument, Pointer<Char> track) =>
+        _bindings.ob_engine_instrument_set_route(_engine, instrument, track),
+  );
 
   @override
   bool get canUndoProject => _bindings.ob_engine_project_can_undo(_engine) != 0;
@@ -1497,6 +1507,8 @@ class ProjectInstrument {
     required this.affectedNotes,
     this.gain = 1.0,
     this.pan = 0.0,
+    this.routeId = '',
+    this.routeName = '',
   });
 
   final String id;
@@ -1517,6 +1529,10 @@ class ProjectInstrument {
   /// Channel gain (linear 0..2) and pan (-1..1): the rack's VOL/PAN knobs.
   final double gain;
   final double pan;
+
+  /// Stable mixer destination and its display name for output port 0.
+  final String routeId;
+  final String routeName;
 }
 
 class RackPattern {

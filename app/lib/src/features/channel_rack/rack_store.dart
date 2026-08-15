@@ -31,6 +31,11 @@ class RackStore extends ChangeNotifier {
 
   String? selectedInstrumentId;
   String? selectedVelocityInstrument;
+  bool showAll = true;
+
+  /// Rows visible under the rack's All/Used filter. The underlying [rows]
+  /// remains the complete project rack so changing filters never loses state.
+  List<RackRow> get visibleRows => showAll ? rows : rows.where((RackRow row) => row.hasSequence).toList(growable: false);
   int? selectedVelocityStep;
 
   bool _painting = false;
@@ -113,6 +118,12 @@ class RackStore extends ChangeNotifier {
   void setSwing(double value) {
     _client.setRackSwing(value.clamp(0.0, 1.0));
     refresh();
+  }
+
+  void setShowAll(bool value) {
+    if (showAll == value) return;
+    showAll = value;
+    notifyListeners();
   }
 
   void selectPattern(String patternId) {

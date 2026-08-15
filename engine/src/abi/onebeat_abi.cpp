@@ -268,6 +268,14 @@ void fitClipsToPatterns(ob_engine& handle) {
 void syncChannels(ob_engine& handle) {
   std::vector<onebeat::core::Engine::ChannelDesc> channels;
   channels.reserve(handle.project.instruments().size() + handle.audio_channel_indices.size());
+  bool any_instrument_solo = false;
+  for (const auto& [id, instrument] : handle.project.instruments()) {
+    (void)id;
+    if (instrument.soloed) {
+      any_instrument_solo = true;
+      break;
+    }
+  }
   int index = 0;
   for (const auto& [id, instrument] : handle.project.instruments()) {
     onebeat::core::Engine::ChannelDesc desc;
@@ -277,7 +285,10 @@ void syncChannels(ob_engine& handle) {
     if (isSampleInstrument(instrument)) desc.sample_path = instrument.plugin.path_hint;
     desc.gain = instrument.gain;
     desc.pan = instrument.pan;
-    desc.muted = instrument.muted;
+    // Instrument solo is an audio gate, not merely a UI flag. Keep the
+    // event-level mute in the model and gate non-solo channels only while at
+    // least one instrument is soloed.
+    desc.muted = instrument.muted || (any_instrument_solo && !instrument.soloed);
     channels.push_back(std::move(desc));
     if (handle.selected_instrument.has_value() && *handle.selected_instrument == id) {
       handle.engine->setAuditionChannel(index);
@@ -780,7 +791,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.11.0";
+  return "1.12.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -1458,6 +1469,14 @@ ob_status ob_engine_instrument_at(ob_engine* engine, int32_t index, ob_instrumen
            instrument->plugin.path_hint.c_str());
   out_info->gain = instrument->gain;
   out_info->pan = instrument->pan;
+  if (!instrument->routing.empty()) {
+    const onebeat::model::OutputRoute& route = instrument->routing.front();
+    copyText(out_info->route_id, sizeof(out_info->route_id), route.track.str().c_str());
+    if (const onebeat::model::MixerTrack* track = engine->project.findMixerTrack(route.track);
+        track != nullptr) {
+      copyText(out_info->route_name, sizeof(out_info->route_name), track->name.c_str());
+    }
+  }
   g_last_error.clear();
   return OB_OK;
 }
@@ -1778,6 +1797,34 @@ ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf8_instr
   if (status != OB_OK) return status;
   // As for gain: per-channel pan is published by executeModel for every channel.
   return OB_OK;
+}
+
+ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_instrument_id,
+                                         const char* utf8_mixer_track_id) {
+  if (engine == nullptr || utf8_mixer_track_id == nullptr || utf8_mixer_track_id[0] == '\0') {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An instrument and mixer track are required.");
+  }
+  const auto instrument = instrumentId(utf8_instrument_id);
+  const auto track = onebeat::model::MixerTrackId::parse(utf8_mixer_track_id);
+  if (!instrument || !track || engine->project.findInstrument(*instrument) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument or mixer track does not exist.");
+  }
+  if (engine->project.findMixerTrack(*track) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
+  }
+  return executeModel(
+      *engine,
+      onebeat::model::editInstrument(
+          engine->project, *instrument, onebeat::model::ChangeField::Routing,
+          [track](onebeat::model::Instrument& value) {
+            if (value.routing.empty()) {
+              value.routing.push_back(onebeat::model::OutputRoute{0, *track});
+            } else {
+              value.routing.front().track = *track;
+            }
+          },
+          "Route instrument"),
+      "The instrument could not be routed.");
 }
 
 int32_t ob_engine_project_can_undo(ob_engine* engine) {

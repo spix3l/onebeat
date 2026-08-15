@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/snap_grid.dart';
 import '../../design/tokens.dart';
+import '../../ui_kit/button.dart';
 import '../../ui_kit/dropdown.dart';
 
 /// The dropdown row above the grid.
@@ -23,6 +24,9 @@ class RackToolbarVm {
     this.channelTypes = const <String>['Sampler', 'Synth', 'Audio clip'],
     this.groups = const <String>['All', 'Drums', 'Music'],
     this.snaps,
+    this.swing = 0.0,
+    this.velocity,
+    this.velocityStep,
   });
 
   final String channelType;
@@ -50,6 +54,9 @@ class RackToolbarVm {
   final List<String> channelTypes;
   final List<String> groups;
   final List<String>? snaps;
+  final double swing;
+  final int? velocity;
+  final int? velocityStep;
 
   // Legacy values remain in the VM so older fixtures can still construct it;
   // the rack no longer renders the non-functional filters in production.
@@ -66,6 +73,8 @@ class ObRackToolbar extends StatelessWidget {
     this.onAddChannel,
     this.onAutomationTap,
     this.onSteps,
+    this.onSwing,
+    this.onVelocityDelta,
     super.key,
   });
 
@@ -77,6 +86,8 @@ class ObRackToolbar extends StatelessWidget {
   final VoidCallback? onAddChannel;
   final VoidCallback? onAutomationTap;
   final ValueChanged<int>? onSteps;
+  final ValueChanged<double>? onSwing;
+  final ValueChanged<int>? onVelocityDelta;
 
   @override
   Widget build(BuildContext context) {
@@ -86,19 +97,20 @@ class ObRackToolbar extends StatelessWidget {
       height: tokens.size.rackToolbarBarHeight,
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
       ),
       child: Row(
         children: <Widget>[
-          // Channel type, group, mixer and automation were never wired to rack
-          // behaviour. They are intentionally absent rather than disabled.
-          // Keep the callback-gated snap control for older isolated widget
-          // fixtures; RackBinding does not provide this callback anymore.
+          if (onGroup != null) ...<Widget>[
+            ObDropdown(
+              label: 'Show',
+              value: vm.group,
+              items: vm.groups,
+              width: tokens.size.rackSnapFieldWidth,
+              onSelected: onGroup,
+            ),
+            SizedBox(width: tokens.spacing.sm),
+          ],
           if (onSnap != null) ...<Widget>[
             ObDropdown(
               label: 'Snap',
@@ -110,20 +122,62 @@ class ObRackToolbar extends StatelessWidget {
             SizedBox(width: tokens.spacing.md),
           ],
           const Spacer(),
+          if (onSwing != null)
+            _RackNudgeControl(
+              label: 'SWING',
+              value: '${(vm.swing * 100).round()}%',
+              onMinus: () => onSwing!((vm.swing - 0.05).clamp(0.0, 1.0)),
+              onPlus: () => onSwing!((vm.swing + 0.05).clamp(0.0, 1.0)),
+            ),
+          if (onVelocityDelta != null) ...<Widget>[
+            SizedBox(width: tokens.spacing.md),
+            _RackNudgeControl(
+              label: 'VEL ${vm.velocityStep == null ? '—' : vm.velocityStep! + 1}',
+              value: vm.velocity == null ? '—' : '${(vm.velocity! / 16383 * 100).round()}%',
+              onMinus: () => onVelocityDelta!(-512),
+              onPlus: () => onVelocityDelta!(512),
+            ),
+          ],
+          SizedBox(width: tokens.spacing.md),
           ObDropdown(
             label: 'Steps',
             value: '${vm.steps}',
             items: vm.stepItems,
             width: tokens.size.rackSnapFieldWidth,
-            onSelected: onSteps == null
-                ? null
-                : (String value) {
-                    final int? parsed = int.tryParse(value);
-                    if (parsed != null) onSteps!(parsed);
-                  },
+            onSelected:
+                onSteps == null
+                    ? null
+                    : (String value) {
+                      final int? parsed = int.tryParse(value);
+                      if (parsed != null) onSteps!(parsed);
+                    },
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RackNudgeControl extends StatelessWidget {
+  const _RackNudgeControl({required this.label, required this.value, required this.onMinus, required this.onPlus});
+
+  final String label;
+  final String value;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text('$label $value', style: tokens.type.microCaps),
+        SizedBox(width: tokens.spacing.xs),
+        ObButton(label: '−', width: 28, onTap: onMinus),
+        SizedBox(width: tokens.spacing.xxs),
+        ObButton(label: '+', width: 28, onTap: onPlus),
+      ],
     );
   }
 }
@@ -147,12 +201,7 @@ class ObRackHeader extends StatelessWidget {
       height: size.rackColumnHeaderHeight,
       decoration: BoxDecoration(
         color: tokens.color.surfaceColumnHead,
-        border: Border(
-          bottom: BorderSide(
-            color: tokens.color.line,
-            width: tokens.border.hairline,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
       ),
       child: Row(
         children: <Widget>[
@@ -164,55 +213,23 @@ class ObRackHeader extends StatelessWidget {
             width: size.rackPowerSize + tokens.spacing.sm + size.rackColorChipSize + tokens.spacing.md,
             child: Text('PWR', style: style, maxLines: 1),
           ),
-          SizedBox(
-            width: size.rackNameWidth,
-            child: Text('CHANNEL', style: style, maxLines: 1),
-          ),
+          SizedBox(width: size.rackNameWidth, child: Text('CHANNEL', style: style, maxLines: 1)),
           // One number per column, centred on the cell it names.
           for (int i = 0; i < stepCount; i++) ...<Widget>[
-            if (i > 0)
-              SizedBox(
-                width: i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap,
-              ),
+            if (i > 0) SizedBox(width: i % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap),
             SizedBox(
               width: size.rackStepCell,
-              child: Text(
-                '${i + 1}',
-                style: style,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-              ),
+              child: Text('${i + 1}', style: style, textAlign: TextAlign.center, maxLines: 1),
             ),
           ],
           SizedBox(width: tokens.spacing.md),
-          SizedBox(
-            width: size.knobSmall,
-            child: Text(
-              'VOL',
-              style: style,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
-          ),
+          SizedBox(width: size.knobSmall, child: Text('VOL', style: style, textAlign: TextAlign.center, maxLines: 1)),
           SizedBox(width: tokens.spacing.sm),
-          SizedBox(
-            width: size.knobSmall,
-            child: Text(
-              'PAN',
-              style: style,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
-          ),
+          SizedBox(width: size.knobSmall, child: Text('PAN', style: style, textAlign: TextAlign.center, maxLines: 1)),
           SizedBox(width: tokens.spacing.sm),
           SizedBox(
             width: size.rackRouteChipWidth,
-            child: Text(
-              'SEND',
-              style: style,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
+            child: Text('SEND', style: style, textAlign: TextAlign.center, maxLines: 1),
           ),
           SizedBox(width: tokens.spacing.md),
         ],
@@ -266,11 +283,7 @@ class ObRackFooter extends StatelessWidget {
             SizedBox(width: tokens.spacing.md),
             Text(lead, maxLines: 1, style: tokens.type.bodySecondary),
             SizedBox(width: tokens.spacing.sm),
-            Text(
-              action,
-              maxLines: 1,
-              style: tokens.type.body.copyWith(fontWeight: FontWeight.w600),
-            ),
+            Text(action, maxLines: 1, style: tokens.type.body.copyWith(fontWeight: FontWeight.w600)),
             SizedBox(width: tokens.spacing.sm),
             Text(trail, maxLines: 1, style: tokens.type.bodySecondary),
             const Spacer(),

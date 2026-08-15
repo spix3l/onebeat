@@ -46,6 +46,7 @@ class ChannelInspectorVm {
     this.muted = false,
     this.soloed = false,
     this.hostsPlugin = false,
+    this.hostsSampler = false,
   });
 
   final String name;
@@ -58,6 +59,9 @@ class ChannelInspectorVm {
   /// True when the channel runs a hosted plug-in rather than a sample or an
   /// empty slot — the only channels that have a plug-in window to open.
   final bool hostsPlugin;
+
+  /// True when the channel uses OneBeat's built-in sampler editor.
+  final bool hostsSampler;
 
   /// Normalised 0..1 envelope samples. Drawn mirrored about the centre line;
   /// deterministic, so the same vm always paints the same preview.
@@ -90,6 +94,7 @@ class ObChannelInspector extends StatelessWidget {
     this.onMute,
     this.onSolo,
     this.onOpenPlugin,
+    this.onOpenSampler,
     this.onFxTap,
     this.onAddFx,
     this.onRouteTap,
@@ -106,6 +111,7 @@ class ObChannelInspector extends StatelessWidget {
   /// Opens the selected channel's plug-in window. Only wired for channels
   /// that host a plug-in ([ChannelInspectorVm.hostsPlugin]).
   final VoidCallback? onOpenPlugin;
+  final VoidCallback? onOpenSampler;
 
   /// Fired with the index of the tapped chain entry.
   final ValueChanged<int>? onFxTap;
@@ -147,15 +153,15 @@ class ObChannelInspector extends StatelessWidget {
           // Only a plug-in channel has a window to open, so the action appears
           // exactly when it can do something — next to the channel's name,
           // which is where the eye is when you want to open what it runs.
-          if (vm.hostsPlugin && onOpenPlugin != null) ...<Widget>[
+          if ((vm.hostsPlugin && onOpenPlugin != null) || (vm.hostsSampler && onOpenSampler != null)) ...<Widget>[
             SizedBox(width: tokens.spacing.md),
             ObTooltip(
-              message: 'Open plugin window',
+              message: vm.hostsSampler ? 'Open sampler' : 'Open plugin window',
               child: ObButton(
-                label: 'Open plugin',
-                icon: ObKitGlyphKind.keyboard,
+                label: vm.hostsSampler ? 'Open sampler' : 'Open plugin',
+                icon: vm.hostsSampler ? ObKitGlyphKind.waveform : ObKitGlyphKind.keyboard,
                 tone: ObButtonTone.secondary,
-                onTap: onOpenPlugin,
+                onTap: vm.hostsSampler ? onOpenSampler : onOpenPlugin,
               ),
             ),
           ],
