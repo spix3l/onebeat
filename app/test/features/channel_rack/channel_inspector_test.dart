@@ -14,10 +14,7 @@ import '../../support/ui_harness.dart';
 /// falling height, ridden on a low floor.
 List<double> demoWaveform() {
   const int count = 96;
-  return <double>[
-    for (int i = 0; i < count; i++)
-      _lobe(i / (count - 1)),
-  ];
+  return <double>[for (int i = 0; i < count; i++) _lobe(i / (count - 1))];
 }
 
 double _lobe(double t) {
@@ -72,7 +69,7 @@ void main() {
     );
   });
 
-  testWidgets('mute, solo, FX and route taps report themselves', (
+  testWidgets('mute, solo and route taps report themselves', (
     WidgetTester tester,
   ) async {
     final List<String> fired = <String>[];
@@ -83,17 +80,14 @@ void main() {
         vm: demoInspector,
         onMute: () => fired.add('mute'),
         onSolo: () => fired.add('solo'),
-        onFxTap: (int i) => fired.add('fx:$i'),
-        onAddFx: () => fired.add('addFx'),
         onRouteTap: () => fired.add('route'),
       ),
       size: Size(1600, tokens.size.inspectorHeight),
     );
     await tester.tap(find.text('M'));
     await tester.tap(find.text('S'));
-    await tester.tap(find.text('EQ 4'));
     await tester.tap(find.text('M1 · Music'));
-    expect(fired, <String>['mute', 'solo', 'fx:1', 'route']);
+    expect(fired, <String>['mute', 'solo', 'route']);
   });
 
   testWidgets('the keyboard maps x to a note and reports it', (
@@ -109,12 +103,8 @@ void main() {
     final Rect keys = tester.getRect(find.byType(MiniKeyboard));
     final double whiteWidth = keys.width / 14;
     // The first white key is middle C; the eighth is the C an octave up.
-    await tester.tapAt(
-      Offset(keys.left + whiteWidth * 0.5, keys.center.dy),
-    );
-    await tester.tapAt(
-      Offset(keys.left + whiteWidth * 7.5, keys.center.dy),
-    );
+    await tester.tapAt(Offset(keys.left + whiteWidth * 0.5, keys.center.dy));
+    await tester.tapAt(Offset(keys.left + whiteWidth * 7.5, keys.center.dy));
     // A black key sits over the boundary between the first two white keys and
     // wins there, because that is what a finger expects.
     await tester.tapAt(
@@ -123,7 +113,7 @@ void main() {
     expect(notes, <int>[60, 72, 61]);
   });
 
-  testWidgets('the waveform is drawn from the vm, not invented', (
+  testWidgets('the inspector omits the waveform and FX controls', (
     WidgetTester tester,
   ) async {
     final OneBeatTokens tokens = OneBeatTokens.dark();
@@ -144,13 +134,9 @@ void main() {
       ObChannelInspector(vm: flat),
       size: Size(1600, tokens.size.inspectorHeight),
     );
-    final WaveformPainter painter = WaveformPainter(
-      samples: flat.waveform,
-      color: tokens.color.accent,
-      barPitch: tokens.size.inspectorWaveBarPitch,
-      barWidth: tokens.border.emphasis,
-    );
-    expect(painter.shouldRepaint(painter), isFalse);
+    expect(find.text('Chorus'), findsNothing);
+    expect(find.text('EQ 4'), findsNothing);
+    expect(find.text('+'), findsNothing);
     expect(find.byType(MiniKeyboard), findsOneWidget);
   });
 }

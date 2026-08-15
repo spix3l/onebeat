@@ -3,8 +3,6 @@
 // Owns the mapping from the engine snapshot and RackStore to ChannelRackScreenVm.
 // Listens to the EngineController for real-time playback cursor updates,
 // and routes gestures and user interactions to RackStore commands.
-import 'dart:math' as math;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -142,44 +140,21 @@ class _RackBindingState extends State<RackBinding>
     final double loopLengthBeats =
         endBeats > startBeats ? endBeats - startBeats : 0.0;
     final double inLoop = snapshot.positionBeats - startBeats;
-    final double looped = loopLengthBeats > 0.0
-        ? inLoop % loopLengthBeats
-        : inLoop;
+    final double looped =
+        loopLengthBeats > 0.0 ? inLoop % loopLengthBeats : inLoop;
     final double currentTicks = (looped < 0.0 ? 0.0 : looped) * 960.0;
     return currentTicks.round();
   }
 
   Color _resolveInstrumentColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
-      final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
+      final int parsed =
+          int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
       }
     }
     return channelColors[index % channelColors.length];
-  }
-
-  List<double> _defaultWaveform() {
-    const int count = 96;
-    return <double>[
-      for (int i = 0; i < count; i++)
-        _waveSample(i / (count - 1)),
-    ];
-  }
-
-  double _waveSample(double t) {
-    double amp = 0.12;
-    const List<(double, double, double)> lobes = <(double, double, double)>[
-      (0.16, 0.13, 0.88),
-      (0.44, 0.10, 0.66),
-      (0.68, 0.11, 1.0),
-      (0.88, 0.05, 0.42),
-    ];
-    for (final (double centre, double width, double height) in lobes) {
-      final double d = (t - centre) / width;
-      amp = math.max(amp, height * math.exp(-d * d));
-    }
-    return amp;
   }
 
   ChannelRackScreenVm _buildVm() {
@@ -202,11 +177,7 @@ class _RackBindingState extends State<RackBinding>
       }
     } else if (pattern != null) {
       patternTabs.add(
-        PatternTabVm(
-          id: pattern.id,
-          name: pattern.name,
-          selected: true,
-        ),
+        PatternTabVm(id: pattern.id, name: pattern.name, selected: true),
       );
     }
 
@@ -229,14 +200,17 @@ class _RackBindingState extends State<RackBinding>
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type: inst != null && inst.pluginName.isNotEmpty
-              ? inst.pluginName
-              : 'Empty channel',
+          type:
+              inst != null && inst.pluginName.isNotEmpty
+                  ? inst.pluginName
+                  : 'Empty channel',
           color: color,
           steps: stepVms,
-          vol: _gains[row.instrumentId] ??
+          vol:
+              _gains[row.instrumentId] ??
               (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
-          pan: _pans[row.instrumentId] ??
+          pan:
+              _pans[row.instrumentId] ??
               (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
           route: '→ D1',
           powered: !(inst?.muted ?? false),
@@ -260,21 +234,19 @@ class _RackBindingState extends State<RackBinding>
 
       inspectorVm = ChannelInspectorVm(
         name: selectedInst?.name ?? selectedId,
-        subtitle: '${selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler"} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
+        subtitle:
+            '${selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler"} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
         color: inspColor,
-        waveform: _defaultWaveform(),
-        vol: _gains[selectedId] ??
+        vol:
+            _gains[selectedId] ??
             (selectedInst != null ? selectedInst.gain.clamp(0.0, 1.0) : 0.78),
         volText: _volText(selectedId, selectedInst),
-        pan: _pans[selectedId] ??
+        pan:
+            _pans[selectedId] ??
             (selectedInst != null
                 ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0)
                 : 0.5),
         panText: _panText(selectedId, selectedInst),
-        fx: <FxVm>[
-          FxVm(name: 'Chorus', color: inspColor, active: true),
-          FxVm(name: 'EQ 4', color: channelColors[2]),
-        ],
         route: 'M1 · Music',
         muted: selectedInst?.muted ?? false,
         soloed: false,
@@ -304,7 +276,8 @@ class _RackBindingState extends State<RackBinding>
   /// The value under the inspector's VOL knob, formatted as the rounded
   /// percentage the mockup shows.
   String _volText(String id, ProjectInstrument? inst) {
-    final double v = _gains[id] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 0.78);
+    final double v =
+        _gains[id] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 0.78);
     return '${(v * 100).round()}';
   }
 
@@ -653,14 +626,17 @@ class _RackBindingState extends State<RackBinding>
         final List<RackRow> visible = _store.rows;
         if (rowIndex < 0 || rowIndex >= visible.length) return;
         final RackRow row = visible[rowIndex];
-        final bool velocityMode = event.buttons == kSecondaryMouseButton ||
+        final bool velocityMode =
+            event.buttons == kSecondaryMouseButton ||
             HardwareKeyboard.instance.isAltPressed;
         if (velocityMode) {
           _store.beginVelocityPaint();
           _store.setVelocity(row.instrumentId, stepIndex, 12900);
         } else {
           final bool active =
-              stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
+              stepIndex < row.steps.length
+                  ? !row.steps[stepIndex].active
+                  : true;
           _store.beginPaint(row.instrumentId, stepIndex, active: active);
         }
       },

@@ -1,10 +1,8 @@
 // ObChannelInspector — the strip under the rack (UI-B-06).
 //
 // Everything about the selected channel on one 120px line, left to right:
-// what it is, what it sounds like, how loud and where, whether it is heard,
-// what is on it, where it goes, and a keyboard to try it. The order is the
-// order a musician asks the questions in, which is why the waveform sits
-// second and the routing sits last.
+// what it is, how loud and where, whether it is heard, where it goes, and a
+// keyboard to try it.
 //
 // Presentational only. Nothing here plays a note, opens a plug-in window or
 // reorders a chain; it reports the intent and UI-D-02 wires it.
@@ -14,6 +12,7 @@ import '../../design/tokens.dart';
 import '../../ui_kit/fx_chip.dart';
 import '../../ui_kit/knob.dart';
 import '../../ui_kit/toggle_chip.dart';
+import '../../ui_kit/tooltip.dart';
 
 /// One entry in the FX chain.
 @immutable
@@ -35,12 +34,12 @@ class ChannelInspectorVm {
     required this.name,
     required this.subtitle,
     required this.color,
-    required this.waveform,
+    this.waveform = const <double>[],
     required this.vol,
     required this.volText,
     required this.pan,
     required this.panText,
-    required this.fx,
+    this.fx = const <FxVm>[],
     required this.route,
     this.muted = false,
     this.soloed = false,
@@ -134,19 +133,6 @@ class ObChannelInspector extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          SizedBox(
-            width: tokens.size.inspectorWaveWidth,
-            height: tokens.size.inspectorWaveHeight,
-            child: CustomPaint(
-              painter: WaveformPainter(
-                samples: vm.waveform,
-                color: color.accent,
-                barPitch: tokens.size.inspectorWaveBarPitch,
-                barWidth: tokens.border.emphasis,
-              ),
-            ),
-          ),
-          const Spacer(),
           _KnobReadout(
             value: vm.vol,
             valueText: vm.volText,
@@ -161,28 +147,23 @@ class ObChannelInspector extends StatelessWidget {
             onChanged: onPan,
           ),
           SizedBox(width: tokens.spacing.lg),
-          _ToggleStack(
-            tone: ObToggleTone.mute,
-            on: vm.muted,
-            onTap: onMute,
+          ObTooltip(
+            message: 'Mute channel',
+            child: _ToggleStack(
+              tone: ObToggleTone.mute,
+              on: vm.muted,
+              onTap: onMute,
+            ),
           ),
           SizedBox(width: tokens.spacing.sm),
-          _ToggleStack(
-            tone: ObToggleTone.solo,
-            on: vm.soloed,
-            onTap: onSolo,
-          ),
-          SizedBox(width: tokens.spacing.xl),
-          for (int i = 0; i < vm.fx.length; i++) ...<Widget>[
-            ObFxChip(
-              label: vm.fx[i].name,
-              dotColor: vm.fx[i].color,
-              active: vm.fx[i].active,
-              onTap: onFxTap == null ? null : () => onFxTap!(i),
+          ObTooltip(
+            message: 'Solo channel',
+            child: _ToggleStack(
+              tone: ObToggleTone.solo,
+              on: vm.soloed,
+              onTap: onSolo,
             ),
-            SizedBox(width: tokens.spacing.sm),
-          ],
-          _AddFxTile(onTap: onAddFx),
+          ),
           SizedBox(width: tokens.spacing.xl),
           _RouteArrow(color: color.textMuted, stroke: tokens.border.glyph),
           SizedBox(width: tokens.spacing.sm),
@@ -303,43 +284,6 @@ class _ToggleStack extends StatelessWidget {
   }
 }
 
-class _AddFxTile extends StatelessWidget {
-  const _AddFxTile({this.onTap});
-
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final ColorTokens color = tokens.color;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-        child: Container(
-          width: tokens.size.chipHeight,
-          height: tokens.size.chipHeight,
-          decoration: BoxDecoration(
-            color: color.surfaceWell,
-            borderRadius: tokens.radius.controlBorder,
-            border: Border.all(
-              color: color.lineStrong,
-              width: tokens.border.hairline,
-            ),
-          ),
-          child: CustomPaint(
-            painter: _PlusPainter(
-              color: color.textSecondary,
-              stroke: tokens.border.glyph,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _RouteArrow extends StatelessWidget {
   const _RouteArrow({required this.color, required this.stroke});
 
@@ -379,11 +323,10 @@ class WaveformPainter extends CustomPainter {
 
   // Allocated once: `paint` runs on every frame the strip is on screen and
   // must not allocate.
-  late final Paint _bar =
-      Paint()
-        ..color = color
-        ..strokeWidth = barWidth
-        ..strokeCap = StrokeCap.round;
+  late final Paint _bar = Paint()
+    ..color = color
+    ..strokeWidth = barWidth
+    ..strokeCap = StrokeCap.round;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -396,8 +339,8 @@ class WaveformPainter extends CustomPainter {
       // Sample position mapped across the preview, so the same envelope fills
       // whatever width the strip gives it.
       final double t = bars == 1 ? 0 : i / (bars - 1);
-      final double amplitude =
-          samples[(t * (samples.length - 1)).round()].clamp(0.0, 1.0);
+      final double amplitude = samples[(t * (samples.length - 1)).round()]
+          .clamp(0.0, 1.0);
       final double half = mid * amplitude;
       final double x = i * barPitch + barPitch / 2;
       canvas.drawLine(Offset(x, mid - half), Offset(x, mid + half), _bar);
@@ -418,7 +361,12 @@ class WaveformPainter extends CustomPainter {
 /// gesture detectors: black keys overlap their neighbours, and a widget per
 /// key would need the same arithmetic to decide who won anyway.
 class MiniKeyboard extends StatelessWidget {
-  const MiniKeyboard({this.baseNote = 60, this.octaves = 2, this.onKeyPress, super.key});
+  const MiniKeyboard({
+    this.baseNote = 60,
+    this.octaves = 2,
+    this.onKeyPress,
+    super.key,
+  });
 
   /// MIDI note of the leftmost white key. 60 is middle C.
   final int baseNote;
@@ -471,12 +419,10 @@ class MiniKeyboard extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown:
-          onKeyPress == null
-              ? null
-              : (TapDownDetails details) => onKeyPress!(
-                noteAt(details.localPosition.dx, width, height),
-              ),
+      onTapDown: onKeyPress == null
+          ? null
+          : (TapDownDetails details) =>
+                onKeyPress!(noteAt(details.localPosition.dx, width, height)),
       child: SizedBox(
         width: width,
         height: height,
@@ -529,11 +475,10 @@ class _KeyboardPainter extends CustomPainter {
 
   late final Paint _whitePaint = Paint()..color = white;
   late final Paint _blackPaint = Paint()..color = black;
-  late final Paint _linePaint =
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..color = line;
+  late final Paint _linePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = stroke
+    ..color = line;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -579,17 +524,28 @@ class _NoteGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
-    canvas.drawLine(Offset(w * 0.40, h * 0.62), Offset(w * 0.40, h * 0.33), paint);
-    canvas.drawLine(Offset(w * 0.66, h * 0.56), Offset(w * 0.66, h * 0.28), paint);
-    canvas.drawLine(Offset(w * 0.40, h * 0.33), Offset(w * 0.66, h * 0.28), paint);
+    canvas.drawLine(
+      Offset(w * 0.40, h * 0.62),
+      Offset(w * 0.40, h * 0.33),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(w * 0.66, h * 0.56),
+      Offset(w * 0.66, h * 0.28),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(w * 0.40, h * 0.33),
+      Offset(w * 0.66, h * 0.28),
+      paint,
+    );
     canvas.drawCircle(Offset(w * 0.34, h * 0.64), w * 0.07, paint);
     canvas.drawCircle(Offset(w * 0.60, h * 0.58), w * 0.07, paint);
   }
@@ -597,30 +553,6 @@ class _NoteGlyphPainter extends CustomPainter {
   @override
   bool shouldRepaint(_NoteGlyphPainter oldDelegate) =>
       oldDelegate.color != color;
-}
-
-class _PlusPainter extends CustomPainter {
-  _PlusPainter({required this.color, required this.stroke});
-
-  final Color color;
-  final double stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
-    final double w = size.width;
-    final double h = size.height;
-    canvas.drawLine(Offset(w * 0.5, h * 0.3), Offset(w * 0.5, h * 0.7), paint);
-    canvas.drawLine(Offset(w * 0.3, h * 0.5), Offset(w * 0.7, h * 0.5), paint);
-  }
-
-  @override
-  bool shouldRepaint(_PlusPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _ArrowPainter extends CustomPainter {
@@ -631,16 +563,19 @@ class _ArrowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
-    canvas.drawLine(Offset(w * 0.16, h * 0.5), Offset(w * 0.84, h * 0.5), paint);
+    canvas.drawLine(
+      Offset(w * 0.16, h * 0.5),
+      Offset(w * 0.84, h * 0.5),
+      paint,
+    );
     canvas.drawLine(Offset(w * 0.6, h * 0.3), Offset(w * 0.84, h * 0.5), paint);
     canvas.drawLine(Offset(w * 0.6, h * 0.7), Offset(w * 0.84, h * 0.5), paint);
   }

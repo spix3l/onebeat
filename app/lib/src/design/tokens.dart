@@ -373,8 +373,8 @@ class SizeTokens {
   double get rackCursorWidth => 2;
 
   /// The channel inspector strip (UI-B-06), measured off the bottom of
-  /// `screens/channel-rack.png`. One row, six blocks: identity, waveform,
-  /// mix, mute/solo, FX chain, routing, keyboard.
+  /// `screens/channel-rack.png`. One row: identity, mix, mute/solo, routing,
+  /// keyboard.
   double get inspectorHeight => 120;
   double get inspectorTileSize => 48;
   double get inspectorWaveWidth => 275;
@@ -1360,8 +1360,8 @@ class OneBeatTheme extends InheritedWidget {
   final OneBeatTokens tokens;
 
   static OneBeatTokens of(BuildContext context) {
-    final OneBeatTheme? theme = context
-        .dependOnInheritedWidgetOfExactType<OneBeatTheme>();
+    final OneBeatTheme? theme =
+        context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
     assert(
       theme != null,
       'No OneBeatTheme found. Wrap the app in OneBeatTheme.',
