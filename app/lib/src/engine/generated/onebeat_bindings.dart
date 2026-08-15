@@ -671,7 +671,11 @@ class OneBeatBindings {
     int soloed,
   ) {
     return ob_status.fromValue(
-      _ob_engine_instrument_set_soloed(engine, utf8_instrument_id, soloed),
+      _ob_engine_instrument_set_soloed(
+        engine,
+        utf8_instrument_id,
+        soloed,
+      ),
     );
   }
 

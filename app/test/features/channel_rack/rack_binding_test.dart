@@ -257,8 +257,11 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void reorderInstrument(String id, int order) => reorders.add((id, order));
 
-  @override
-  void setInstrumentMuted(String id, {required bool muted}) {
+  /// Rewrites one instrument's mute/solo flags, leaving everything else — and
+  /// every other instrument — as it was. Both setters go through here so that
+  /// muting a lane cannot silently clear its solo, the way two hand-written
+  /// copies of this rebuild did.
+  void _setFlags(String id, {bool? muted, bool? soloed}) {
     instruments = instruments
         .map(
           (ProjectInstrument inst) => inst.id == id
@@ -271,16 +274,25 @@ class _FakeRackEngineClient implements EngineClient {
                   pluginName: inst.pluginName,
                   pluginVendor: inst.pluginVendor,
                   pluginPath: inst.pluginPath,
-                  muted: muted,
+                  muted: muted ?? inst.muted,
+                  soloed: soloed ?? inst.soloed,
                   selected: inst.selected,
                   affectedPatterns: inst.affectedPatterns,
                   affectedClips: inst.affectedClips,
                   affectedNotes: inst.affectedNotes,
+                  gain: inst.gain,
+                  pan: inst.pan,
                 )
               : inst,
         )
         .toList();
   }
+
+  @override
+  void setInstrumentMuted(String id, {required bool muted}) => _setFlags(id, muted: muted);
+
+  @override
+  void setInstrumentSoloed(String id, {required bool soloed}) => _setFlags(id, soloed: soloed);
 
   @override
   void duplicateInstrument(String id) => duplicateCalls++;
@@ -806,7 +818,7 @@ void main() {
     expect(client.reorders, isEmpty);
   });
 
-  testWidgets('clicking a sample lane opens its sampler', (
+  testWidgets('a sample lane selects without opening an editor window', (
     WidgetTester tester,
   ) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
@@ -819,10 +831,15 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Kick 808'));
-    await tester.pump();
+    // Only lanes that host a real plug-in carry a double-tap recognizer
+    // (channel_rack_screen.dart). A sample lane therefore stays responsive to a
+    // single click and opens nothing — neither on one click nor on two.
+    await tester.tap(find.text('Kick 808').first);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Kick 808').first);
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(opened, <String>['kick']);
+    expect(opened, isEmpty);
     expect(find.byType(ObChannelInspector), findsOneWidget);
   });
 

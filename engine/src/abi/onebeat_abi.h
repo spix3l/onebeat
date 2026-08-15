@@ -487,9 +487,9 @@ OB_API ob_status ob_engine_instrument_rename(ob_engine* engine, const char* utf8
 OB_API ob_status ob_engine_instrument_recolor(ob_engine* engine, const char* utf8_instrument_id,
                                               const char* utf8_color);
 OB_API ob_status ob_engine_instrument_set_muted(ob_engine* engine, const char* utf8_instrument_id,
-                                                 int32_t muted);
+                                                int32_t muted);
 OB_API ob_status ob_engine_instrument_set_soloed(ob_engine* engine, const char* utf8_instrument_id,
-                                                  int32_t soloed);
+                                                 int32_t soloed);
 OB_API ob_status ob_engine_instrument_reorder(ob_engine* engine, const char* utf8_instrument_id,
                                               int32_t order);
 OB_API ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instrument_id,
