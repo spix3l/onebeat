@@ -55,10 +55,16 @@ while IFS= read -r APP_DIR; do
   rm -f "$APP_DIR/Contents/MacOS/onebeat-plugin-host"
   rm -rf "$APP_DIR/Contents/PlugIns/OneBeat Piano.clap"
   rm -rf "$APP_DIR/Contents/PlugIns/Lowkey.clap"
+  rm -rf "$APP_DIR/Contents/PlugIns/OneBeat Organ.clap"
+  rm -rf "$APP_DIR/Contents/PlugIns/OneBeat Drill Synth.clap"
   cp -R "$REPO_ROOT/build/stock-plugins/OneBeat Piano.clap" "$APP_DIR/Contents/PlugIns/"
   cp -R "$REPO_ROOT/build/stock-plugins/Lowkey.clap" "$APP_DIR/Contents/PlugIns/"
+  cp -R "$REPO_ROOT/build/stock-plugins/OneBeat Organ.clap" "$APP_DIR/Contents/PlugIns/"
+  cp -R "$REPO_ROOT/build/stock-plugins/OneBeat Drill Synth.clap" "$APP_DIR/Contents/PlugIns/"
   codesign --force --sign - "$APP_DIR/Contents/PlugIns/OneBeat Piano.clap" 2>/dev/null || true
   codesign --force --sign - "$APP_DIR/Contents/PlugIns/Lowkey.clap" 2>/dev/null || true
+  codesign --force --sign - "$APP_DIR/Contents/PlugIns/OneBeat Organ.clap" 2>/dev/null || true
+  codesign --force --sign - "$APP_DIR/Contents/PlugIns/OneBeat Drill Synth.clap" 2>/dev/null || true
   codesign --force --sign - "$APP_DIR/Contents/Frameworks/libonebeat_engine.dylib" 2>/dev/null || true
   codesign --force --sign - "$HELPER_APP" 2>/dev/null || true
   # Replacing nested code invalidates the outer seal. Re-sign the development

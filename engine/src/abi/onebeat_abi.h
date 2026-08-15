@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 15
+#define OB_ABI_VERSION_MINOR 16
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -818,6 +818,24 @@ OB_API ob_status ob_engine_clip_set_transpose(ob_engine* engine, const char* utf
  * directory list), which is how the multi-selection case is expressed without
  * marshalling an array of pointers. */
 OB_API ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8_clip_ids);
+
+/* Split by channel (added in ABI 1.16). Takes one pattern clip and replaces it
+ * with one clip per channel the pattern uses: each new pattern holds a single
+ * channel's notes and keeps the source's length, time signature and swing, and
+ * each new clip keeps the source clip's position, length and transforms.
+ *
+ * The first channel stays on the clip's own lane; the rest go onto lanes
+ * *inserted* directly below it, named after their channel — inserted rather
+ * than reused, because reusing the lanes below would drop the split clips on
+ * top of whatever already lives there.
+ *
+ * The source pattern is left in the project. It may still be placed elsewhere,
+ * and a split is not a request to delete arrangement the user did not select.
+ *
+ * One undo entry. A clip whose pattern uses fewer than two channels has
+ * nothing to split: that succeeds and changes nothing, so a menu item wired
+ * straight to this call cannot raise an error dialog by being clicked. */
+OB_API ob_status ob_engine_clip_split_by_channel(ob_engine* engine, const char* utf8_clip_id);
 
 /* ------------------------------------------------------------------------- */
 /* Project files (added in ABI 1.7, OB-3-05's writer reaching the UI)         */

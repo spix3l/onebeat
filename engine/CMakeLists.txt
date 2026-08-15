@@ -272,6 +272,85 @@ add_custom_command(TARGET onebeat_stock_lowkey POST_BUILD
           "${ONEBEAT_LOWKEY_BUNDLE}/Contents/Info.plist"
   VERBATIM)
 
+# OneBeat Drill Synth is a sample-free subtractive instrument. The DSP core is
+# intentionally separate from this adapter so the same voices can be wrapped by
+# the VST3 adapter when Stage 5 lands.
+add_library(onebeat_stock_drill_synth MODULE
+  stock_plugins/synth/synth_clap.cpp
+  stock_plugins/synth/synth_engine.cpp)
+target_include_directories(onebeat_stock_drill_synth SYSTEM PRIVATE
+  ${ONEBEAT_THIRD_PARTY}/clap/include)
+target_link_libraries(onebeat_stock_drill_synth PRIVATE onebeat_flags)
+set_target_properties(onebeat_stock_drill_synth PROPERTIES
+  PREFIX ""
+  SUFFIX ".dylib"
+  OUTPUT_NAME "OneBeat Drill Synth"
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stock-plugin-binaries
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+
+set(ONEBEAT_DRILL_SYNTH_BUNDLE "${ONEBEAT_STOCK_PLUGIN_DIR}/OneBeat Drill Synth.clap")
+file(WRITE "${CMAKE_BINARY_DIR}/OneBeatDrillSynth-Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\">
+<dict>
+  <key>CFBundleExecutable</key><string>OneBeat Drill Synth</string>
+  <key>CFBundleIdentifier</key><string>dev.onebeat.stock.drill_synth</string>
+  <key>CFBundleName</key><string>OneBeat Drill Synth</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>${PROJECT_VERSION}</string>
+  <key>CFBundleVersion</key><string>${PROJECT_VERSION}</string>
+</dict>
+</plist>
+")
+add_custom_command(TARGET onebeat_stock_drill_synth POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${ONEBEAT_DRILL_SYNTH_BUNDLE}/Contents/MacOS"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:onebeat_stock_drill_synth>"
+          "${ONEBEAT_DRILL_SYNTH_BUNDLE}/Contents/MacOS/OneBeat Drill Synth"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/OneBeatDrillSynth-Info.plist"
+          "${ONEBEAT_DRILL_SYNTH_BUNDLE}/Contents/Info.plist"
+  VERBATIM)
+
+add_library(onebeat_stock_organ MODULE
+  stock_plugins/synth/synth_clap.cpp
+  stock_plugins/synth/synth_engine.cpp)
+target_include_directories(onebeat_stock_organ SYSTEM PRIVATE
+  ${ONEBEAT_THIRD_PARTY}/clap/include)
+target_compile_definitions(onebeat_stock_organ PRIVATE
+  OB_STOCK_ORGAN
+  OB_STOCK_PLUGIN_ID="dev.onebeat.stock.organ"
+  OB_STOCK_PLUGIN_NAME="OneBeat Organ"
+  OB_STOCK_NOTE_NAME="Tonewheel Organ"
+  OB_STOCK_PLUGIN_DESCRIPTION="A sample-free tonewheel organ with rotary cabinet character.")
+target_link_libraries(onebeat_stock_organ PRIVATE onebeat_flags)
+set_target_properties(onebeat_stock_organ PROPERTIES
+  PREFIX ""
+  SUFFIX ".dylib"
+  OUTPUT_NAME "OneBeat Organ"
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stock-plugin-binaries
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+
+set(ONEBEAT_ORGAN_BUNDLE "${ONEBEAT_STOCK_PLUGIN_DIR}/OneBeat Organ.clap")
+file(WRITE "${CMAKE_BINARY_DIR}/OneBeatOrgan-Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\"><dict>
+<key>CFBundleExecutable</key><string>OneBeat Organ</string>
+<key>CFBundleIdentifier</key><string>dev.onebeat.stock.organ</string>
+<key>CFBundleName</key><string>OneBeat Organ</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+<key>CFBundleShortVersionString</key><string>${PROJECT_VERSION}</string>
+<key>CFBundleVersion</key><string>${PROJECT_VERSION}</string>
+</dict></plist>
+")
+add_custom_command(TARGET onebeat_stock_organ POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${ONEBEAT_ORGAN_BUNDLE}/Contents/MacOS"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:onebeat_stock_organ>"
+          "${ONEBEAT_ORGAN_BUNDLE}/Contents/MacOS/OneBeat Organ"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/OneBeatOrgan-Info.plist"
+          "${ONEBEAT_ORGAN_BUNDLE}/Contents/Info.plist"
+  VERBATIM)
+
 # ---------------------------------------------------------------------------
 # Test harness + tests
 # ---------------------------------------------------------------------------

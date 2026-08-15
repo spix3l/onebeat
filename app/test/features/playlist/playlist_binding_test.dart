@@ -318,6 +318,84 @@ void main() {
     expect(store.clips[0].patternId != store.clips[1].patternId, isTrue);
   });
 
+  testWidgets('⌘B duplicates the selection one selection-length later, and keeps the copies selected', (
+    WidgetTester tester,
+  ) async {
+    // A two-bar phrase across two lanes: one bar of clip on each, offset from
+    // each other, so shearing it would show.
+    fakeClient.createLane('Second');
+    final String secondLane = fakeClient.lanes.keys.last;
+    fakeClient.addClip('lane_a', patternId: 'pat_a', startTicks: 0, lengthTicks: 1920);
+    fakeClient.addClip(secondLane, patternId: 'pat_a', startTicks: 1920, lengthTicks: 1920);
+    store.refresh();
+    store.selectClips(store.clips.map((ArrangementClip clip) => clip.id));
+
+    await pumpForTest(tester, PlaylistBinding(client: fakeClient, store: store));
+
+    Future<void> duplicate() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+    }
+
+    await duplicate();
+
+    expect(store.clips, hasLength(4));
+    // 3840 ticks of phrase, so both copies move by 3840 — the shape is kept.
+    expect(store.clips.map((ArrangementClip clip) => clip.startTicks).toList()..sort(), <int>[
+      0,
+      1920,
+      3840,
+      5760,
+    ]);
+    expect(
+      store.clips.where((ArrangementClip clip) => clip.laneId == secondLane).length,
+      2,
+      reason: 'a copy stays on the lane it came from',
+    );
+
+    // The copies are what is selected, so pressing it again extends the phrase
+    // rather than duplicating the original a second time.
+    expect(store.selectedClipIds, hasLength(2));
+    await duplicate();
+    expect(store.clips.map((ArrangementClip clip) => clip.startTicks).toList()..sort(), <int>[
+      0,
+      1920,
+      3840,
+      5760,
+      7680,
+      9600,
+    ]);
+  });
+
+  testWidgets('splits a clip into one clip per channel, each on its own lane', (WidgetTester tester) async {
+    // Two channels in the one pattern, and a lane below the clip's so the
+    // split can be seen to insert rather than to overwrite.
+    fakeClient.addNote('kick', 0, 480, 36, velocity: 9000);
+    fakeClient.addNote('snare', 480, 480, 38, velocity: 9000);
+    fakeClient.createLane('Below');
+    fakeClient.addClip('lane_a', patternId: 'pat_a', startTicks: 3840, lengthTicks: 3840);
+    store.refresh();
+    store.selectClip(store.clips.first.id);
+
+    await pumpForTest(tester, PlaylistBinding(client: fakeClient, store: store));
+
+    await tester.tap(find.text('Split by channel'));
+    await tester.pump();
+
+    expect(store.clips.length, 2);
+    expect(store.clips.map((ArrangementClip clip) => clip.laneId).toSet().length, 2);
+    // Same place in time, one channel each.
+    expect(store.clips.every((ArrangementClip clip) => clip.startTicks == 3840), isTrue);
+    // The lane that was below the clip's is still below the split lanes.
+    expect(store.lanes.map((ArrangementLane lane) => lane.name).toList(), <String>[
+      'Patterns',
+      'snare',
+      'Below',
+    ]);
+  });
+
   testWidgets('inspector modifiers: start, length, transpose, mute, loop', (
     WidgetTester tester,
   ) async {

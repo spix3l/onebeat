@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/plugins/plugin_binding.dart';
 import 'package:onebeat/src/features/plugins/stock/piano_editor.dart';
@@ -122,9 +123,21 @@ void main() {
       PluginBinding(client: client, trackId: 'inst_keys', pluginName: 'Synth', trackName: 'Soft Keys', onClose: () {}),
     );
 
-    expect(find.text('FILTER & TONE'), findsOneWidget);
+    expect(find.text('DRILL//SYNTH'), findsOneWidget);
+    expect(find.text('FILTER'), findsOneWidget);
     expect(find.text('CUTOFF'), findsOneWidget);
-    expect(find.text('AMPLITUDE ENVELOPE'), findsOneWidget);
+    expect(find.text('AMP ENVELOPE'), findsOneWidget);
+    expect(find.text('OSCILLATORS'), findsOneWidget);
+    expect(find.text('MOVEMENT / SPACE'), findsOneWidget);
+    expect(find.text('PREVIEW KEYBOARD'), findsOneWidget);
+
+    await tester.tap(find.text('C2'));
+    await tester.pump();
+    expect(client.auditionedNotesOn, isNotEmpty);
+
+    await tester.tap(find.text('›').first);
+    await tester.pump();
+    expect(find.text('Frosted Bell'), findsOneWidget);
   });
 
   testWidgets('PluginBinding renders Organ stock editor and updates parameters', (WidgetTester tester) async {
@@ -140,8 +153,8 @@ void main() {
         parameters: const <HostedParameter>[
           HostedParameter(
             id: 12,
-            name: 'Drive',
-            module: 'Tone',
+            name: 'Attack',
+            module: 'Character',
             display: '15 %',
             value: 0.15,
             minimum: 0.0,
@@ -154,12 +167,19 @@ void main() {
     );
 
     expect(find.text('TONEWHEEL ORGAN'), findsOneWidget);
-    expect(find.text('MOTION & SPACE'), findsOneWidget);
-    expect(find.text('ROTARY'), findsOneWidget);
+    expect(find.text('CHARACTER'), findsOneWidget);
+    expect(find.text('ROTARY SPEAKER'), findsOneWidget);
+    expect(find.text('PREVIEW'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsNothing);
 
-    await tester.drag(find.byType(ObKnob).at(3), const Offset(0, -24));
+    await tester.drag(find.byType(ObKnob).first, const Offset(0, -24));
     await tester.pump();
     expect(client.paramValues.containsKey(12), true);
+
+    final Offset keyboardOrigin = tester.getTopLeft(find.byKey(const Key('organ-mini-keyboard')));
+    await tester.tapAt(keyboardOrigin + const Offset(8, 54));
+    expect(client.auditionedNotesOn, isNotEmpty);
+    expect(client.auditionedNotesOff, isNotEmpty);
   });
 
   testWidgets('PluginBinding renders Sampler stock editor for sampler plugin', (WidgetTester tester) async {

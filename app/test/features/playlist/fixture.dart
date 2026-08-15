@@ -100,5 +100,5 @@ final PlaylistVm demoPlaylist = PlaylistVm(
   clips: demoClips,
   pxPerBar: 38.3,
   playheadBar16ths: demoPlayheadBar16ths,
-  headerRight: 'Untitled.onebeat · 124 BPM · 4/4',
+  headerRight: '124 BPM · 4/4',
 );

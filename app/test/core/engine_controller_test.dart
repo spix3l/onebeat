@@ -10,7 +10,20 @@ class _PreviewClient implements EngineClient {
   final List<EngineEvent> pendingEvents = <EngineEvent>[];
   final List<int> noteOns = <int>[];
   final List<int> noteOffs = <int>[];
+  final List<String> transport = <String>[];
   String? loadedPath;
+
+  @override
+  void play() => transport.add('play');
+
+  @override
+  void stop() => transport.add('stop');
+
+  @override
+  void playPatternPreview(String patternId) => transport.add('preview:$patternId');
+
+  @override
+  void stopPatternPreview() => transport.add('previewStop');
 
   @override
   EngineSnapshot readSnapshot() => const EngineSnapshot.empty();
@@ -105,5 +118,34 @@ void main() {
     await tester.pump(controller.motion.settled);
     expect(client.noteOffs, isNotEmpty);
     expect(client.noteOffs.every((int key) => key == 60), isTrue);
+  });
+
+  testWidgets('play leaves pattern preview in the engine, not only in the controller', (
+    WidgetTester tester,
+  ) async {
+    final _PreviewClient client = _PreviewClient();
+    late EngineController controller;
+
+    await pumpUi(
+      tester,
+      _ControllerHost(client: client, onReady: (EngineController value) => controller = value),
+      size: const Size(320, 200),
+    );
+
+    controller.playPatternPreview('pat_1');
+    client.transport.clear();
+
+    controller.play();
+
+    // Without the stop, the engine keeps the preview's schedule — the pattern
+    // alone, looping at its own length — and "play the song" plays one bar of
+    // it over and over.
+    expect(client.transport, <String>['previewStop', 'play']);
+    expect(controller.patternPreviewing, isFalse);
+
+    // Playing again is just play: there is no preview left to leave.
+    client.transport.clear();
+    controller.play();
+    expect(client.transport, <String>['play']);
   });
 }

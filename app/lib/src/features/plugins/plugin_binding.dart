@@ -7,6 +7,7 @@ import '../../ui_kit/kit_glyphs.dart';
 import 'stock/generic_editor.dart';
 import 'stock/guitar_editor.dart';
 import 'stock/lowkey_editor.dart';
+import 'stock/organ_editor.dart';
 import 'stock/piano_editor.dart';
 import 'stock/sampler_editor.dart';
 import 'stock/synth_editor.dart';
@@ -178,15 +179,63 @@ class _PluginBindingState extends State<PluginBinding> {
     _onStockChanged('attack', preset.attack);
   }
 
+  void _onSynthPresetSelected(int index) {
+    if (index < 0 || index >= kSynthPresets.length) return;
+    final SynthPresetData preset = kSynthPresets[index];
+    _onStockChanged('preset', index / kSynthPresets.length);
+    _onStockChanged('osc shape', preset.oscShape);
+    _onStockChanged('osc mix', preset.oscMix);
+    _onStockChanged('detune', preset.detune);
+    _onStockChanged('sub', preset.sub);
+    _onStockChanged('cutoff', preset.cutoff);
+    _onStockChanged('resonance', preset.resonance);
+    _onStockChanged('filter env', preset.filterEnv);
+    _onStockChanged('attack', preset.attack);
+    _onStockChanged('decay', preset.decay);
+    _onStockChanged('sustain', preset.sustain);
+    _onStockChanged('release', preset.release);
+    _onStockChanged('drive', preset.drive);
+    _onStockChanged('delay', preset.delay);
+    _onStockChanged('width', preset.width);
+    _onStockChanged('output', preset.output);
+    _onStockChanged('lfo rate', preset.lfoRate);
+    _onStockChanged('lfo depth', preset.lfoDepth);
+    _onStockChanged('glide', preset.glide);
+    _onStockChanged('noise', preset.noise);
+  }
+
   @override
   Widget build(BuildContext context) {
     final String lower = widget.pluginName.toLowerCase();
     final bool isPiano = lower.contains('piano');
     final bool isGuitar = lower.contains('guitar');
     final bool isLowkey = lower.contains('lowkey');
+    final bool isSynth = lower.contains('synth');
+    final bool isOrgan = lower.contains('organ');
 
     Widget editorContent;
-    if (isLowkey) {
+    if (isOrgan) {
+      editorContent = OrganStockEditor(
+        preset: _stockValue('preset', 0.0),
+        percussion: _stockValue('res', 0.35),
+        click: _stockValue('cutoff', 0.20),
+        drive: _stockValue('detune', 0.15),
+        reverb: _stockValue('lfo', 0.25),
+        rotary: _stockValue('lfo rate', 0.50),
+        attack: _stockValue('attack', 0.10),
+        release: _stockValue('release', 0.35),
+        onPresetChanged: (double v) => _onStockChanged('preset', v),
+        onPercussionChanged: (double v) => _onStockChanged('res', v),
+        onClickChanged: (double v) => _onStockChanged('cutoff', v),
+        onDriveChanged: (double v) => _onStockChanged('detune', v),
+        onReverbChanged: (double v) => _onStockChanged('lfo', v),
+        onRotaryChanged: (double v) => _onStockChanged('lfo rate', v),
+        onAttackChanged: (double v) => _onStockChanged('attack', v),
+        onReleaseChanged: (double v) => _onStockChanged('release', v),
+        onAuditionNoteOn: widget.client.auditionNoteOn,
+        onAuditionNoteOff: widget.client.auditionNoteOff,
+      );
+    } else if (isLowkey) {
       editorContent = LowkeyStockEditor(
         preset: _stockValue('preset', 0.0),
         tone: _stockValue('tone', 0.35),
@@ -311,20 +360,50 @@ class _PluginBindingState extends State<PluginBinding> {
         onAuditionNoteOn: widget.client.auditionNoteOn,
         onAuditionNoteOff: widget.client.auditionNoteOff,
       );
-    } else if (lower.contains('synth')) {
+    } else if (isSynth) {
       editorContent = SynthStockEditor(
+        preset: _stockValue('preset', 0.0),
+        oscShape: _stockValue('osc shape', 0.08),
+        oscMix: _stockValue('osc mix', 0.35),
+        detune: _stockValue('detune', 0.50),
+        sub: _stockValue('sub', 0.72),
         cutoff: _stockValue('cutoff', 0.75),
-        resonance: _stockValue('res', 0.3),
+        resonance: _stockValue('resonance', 0.30),
+        filterEnv: _stockValue('filter env', 0.62),
         attack: _stockValue('attack', 0.05),
-        decay: _stockValue('decay', 0.3),
-        sustain: _stockValue('sustain', 0.8),
-        release: _stockValue('release', 0.4),
+        decay: _stockValue('decay', 0.30),
+        sustain: _stockValue('sustain', 0.80),
+        release: _stockValue('release', 0.40),
+        drive: _stockValue('drive', 0.20),
+        delay: _stockValue('delay', 0.04),
+        width: _stockValue('width', 0.28),
+        output: _stockValue('output', 0.78),
+        lfoRate: _stockValue('lfo rate', 0.18),
+        lfoDepth: _stockValue('lfo depth', 0.08),
+        glide: _stockValue('glide', 0.00),
+        noise: _stockValue('noise', 0.02),
+        onPresetChanged: _onSynthPresetSelected,
+        onOscShapeChanged: (double value) => _onStockChanged('osc shape', value),
+        onOscMixChanged: (double value) => _onStockChanged('osc mix', value),
+        onDetuneChanged: (double value) => _onStockChanged('detune', value),
+        onSubChanged: (double value) => _onStockChanged('sub', value),
         onCutoffChanged: (double value) => _onStockChanged('cutoff', value),
-        onResonanceChanged: (double value) => _onStockChanged('res', value),
+        onResonanceChanged: (double value) => _onStockChanged('resonance', value),
+        onFilterEnvChanged: (double value) => _onStockChanged('filter env', value),
         onAttackChanged: (double value) => _onStockChanged('attack', value),
         onDecayChanged: (double value) => _onStockChanged('decay', value),
         onSustainChanged: (double value) => _onStockChanged('sustain', value),
         onReleaseChanged: (double value) => _onStockChanged('release', value),
+        onDriveChanged: (double value) => _onStockChanged('drive', value),
+        onDelayChanged: (double value) => _onStockChanged('delay', value),
+        onWidthChanged: (double value) => _onStockChanged('width', value),
+        onOutputChanged: (double value) => _onStockChanged('output', value),
+        onLfoRateChanged: (double value) => _onStockChanged('lfo rate', value),
+        onLfoDepthChanged: (double value) => _onStockChanged('lfo depth', value),
+        onGlideChanged: (double value) => _onStockChanged('glide', value),
+        onNoiseChanged: (double value) => _onStockChanged('noise', value),
+        onAuditionNoteOn: widget.client.auditionNoteOn,
+        onAuditionNoteOff: widget.client.auditionNoteOff,
       );
     } else if (lower.contains('sampler')) {
       editorContent = SamplerStockEditor(
@@ -361,8 +440,20 @@ class _PluginBindingState extends State<PluginBinding> {
 
     return ObFloatingWindow.plugin(
       vm: windowVm,
-      width: isPiano ? 720 : (isGuitar ? 860 : (isLowkey ? 900 : tokens.size.pluginWindowWidth)),
-      height: isPiano ? 430 : (isGuitar ? 520 : (isLowkey ? 680 : tokens.size.pluginWindowHeight)),
+      width:
+          isPiano
+              ? 720
+              : (isGuitar
+                  ? 860
+                  : (isLowkey ? 900 : (isSynth ? tokens.size.synthWindowWidth : tokens.size.pluginWindowWidth))),
+      height:
+          isPiano
+              ? 430
+              : (isGuitar
+                  ? 520
+                  : (isLowkey
+                      ? 680
+                      : (isOrgan ? 500 : (isSynth ? tokens.size.synthWindowHeight : tokens.size.pluginWindowHeight)))),
       onDragUpdate: widget.onDragUpdate,
       child: editorContent,
     );

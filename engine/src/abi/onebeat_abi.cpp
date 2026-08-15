@@ -545,33 +545,51 @@ void publishModel(ob_engine& handle) {
     handle.engine->publishSchedule(std::move(flattened.schedule));
   }
 
-  // The transport must cover the complete arrangement, not just the current
-  // piano-roll pattern. In particular, a long audio clip must not be cut back
-  // to the default one-bar loop while the song is playing.
+  // The loop region.
+  //
+  // Two different things want to set it, and conflating them is what made
+  // playback unpredictable: previewing a one-bar pattern used to leave the
+  // transport looping that one bar, and every later publish re-derived the
+  // region from *the current pattern and the preview schedule* — so pressing
+  // play in the playlist afterwards looped bar 1 of a finished arrangement.
+  //
+  // So: a preview owns the region while it is previewing, and nothing else
+  // does. Outside preview the region spans the whole arrangement, and whether
+  // it loops at all is the user's switch (`TransportState::loop_enabled`),
+  // which is persisted with the project and is no longer overwritten here
+  // every time anything is edited.
   double loop_end_beats = 4.0;
-  const onebeat::model::Pattern* pattern = currentPattern(handle);
-  if (pattern != nullptr) {
-    loop_end_beats = std::max(
-        loop_end_beats, static_cast<double>(onebeat::model::patternEffectiveLength(*pattern)) /
-                            static_cast<double>(onebeat::model::TicksPerQuarter));
-  }
-  for (const auto& [clip_id, clip] : handle.project.clips()) {
-    (void)clip_id;
-    if (clip.audio() == nullptr) continue;
-    const double clip_end = static_cast<double>(clip.start + clip.length) /
-                            static_cast<double>(onebeat::model::TicksPerQuarter);
-    loop_end_beats = std::max(loop_end_beats, clip_end);
-  }
-  if (flattened.length_frames > 0) {
-    loop_end_beats = std::max(
-        loop_end_beats,
-        handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames));
+  bool loop_enabled = handle.project.transport().loop_enabled;
+  if (handle.pattern_preview) {
+    const onebeat::model::Pattern* pattern = currentPattern(handle);
+    if (pattern != nullptr) {
+      loop_end_beats = std::max(
+          loop_end_beats, static_cast<double>(onebeat::model::patternEffectiveLength(*pattern)) /
+                              static_cast<double>(onebeat::model::TicksPerQuarter));
+    }
+    // A preview that did not loop would be a one-shot audition of a pattern
+    // the user is editing, which is not what the button means.
+    loop_enabled = true;
+  } else {
+    // Every clip, not only the audio ones: a pattern clip is arrangement too,
+    // and a region that stopped short of it would cut the song off.
+    for (const auto& [clip_id, clip] : handle.project.clips()) {
+      (void)clip_id;
+      const double clip_end = static_cast<double>(clip.start + clip.length) /
+                              static_cast<double>(onebeat::model::TicksPerQuarter);
+      loop_end_beats = std::max(loop_end_beats, clip_end);
+    }
+    if (flattened.length_frames > 0) {
+      loop_end_beats = std::max(
+          loop_end_beats,
+          handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames));
+    }
   }
   ob_command loop{};
   loop.type = OB_CMD_SET_LOOP;
   loop.f64_a = 0.0;
   loop.f64_b = loop_end_beats;
-  loop.i64_a = 1;
+  loop.i64_a = loop_enabled ? 1 : 0;
   handle.engine->postCommand(loop);
 
   ob_command metronome{};
@@ -589,13 +607,34 @@ ob_status executeModel(ob_engine& handle, onebeat::model::CommandPtr command, co
   return OB_OK;
 }
 
+// How many playlist lanes a project starts with.
+//
+// A playlist you have to build a lane at a time is a playlist that interrupts
+// you to ask permission before every idea. FL gives you the tracks up front and
+// so do we: an empty lane costs a name and an integer, holds no signal
+// (ARCHITECTURE.md §4), and is silent until something is dropped on it.
+constexpr int KDefaultLaneCount = 60;
+
+// The first lane keeps the name the default clip is placed on; the rest are
+// numbered the way the playlist names lanes it creates on a drop.
+bool createDefaultLanes(onebeat::model::Project& project, onebeat::model::CommandBus& commands) {
+  if (!commands.execute(onebeat::model::addLane(project, "Patterns"))) return false;
+  for (int index = 2; index <= KDefaultLaneCount; ++index) {
+    if (!commands.execute(onebeat::model::addLane(project, "Track " + std::to_string(index)))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool initialiseRack(ob_engine& handle) {
   if (!handle.commands.execute(onebeat::model::addPattern(handle.project, "Pattern 1",
                                                           onebeat::model::TicksPerBarFourFour))) {
     return false;
   }
   handle.current_pattern = handle.project.patterns().begin()->first;
-  if (!handle.commands.execute(onebeat::model::addLane(handle.project, "Patterns"))) return false;
+  if (!createDefaultLanes(handle.project, handle.commands)) return false;
+  // Lane ids are monotonic, so the first entry is the first lane created.
   const onebeat::model::ArrangementLaneId lane = handle.project.lanes().begin()->first;
   if (!handle.commands.execute(onebeat::model::addClip(
           handle.project, lane, onebeat::model::PatternSource{*handle.current_pattern}, 0,
@@ -744,6 +783,17 @@ std::string derivedPatternName(const ob_engine& handle, const std::string& base)
   return base + " copy";
 }
 
+// `base` when no pattern is called that yet, a derived name otherwise. Split
+// by channel wants the channel's own name where it can have it — `Kick`, not
+// `Kick 2` — and only needs to derive when the name is already taken.
+std::string uniquePatternName(const ob_engine& handle, const std::string& base) {
+  for (const auto& [id, pattern] : handle.project.patterns()) {
+    (void)id;
+    if (pattern.name == base) return derivedPatternName(handle, base);
+  }
+  return base;
+}
+
 // Executes a create command and reports the ID it minted, by diffing the map.
 // The command layer mints IDs internally and does not surface them, and diffing
 // is both cheap at this scale and immune to assumptions about map ordering.
@@ -814,7 +864,7 @@ uint32_t ob_abi_version(void) {
 }
 
 const char* ob_abi_version_string(void) {
-  return "1.15.0";
+  return "1.16.0";
 }
 
 const char* ob_last_error_message(void) {
@@ -936,7 +986,7 @@ ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
     return fail(OB_ERR_INVALID_ARGUMENT, "engine and command must not be null.");
   }
   if ((command->type == OB_CMD_SET_TEMPO && command->f64_a >= 20.0 && command->f64_a <= 999.0) ||
-      command->type == OB_CMD_SET_METRONOME) {
+      command->type == OB_CMD_SET_METRONOME || command->type == OB_CMD_SET_LOOP) {
     onebeat::model::TransportState transport = engine->project.transport();
     bool changed = false;
     if (command->type == OB_CMD_SET_TEMPO && std::abs(transport.tempo - command->f64_a) > 0.0001) {
@@ -946,6 +996,15 @@ ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
     if (command->type == OB_CMD_SET_METRONOME &&
         transport.metronome_enabled != (command->i64_a != 0)) {
       transport.metronome_enabled = command->i64_a != 0;
+      changed = true;
+    }
+    // Only the switch, not the region: the region is derived from the
+    // arrangement on every publish (see publishModel), so storing the caller's
+    // copy of it would be storing a value this engine is about to recompute.
+    // A user-drawn loop region is a separate feature, and gets a separate
+    // field when there is a UI that draws one.
+    if (command->type == OB_CMD_SET_LOOP && transport.loop_enabled != (command->i64_a != 0)) {
+      transport.loop_enabled = command->i64_a != 0;
       changed = true;
     }
     if (changed) {
@@ -3050,6 +3109,178 @@ ob_status ob_engine_clips_make_unique(ob_engine* engine, const char* utf8_clip_i
   return OB_OK;
 }
 
+ob_status ob_engine_clip_split_by_channel(ob_engine* engine, const char* utf8_clip_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* found = id ? engine->project.findClip(*id) : nullptr;
+  if (found == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  const onebeat::model::PatternSource* pattern_source = found->pattern();
+  if (pattern_source == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Only a pattern clip can be split by channel.");
+  }
+  const onebeat::model::Pattern* found_pattern =
+      engine->project.findPattern(pattern_source->pattern);
+  if (found_pattern == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip's pattern is missing.");
+  }
+  // Copied, not pointed at: every command below mutates the project the
+  // pointers above read from.
+  const onebeat::model::Pattern pattern = *found_pattern;
+  const onebeat::model::Clip original = *found;
+
+  // The channels the pattern actually uses, in rack order — the order the user
+  // reads them in, so the lanes come out in that order too.
+  std::vector<onebeat::model::InstrumentId> channels;
+  for (const auto& [instrument, sequence] : pattern.sequences) {
+    if (!sequence.empty()) channels.push_back(instrument);
+  }
+  std::sort(channels.begin(), channels.end(),
+            [engine](onebeat::model::InstrumentId a, onebeat::model::InstrumentId b) {
+              const onebeat::model::Instrument* left = engine->project.findInstrument(a);
+              const onebeat::model::Instrument* right = engine->project.findInstrument(b);
+              const int32_t left_order = left == nullptr ? 0 : left->order;
+              const int32_t right_order = right == nullptr ? 0 : right->order;
+              if (left_order != right_order) return left_order < right_order;
+              return a.raw() < b.raw();
+            });
+  // One channel (or none) is already split. Not an error: see the header.
+  if (channels.size() < 2) {
+    g_last_error.clear();
+    return OB_OK;
+  }
+
+  const onebeat::model::ArrangementLaneId first_lane = original.lane;
+  const std::vector<const onebeat::model::ArrangementLane*> lanes = orderedLanes(*engine);
+  int32_t source_order = 0;
+  for (const onebeat::model::ArrangementLane* lane : lanes) {
+    if (lane->id == first_lane) source_order = lane->order;
+  }
+  const auto extra_lanes = static_cast<int32_t>(channels.size()) - 1;
+  std::optional<onebeat::model::PatternId> first_split_pattern;
+
+  engine->commands.beginTransaction("Split by channel");
+  const auto abort = [engine](const char* message) {
+    engine->commands.abortTransaction();
+    return fail(OB_ERR_INTERNAL, message);
+  };
+
+  // Open a gap below the source lane, so the new lanes are inserted rather
+  // than laid on top of lanes that already hold clips.
+  //
+  // Bottom lane first: lane order is unique (the model checks it after every
+  // command), so moving the lanes down in reading order would have each one
+  // land on the one below it before that one had moved out of the way.
+  for (auto lane_it = lanes.rbegin(); lane_it != lanes.rend(); ++lane_it) {
+    const onebeat::model::ArrangementLane* lane = *lane_it;
+    if (lane->order <= source_order) continue;
+    const onebeat::model::ArrangementLaneId lane_id = lane->id;
+    const int32_t moved = lane->order + extra_lanes;
+    if (!engine->commands.execute(onebeat::model::editLane(
+            engine->project, lane_id, onebeat::model::ChangeField::Order,
+            [moved](onebeat::model::ArrangementLane& target) { target.order = moved; },
+            "Make room for split lanes"))) {
+      return abort("The lanes below could not be moved.");
+    }
+  }
+
+  for (size_t index = 0; index < channels.size(); ++index) {
+    const onebeat::model::InstrumentId channel = channels[index];
+    const onebeat::model::Instrument* instrument = engine->project.findInstrument(channel);
+    const std::string channel_name =
+        instrument == nullptr || instrument->name.empty() ? "Channel" : instrument->name;
+
+    // The channel's own pattern: the source's settings, one channel's notes.
+    const auto split_pattern = executeAndFindNew<onebeat::model::PatternId>(
+        *engine, engine->project.patterns(),
+        onebeat::model::addPattern(engine->project, uniquePatternName(*engine, channel_name),
+                                   // Use the source's effective length. If a note
+                                   // extends beyond its declared length, every
+                                   // split channel must retain that same loop
+                                   // window rather than deriving a different one
+                                   // from its own note content.
+                                   onebeat::model::patternEffectiveLength(pattern)));
+    if (!split_pattern) return abort("The channel's pattern could not be created.");
+    if (!first_split_pattern.has_value()) first_split_pattern = *split_pattern;
+
+    const onebeat::model::ColorHex color =
+        instrument == nullptr ? pattern.color : instrument->color;
+    const double swing = pattern.swing;
+    const std::string group = pattern.group;
+    const onebeat::model::TimeSignature signature = pattern.time_signature;
+    if (!engine->commands.execute(onebeat::model::editPatternMeta(
+            engine->project, *split_pattern, onebeat::model::ChangeField::Color,
+            [&color, swing, &group, signature](onebeat::model::PatternMeta& meta) {
+              meta.color = color;
+              meta.swing = swing;
+              meta.group = group;
+              meta.time_signature = signature;
+            },
+            "Copy pattern settings"))) {
+      return abort("The channel's pattern settings could not be copied.");
+    }
+    const auto sequence = pattern.sequences.find(channel);
+    if (sequence != pattern.sequences.end() &&
+        !engine->commands.execute(
+            onebeat::model::insertNotes(*split_pattern, channel, sequence->second.notes()))) {
+      return abort("The channel's notes could not be copied.");
+    }
+
+    // The lane it lands on: the source clip's own for the first channel, a
+    // freshly inserted one named after the channel for the rest.
+    onebeat::model::ArrangementLaneId target_lane = first_lane;
+    if (index > 0) {
+      const auto created = executeAndFindNew<onebeat::model::ArrangementLaneId>(
+          *engine, engine->project.lanes(),
+          onebeat::model::addLane(engine->project, channel_name));
+      if (!created) return abort("The channel's lane could not be created.");
+      target_lane = *created;
+      const auto order = static_cast<int32_t>(source_order + static_cast<int32_t>(index));
+      if (!engine->commands.execute(onebeat::model::editLane(
+              engine->project, target_lane, onebeat::model::ChangeField::Order,
+              [order, &color](onebeat::model::ArrangementLane& lane) {
+                lane.order = order;
+                lane.color = color;
+              },
+              "Place split lane"))) {
+        return abort("The channel's lane could not be placed.");
+      }
+    }
+
+    const auto split_clip = executeAndFindNew<onebeat::model::ClipId>(
+        *engine, engine->project.clips(),
+        onebeat::model::addClip(engine->project, target_lane,
+                                onebeat::model::PatternSource{*split_pattern}, original.start,
+                                original.length));
+    if (!split_clip) return abort("The channel's clip could not be placed.");
+
+    // The split inherits how the source clip was playing, not just where it
+    // was: a muted or transposed clip splits into muted, transposed clips.
+    const bool muted = original.muted;
+    const onebeat::model::ClipTransforms transforms = original.transforms;
+    if (!engine->commands.execute(onebeat::model::editClip(
+            engine->project, *split_clip, onebeat::model::ChangeField::All,
+            [muted, transforms](onebeat::model::Clip& clip) {
+              clip.muted = muted;
+              clip.transforms = transforms;
+            },
+            "Copy clip settings"))) {
+      return abort("The channel's clip settings could not be copied.");
+    }
+  }
+
+  if (!engine->commands.execute(onebeat::model::removeClip(original.id))) {
+    return abort("The original clip could not be removed.");
+  }
+
+  engine->commands.commitTransaction();
+  // The source pattern remains available when it is used elsewhere, but this
+  // split replaced its selected clip. Keep the rack on an audible channel.
+  if (first_split_pattern.has_value()) engine->current_pattern = *first_split_pattern;
+  publishModel(*engine);
+  g_last_error.clear();
+  return OB_OK;
+}
+
 ob_status ob_engine_project_new(ob_engine* engine) {
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
   try {
@@ -3057,6 +3288,9 @@ ob_status ob_engine_project_new(ob_engine* engine) {
     const onebeat::model::PatternId pattern =
         fresh.createPattern("Pattern 1", onebeat::model::TicksPerBarFourFour);
     const onebeat::model::ArrangementLaneId lane = fresh.createLane("Patterns");
+    for (int index = 2; index <= KDefaultLaneCount; ++index) {
+      fresh.createLane("Track " + std::to_string(index));
+    }
     if (!fresh
              .createClip(lane, onebeat::model::PatternSource{pattern}, 0,
                          onebeat::model::TicksPerBarFourFour)

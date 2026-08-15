@@ -20,10 +20,10 @@
 TEST_SUITE("abi") {
   // The minor version moves when functions or structs are *added* (ADR-002 §8);
   // the major is what a client refuses to run against, and it has not moved.
-  TEST_CASE("ABI version is 1.15.0 and packs as documented") {
+  TEST_CASE("ABI version is 1.16.0 and packs as documented") {
     CHECK(ob_abi_version() == OB_ABI_VERSION_PACKED);
     CHECK((ob_abi_version() >> 16) == 1);
-    CHECK(std::string(ob_abi_version_string()) == "1.15.0");
+    CHECK(std::string(ob_abi_version_string()) == "1.16.0");
   }
 
   TEST_CASE("ob_command layout is frozen") {
@@ -466,11 +466,15 @@ TEST_SUITE("abi") {
     CHECK(ob_engine_pattern_remove(engine, first_pattern.c_str()) == OB_ERR_INVALID_ARGUMENT);
 
     // ----- lanes -------------------------------------------------------------
-    REQUIRE(ob_engine_lane_count(engine) == 1);
+    // A session starts with a playlist's worth of lanes, so tracks are there to
+    // drop onto rather than made one at a time. Everything below counts from
+    // that rather than from a hardcoded 1.
+    const int32_t default_lanes = ob_engine_lane_count(engine);
+    REQUIRE(default_lanes == 60);
     REQUIRE(ob_engine_lane_create(engine, "Drums") == OB_OK);
-    REQUIRE(ob_engine_lane_count(engine) == 2);
+    REQUIRE(ob_engine_lane_count(engine) == default_lanes + 1);
     ob_lane_info lane{};
-    REQUIRE(ob_engine_lane_at(engine, 1, &lane) == OB_OK);
+    REQUIRE(ob_engine_lane_at(engine, default_lanes, &lane) == OB_OK);
     CHECK(std::string(lane.name) == "Drums");
     const std::string drums_lane = lane.id;
 
@@ -479,7 +483,7 @@ TEST_SUITE("abi") {
     REQUIRE(ob_engine_lane_set_collapsed(engine, drums_lane.c_str(), 1) == OB_OK);
     REQUIRE(ob_engine_lane_set_height(engine, drums_lane.c_str(), 120) == OB_OK);
     REQUIRE(ob_engine_lane_recolor(engine, drums_lane.c_str(), "#66C58F") == OB_OK);
-    REQUIRE(ob_engine_lane_at(engine, 1, &lane) == OB_OK);
+    REQUIRE(ob_engine_lane_at(engine, default_lanes, &lane) == OB_OK);
     CHECK((lane.flags & OB_LANE_FLAG_MUTED) != 0U);
     CHECK((lane.flags & OB_LANE_FLAG_SOLOED) != 0U);
     CHECK((lane.flags & OB_LANE_FLAG_COLLAPSED) != 0U);
@@ -590,6 +594,156 @@ TEST_SUITE("abi") {
     CHECK(ob_engine_clips_make_unique(engine, "") == OB_ERR_INVALID_ARGUMENT);
     CHECK(ob_engine_pattern_select(engine, "pat_nope") == OB_ERR_INVALID_ARGUMENT);
     CHECK_FALSE(std::string(ob_last_error_message()).empty());
+
+    ob_engine_destroy(engine);
+  }
+
+  // The loop region belongs to the arrangement, and the loop *switch* belongs
+  // to the user. Auditioning a pattern used to leave the transport looping that
+  // pattern's one bar, so playing the song afterwards looped bar 1 of it.
+  TEST_CASE("Previewing a pattern does not leave the song looping one bar") {
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/stage3-abi-loop";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+
+    // Reads the snapshot until it satisfies `ready`, so the test waits on the
+    // audio thread having applied the command rather than on a duration.
+    const auto settled = [engine](const std::function<bool(const ob_snapshot&)>& ready) {
+      ob_snapshot snapshot{};
+      for (int attempt = 0; attempt < 2000; ++attempt) {
+        REQUIRE(ob_engine_read_snapshot(engine, &snapshot) == OB_OK);
+        if (ready(snapshot)) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+      return snapshot;
+    };
+
+    ob_lane_info lane{};
+    REQUIRE(ob_engine_lane_at(engine, 0, &lane) == OB_OK);
+    ob_pattern_info pattern{};
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    // A clip out at bar 9, so "the whole arrangement" is unmistakably longer
+    // than the one-bar pattern it is made of.
+    REQUIRE(ob_engine_clip_add(engine, lane.id, pattern.id, int64_t{3840} * 8, 3840) == OB_OK);
+
+    ob_snapshot snapshot =
+        settled([](const ob_snapshot& value) { return value.loop_end_beats >= 36.0; });
+    CHECK(snapshot.loop_enabled == 1U);
+    CHECK(snapshot.loop_end_beats >= 36.0);
+
+    // A preview owns the region while it runs: that is what makes auditioning
+    // a pattern repeat it.
+    REQUIRE(ob_engine_pattern_preview_start(engine, pattern.id) == OB_OK);
+    snapshot = settled([](const ob_snapshot& value) { return value.loop_end_beats <= 4.0; });
+    CHECK(snapshot.loop_end_beats <= 4.0);
+
+    // And gives it back when it stops — this is the bug.
+    REQUIRE(ob_engine_pattern_preview_stop(engine) == OB_OK);
+    snapshot = settled([](const ob_snapshot& value) { return value.loop_end_beats >= 36.0; });
+    CHECK(snapshot.loop_end_beats >= 36.0);
+
+    // Switching the loop off sticks, including across an unrelated edit: it is
+    // the user's switch, not a value re-derived on every publish.
+    ob_command loop{};
+    loop.type = OB_CMD_SET_LOOP;
+    loop.f64_a = 0.0;
+    loop.f64_b = snapshot.loop_end_beats;
+    loop.i64_a = 0;
+    REQUIRE(ob_engine_post_command(engine, &loop) == OB_OK);
+    snapshot = settled([](const ob_snapshot& value) { return value.loop_enabled == 0U; });
+    CHECK(snapshot.loop_enabled == 0U);
+
+    REQUIRE(ob_engine_lane_create(engine, "Another") == OB_OK);
+    snapshot = settled([](const ob_snapshot& value) { return value.loop_enabled == 0U; });
+    CHECK(snapshot.loop_enabled == 0U);
+
+    ob_engine_destroy(engine);
+  }
+
+  // Split by channel: one clip of a two-channel pattern becomes two clips of
+  // one-channel patterns, on two lanes, and undo puts the single clip back.
+  TEST_CASE("Splitting a clip by channel gives every channel its own lane") {
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/stage3-abi-split";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    REQUIRE(ob_engine_instrument_add_empty(engine, "Kick") == OB_OK);
+    REQUIRE(ob_engine_instrument_add_empty(engine, "Snare") == OB_OK);
+    ob_instrument_info kick{};
+    ob_instrument_info snare{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &kick) == OB_OK);
+    REQUIRE(ob_engine_instrument_at(engine, 1, &snare) == OB_OK);
+    REQUIRE(ob_engine_note_add(engine, kick.id, 0, 480, 36, 9000) == OB_OK);
+    REQUIRE(ob_engine_note_add(engine, snare.id, 480, 480, 38, 9000) == OB_OK);
+    REQUIRE(ob_engine_note_add(engine, snare.id, 1440, 480, 38, 9000) == OB_OK);
+
+    // The clip the new project placed, given a transform so the split can be
+    // checked for carrying it.
+    REQUIRE(ob_engine_clip_count(engine) == 1);
+    const int32_t lanes_before = ob_engine_lane_count(engine);
+    ob_clip_info clip{};
+    REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
+    const std::string source_clip = clip.id;
+    const int64_t start = clip.start_ticks;
+    const int64_t length = clip.length_ticks;
+    REQUIRE(ob_engine_clip_set_transpose(engine, source_clip.c_str(), 5) == OB_OK);
+    REQUIRE(ob_engine_clip_set_muted(engine, source_clip.c_str(), 1) == OB_OK);
+
+    REQUIRE(ob_engine_clip_split_by_channel(engine, source_clip.c_str()) == OB_OK);
+
+    // Two clips, on two lanes, at the same place in time as the one they
+    // replaced — and the second lane is named after its channel.
+    CHECK(ob_engine_clip_count(engine) == 2);
+    REQUIRE(ob_engine_lane_count(engine) == lanes_before + 1);
+    ob_lane_info lane{};
+    REQUIRE(ob_engine_lane_at(engine, 1, &lane) == OB_OK);
+    CHECK(std::string(lane.name) == "Snare");
+    const std::string second_lane = lane.id;
+
+    for (int32_t index = 0; index < 2; ++index) {
+      REQUIRE(ob_engine_clip_at(engine, index, &clip) == OB_OK);
+      CHECK(std::string(clip.id) != source_clip);
+      CHECK(clip.start_ticks == start);
+      CHECK(clip.length_ticks == length);
+      CHECK(clip.transpose == 5);
+      CHECK((clip.flags & OB_CLIP_FLAG_MUTED) != 0U);
+      // One channel each, in rack order: Kick stayed put, Snare moved down.
+      const bool on_first = std::string(clip.lane_id) != second_lane;
+      CHECK(std::string(clip.name) == (on_first ? "Kick" : "Snare"));
+      CHECK(clip.note_count == (on_first ? 1U : 2U));
+    }
+
+    // The source pattern is still there: a split is not a delete.
+    CHECK(ob_engine_pattern_count(engine) == 3);
+
+    // A clip that is already one channel has nothing to split, and says so by
+    // changing nothing rather than by failing.
+    REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
+    REQUIRE(ob_engine_clip_split_by_channel(engine, clip.id) == OB_OK);
+    CHECK(ob_engine_clip_count(engine) == 2);
+    CHECK(ob_engine_pattern_count(engine) == 3);
+
+    // One undo entry for the whole split.
+    REQUIRE(ob_engine_project_undo(engine) == OB_OK);
+    CHECK(ob_engine_clip_count(engine) == 1);
+    CHECK(ob_engine_lane_count(engine) == lanes_before);
+    CHECK(ob_engine_pattern_count(engine) == 1);
+    REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
+    CHECK(std::string(clip.id) == source_clip);
+
+    CHECK(ob_engine_clip_split_by_channel(engine, "clip_nope") == OB_ERR_INVALID_ARGUMENT);
+    CHECK(ob_engine_clip_split_by_channel(nullptr, source_clip.c_str()) == OB_ERR_INVALID_ARGUMENT);
 
     ob_engine_destroy(engine);
   }

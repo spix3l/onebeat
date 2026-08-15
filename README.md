@@ -5,10 +5,12 @@ pattern-based production workflow. It hosts third-party plugins (CLAP, VST3, AU)
 accepts user soundpacks, and ships with a small suite of built-in instruments and
 effects. macOS first; Windows and Linux are a v2 target rather than an exclusion.
 
-The app bundle includes **OneBeat Piano**, a lightweight 32-voice, sample-free
-CLAP instrument with a docked playable editor. It is scanned from inside the app
-bundle on first launch, so a clean install can make sound without installing a
-third-party plug-in or a separate content pack.
+The app bundle includes **OneBeat Piano**, **Lowkey**, and **OneBeat Drill Synth**:
+lightweight, sample-free CLAP instruments with docked playable editors. Drill Synth
+ships with eight factory sounds aimed at dark melodies, bells, pads, leads, and
+sub bass. They are scanned from inside the app bundle on first launch, so a clean
+install can make sound without installing a third-party plug-in or a separate
+content pack.
 
 **Status: v0.1 — "it makes sound."** A note plays without glitching, a meter
 moves smoothly, and the real-time discipline that everything else will be built

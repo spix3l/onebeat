@@ -799,6 +799,14 @@ class SizeTokens {
   double get detachedWindowHeight => 760;
   double get pluginWindowWidth => 440;
   double get pluginWindowHeight => 340;
+  double get synthWindowWidth => 760;
+  double get synthWindowHeight => 560;
+  double get synthHeaderHeight => 56;
+  double get synthHeroHeight => 174;
+  double get synthDialSize => 78;
+  double get synthKeyboardHeight => 106;
+  double get synthKeyboardBlackHeight => 58;
+  double get synthKeyboardLabelHeight => 18;
 
   /// A dock target chip and the ghost of the panel being dragged onto it.
   double get dockChipHeight => 22;

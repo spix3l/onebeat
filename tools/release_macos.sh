@@ -12,12 +12,16 @@ HELPER="$APP/Contents/Helpers/onebeat-plugin-host.app"
 ENGINE="$APP/Contents/Frameworks/libonebeat_engine.dylib"
 STOCK_PIANO="$APP/Contents/PlugIns/OneBeat Piano.clap"
 STOCK_LOWKEY="$APP/Contents/PlugIns/Lowkey.clap"
+STOCK_ORGAN="$APP/Contents/PlugIns/OneBeat Organ.clap"
+STOCK_DRILL_SYNTH="$APP/Contents/PlugIns/OneBeat Drill Synth.clap"
 ENTITLEMENTS="$REPO_ROOT/app/macos/Runner/PluginHost.entitlements"
 OUTPUT="$REPO_ROOT/app/build/macos/OneBeat-macOS.zip"
 
 # Sign inside-out. Only the helper can load third-party signatures.
 codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$STOCK_PIANO"
 codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$STOCK_LOWKEY"
+codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$STOCK_ORGAN"
+codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$STOCK_DRILL_SYNTH"
 codesign --force --timestamp --options runtime --sign "$OB_SIGNING_IDENTITY" "$ENGINE"
 codesign --force --timestamp --options runtime --entitlements "$ENTITLEMENTS" \
   --sign "$OB_SIGNING_IDENTITY" "$HELPER"

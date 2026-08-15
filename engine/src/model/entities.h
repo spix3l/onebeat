@@ -272,7 +272,11 @@ struct TransportState {
   double tempo = 120.0;
   TimeSignature time_signature;
   bool metronome_enabled = false;
-  bool loop_enabled = false;
+  // On: play repeats the arrangement rather than running off its end into
+  // silence. The switch is the user's — the transport bar toggles it and the
+  // project remembers it — while the *region* is derived from the arrangement
+  // (ABI publishModel).
+  bool loop_enabled = true;
   Ticks loop_start = 0;
   Ticks loop_end = TicksPerBarFourFour * 8;
 };

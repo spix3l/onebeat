@@ -270,6 +270,56 @@ class FakeEngineClient implements EngineClient {
     currentPatternId = id;
   }
 
+  @override
+  void splitClipByChannel(String clipId) {
+    final MutableClip? clip = clips[clipId];
+    final MutablePattern? source = clip == null ? null : patterns[clip.patternId];
+    if (clip == null || source == null) return;
+    final List<String> channels =
+        source.sequences.entries
+            .where((MapEntry<String, List<SequenceNote>> entry) => entry.value.isNotEmpty)
+            .map((MapEntry<String, List<SequenceNote>> entry) => entry.key)
+            .toList()
+          ..sort();
+    if (channels.length < 2) return;
+
+    final MutableLane sourceLane = lanes[clip.laneId]!;
+    for (final MutableLane lane in lanes.values) {
+      if (lane.order > sourceLane.order) lane.order += channels.length - 1;
+    }
+
+    for (int index = 0; index < channels.length; index++) {
+      final String channel = channels[index];
+      final String patternId = _mint('pat');
+      patterns[patternId] = MutablePattern(
+        id: patternId,
+        name: channel,
+        color: source.color,
+        lengthTicks: source.lengthTicks,
+      )..sequences[channel] = List<SequenceNote>.of(source.sequences[channel]!);
+
+      String laneId = clip.laneId;
+      if (index > 0) {
+        laneId = _mint('lane');
+        lanes[laneId] = MutableLane(id: laneId, name: channel, order: sourceLane.order + index);
+      }
+
+      final String newClipId = _mint('clip');
+      clips[newClipId] = MutableClip(
+        id: newClipId,
+        laneId: laneId,
+        patternId: patternId,
+        startTicks: clip.startTicks,
+        lengthTicks: clip.lengthTicks,
+      )
+        ..transpose = clip.transpose
+        ..windowStartTicks = clip.windowStartTicks
+        ..muted = clip.muted
+        ..loop = clip.loop;
+    }
+    clips.remove(clipId);
+  }
+
   // ----- lanes --------------------------------------------------------------
 
   @override

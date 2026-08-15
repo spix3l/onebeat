@@ -233,6 +233,53 @@ TEST_SUITE("engine") {
     CHECK(restored == doctest::Approx(0.62));
   }
 
+  TEST_CASE("The shipped Drill Synth exposes UK Drill presets and renders") {
+    ClapRig rig(OB_STOCK_DRILL_SYNTH, "dev.onebeat.stock.drill_synth");
+    CHECK(std::string(rig.plugin->name().text()) == "OneBeat Drill Synth");
+    CHECK(rig.plugin->audioPortCount(PortDirection::Input) == 0);
+    CHECK(rig.plugin->audioPortCount(PortDirection::Output) == 1);
+    CHECK(rig.plugin->notePortCount(PortDirection::Input) == 1);
+    CHECK(rig.plugin->paramCount() == 20);
+
+    char display[64]{};
+    REQUIRE(rig.plugin->paramValueToText(115, 0.0, display, sizeof(display)));
+    CHECK(std::string(display) == "Drill Sub");
+    REQUIRE(rig.plugin->paramValueToText(115, 0.875, display, sizeof(display)));
+    CHECK(std::string(display) == "Choir Mist");
+
+    CHECK(rig.render({PluginEvent::paramValue(0, 115, 0.0), PluginEvent::noteOn(0, 36, 0.9)}) >
+          0.005F);
+    for (int block = 0; block < 10; ++block) CHECK(rig.render({}) > 0.0005F);
+    CHECK(rig.render({PluginEvent::noteOff(0, 36)}) > 0.00001F);
+
+    rig.render({PluginEvent::paramValue(0, 115, 0.375), PluginEvent::paramValue(0, 111, 0.61)});
+    MemoryStateWriter saved;
+    REQUIRE(rig.plugin->saveState(saved));
+    CHECK(saved.bytes().size() > 20 * sizeof(double));
+    rig.render({PluginEvent::paramValue(0, 115, 0.0)});
+    MemoryStateReader reader(saved.bytes());
+    REQUIRE(rig.plugin->loadState(reader));
+    double restored = 0.0;
+    REQUIRE(rig.plugin->paramValue(115, restored));
+    CHECK(restored == doctest::Approx(0.375));
+    REQUIRE(rig.plugin->paramValue(111, restored));
+    CHECK(restored == doctest::Approx(0.61));
+  }
+
+  TEST_CASE("The shipped Organ releases its Gospel patch") {
+    ClapRig rig(OB_STOCK_ORGAN, "dev.onebeat.stock.organ");
+    CHECK(std::string(rig.plugin->name().text()) == "OneBeat Organ");
+
+    CHECK(rig.render({PluginEvent::paramValue(0, 115, 0.5), PluginEvent::noteOn(0, 60, 0.9)}) >
+          0.001F);
+    for (int block = 0; block < 8; ++block) CHECK(rig.render({}) > 0.0001F);
+    rig.render({PluginEvent::noteOff(0, 60)});
+
+    float final_tail = 0.0F;
+    for (int block = 0; block < 500; ++block) final_tail = rig.render({});
+    CHECK(final_tail < 0.001F);
+  }
+
   TEST_CASE("The CLAP adapter maps identity, ports, parameters and latency") {
     ClapRig rig;
     CHECK(std::string(rig.plugin->name().text()) == "OneBeat Test Synth");
