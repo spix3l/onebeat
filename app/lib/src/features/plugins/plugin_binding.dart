@@ -73,10 +73,16 @@ class _PluginBindingState extends State<PluginBinding> {
   }
 
   HostedParameter? _stockParameter(String label) {
-    final String key =
-        label.toLowerCase() == 'pitch' ? 'transpose' : label.toLowerCase();
+    final String key = label.toLowerCase();
     for (final HostedParameter parameter in _parameters) {
-      if (parameter.name.toLowerCase().contains(key)) return parameter;
+      final String name = parameter.name.toLowerCase();
+      if (name == key || name.contains(key)) return parameter;
+      if (key == 'pitch' &&
+          (name.contains('pitch') ||
+              name.contains('transpose') ||
+              name.contains('tune'))) {
+        return parameter;
+      }
     }
     return null;
   }
@@ -148,6 +154,7 @@ class _PluginBindingState extends State<PluginBinding> {
         modDepth: _stockValue('depth', 0.00),
         modRate: _stockValue('rate', 0.30),
         drive: _stockValue('drive', 0.00),
+        pitch: _stockValue('pitch', 0.50),
         onPresetChanged: _onPianoPresetSelected,
         onToneChanged: (double v) => _onStockChanged('tone', v),
         onBodyChanged: (double v) => _onStockChanged('body', v),
@@ -166,6 +173,7 @@ class _PluginBindingState extends State<PluginBinding> {
         onModDepthChanged: (double v) => _onStockChanged('depth', v),
         onModRateChanged: (double v) => _onStockChanged('rate', v),
         onDriveChanged: (double v) => _onStockChanged('drive', v),
+        onPitchChanged: (double v) => _onStockChanged('pitch', v),
         onAuditionNoteOn: widget.client.auditionNoteOn,
         onAuditionNoteOff: widget.client.auditionNoteOff,
       );

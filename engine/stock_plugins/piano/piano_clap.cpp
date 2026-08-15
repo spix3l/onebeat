@@ -170,6 +170,15 @@ bool paramsValueToText(const clap_plugin_t*, clap_id id, double value, char* dis
       std::snprintf(display, size, "%.1f Hz", hz);
       return true;
     }
+    case onebeat::stock::piano::ParamPitch: {
+      const double st = (clamped - 0.5) * 48.0;
+      if (std::abs(st) < 0.05) {
+        std::snprintf(display, size, "0 st");
+      } else {
+        std::snprintf(display, size, "%+.1f st", st);
+      }
+      return true;
+    }
     default:
       std::snprintf(display, size, "%d %%", static_cast<int>(std::lround(clamped * 100.0)));
       return true;

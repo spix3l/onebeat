@@ -270,6 +270,9 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
   const double mod_depth = parameter(ParamModDepth);
   const double mod_rate = parameter(ParamModRate);
   const double drive = parameter(ParamDrive);
+  const double pitch_param = parameter(ParamPitch);
+  const double pitch_semitones = (pitch_param - 0.5) * 48.0;
+  const double pitch_scale = std::pow(2.0, pitch_semitones / 12.0);
 
   // Derive preset index
   const uint32_t preset =
@@ -363,7 +366,7 @@ void PianoEngine::render(float** outputs, uint32_t channel_count, uint32_t offse
 
       // Synthesis algorithms
       double sample = 0.0;
-      const double f0 = voice.frequency;
+      const double f0 = voice.frequency * pitch_scale;
 
       switch (preset) {
         case PresetConcertGrand:

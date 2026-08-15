@@ -26,6 +26,7 @@ enum ParameterId : uint32_t {
   ParamModDepth = 115,
   ParamModRate = 116,
   ParamDrive = 117,
+  ParamPitch = 118,
 };
 
 enum PianoPresetIndex : uint32_t {
@@ -49,7 +50,7 @@ struct ParameterSpec {
   double default_value;
 };
 
-inline constexpr std::array<ParameterSpec, 18> ParameterSpecs{{
+inline constexpr std::array<ParameterSpec, 19> ParameterSpecs{{
     {ParamTone, "Tone", "Piano", 0.65},
     {ParamBody, "Body", "Piano", 0.60},
     {ParamDecay, "Decay", "Envelope", 0.60},
@@ -68,6 +69,7 @@ inline constexpr std::array<ParameterSpec, 18> ParameterSpecs{{
     {ParamModDepth, "Mod Depth", "Modulation", 0.00},
     {ParamModRate, "Mod Rate", "Modulation", 0.30},
     {ParamDrive, "Drive", "Master", 0.00},
+    {ParamPitch, "Pitch", "Piano", 0.50},
 }};
 
 [[nodiscard]] size_t parameterIndex(uint32_t id) noexcept;
