@@ -140,9 +140,40 @@ bool paramsValueToText(const clap_plugin_t*, clap_id id, double value, char* dis
   if (parameterIndex(id) >= ParameterSpecs.size() || display == nullptr || size == 0) {
     return false;
   }
-  std::snprintf(display, size, "%d %%",
-                static_cast<int>(std::lround(clampParameter(value) * 100.0)));
-  return true;
+  const double clamped = clampParameter(value);
+  switch (id) {
+    case onebeat::stock::piano::ParamPreset: {
+      const uint32_t idx = std::clamp(
+          static_cast<uint32_t>(clamped * static_cast<double>(onebeat::stock::piano::PresetCount)),
+          0U, static_cast<uint32_t>(onebeat::stock::piano::PresetCount - 1));
+      std::strncpy(display, onebeat::stock::piano::presetName(idx), size - 1);
+      display[size - 1] = '\0';
+      return true;
+    }
+    case onebeat::stock::piano::ParamAttack: {
+      const double ms = (0.001 + clamped * clamped * 0.4) * 1000.0;
+      std::snprintf(display, size, "%.1f ms", ms);
+      return true;
+    }
+    case onebeat::stock::piano::ParamDecay: {
+      const double sec = 0.12 + clamped * clamped * 12.0;
+      std::snprintf(display, size, "%.2f s", sec);
+      return true;
+    }
+    case onebeat::stock::piano::ParamRelease: {
+      const double sec = 0.03 + clamped * clamped * 5.0;
+      std::snprintf(display, size, "%.2f s", sec);
+      return true;
+    }
+    case onebeat::stock::piano::ParamModRate: {
+      const double hz = 0.2 + clamped * 7.8;
+      std::snprintf(display, size, "%.1f Hz", hz);
+      return true;
+    }
+    default:
+      std::snprintf(display, size, "%d %%", static_cast<int>(std::lround(clamped * 100.0)));
+      return true;
+  }
 }
 
 bool paramsTextToValue(const clap_plugin_t*, clap_id id, const char* display, double* value) {
@@ -204,9 +235,14 @@ bool noteGet(const clap_plugin_t*, uint32_t index, bool input, clap_note_port_in
 
 const clap_plugin_note_ports_t NotePorts{noteCount, noteGet};
 
+struct SavedStateHeader {
+  uint32_t magic = 0x4f42504eU;
+  uint32_t version = 2;
+};
+
 struct SavedState {
   uint32_t magic = 0x4f42504eU;
-  uint32_t version = 1;
+  uint32_t version = 2;
   std::array<double, ParameterSpecs.size()> values{};
 };
 
@@ -245,14 +281,31 @@ bool stateSave(const clap_plugin_t* plugin, const clap_ostream_t* stream) {
 }
 
 bool stateLoad(const clap_plugin_t* plugin, const clap_istream_t* stream) {
-  SavedState state;
-  if (!readAll(stream, &state, sizeof(state)) || state.magic != 0x4f42504eU || state.version != 1) {
+  SavedStateHeader header;
+  if (!readAll(stream, &header, sizeof(header)) || header.magic != 0x4f42504eU) {
     return false;
   }
-  for (size_t index = 0; index < ParameterSpecs.size(); ++index) {
-    self(plugin).engine.setParameter(ParameterSpecs[index].id, state.values[index]);
+  if (header.version == 1) {
+    std::array<double, 7> legacy_values{};
+    if (!readAll(stream, legacy_values.data(), sizeof(legacy_values))) {
+      return false;
+    }
+    for (size_t index = 0; index < legacy_values.size(); ++index) {
+      self(plugin).engine.setParameter(ParameterSpecs[index].id, legacy_values[index]);
+    }
+    return true;
   }
-  return true;
+  if (header.version == 2) {
+    std::array<double, ParameterSpecs.size()> values{};
+    if (!readAll(stream, values.data(), sizeof(values))) {
+      return false;
+    }
+    for (size_t index = 0; index < ParameterSpecs.size(); ++index) {
+      self(plugin).engine.setParameter(ParameterSpecs[index].id, values[index]);
+    }
+    return true;
+  }
+  return false;
 }
 
 const clap_plugin_state_t State{stateSave, stateLoad};
