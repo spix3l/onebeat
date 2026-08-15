@@ -643,4 +643,158 @@ void main() {
     await pumpForTest(tester, const SizedBox(), size: const Size(1600, 900));
     await tester.pump();
   });
+
+  testWidgets('a right-button sweep erases every note it crosses, as one undo step', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    // Three notes along one row. At the default zoom, 12.5 ticks to the pixel,
+    // so all three sit inside the first 80px of canvas.
+    store
+      ..addNoteAt(0, 84, length: 240)
+      ..addNoteAt(480, 84, length: 240)
+      ..addNoteAt(960, 84, length: 240);
+    expect(store.notes.length, 3);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    final double rowY = keys.top + 7;
+    final int commitsBefore = client.gestureCommits;
+
+    final TestPointer mouse = TestPointer(
+      1,
+      PointerDeviceKind.mouse,
+      null,
+      kSecondaryButton,
+    );
+    await tester.sendEventToBinding(
+      mouse.down(Offset(keys.right + 2, rowY)),
+    );
+    await tester.sendEventToBinding(mouse.move(Offset(keys.right + 100, rowY)));
+    await tester.sendEventToBinding(mouse.up());
+    await tester.pump();
+
+    expect(store.notes, isEmpty, reason: 'the sweep crossed all three');
+    expect(
+      client.gestureCommits - commitsBefore,
+      1,
+      reason: 'a sweep is one undo step, not one per note',
+    );
+  });
+
+  testWidgets('a right-button sweep only erases the row it crosses', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..addNoteAt(0, 84, length: 240)
+      ..addNoteAt(0, 80, length: 240);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    final TestPointer mouse = TestPointer(
+      1,
+      PointerDeviceKind.mouse,
+      null,
+      kSecondaryButton,
+    );
+    await tester.sendEventToBinding(
+      mouse.down(Offset(keys.right + 2, keys.top + 7)),
+    );
+    await tester.sendEventToBinding(
+      mouse.move(Offset(keys.right + 40, keys.top + 7)),
+    );
+    await tester.sendEventToBinding(mouse.up());
+    await tester.pump();
+
+    expect(store.notes.length, 1);
+    expect(store.notes.single.key, 80, reason: 'the other row is untouched');
+  });
+
+  testWidgets("the cursor says 'resize' over a note's right edge and 'grab' over its body", (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    // 960 ticks at 12.5 ticks/px is 76.8px wide, so the handle is the full 8px
+    // rather than the third-of-the-note cap.
+    store.addNoteAt(0, 84, length: 960);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    final double rowY = keys.top + 7;
+    MouseCursor cursor() => tester
+        .widget<PianoRollScreen>(find.byType(PianoRollScreen))
+        .gridCursor;
+
+    final TestPointer mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      mouse.hover(Offset(keys.right + 20, rowY)),
+    );
+    await tester.pump();
+    expect(cursor(), SystemMouseCursors.grab);
+
+    // 76.8px in is the note's end; 2px short of it is inside the grab zone.
+    await tester.sendEventToBinding(
+      mouse.hover(Offset(keys.right + 75, rowY)),
+    );
+    await tester.pump();
+    expect(cursor(), SystemMouseCursors.resizeLeftRight);
+
+    await tester.sendEventToBinding(
+      mouse.hover(Offset(keys.right + 400, rowY)),
+    );
+    await tester.pump();
+    expect(cursor(), MouseCursor.defer, reason: 'empty canvas asks for nothing');
+  });
+
+  testWidgets("resizing lands the note's edge under the pointer, not offset by the grab", (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+      ..addNoteAt(0, 84, length: 960);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    final double rowY = keys.top + 7;
+    // Grab 3px inside the edge and drag to tick 1920 (153.6px). The old code
+    // measured the drag from where the grab started, so the edge finished 3px
+    // — a snap step, once rounded — short of the pointer.
+    await tester.dragFrom(
+      Offset(keys.right + 74, rowY),
+      const Offset(80, 0),
+    );
+    await tester.pump();
+
+    expect(store.notes.single.endTicks, 1920);
+  });
 }

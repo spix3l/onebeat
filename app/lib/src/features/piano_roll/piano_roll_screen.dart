@@ -43,11 +43,15 @@ class PianoRollScreen extends StatelessWidget {
     this.onBack,
     this.onKeyPress,
     this.onTapDown,
-    this.onSecondaryTapDown,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
+    this.onEraseStart,
+    this.onEraseUpdate,
+    this.onEraseEnd,
+    this.onGridHover,
+    this.gridCursor = MouseCursor.defer,
     this.onPointerSignal,
     this.onPointerPanZoomStart,
     this.onPointerPanZoomUpdate,
@@ -74,11 +78,26 @@ class PianoRollScreen extends StatelessWidget {
   final ValueChanged<int>? onKeyPress;
 
   final void Function(TapDownDetails details)? onTapDown;
-  final void Function(TapDownDetails details)? onSecondaryTapDown;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
+
+  /// The right-button sweep, reported in canvas coordinates.
+  ///
+  /// A raw pointer path rather than a gesture: `GestureDetector` offers no
+  /// secondary drag, and a second recogniser in the arena would have to fight
+  /// the primary one for every pointer. The primary pan recogniser ignores a
+  /// secondary-button pointer, so the two never collide.
+  final ValueChanged<Offset>? onEraseStart;
+  final ValueChanged<Offset>? onEraseUpdate;
+  final VoidCallback? onEraseEnd;
+
+  /// Pointer position over the canvas, so the cursor can say what a click at
+  /// that spot would do before the click happens.
+  final ValueChanged<Offset>? onGridHover;
+  final MouseCursor gridCursor;
+
   final void Function(PointerSignalEvent event)? onPointerSignal;
 
   /// Trackpad gestures. Separate from [onPointerSignal] because a trackpad
@@ -161,11 +180,15 @@ class PianoRollScreen extends StatelessWidget {
                             roll: vm.roll,
                             onKeyPress: onKeyPress,
                             onTapDown: onTapDown,
-                            onSecondaryTapDown: onSecondaryTapDown,
                             onPanStart: onPanStart,
                             onPanUpdate: onPanUpdate,
                             onPanEnd: onPanEnd,
                             onPanCancel: onPanCancel,
+                            onEraseStart: onEraseStart,
+                            onEraseUpdate: onEraseUpdate,
+                            onEraseEnd: onEraseEnd,
+                            onGridHover: onGridHover,
+                            gridCursor: gridCursor,
                             onGridSize: onGridSize,
                           ),
                         ),
@@ -333,22 +356,30 @@ class _GridRow extends StatelessWidget {
     required this.roll,
     this.onKeyPress,
     this.onTapDown,
-    this.onSecondaryTapDown,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
+    this.onEraseStart,
+    this.onEraseUpdate,
+    this.onEraseEnd,
+    this.onGridHover,
+    this.gridCursor = MouseCursor.defer,
     this.onGridSize,
   });
 
   final PianoRollVm roll;
   final ValueChanged<int>? onKeyPress;
   final void Function(TapDownDetails details)? onTapDown;
-  final void Function(TapDownDetails details)? onSecondaryTapDown;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
+  final ValueChanged<Offset>? onEraseStart;
+  final ValueChanged<Offset>? onEraseUpdate;
+  final VoidCallback? onEraseEnd;
+  final ValueChanged<Offset>? onGridHover;
+  final MouseCursor gridCursor;
   final ValueChanged<Size>? onGridSize;
 
   @override
@@ -365,11 +396,15 @@ class _GridRow extends StatelessWidget {
           child: _InteractiveGridArea(
             roll: roll,
             onTapDown: onTapDown,
-            onSecondaryTapDown: onSecondaryTapDown,
             onPanStart: onPanStart,
             onPanUpdate: onPanUpdate,
             onPanEnd: onPanEnd,
             onPanCancel: onPanCancel,
+            onEraseStart: onEraseStart,
+            onEraseUpdate: onEraseUpdate,
+            onEraseEnd: onEraseEnd,
+            onGridHover: onGridHover,
+            gridCursor: gridCursor,
             onGridSize: onGridSize,
           ),
         ),
@@ -382,22 +417,32 @@ class _InteractiveGridArea extends StatelessWidget {
   const _InteractiveGridArea({
     required this.roll,
     this.onTapDown,
-    this.onSecondaryTapDown,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
+    this.onEraseStart,
+    this.onEraseUpdate,
+    this.onEraseEnd,
+    this.onGridHover,
+    this.gridCursor = MouseCursor.defer,
     this.onGridSize,
   });
 
   final PianoRollVm roll;
   final void Function(TapDownDetails details)? onTapDown;
-  final void Function(TapDownDetails details)? onSecondaryTapDown;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
   final VoidCallback? onPanCancel;
+  final ValueChanged<Offset>? onEraseStart;
+  final ValueChanged<Offset>? onEraseUpdate;
+  final VoidCallback? onEraseEnd;
+  final ValueChanged<Offset>? onGridHover;
+  final MouseCursor gridCursor;
   final ValueChanged<Size>? onGridSize;
+
+  bool _isErase(PointerEvent event) => (event.buttons & kSecondaryButton) != 0;
 
   @override
   Widget build(BuildContext context) {
@@ -413,30 +458,58 @@ class _InteractiveGridArea extends StatelessWidget {
           // inside a rebuild.
           WidgetsBinding.instance.addPostFrameCallback((_) => report(size));
         }
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          // Everything that can point at a canvas *except* a trackpad. A
-          // trackpad two-finger scroll arrives as a pan gesture, and a drag
-          // recogniser will happily accept it — which is how scrolling ended up
-          // drawing notes. Scrolling is handled by the Listener above instead.
-          supportedDevices: prCanvasPointers,
-          onTapDown: onTapDown,
-          onSecondaryTapDown: onSecondaryTapDown,
-          onPanStart: onPanStart,
-          onPanUpdate: onPanUpdate,
-          onPanEnd: onPanEnd,
-          onPanCancel: onPanCancel,
-          child: ClipRect(
-            child: CustomPaint(
-              painter: PrGridPainter(
-                vm: roll,
-                color: tokens.color,
-                noteHeight: tokens.size.prNoteHeight,
-                noteRadius: tokens.radius.xs,
-                lineWidth: tokens.border.hairline,
-                playheadWidth: tokens.size.playheadWidth,
+        return MouseRegion(
+          cursor: gridCursor,
+          onHover: onGridHover == null
+              ? null
+              : (PointerHoverEvent event) => onGridHover!(event.localPosition),
+          child: Listener(
+            // The right-button sweep. A raw pointer path, so it never enters the
+            // gesture arena and never has to win a fight with the drag
+            // recogniser below — which only accepts primary-button pointers.
+            onPointerDown: onEraseStart == null
+                ? null
+                : (PointerDownEvent event) {
+                    if (_isErase(event)) onEraseStart!(event.localPosition);
+                  },
+            onPointerMove: onEraseUpdate == null
+                ? null
+                : (PointerMoveEvent event) {
+                    if (_isErase(event)) onEraseUpdate!(event.localPosition);
+                  },
+            onPointerUp: onEraseEnd == null ? null : (_) => onEraseEnd!(),
+            onPointerCancel: onEraseEnd == null ? null : (_) => onEraseEnd!(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              // Everything that can point at a canvas *except* a trackpad. A
+              // trackpad two-finger scroll arrives as a pan gesture, and a drag
+              // recogniser will happily accept it — which is how scrolling ended
+              // up drawing notes. Scrolling is handled by the Listener above.
+              supportedDevices: prCanvasPointers,
+              // The drag begins where the pointer went *down*, not where the
+              // recogniser accepted it a few pixels later. On an editing canvas
+              // that difference is the whole gesture: press on a note's right
+              // edge, move, and the default behaviour hit-tests a point already
+              // past the note — so a resize became a draw.
+              dragStartBehavior: DragStartBehavior.down,
+              onTapDown: onTapDown,
+              onPanStart: onPanStart,
+              onPanUpdate: onPanUpdate,
+              onPanEnd: onPanEnd,
+              onPanCancel: onPanCancel,
+              child: ClipRect(
+                child: CustomPaint(
+                  painter: PrGridPainter(
+                    vm: roll,
+                    color: tokens.color,
+                    noteHeight: tokens.size.prNoteHeight,
+                    noteRadius: tokens.radius.xs,
+                    lineWidth: tokens.border.hairline,
+                    playheadWidth: tokens.size.playheadWidth,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
               ),
-              child: const SizedBox.expand(),
             ),
           ),
         );

@@ -83,7 +83,7 @@ String keyName(int key) =>
     '${pitchClassNames[((key % 12) + 12) % 12]}${(key ~/ 12) - 1}';
 
 /// What a drag gesture is currently doing.
-enum PianoDragKind { none, draw, move, resize, marquee, velocity }
+enum PianoDragKind { none, draw, move, resize, marquee, velocity, erase }
 
 class PianoRollStore extends ChangeNotifier {
   PianoRollStore(this._client, [this._patterns]);
@@ -370,26 +370,6 @@ class PianoRollStore extends ChangeNotifier {
       if (note.endTicks > end) end = note.endTicks;
     }
     return end;
-  }
-
-  /// What the transport loops over: the pattern's content, rounded up to a
-  /// whole bar, and never less than one bar.
-  ///
-  /// This mirrors the rule the engine applies when it sets the loop region
-  /// (`publishModel` in onebeat_abi.cpp). It is duplicated rather than read
-  /// back because the drawn playhead has to wrap on exactly the tick the audio
-  /// wraps on, and the ABI publishes the loop in beats after rounding.
-  ///
-  /// Only this instrument's notes are counted, which is right for the roll's
-  /// own playhead but will under-read once several instruments share a pattern
-  /// — see [ghostNotes], which is where the rest of the pattern lives.
-  int get loopLengthTicks {
-    int end = noteEndTicks;
-    for (final SequenceNote ghost in ghostNotes) {
-      if (ghost.endTicks > end) end = ghost.endTicks;
-    }
-    if (end <= 0) return ticksPerBar;
-    return ((end + ticksPerBar - 1) ~/ ticksPerBar) * ticksPerBar;
   }
 
   /// The last tick with anything on it — where the horizontal rail's track
@@ -703,6 +683,25 @@ class PianoRollStore extends ChangeNotifier {
     _dragLengthDelta = lengthDelta;
     if (selection.isNotEmpty) lastNoteLength = selection.first.lengthTicks;
     refresh();
+  }
+
+  /// Opens an erase drag: one undo step for however many notes the sweep
+  /// crosses, rather than one per note.
+  void beginErase() {
+    if (dragKind == PianoDragKind.erase) return;
+    dragKind = PianoDragKind.erase;
+    _beginGesture('Erase notes');
+    notifyListeners();
+  }
+
+  /// Removes the note under (tick, key), if there is one. Returns whether it
+  /// removed anything, so a sweep can skip the read-back when it crosses empty
+  /// canvas — which is most of the pixels in a drag.
+  bool eraseAt(int tick, int key) {
+    final SequenceNote? hit = noteAt(tick, key);
+    if (hit == null) return false;
+    deleteNote(hit);
+    return true;
   }
 
   void beginMarquee(int tick, int key) {

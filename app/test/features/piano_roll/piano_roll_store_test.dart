@@ -225,32 +225,6 @@ void main() {
     expect(roll.notesNearTick(2000, 40), isEmpty);
   });
 
-  test('the loop covers the content, rounded up to a whole bar', () {
-    final EditorHarness harness = EditorHarness();
-    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
-
-    // An empty pattern still loops on something.
-    expect(roll.loopLengthTicks, ticksPerBar);
-
-    // A note ending inside bar 1 loops one bar.
-    roll.addNoteAt(0, 60, length: ticksPerQuarter);
-    expect(roll.loopLengthTicks, ticksPerBar);
-
-    // A note starting at the top of bar 4 loops four bars, not five.
-    roll.addNoteAt(ticksPerBar * 3, 62, length: ticksPerQuarter);
-    expect(roll.loopLengthTicks, ticksPerBar * 4);
-  });
-
-  test('a note crossing a barline extends the loop to the next bar', () {
-    final EditorHarness harness = EditorHarness();
-    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
-
-    // Ends one tick into bar 2, so the loop has to reach the end of bar 2.
-    roll.addNoteAt(0, 60, length: ticksPerBar + 1);
-
-    expect(roll.loopLengthTicks, ticksPerBar * 2);
-  });
-
   test('a preview lights its key and goes dark when released', () {
     final EditorHarness harness = EditorHarness()..seedNotes('inst_a');
     final PianoRollStore roll = harness.pianoRoll;
@@ -270,5 +244,24 @@ void main() {
     roll.addNoteAt(ticksPerBar * 7, 60, length: ticksPerQuarter);
 
     expect(roll.contentEndTicks, greaterThan(ticksPerBar * 7));
+  });
+
+  test('an erase sweep is one undo step whatever it crosses', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..addNoteAt(0, 60, length: ticksPerQuarter)
+      ..addNoteAt(ticksPerQuarter, 60, length: ticksPerQuarter);
+    final int notesBefore = roll.notes.length;
+
+    roll.beginErase();
+    expect(roll.eraseAt(ticksPerQuarter ~/ 2, 60), isTrue);
+    // Empty canvas, and a row the sweep only passed over.
+    expect(roll.eraseAt(ticksPerQuarter ~/ 2, 61), isFalse);
+    expect(roll.eraseAt(ticksPerQuarter + 10, 60), isTrue);
+    roll.endDrag();
+
+    expect(roll.notes.length, notesBefore - 2);
+    expect(roll.dragKind, PianoDragKind.none);
   });
 }

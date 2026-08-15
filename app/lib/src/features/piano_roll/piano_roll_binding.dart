@@ -48,6 +48,14 @@ class _PianoRollBindingState extends State<PianoRollBinding>
   int _dragOriginTick = 0;
   int _dragOriginKey = 0;
 
+  /// The end tick of the note a resize grabbed. The drag is measured against
+  /// this rather than against the pointer's start, so the edge tracks the
+  /// cursor instead of trailing it.
+  int _resizeOriginEnd = 0;
+
+  /// What the pointer is currently over, expressed as a cursor.
+  MouseCursor _gridCursor = MouseCursor.defer;
+
   /// The measured canvas. Paging, anchored zoom and the "how far can I scroll
   /// down" floor all need it, and none of them can be answered from the vm.
   Size _gridSize = Size.zero;
@@ -346,14 +354,91 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     }
   }
 
-  void _onSecondaryTapDown(TapDownDetails details, PrViewport view) {
-    final int tick = view.tickAt(details.localPosition.dx);
-    final int key = view.noteAt(details.localPosition.dy);
-    final SequenceNote? hit = _store.noteAt(tick, key);
-    if (hit != null) {
-      _store.deleteNote(hit);
+  /// Whether [x] falls in [note]'s right-edge grab zone.
+  ///
+  /// Capped at a third of the note, because the zone is a fixed number of
+  /// pixels and a note is not: zoomed out, a 1/16 is a handful of pixels wide
+  /// and a fixed handle would swallow all of it, leaving no way to move the
+  /// note at all.
+  bool _onResizeEdge(SequenceNote note, double x, PrViewport view) {
+    final double endX = view.xOf(note.endTicks);
+    final double width = note.lengthTicks / view.ticksPerPx;
+    final double handle = OneBeatTheme.of(context).size.pianoResizeHandleWidth;
+    final double zone = handle < width / 3 ? handle : width / 3;
+    return x >= endX - zone && x <= endX;
+  }
+
+  /// What the pointer is over, said in the cursor: the one affordance that
+  /// tells you a note can be resized *before* you commit to a drag.
+  MouseCursor _cursorAt(Offset local, PrViewport view) {
+    if (_store.tool == PrTool.eraser) return MouseCursor.defer;
+    final SequenceNote? hit = _store.noteAt(
+      view.tickAt(local.dx),
+      view.noteAt(local.dy),
+    );
+    if (hit == null) return MouseCursor.defer;
+    return _onResizeEdge(hit, local.dx, view)
+        ? SystemMouseCursors.resizeLeftRight
+        : SystemMouseCursors.grab;
+  }
+
+  void _onGridHover(Offset local, PrViewport view) {
+    final MouseCursor next = _cursorAt(local, view);
+    // Only when it changes: a hover fires per pixel, and a setState per pixel
+    // would rebuild the roll for a cursor that already looks right.
+    if (next == _gridCursor) return;
+    setState(() => _gridCursor = next);
+  }
+
+  // ----- Erasing ------------------------------------------------------------
+
+  /// The last point the erase sweep sampled, in canvas coordinates.
+  Offset? _lastErasePoint;
+
+  void _onEraseStart(Offset local, PrViewport view) {
+    FocusPolicy.takeUnlessTyping(_focus);
+    // A right-click is a sweep of length zero, so there is one code path rather
+    // than a tap handler and a drag handler that have to agree.
+    _store.beginErase();
+    _lastErasePoint = null;
+    _sweepErase(local, view);
+  }
+
+  void _onEraseUpdate(Offset local, PrViewport view) {
+    if (_store.dragKind != PianoDragKind.erase) return;
+    _sweepErase(local, view);
+  }
+
+  void _onEraseEnd() {
+    if (_store.dragKind != PianoDragKind.erase) return;
+    _lastErasePoint = null;
+    _store.endDrag();
+  }
+
+  /// Erases everything the pointer crossed since the last sample, not only what
+  /// is under it now.
+  ///
+  /// A quick sweep delivers pointer moves tens of pixels apart, and a note
+  /// narrower than that gap would survive a stroke drawn straight through it —
+  /// which reads as the erase randomly missing.
+  void _sweepErase(Offset local, PrViewport view) {
+    final Offset? from = _lastErasePoint;
+    _lastErasePoint = local;
+    if (from == null) {
+      _eraseAt(local, view);
+      return;
+    }
+    final double step = view.rowHeight / 2;
+    final int samples = step <= 0
+        ? 1
+        : ((local - from).distance / step).ceil().clamp(1, 64);
+    for (int i = 1; i <= samples; i++) {
+      _eraseAt(Offset.lerp(from, local, i / samples)!, view);
     }
   }
+
+  void _eraseAt(Offset local, PrViewport view) =>
+      _store.eraseAt(view.tickAt(local.dx), view.noteAt(local.dy));
 
   void _onPanStart(DragStartDetails details, PrViewport view) {
     FocusPolicy.takeUnlessTyping(_focus);
@@ -370,10 +455,19 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       return;
     }
 
+    // The eraser tool's drag is the same sweep the right button does, so the
+    // two never disagree about what a stroke removes.
+    if (_store.tool == PrTool.eraser) {
+      _onEraseStart(details.localPosition, view);
+      return;
+    }
+
     final SequenceNote? hit = _store.noteAt(tick, key);
     if (hit == null) {
       if (_store.tool == PrTool.pencil) {
         _store.addNoteAt(_maybeSnap(tick), key);
+        // The drawn note's own end is what the drag then stretches.
+        _resizeOriginEnd = _maybeSnap(tick) + _store.defaultNoteLength;
         _store.beginResize();
       } else {
         _store.beginMarquee(tick, key);
@@ -381,19 +475,12 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       return;
     }
 
-    if (_store.tool == PrTool.eraser) {
-      _store.deleteNote(hit);
-      return;
-    }
-
     if (!_store.selection.contains(hit)) {
       _store.selectOnly(hit);
     }
 
-    final double noteEndX = view.xOf(hit.startTicks + hit.lengthTicks);
-    final OneBeatTokens tokens = OneBeatTheme.of(context);
-    if ((noteEndX - details.localPosition.dx).abs() <=
-        tokens.size.pianoResizeHandleWidth) {
+    if (_onResizeEdge(hit, details.localPosition.dx, view)) {
+      _resizeOriginEnd = hit.endTicks;
       _store.beginResize();
     } else {
       _store.beginMove();
@@ -413,13 +500,15 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         }
         _store.updateMove(deltaTicks, key - _dragOriginKey);
       case PianoDragKind.resize:
-        int delta = tick - _dragOriginTick;
-        if (!_snapOff && _store.snapTicks > 0) {
-          delta = (delta / _store.snapTicks).round() * _store.snapTicks;
-        }
-        _store.updateResize(delta);
+        // Measured from the note's *end*, not from where the drag began. The
+        // edge then lands exactly where the pointer is, instead of trailing it
+        // by however far into the handle you happened to click.
+        final int target = _snapOff ? tick : _store.snap(tick);
+        _store.updateResize(target - _resizeOriginEnd);
       case PianoDragKind.marquee:
         _store.updateMarquee(tick, key);
+      case PianoDragKind.erase:
+        _sweepErase(details.localPosition, view);
       case PianoDragKind.none:
       case PianoDragKind.draw:
       case PianoDragKind.velocity:
@@ -780,11 +869,15 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onBack: widget.onBackToPlaylist,
           onKeyPress: (int key) => _store.audition(key),
           onTapDown: (TapDownDetails d) => _onTapDown(d, view),
-          onSecondaryTapDown: (TapDownDetails d) => _onSecondaryTapDown(d, view),
           onPanStart: (DragStartDetails d) => _onPanStart(d, view),
           onPanUpdate: (DragUpdateDetails d) => _onPanUpdate(d, view),
           onPanEnd: (_) => _store.endDrag(),
           onPanCancel: _store.cancelDrag,
+          onEraseStart: (Offset local) => _onEraseStart(local, view),
+          onEraseUpdate: (Offset local) => _onEraseUpdate(local, view),
+          onEraseEnd: _onEraseEnd,
+          onGridHover: (Offset local) => _onGridHover(local, view),
+          gridCursor: _gridCursor,
           onPointerSignal: (PointerSignalEvent e) =>
               _onPointerSignal(e, view, gutter),
           onPointerPanZoomStart: _onPanZoomStart,
