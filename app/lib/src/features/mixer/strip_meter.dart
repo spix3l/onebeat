@@ -135,14 +135,8 @@ class StripFader extends StatelessWidget {
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onVerticalDragUpdate:
-              onChanged == null
-                  ? null
-                  : (DragUpdateDetails d) => report(d.localPosition),
-          onTapDown:
-              onChanged == null
-                  ? null
-                  : (TapDownDetails d) => report(d.localPosition),
+          onVerticalDragUpdate: onChanged == null ? null : (DragUpdateDetails d) => report(d.localPosition),
+          onTapDown: onChanged == null ? null : (TapDownDetails d) => report(d.localPosition),
           child: CustomPaint(
             painter: _FaderPainter(
               position: position,
@@ -237,6 +231,5 @@ class _FaderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FaderPainter oldDelegate) =>
-      oldDelegate.position != position || oldDelegate.cap != cap;
+  bool shouldRepaint(_FaderPainter oldDelegate) => oldDelegate.position != position || oldDelegate.cap != cap;
 }

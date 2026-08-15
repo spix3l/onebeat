@@ -163,8 +163,7 @@ class _FakeStoreEngineClient implements EngineClient {
 
   void _replaceStep(int step, RackStep replacement) {
     final RackRow row = rows.single;
-    final List<RackStep> steps = List<RackStep>.of(row.steps)
-      ..[step] = replacement;
+    final List<RackStep> steps = List<RackStep>.of(row.steps)..[step] = replacement;
     final int active = steps.where((RackStep value) => value.active).length;
     rows = <RackRow>[
       RackRow(

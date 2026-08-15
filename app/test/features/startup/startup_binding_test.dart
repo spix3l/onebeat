@@ -5,8 +5,7 @@ import 'package:onebeat/src/features/startup/startup_binding.dart';
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
 
-class _FakeStartupEngineClient extends FakeEngineClient implements EngineClient {
-}
+class _FakeStartupEngineClient extends FakeEngineClient implements EngineClient {}
 
 void main() {
   setUpAll(loadAppFonts);

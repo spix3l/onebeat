@@ -77,8 +77,7 @@ class PatternStore extends ChangeNotifier {
   /// Clips of the current pattern are highlighted in the arrangement (D-M6's
   /// instance highlighting). The arrangement asks this rather than keeping its
   /// own copy of the selection.
-  bool highlightsPattern(String patternId) =>
-      patternId.isNotEmpty && current?.id == patternId;
+  bool highlightsPattern(String patternId) => patternId.isNotEmpty && current?.id == patternId;
 
   void select(String patternId, {String fromClipId = ''}) {
     _client.selectPattern(patternId);

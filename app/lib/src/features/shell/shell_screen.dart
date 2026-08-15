@@ -118,8 +118,7 @@ class ShellScreen extends StatelessWidget {
 
     return ColoredBox(
       color: tokens.color.surfaceSunken,
-      child:
-          overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
+      child: overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
     );
   }
 }
@@ -176,8 +175,7 @@ class _ResizableBrowserPanelState extends State<_ResizableBrowserPanel> {
   }
 
   void _resize(DragUpdateDetails details) {
-    final double next =
-        (_width + details.delta.dx).clamp(_minWidth, _maxWidth).toDouble();
+    final double next = (_width + details.delta.dx).clamp(_minWidth, _maxWidth).toDouble();
     setState(() => _width = next);
     widget.onResize?.call(details.delta.dx);
   }

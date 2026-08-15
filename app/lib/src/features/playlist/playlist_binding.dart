@@ -38,8 +38,7 @@ class PlaylistBinding extends StatefulWidget {
   State<PlaylistBinding> createState() => _PlaylistBindingState();
 }
 
-class _PlaylistBindingState extends State<PlaylistBinding>
-    with SingleTickerProviderStateMixin {
+class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   late final PlaylistStore _store;
   final FocusNode _focus = FocusNode(debugLabel: 'playlist-binding');
@@ -97,8 +96,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   @override
   void didUpdateWidget(covariant PlaylistBinding oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.lastClickedItem != null &&
-        !identical(widget.lastClickedItem, oldWidget.lastClickedItem)) {
+    if (widget.lastClickedItem != null && !identical(widget.lastClickedItem, oldWidget.lastClickedItem)) {
       final PlaylistInsertItem item = widget.lastClickedItem!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && identical(widget.lastClickedItem, item)) {
@@ -143,9 +141,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     // Undo and redo are dispatched by the shell's controller, outside this
     // store. Refresh only when the history head changes, rather than re-reading
     // every clip on every transport frame.
-    if (history.isNotEmpty &&
-        _historySignature.isNotEmpty &&
-        history != _historySignature) {
+    if (history.isNotEmpty && _historySignature.isNotEmpty && history != _historySignature) {
       _store.refresh();
     }
     _historySignature = history;
@@ -157,9 +153,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   }
 
   void _requestWaveform(String path) {
-    if (path.isEmpty ||
-        _waveforms.containsKey(path) ||
-        !_waveformLoads.add(path)) {
+    if (path.isEmpty || _waveforms.containsKey(path) || !_waveformLoads.add(path)) {
       return;
     }
     loadAudioWaveform(path).then((List<double> waveform) {
@@ -171,8 +165,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
   Color _resolveColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
-      final int parsed =
-          int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
+      final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
       }
@@ -181,12 +174,10 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   }
 
   void _refreshPatternPreview() {
-    final PatternSummary? current = _store.patterns
-        .cast<PatternSummary?>()
-        .firstWhere(
-          (PatternSummary? pattern) => pattern?.isCurrent ?? false,
-          orElse: () => _store.patterns.isEmpty ? null : _store.patterns.first,
-        );
+    final PatternSummary? current = _store.patterns.cast<PatternSummary?>().firstWhere(
+      (PatternSummary? pattern) => pattern?.isCurrent ?? false,
+      orElse: () => _store.patterns.isEmpty ? null : _store.patterns.first,
+    );
     final String patternId = current?.id ?? '';
     if (_previewCacheReady && patternId == _previewPatternId) return;
 
@@ -197,20 +188,15 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     if (current == null) return;
 
     try {
-      final List<ProjectInstrument> instruments =
-          widget.client.readInstruments();
-      final ProjectInstrument? selected = instruments
-          .cast<ProjectInstrument?>()
-          .firstWhere(
-            (ProjectInstrument? instrument) => instrument?.selected ?? false,
-            orElse: () => instruments.isEmpty ? null : instruments.first,
-          );
+      final List<ProjectInstrument> instruments = widget.client.readInstruments();
+      final ProjectInstrument? selected = instruments.cast<ProjectInstrument?>().firstWhere(
+        (ProjectInstrument? instrument) => instrument?.selected ?? false,
+        orElse: () => instruments.isEmpty ? null : instruments.first,
+      );
       final List<ClipPreviewNoteVm> notes = <ClipPreviewNoteVm>[];
       final List<String> names = <String>[];
       for (final ProjectInstrument instrument
-          in selected == null
-              ? const <ProjectInstrument>[]
-              : <ProjectInstrument>[selected]) {
+          in selected == null ? const <ProjectInstrument>[] : <ProjectInstrument>[selected]) {
         final List<SequenceNote> sequence = widget.client.readNotes(
           instrument.id,
         );
@@ -218,10 +204,9 @@ class _PlaylistBindingState extends State<PlaylistBinding>
         if (instrument.name.isNotEmpty) names.add(instrument.name);
         for (final SequenceNote note in sequence) {
           if (notes.length >= 96) break;
-          final double patternLength =
-              current.lengthTicks <= 0
-                  ? ticksPerBar.toDouble()
-                  : current.lengthTicks.toDouble();
+          final double patternLength = current.lengthTicks <= 0
+              ? ticksPerBar.toDouble()
+              : current.lengthTicks.toDouble();
           notes.add(
             ClipPreviewNoteVm(
               x: note.startTicks / patternLength,
@@ -290,10 +275,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
             isAudio: clip.isAudio,
             waveform: _waveforms[clip.audioPath] ?? const <double>[],
             instrumentName: clip.isAudio ? '' : _previewInstrumentName,
-            previewNotes:
-                clip.isAudio
-                    ? const <ClipPreviewNoteVm>[]
-                    : _previewForClip(clip),
+            previewNotes: clip.isAudio ? const <ClipPreviewNoteVm>[] : _previewForClip(clip),
           );
         })(),
     ];
@@ -304,20 +286,16 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       playhead16ths = (snapshot.positionBeats * 4).round();
     }
 
-    final double pxPerBar =
-        tokens.size.playlistPxPerBar * _store.horizontalZoom;
+    final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final PlaylistMarquee? marquee = _store.marquee;
-    final Rect? marqueeRect =
-        marquee == null
-            ? null
-            : Rect.fromLTRB(
-              (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-              (marquee.lowLane - _store.scrollLanes) *
-                  tokens.size.playlistLaneHeight,
-              (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-              (marquee.highLane + 1 - _store.scrollLanes) *
-                  tokens.size.playlistLaneHeight,
-            );
+    final Rect? marqueeRect = marquee == null
+        ? null
+        : Rect.fromLTRB(
+            (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+            (marquee.lowLane - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+            (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+            (marquee.highLane + 1 - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+          );
 
     final PlaylistVm canvasVm = PlaylistVm(
       clips: clipVms,
@@ -329,8 +307,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       snapTicks: _store.snap.ticks,
       marqueeRect: marqueeRect,
       headerTitle: 'Playlist',
-      headerRight:
-          'Untitled.onebeat · ${snapshot.tempoBpm.toStringAsFixed(0)} BPM · 4/4',
+      headerRight: 'Untitled.onebeat · ${snapshot.tempoBpm.toStringAsFixed(0)} BPM · 4/4',
     );
 
     ClipInspectorVm inspectorVm = const ClipInspectorVm(selectedCount: 0);
@@ -347,12 +324,9 @@ class _PlaylistBindingState extends State<PlaylistBinding>
           clipId: clip.id,
           name: clip.name,
           color: _resolveColor(laneIndex, clip.color),
-          usageText:
-              clip.isAudio
-                  ? 'Audio file · full source duration'
-                  : (clip.isShared
-                      ? 'Pattern used in ${clip.usageCount} clips'
-                      : 'Pattern used once'),
+          usageText: clip.isAudio
+              ? 'Audio file · full source duration'
+              : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
           isShared: !clip.isAudio && clip.isShared,
           isAudio: clip.isAudio,
           startBar: (clip.startTicks / ticksPerBar).round(),
@@ -368,28 +342,21 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     return PlaylistScreenVm(canvas: canvasVm, inspector: inspectorVm);
   }
 
-  bool get _isLasso =>
-      HardwareKeyboard.instance.isAltPressed ||
-      HardwareKeyboard.instance.isMetaPressed;
+  bool get _isLasso => HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isMetaPressed;
 
   Offset _canvasLocalFromGlobal(Offset global) {
-    final RenderBox? box =
-        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     return box == null ? global : box.globalToLocal(global);
   }
 
   int _tickAtCanvas(Offset local) =>
-      ((local.dx /
-                      (OneBeatTokens.dark().size.playlistPxPerBar *
-                          _store.horizontalZoom) +
+      ((local.dx / (OneBeatTokens.dark().size.playlistPxPerBar * _store.horizontalZoom) +
                   _store.scrollTicks / ticksPerBar) *
               ticksPerBar)
           .round();
 
   int _laneAtCanvas(Offset local) =>
-      (local.dy / OneBeatTokens.dark().size.playlistLaneHeight +
-              _store.scrollLanes)
-          .floor();
+      (local.dy / OneBeatTokens.dark().size.playlistLaneHeight + _store.scrollLanes).floor();
 
   void _beginMarquee(Offset local) {
     if (!_isLasso) return;
@@ -412,9 +379,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
   void _onClipDoubleTap(int hashId) {
     for (final ArrangementClip clip in _store.clips) {
-      if (clip.id.hashCode == hashId &&
-          !clip.isAudio &&
-          clip.patternId.isNotEmpty) {
+      if (clip.id.hashCode == hashId && !clip.isAudio && clip.patternId.isNotEmpty) {
         FocusPolicy.take(_focus);
         widget.onOpenPattern?.call(clip.patternId, clip.id);
         return;
@@ -440,19 +405,13 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
   void _consumeExternalAudioDrop(AudioFileDrop? drop) {
     if (!mounted || drop == null) return;
-    final RenderBox? box =
-        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final Offset local = box.globalToLocal(Offset(drop.x, drop.y));
     final double bar =
-        local.dx /
-            (OneBeatTokens.dark().size.playlistPxPerBar *
-                _store.horizontalZoom) +
+        local.dx / (OneBeatTokens.dark().size.playlistPxPerBar * _store.horizontalZoom) +
         _store.scrollTicks / ticksPerBar;
-    final int lane =
-        (local.dy / OneBeatTokens.dark().size.playlistLaneHeight +
-                _store.scrollLanes)
-            .floor();
+    final int lane = (local.dy / OneBeatTokens.dark().size.playlistLaneHeight + _store.scrollLanes).floor();
     _ensureLane(lane);
     for (final String path in drop.paths) {
       final String extension = path.split('.').last.toLowerCase();
@@ -488,8 +447,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     if (_resizingClipId.isEmpty) return;
     _dragPixels += details.delta;
     final OneBeatTokens tokens = OneBeatTokens.dark();
-    final double pxPerBar =
-        tokens.size.playlistPxPerBar * _store.horizontalZoom;
+    final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final int deltaTicks = _store.snapDelta(
       (_dragPixels.dx / pxPerBar * ticksPerBar).round(),
     );
@@ -517,12 +475,10 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       _beginMarquee(_canvasLocalFromGlobal(details.globalPosition));
       return;
     }
-    final ArrangementClip? clip = _store.clips
-        .cast<ArrangementClip?>()
-        .firstWhere(
-          (ArrangementClip? item) => item?.id.hashCode == hashId,
-          orElse: () => null,
-        );
+    final ArrangementClip? clip = _store.clips.cast<ArrangementClip?>().firstWhere(
+      (ArrangementClip? item) => item?.id.hashCode == hashId,
+      orElse: () => null,
+    );
     if (clip == null) return;
     FocusPolicy.take(_focus);
     if (!_store.selectedClipIds.contains(clip.id)) {
@@ -538,8 +494,7 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
   void _onPlaylistScroll(Offset delta) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final bool horizontal =
-        HardwareKeyboard.instance.isShiftPressed && delta.dx == 0;
+    final bool horizontal = HardwareKeyboard.instance.isShiftPressed && delta.dx == 0;
     _store.panBy(
       deltaTicks: (horizontal ? delta.dy : delta.dx) / _store.pixelsPerTick,
       deltaLanes: horizontal ? 0 : delta.dy / tokens.size.playlistLaneHeight,
@@ -571,15 +526,15 @@ class _PlaylistBindingState extends State<PlaylistBinding>
     if (_draggingClipId.isEmpty) return;
     _dragPixels += details.delta;
     final OneBeatTokens tokens = OneBeatTokens.dark();
-    final double pxPerBar =
-        tokens.size.playlistPxPerBar * _store.horizontalZoom;
+    final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final int deltaTicks = _store.snapDelta(
       (_dragPixels.dx / pxPerBar * ticksPerBar).round(),
     );
     if (_store.lanes.isEmpty) return;
-    final int laneIndex = (_dragStartLane +
-            (_dragPixels.dy / tokens.size.playlistLaneHeight).round())
-        .clamp(0, 1 << 20);
+    final int laneIndex = (_dragStartLane + (_dragPixels.dy / tokens.size.playlistLaneHeight).round()).clamp(
+      0,
+      1 << 20,
+    );
     _ensureLane(laneIndex);
     _store.updateClipMove(deltaTicks, laneId: _store.lanes[laneIndex].id);
   }
@@ -645,15 +600,11 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       return;
     }
     _store.refresh();
-    final ArrangementClip? added = _store.clips
-        .cast<ArrangementClip?>()
-        .firstWhere(
-          (ArrangementClip? clip) =>
-              clip?.isAudio == true &&
-              clip?.laneId == targetLane.id &&
-              clip?.startTicks == startTicks,
-          orElse: () => null,
-        );
+    final ArrangementClip? added = _store.clips.cast<ArrangementClip?>().firstWhere(
+      (ArrangementClip? clip) =>
+          clip?.isAudio == true && clip?.laneId == targetLane.id && clip?.startTicks == startTicks,
+      orElse: () => null,
+    );
     if (added != null) _store.selectClip(added.id);
   }
 
@@ -684,10 +635,8 @@ class _PlaylistBindingState extends State<PlaylistBinding>
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.delete): _DeleteIntent(),
         SingleActivator(LogicalKeyboardKey.backspace): _DeleteIntent(),
-        SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-            _DuplicateIntent(),
-        SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-            _SelectAllIntent(),
+        SingleActivator(LogicalKeyboardKey.keyD, meta: true): _DuplicateIntent(),
+        SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
         SingleActivator(LogicalKeyboardKey.escape): CancelIntent(),
       },
       handlers: const <String, VoidCallback>{},

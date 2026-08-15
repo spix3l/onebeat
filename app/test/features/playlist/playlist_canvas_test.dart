@@ -147,9 +147,7 @@ void main() {
         height: 500,
         child: PlaylistCanvas(
           vm: PlaylistVm(clips: <ClipVm>[], pxPerBar: 100),
-          onDrop:
-              (Object data, double bar, int lane) =>
-                  drops.add((data, bar, lane)),
+          onDrop: (Object data, double bar, int lane) => drops.add((data, bar, lane)),
         ),
       ),
       size: const Size(600, 500),
@@ -182,9 +180,7 @@ void main() {
         tester,
         PlaylistCanvas(
           vm: const PlaylistVm(clips: <ClipVm>[], pxPerBar: 100),
-          onDrop:
-              (Object data, double bar, int lane) =>
-                  drops.add((data, bar, lane)),
+          onDrop: (Object data, double bar, int lane) => drops.add((data, bar, lane)),
         ),
         size: const Size(600, 500),
       );
@@ -230,8 +226,7 @@ void main() {
 
     expect(
       find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is CustomPaint && widget.painter is PatternPreviewPainter,
+        (Widget widget) => widget is CustomPaint && widget.painter is PatternPreviewPainter,
       ),
       findsOneWidget,
     );
@@ -260,8 +255,7 @@ void main() {
 
     expect(
       find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is CustomPaint && widget.painter is AudioWaveformPainter,
+        (Widget widget) => widget is CustomPaint && widget.painter is AudioWaveformPainter,
       ),
       findsOneWidget,
     );

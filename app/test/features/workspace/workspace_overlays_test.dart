@@ -92,8 +92,7 @@ class _FaderBoard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          for (final MixerStripVm strip in demoDetachedStrips)
-            ObMixerStrip.fader(vm: strip),
+          for (final MixerStripVm strip in demoDetachedStrips) ObMixerStrip.fader(vm: strip),
         ],
       ),
     );
@@ -101,8 +100,7 @@ class _FaderBoard extends StatelessWidget {
 }
 
 /// One mockup-sized window the golden is recorded in.
-Widget _variant(Widget frame) =>
-    SizedBox(width: 1600, height: 1000, child: frame);
+Widget _variant(Widget frame) => SizedBox(width: 1600, height: 1000, child: frame);
 
 void main() {
   setUpAll(loadAppFonts);
@@ -208,9 +206,7 @@ void main() {
       <String>['Beatmaking'],
     );
     expect(
-      vm.rows
-          .where((ObMenuRowVm r) => r.tone == ObMenuRowTone.danger)
-          .map((ObMenuRowVm r) => r.label),
+      vm.rows.where((ObMenuRowVm r) => r.tone == ObMenuRowTone.danger).map((ObMenuRowVm r) => r.label),
       <String>['Delete…'],
     );
     // `Reset to default` sits behind its own rule — never the row you hit by
@@ -269,9 +265,12 @@ void main() {
     // occupy — we make room for them rather than drawing our own.
     final Rect window = tester.getRect(find.byType(DetachedPanelWindow));
     final Rect title = tester.getRect(find.text('Mixer'));
-    expect(title.left - window.left, greaterThanOrEqualTo(
-      tokens.size.titleBarInset,
-    ));
+    expect(
+      title.left - window.left,
+      greaterThanOrEqualTo(
+        tokens.size.titleBarInset,
+      ),
+    );
   });
 
   testWidgets('the drag layer offers four edges and a tab', (

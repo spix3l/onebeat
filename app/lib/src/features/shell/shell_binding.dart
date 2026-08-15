@@ -53,8 +53,7 @@ class ShellBinding extends StatefulWidget {
   State<ShellBinding> createState() => _ShellBindingState();
 }
 
-class _ShellBindingState extends State<ShellBinding>
-    with TickerProviderStateMixin {
+class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMixin {
   late final core.EngineController _controller;
   final FocusNode _rootFocus = FocusNode(debugLabel: 'shell');
 
@@ -142,14 +141,9 @@ class _ShellBindingState extends State<ShellBinding>
 
   List<PluginListing> _readBuiltins() {
     final PluginScanStatus status = _controller.client.readPluginScanStatus();
-    if (status.pluginCount > 0 &&
-        status.listGeneration != _builtinsGeneration) {
+    if (status.pluginCount > 0 && status.listGeneration != _builtinsGeneration) {
       _builtinsGeneration = status.listGeneration;
-      _builtins =
-          _controller.client
-              .readPluginList(status.pluginCount)
-              .where((PluginListing p) => p.isUsable)
-              .toList();
+      _builtins = _controller.client.readPluginList(status.pluginCount).where((PluginListing p) => p.isUsable).toList();
     }
     return _builtins;
   }
@@ -158,8 +152,7 @@ class _ShellBindingState extends State<ShellBinding>
   /// touched are restored, so a section added in a later build still appears
   /// the way it was designed to.
   Future<void> _restoreBrowserExpansion() async {
-    final Map<String, bool> stored =
-        await _samplePackPlatform.loadBrowserExpansion();
+    final Map<String, bool> stored = await _samplePackPlatform.loadBrowserExpansion();
     if (!mounted || stored.isEmpty) return;
     setState(() {
       // Anything toggled while the read was in flight wins: it is the more
@@ -203,9 +196,8 @@ class _ShellBindingState extends State<ShellBinding>
     if (!mounted) return false;
     if (pack == null) {
       setState(
-        () =>
-            _samplePackMessage =
-                'That folder has no supported audio files. Add a folder containing at least one WAV file.',
+        () => _samplePackMessage =
+            'That folder has no supported audio files. Add a folder containing at least one WAV file.',
       );
       return false;
     }
@@ -236,14 +228,9 @@ class _ShellBindingState extends State<ShellBinding>
           id: 'pack:${_samplePacks[packIndex].path}',
           name: _samplePacks[packIndex].name,
           count: _samplePacks[packIndex].assets.length,
-          expanded:
-              _browserExpanded['pack:${_samplePacks[packIndex].path}'] ?? true,
+          expanded: _browserExpanded['pack:${_samplePacks[packIndex].path}'] ?? true,
           children: <BrowserNodeVm>[
-            for (
-              int assetIndex = 0;
-              assetIndex < _samplePacks[packIndex].assets.length;
-              assetIndex++
-            )
+            for (int assetIndex = 0; assetIndex < _samplePacks[packIndex].assets.length; assetIndex++)
               BrowserSampleVm(
                 id: _samplePacks[packIndex].assets[assetIndex].id,
                 name: _samplePacks[packIndex].assets[assetIndex].name,
@@ -428,8 +415,7 @@ class _ShellBindingState extends State<ShellBinding>
     final Object? data = node is BrowserSampleVm ? node.dragData : null;
     if (data is! PluginListing) return;
 
-    final List<ProjectInstrument> instruments =
-        _controller.client.readInstruments();
+    final List<ProjectInstrument> instruments = _controller.client.readInstruments();
     ProjectInstrument? instrument;
     for (final ProjectInstrument candidate in instruments) {
       if (candidate.pluginId == data.id) {
@@ -475,8 +461,7 @@ class _ShellBindingState extends State<ShellBinding>
   void _openPluginForInstrument(String instrumentId) {
     if (instrumentId.isEmpty) return;
     ProjectInstrument? instrument;
-    for (final ProjectInstrument candidate
-        in _controller.client.readInstruments()) {
+    for (final ProjectInstrument candidate in _controller.client.readInstruments()) {
       if (candidate.id == instrumentId) {
         instrument = candidate;
         break;
@@ -596,8 +581,7 @@ class _ShellBindingState extends State<ShellBinding>
     final String bpmText = snapshot.tempoBpm.toStringAsFixed(2);
     const String sigText = '4/4';
     final int durationTicks = _durationTicks();
-    final double durationSeconds =
-        durationTicks / 960.0 * 60.0 / snapshot.tempoBpm.clamp(1.0, 999.0);
+    final double durationSeconds = durationTicks / 960.0 * 60.0 / snapshot.tempoBpm.clamp(1.0, 999.0);
 
     final int bar = snapshot.bar.clamp(1, 9999);
     final int beat = snapshot.beat.clamp(1, 4);
@@ -624,17 +608,13 @@ class _ShellBindingState extends State<ShellBinding>
 
     final ObSideRailVm railVm = ObSideRailVm(
       items: _railItems,
-      activeIndex:
-          _activeRailIndex == _pianoRollIndex
-              ? _lastRailIndex
-              : _activeRailIndex,
+      activeIndex: _activeRailIndex == _pianoRollIndex ? _lastRailIndex : _activeRailIndex,
       separatorBefore: null,
     );
 
     final double cpuPercent = (snapshot.cpuLoad * 100.0).clamp(0.0, 100.0);
     final double sampleRateKhz = snapshot.sampleRate / 1000.0;
-    final double latencyMs =
-        (snapshot.latencyFramesRoundTrip / snapshot.sampleRate) * 1000.0;
+    final double latencyMs = (snapshot.latencyFramesRoundTrip / snapshot.sampleRate) * 1000.0;
 
     final String leftDetail =
         'CoreAudio · ${sampleRateKhz.toStringAsFixed(1)} kHz · ${snapshot.blockFrames} spl · ${latencyMs.toStringAsFixed(1)} ms';
@@ -642,34 +622,23 @@ class _ShellBindingState extends State<ShellBinding>
     // The project line is the same in both states: whether the transport is
     // running has nothing to do with whether the work is safe on disk, and the
     // status bar was previously claiming a file name it had made up.
-    final String projectDetail =
-        _project.hasFile
-            ? _project.displayName
-            : '${_project.displayName} · not saved yet';
+    final String projectDetail = _project.hasFile ? _project.displayName : '${_project.displayName} · not saved yet';
 
     final ObStatusBarVm statusVm = ObStatusBarVm(
-      tone:
-          _project.message.isNotEmpty || snapshot.xrunCount > 0
-              ? StatusTone.warning
-              : StatusTone.ok,
+      tone: _project.message.isNotEmpty || snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
       primary: snapshot.playing ? 'Playing' : _project.name,
-      details:
-          snapshot.playing
-              ? <String>[
-                projectDetail,
-                leftDetail,
-                '${cpuPercent.toStringAsFixed(0)}% CPU',
-                '${snapshot.activeVoices} voices',
-              ]
-              : <String>[
-                projectDetail,
-                if (_project.message.isNotEmpty)
-                  _project.message
-                else
-                  'Press ⌘S to save',
-              ],
-      rightHint:
-          snapshot.playing ? '⌘K Search actions' : '⌘S save · ⌘K actions',
+      details: snapshot.playing
+          ? <String>[
+              projectDetail,
+              leftDetail,
+              '${cpuPercent.toStringAsFixed(0)}% CPU',
+              '${snapshot.activeVoices} voices',
+            ]
+          : <String>[
+              projectDetail,
+              if (_project.message.isNotEmpty) _project.message else 'Press ⌘S to save',
+            ],
+      rightHint: snapshot.playing ? '⌘K Search actions' : '⌘S save · ⌘K actions',
     );
 
     return ShellScreenVm(
@@ -678,18 +647,17 @@ class _ShellBindingState extends State<ShellBinding>
       rail: railVm,
       status: statusVm,
       browserWidth: _browserWidth,
-      browser:
-          (_activeRailIndex == 0 || _activeRailIndex == 1)
-              ? ObBrowserPanelVm(
-                nodes: _browserNodes,
-                title: 'Browser',
-                emptyHeading: 'No instruments yet.',
-                emptyButtonLabel: 'Add packs',
-                searchQuery: _browserSearchQuery,
-                scrollOffset: _browserScrollOffset,
-                message: _samplePackMessage,
-              )
-              : null,
+      browser: (_activeRailIndex == 0 || _activeRailIndex == 1)
+          ? ObBrowserPanelVm(
+              nodes: _browserNodes,
+              title: 'Browser',
+              emptyHeading: 'No instruments yet.',
+              emptyButtonLabel: 'Add packs',
+              searchQuery: _browserSearchQuery,
+              scrollOffset: _browserScrollOffset,
+              message: _samplePackMessage,
+            )
+          : null,
     );
   }
 
@@ -844,32 +812,29 @@ class _ShellBindingState extends State<ShellBinding>
                     client: widget.client,
                     trackId: _openPluginTrackId ?? '',
                     pluginName: plugin.name,
-                    trackName:
-                        _openPluginTrackId?.isNotEmpty == true
-                            ? (_controller.client
-                                .readInstruments()
-                                .firstWhere(
-                                  (ProjectInstrument item) =>
-                                      item.id == _openPluginTrackId,
-                                  orElse:
-                                      () => const ProjectInstrument(
-                                        id: '',
-                                        name: 'Instrument',
-                                        color: '',
-                                        order: 0,
-                                        pluginId: '',
-                                        pluginName: '',
-                                        pluginVendor: '',
-                                        pluginPath: '',
-                                        muted: false,
-                                        selected: false,
-                                        affectedPatterns: 0,
-                                        affectedClips: 0,
-                                        affectedNotes: 0,
-                                      ),
-                                )
-                                .name)
-                            : 'Instrument',
+                    trackName: _openPluginTrackId?.isNotEmpty == true
+                        ? (_controller.client
+                              .readInstruments()
+                              .firstWhere(
+                                (ProjectInstrument item) => item.id == _openPluginTrackId,
+                                orElse: () => const ProjectInstrument(
+                                  id: '',
+                                  name: 'Instrument',
+                                  color: '',
+                                  order: 0,
+                                  pluginId: '',
+                                  pluginName: '',
+                                  pluginVendor: '',
+                                  pluginPath: '',
+                                  muted: false,
+                                  selected: false,
+                                  affectedPatterns: 0,
+                                  affectedClips: 0,
+                                  affectedNotes: 0,
+                                ),
+                              )
+                              .name)
+                        : 'Instrument',
                     parameters: _openPluginParameters,
                     onDragUpdate: _movePlugin,
                     onClose: _closePlugin,
@@ -1055,35 +1020,25 @@ class _PlatformMenuHost extends StatelessWidget {
           label: 'Edit',
           menus: <PlatformMenuItem>[
             PlatformMenuItem(
-              label:
-                  controller.client.canUndoProject &&
-                          controller.client.undoProjectName.isNotEmpty
-                      ? 'Undo ${controller.client.undoProjectName}'
-                      : 'Undo',
+              label: controller.client.canUndoProject && controller.client.undoProjectName.isNotEmpty
+                  ? 'Undo ${controller.client.undoProjectName}'
+                  : 'Undo',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyZ,
                 meta: true,
               ),
-              onSelected:
-                  controller.client.canUndoProject
-                      ? controller.undoProject
-                      : null,
+              onSelected: controller.client.canUndoProject ? controller.undoProject : null,
             ),
             PlatformMenuItem(
-              label:
-                  controller.client.canRedoProject &&
-                          controller.client.redoProjectName.isNotEmpty
-                      ? 'Redo ${controller.client.redoProjectName}'
-                      : 'Redo',
+              label: controller.client.canRedoProject && controller.client.redoProjectName.isNotEmpty
+                  ? 'Redo ${controller.client.redoProjectName}'
+                  : 'Redo',
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyZ,
                 meta: true,
                 shift: true,
               ),
-              onSelected:
-                  controller.client.canRedoProject
-                      ? controller.redoProject
-                      : null,
+              onSelected: controller.client.canRedoProject ? controller.redoProject : null,
             ),
           ],
         ),

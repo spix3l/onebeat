@@ -317,19 +317,20 @@ class _FakeRackEngineClient implements EngineClient {
   @override
   void selectPattern(String patternId) {
     patterns = patterns
-        .map((PatternSummary p) => PatternSummary(
-              id: p.id,
-              name: p.name,
-              color: p.color,
-              lengthTicks: p.lengthTicks,
-              swing: p.swing,
-              usageCount: p.usageCount,
-              noteCount: p.noteCount,
-              isCurrent: p.id == patternId,
-            ))
+        .map(
+          (PatternSummary p) => PatternSummary(
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            lengthTicks: p.lengthTicks,
+            swing: p.swing,
+            usageCount: p.usageCount,
+            noteCount: p.noteCount,
+            isCurrent: p.id == patternId,
+          ),
+        )
         .toList();
-    final PatternSummary selected =
-        patterns.firstWhere((PatternSummary p) => p.id == patternId);
+    final PatternSummary selected = patterns.firstWhere((PatternSummary p) => p.id == patternId);
     pattern = RackPattern(
       id: selected.id,
       name: selected.name,
@@ -452,30 +453,30 @@ class _FakeRackEngineClient implements EngineClient {
 
   @override
   EngineSnapshot readSnapshot() => EngineSnapshot(
-        playing: isPlaying,
-        loopEnabled: true,
-        loopStartBeats: loopStartBeats,
-        loopEndBeats: loopEndBeats,
-        positionFrames: 0,
-        positionBeats: positionBeats,
-        positionSeconds: 0,
-        hostTimeNanos: 0,
-        tempoBpm: 120,
-        bar: 1,
-        beat: 1,
-        tick: 0,
-        sampleRate: 48000,
-        blockFrames: 128,
-        activeVoices: 0,
-        peakLeft: 0,
-        peakRight: 0,
-        rmsLeft: 0,
-        rmsRight: 0,
-        cpuLoad: 0,
-        xrunCount: 0,
-        latencyFramesRoundTrip: 256,
-        scheduleEventCount: 0,
-      );
+    playing: isPlaying,
+    loopEnabled: true,
+    loopStartBeats: loopStartBeats,
+    loopEndBeats: loopEndBeats,
+    positionFrames: 0,
+    positionBeats: positionBeats,
+    positionSeconds: 0,
+    hostTimeNanos: 0,
+    tempoBpm: 120,
+    bar: 1,
+    beat: 1,
+    tick: 0,
+    sampleRate: 48000,
+    blockFrames: 128,
+    activeVoices: 0,
+    peakLeft: 0,
+    peakRight: 0,
+    rmsLeft: 0,
+    rmsRight: 0,
+    cpuLoad: 0,
+    xrunCount: 0,
+    latencyFramesRoundTrip: 256,
+    scheduleEventCount: 0,
+  );
 
   @override
   List<EngineEvent> pollEvents() => const <EngineEvent>[];
@@ -667,8 +668,7 @@ void main() {
     );
     await tester.pump();
 
-    final ChannelRackScreen screen =
-        tester.widget(find.byType(ChannelRackScreen));
+    final ChannelRackScreen screen = tester.widget(find.byType(ChannelRackScreen));
     expect(screen.vm.playingStep, 6);
   });
 
@@ -689,8 +689,7 @@ void main() {
     );
     await tester.pump();
 
-    final ChannelRackScreen screen =
-        tester.widget(find.byType(ChannelRackScreen));
+    final ChannelRackScreen screen = tester.widget(find.byType(ChannelRackScreen));
     // 3.5 beats minus a 1-beat loop start wraps (2-beat region) to 0.5 beat,
     // which is step 2 of the 1/16 grid.
     expect(screen.vm.playingStep, 2);
@@ -810,8 +809,7 @@ void main() {
   testWidgets('double-clicking a plug-in lane opens its plug-in window', (
     WidgetTester tester,
   ) async {
-    final _FakeRackEngineClient client =
-        _FakeRackEngineClient(withPluginRow: true);
+    final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
     await pumpForTest(
@@ -914,8 +912,7 @@ void main() {
   testWidgets('right-clicking a plug-in lane offers Open plugin window', (
     WidgetTester tester,
   ) async {
-    final _FakeRackEngineClient client =
-        _FakeRackEngineClient(withPluginRow: true);
+    final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
     await pumpForTest(
@@ -937,8 +934,7 @@ void main() {
   testWidgets('the inspector opens the plug-in window for a plug-in lane', (
     WidgetTester tester,
   ) async {
-    final _FakeRackEngineClient client =
-        _FakeRackEngineClient(withPluginRow: true);
+    final _FakeRackEngineClient client = _FakeRackEngineClient(withPluginRow: true);
     final List<String> opened = <String>[];
 
     await pumpForTest(
@@ -1009,8 +1005,7 @@ void main() {
 
     // Re-open: the row is now ticked.
     await rightClickRow(tester, 'Kick 808');
-    final ObPopoverMenu menu =
-        tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
+    final ObPopoverMenu menu = tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
     final ObMenuRowVm soloRow = menu.vm.rows.firstWhere(
       (ObMenuRowVm row) => row.label == 'Solo',
     );
@@ -1020,8 +1015,7 @@ void main() {
     await tester.tap(find.text('Solo'));
     await tester.pump();
     await rightClickRow(tester, 'Kick 808');
-    final ObPopoverMenu reopened =
-        tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
+    final ObPopoverMenu reopened = tester.widget<ObPopoverMenu>(find.byType(ObPopoverMenu));
     final ObMenuRowVm cleared = reopened.vm.rows.firstWhere(
       (ObMenuRowVm row) => row.label == 'Solo',
     );

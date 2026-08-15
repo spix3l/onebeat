@@ -47,45 +47,41 @@ class _BrowserGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
 
     switch (kind) {
       case ObBrowserGlyphKind.folder:
-        final Path folder =
-            Path()
-              ..moveTo(w * 0.12, h * 0.76)
-              ..lineTo(w * 0.12, h * 0.28)
-              ..lineTo(w * 0.44, h * 0.28)
-              ..lineTo(w * 0.54, h * 0.40)
-              ..lineTo(w * 0.88, h * 0.40)
-              ..lineTo(w * 0.88, h * 0.76)
-              ..close();
+        final Path folder = Path()
+          ..moveTo(w * 0.12, h * 0.76)
+          ..lineTo(w * 0.12, h * 0.28)
+          ..lineTo(w * 0.44, h * 0.28)
+          ..lineTo(w * 0.54, h * 0.40)
+          ..lineTo(w * 0.88, h * 0.40)
+          ..lineTo(w * 0.88, h * 0.76)
+          ..close();
         canvas.drawPath(folder, line);
       case ObBrowserGlyphKind.folderOpen:
         // The open variant tips its front panel forward: same silhouette,
         // sheared lid, so "expanded" reads without a second disclosure mark.
-        final Path back =
-            Path()
-              ..moveTo(w * 0.12, h * 0.76)
-              ..lineTo(w * 0.12, h * 0.28)
-              ..lineTo(w * 0.44, h * 0.28)
-              ..lineTo(w * 0.54, h * 0.40)
-              ..lineTo(w * 0.82, h * 0.40);
+        final Path back = Path()
+          ..moveTo(w * 0.12, h * 0.76)
+          ..lineTo(w * 0.12, h * 0.28)
+          ..lineTo(w * 0.44, h * 0.28)
+          ..lineTo(w * 0.54, h * 0.40)
+          ..lineTo(w * 0.82, h * 0.40);
         canvas.drawPath(back, line);
-        final Path front =
-            Path()
-              ..moveTo(w * 0.12, h * 0.76)
-              ..lineTo(w * 0.26, h * 0.52)
-              ..lineTo(w * 0.96, h * 0.52)
-              ..lineTo(w * 0.82, h * 0.76)
-              ..close();
+        final Path front = Path()
+          ..moveTo(w * 0.12, h * 0.76)
+          ..lineTo(w * 0.26, h * 0.52)
+          ..lineTo(w * 0.96, h * 0.52)
+          ..lineTo(w * 0.82, h * 0.76)
+          ..close();
         canvas.drawPath(front, line);
       case ObBrowserGlyphKind.pattern:
         // Four cells: the same mark the rail uses for the playlist, because a
@@ -112,9 +108,7 @@ class _BrowserGlyphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BrowserGlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind ||
-      oldDelegate.color != color ||
-      oldDelegate.stroke != stroke;
+      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.stroke != stroke;
 }
 
 /// The waveform mark at the right edge of a sample row: five mirrored bars,
@@ -151,12 +145,11 @@ class _SampleWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double step = size.width / _bars.length;
     final double mid = size.height / 2;
     for (int i = 0; i < _bars.length; i++) {
@@ -167,6 +160,5 @@ class _SampleWavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SampleWavePainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.stroke != stroke;
+  bool shouldRepaint(_SampleWavePainter oldDelegate) => oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

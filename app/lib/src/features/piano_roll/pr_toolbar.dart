@@ -121,10 +121,7 @@ class PrToolbar extends StatelessWidget {
               vm.crumbs[i],
               maxLines: 1,
               style: tokens.type.breadcrumb.copyWith(
-                color:
-                    i == vm.crumbs.length - 1
-                        ? color.textMuted
-                        : (i == 0 ? color.textPrimary : color.textSecondary),
+                color: i == vm.crumbs.length - 1 ? color.textMuted : (i == 0 ? color.textPrimary : color.textSecondary),
                 fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
@@ -363,13 +360,12 @@ class _ToolPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     final Paint fill = Paint()..color = color;
 
     // The glyphs are drawn inside a square inset from the 26px button, rather
@@ -392,24 +388,22 @@ class _ToolPainter extends CustomPainter {
         // A pencil pointing down-left: a body with two parallel edges, a
         // ferrule across it, and a closed tip. Closed and continuous, so it
         // survives being 14px across.
-        final Path body =
-            Path()
-              ..moveTo(x(0.72), y(0.0))
-              ..lineTo(x(1.0), y(0.28))
-              ..lineTo(x(0.34), y(0.94))
-              ..lineTo(x(0.0), y(1.0))
-              ..lineTo(x(0.06), y(0.66))
-              ..close();
+        final Path body = Path()
+          ..moveTo(x(0.72), y(0.0))
+          ..lineTo(x(1.0), y(0.28))
+          ..lineTo(x(0.34), y(0.94))
+          ..lineTo(x(0.0), y(1.0))
+          ..lineTo(x(0.06), y(0.66))
+          ..close();
         canvas.drawPath(body, line);
         // The ferrule: where the wood stops and the metal starts.
         canvas.drawLine(Offset(x(0.52), y(0.2)), Offset(x(0.8), y(0.48)), line);
         // The graphite tip, filled so the business end reads at a glance.
-        final Path tip =
-            Path()
-              ..moveTo(x(0.0), y(1.0))
-              ..lineTo(x(0.06), y(0.66))
-              ..lineTo(x(0.34), y(0.94))
-              ..close();
+        final Path tip = Path()
+          ..moveTo(x(0.0), y(1.0))
+          ..lineTo(x(0.06), y(0.66))
+          ..lineTo(x(0.34), y(0.94))
+          ..close();
         canvas.drawPath(tip, fill);
 
       case PrTool.select:
@@ -419,13 +413,12 @@ class _ToolPainter extends CustomPainter {
         // large enough that it cannot fill in.
         final Rect marquee = Rect.fromLTRB(x(0.0), y(0.06), x(1.0), y(0.94));
         const double arm = 0.32;
-        for (final (Offset corner, double dx, double dy)
-            in <(Offset, double, double)>[
-              (marquee.topLeft, 1, 1),
-              (marquee.topRight, -1, 1),
-              (marquee.bottomLeft, 1, -1),
-              (marquee.bottomRight, -1, -1),
-            ]) {
+        for (final (Offset corner, double dx, double dy) in <(Offset, double, double)>[
+          (marquee.topLeft, 1, 1),
+          (marquee.topRight, -1, 1),
+          (marquee.bottomLeft, 1, -1),
+          (marquee.bottomRight, -1, -1),
+        ]) {
           canvas
             ..drawLine(
               corner,
@@ -447,20 +440,18 @@ class _ToolPainter extends CustomPainter {
         // layers at this size, which is exactly what the previous glyph looked
         // like. One solid end and one hollow one cannot be mistaken for a
         // stack.
-        final Path body =
-            Path()
-              ..moveTo(x(0.34), y(0.04))
-              ..lineTo(x(1.0), y(0.38))
-              ..lineTo(x(0.66), y(0.74))
-              ..lineTo(x(0.0), y(0.4))
-              ..close();
-        final Path nib =
-            Path()
-              ..moveTo(x(0.0), y(0.4))
-              ..lineTo(x(0.24), y(0.14))
-              ..lineTo(x(0.9), y(0.48))
-              ..lineTo(x(0.66), y(0.74))
-              ..close();
+        final Path body = Path()
+          ..moveTo(x(0.34), y(0.04))
+          ..lineTo(x(1.0), y(0.38))
+          ..lineTo(x(0.66), y(0.74))
+          ..lineTo(x(0.0), y(0.4))
+          ..close();
+        final Path nib = Path()
+          ..moveTo(x(0.0), y(0.4))
+          ..lineTo(x(0.24), y(0.14))
+          ..lineTo(x(0.9), y(0.48))
+          ..lineTo(x(0.66), y(0.74))
+          ..close();
         canvas
           ..drawPath(body, line)
           ..drawPath(nib, fill)
@@ -470,8 +461,7 @@ class _ToolPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ToolPainter oldDelegate) =>
-      oldDelegate.tool != tool || oldDelegate.color != color;
+  bool shouldRepaint(_ToolPainter oldDelegate) => oldDelegate.tool != tool || oldDelegate.color != color;
 }
 
 class _PlusMinusPainter extends CustomPainter {
@@ -487,12 +477,11 @@ class _PlusMinusPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
     canvas.drawLine(Offset(w * 0.3, h * 0.5), Offset(w * 0.7, h * 0.5), line);
@@ -502,8 +491,7 @@ class _PlusMinusPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_PlusMinusPainter oldDelegate) =>
-      oldDelegate.plus != plus || oldDelegate.color != color;
+  bool shouldRepaint(_PlusMinusPainter oldDelegate) => oldDelegate.plus != plus || oldDelegate.color != color;
 }
 
 class _CrossPainter extends CustomPainter {
@@ -514,12 +502,11 @@ class _CrossPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
     canvas.drawLine(
@@ -546,12 +533,11 @@ class _NotePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
     canvas.drawLine(Offset(w * 0.4, h * 0.66), Offset(w * 0.4, h * 0.32), line);

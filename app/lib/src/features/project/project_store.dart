@@ -29,11 +29,9 @@ enum ProjectOutcome { done, cancelled, failed }
 class ProjectResult {
   const ProjectResult(this.outcome, [this.message = '']);
 
-  const ProjectResult.done([String message = ''])
-    : this(ProjectOutcome.done, message);
+  const ProjectResult.done([String message = '']) : this(ProjectOutcome.done, message);
   const ProjectResult.cancelled() : this(ProjectOutcome.cancelled);
-  const ProjectResult.failed(String message)
-    : this(ProjectOutcome.failed, message);
+  const ProjectResult.failed(String message) : this(ProjectOutcome.failed, message);
 
   final ProjectOutcome outcome;
 
@@ -55,8 +53,7 @@ class SystemProjectBundles implements ProjectBundles {
   const SystemProjectBundles();
 
   @override
-  bool exists(String path) =>
-      Directory(path).existsSync() || File(path).existsSync();
+  bool exists(String path) => Directory(path).existsSync() || File(path).existsSync();
 
   @override
   void delete(String path) => Directory(path).deleteSync(recursive: true);
@@ -273,8 +270,6 @@ class ProjectStore extends ChangeNotifier {
   /// `…/Night Drive.obt` → `Night Drive`.
   static String _projectNameOf(String path) {
     final String file = _fileName(path);
-    return file.endsWith('.$projectExtension')
-        ? file.substring(0, file.length - projectExtension.length - 1)
-        : file;
+    return file.endsWith('.$projectExtension') ? file.substring(0, file.length - projectExtension.length - 1) : file;
   }
 }

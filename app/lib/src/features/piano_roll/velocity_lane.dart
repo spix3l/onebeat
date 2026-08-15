@@ -71,10 +71,7 @@ class PrVelocityLane extends StatelessWidget {
                 message: kind.description,
                 child: _LaneChip(
                   label: lane,
-                  onTap:
-                      onLaneChanged == null
-                          ? null
-                          : () => onLaneChanged!(_next()),
+                  onTap: onLaneChanged == null ? null : () => onLaneChanged!(_next()),
                 ),
               ),
             ),
@@ -162,25 +159,21 @@ class PrVelocityPainter extends CustomPainter {
   final double lineWidth;
   final TextStyle unavailableStyle;
 
-  late final Paint _stem =
-      Paint()
-        ..color = color.noteFill
-        ..strokeWidth = stemWidth
-        ..strokeCap = StrokeCap.round;
-  late final Paint _stemSelected =
-      Paint()
-        ..color = color.noteSelected
-        ..strokeWidth = stemWidth
-        ..strokeCap = StrokeCap.round;
-  late final Paint _stemSounding =
-      Paint()
-        ..color = color.accentBright
-        ..strokeWidth = stemWidth
-        ..strokeCap = StrokeCap.round;
-  late final Paint _rule =
-      Paint()
-        ..color = color.gridLine
-        ..strokeWidth = lineWidth;
+  late final Paint _stem = Paint()
+    ..color = color.noteFill
+    ..strokeWidth = stemWidth
+    ..strokeCap = StrokeCap.round;
+  late final Paint _stemSelected = Paint()
+    ..color = color.noteSelected
+    ..strokeWidth = stemWidth
+    ..strokeCap = StrokeCap.round;
+  late final Paint _stemSounding = Paint()
+    ..color = color.accentBright
+    ..strokeWidth = stemWidth
+    ..strokeCap = StrokeCap.round;
+  late final Paint _rule = Paint()
+    ..color = color.gridLine
+    ..strokeWidth = lineWidth;
   late final Paint _bed = Paint()..color = color.surfaceSunken;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
@@ -221,18 +214,12 @@ class PrVelocityPainter extends CustomPainter {
       if (x < 0 || x > size.width) {
         continue;
       }
-      final double top =
-          size.height - (size.height - inset) * note.velocity.clamp(0.0, 1.0);
-      final bool sounding =
-          playing != null &&
-          playing >= note.startTick &&
-          playing < note.startTick + note.lengthTicks;
+      final double top = size.height - (size.height - inset) * note.velocity.clamp(0.0, 1.0);
+      final bool sounding = playing != null && playing >= note.startTick && playing < note.startTick + note.lengthTicks;
       canvas.drawLine(
         Offset(x, top),
         Offset(x, size.height - inset),
-        vm.selected.contains(note.id)
-            ? _stemSelected
-            : (sounding ? _stemSounding : _stem),
+        vm.selected.contains(note.id) ? _stemSelected : (sounding ? _stemSounding : _stem),
       );
     }
   }

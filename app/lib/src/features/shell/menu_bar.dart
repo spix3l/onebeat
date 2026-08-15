@@ -121,15 +121,9 @@ class _MenuItemState extends State<_MenuItem> {
     return Padding(
       padding: EdgeInsets.only(right: tokens.spacing.sm),
       child: MouseRegion(
-        cursor: widget.onTap != null
-            ? SystemMouseCursors.click
-            : MouseCursor.defer,
-        onEnter: widget.onTap == null
-            ? null
-            : (_) => setState(() => _hover = true),
-        onExit: widget.onTap == null
-            ? null
-            : (_) => setState(() => _hover = false),
+        cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+        onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
@@ -153,18 +147,14 @@ class _MenuItemState extends State<_MenuItem> {
                 Text(
                   title,
                   style: tokens.type.menu.copyWith(
-                    color: highlighted
-                        ? tokens.color.textPrimary
-                        : tokens.color.textMuted,
+                    color: highlighted ? tokens.color.textPrimary : tokens.color.textMuted,
                   ),
                 ),
                 if (hasChevron) ...<Widget>[
                   SizedBox(width: tokens.spacing.xxs),
                   ObChromeGlyph(
                     kind: ObChromeGlyphKind.chevronDown,
-                    color: highlighted
-                        ? tokens.color.textPrimary
-                        : tokens.color.textMuted,
+                    color: highlighted ? tokens.color.textPrimary : tokens.color.textMuted,
                     scale: ObGlyphScale.chrome,
                   ),
                 ],

@@ -59,13 +59,12 @@ class _RailGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     final Paint fill = Paint()..color = color;
     final double w = size.width;
     final double h = size.height;
@@ -92,11 +91,10 @@ class _RailGlyphPainter extends CustomPainter {
       case ObRailGlyphKind.help:
         canvas.drawCircle(Offset(w / 2, h / 2), w * 0.42, line);
         // The query mark: a hook over the bowl and a dot under it.
-        final Path hook =
-            Path()
-              ..moveTo(w * 0.38, h * 0.38)
-              ..cubicTo(w * 0.40, h * 0.24, w * 0.66, h * 0.26, w * 0.62, h * 0.42)
-              ..cubicTo(w * 0.60, h * 0.52, w * 0.50, h * 0.52, w * 0.50, h * 0.62);
+        final Path hook = Path()
+          ..moveTo(w * 0.38, h * 0.38)
+          ..cubicTo(w * 0.40, h * 0.24, w * 0.66, h * 0.26, w * 0.62, h * 0.42)
+          ..cubicTo(w * 0.60, h * 0.52, w * 0.50, h * 0.52, w * 0.50, h * 0.62);
         canvas.drawPath(hook, line);
         canvas.drawCircle(Offset(w * 0.50, h * 0.74), stroke * 0.7, fill);
       case ObRailGlyphKind.note:
@@ -174,22 +172,19 @@ class _RailGlyphPainter extends CustomPainter {
           line,
         );
       case ObRailGlyphKind.folder:
-        final Path folder =
-            Path()
-              ..moveTo(w * 0.10, h * 0.78)
-              ..lineTo(w * 0.10, h * 0.26)
-              ..lineTo(w * 0.42, h * 0.26)
-              ..lineTo(w * 0.52, h * 0.38)
-              ..lineTo(w * 0.90, h * 0.38)
-              ..lineTo(w * 0.90, h * 0.78)
-              ..close();
+        final Path folder = Path()
+          ..moveTo(w * 0.10, h * 0.78)
+          ..lineTo(w * 0.10, h * 0.26)
+          ..lineTo(w * 0.42, h * 0.26)
+          ..lineTo(w * 0.52, h * 0.38)
+          ..lineTo(w * 0.90, h * 0.38)
+          ..lineTo(w * 0.90, h * 0.78)
+          ..close();
         canvas.drawPath(folder, line);
     }
   }
 
   @override
   bool shouldRepaint(_RailGlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind ||
-      oldDelegate.color != color ||
-      oldDelegate.stroke != stroke;
+      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

@@ -133,6 +133,5 @@ class PanelGripPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(PanelGripPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.dot != dot;
+  bool shouldRepaint(PanelGripPainter oldDelegate) => oldDelegate.color != color || oldDelegate.dot != dot;
 }

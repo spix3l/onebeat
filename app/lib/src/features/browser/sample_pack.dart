@@ -43,8 +43,7 @@ class SamplePackScanner {
 
     try {
       final List<File> files = <File>[];
-      await for (final FileSystemEntity entry
-          in root.list(recursive: true, followLinks: false)) {
+      await for (final FileSystemEntity entry in root.list(recursive: true, followLinks: false)) {
         if (entry is! File) continue;
         final String extension = _extension(entry.path);
         if (supportedExtensions.contains(extension)) files.add(entry);

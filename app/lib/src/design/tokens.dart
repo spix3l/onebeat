@@ -897,8 +897,7 @@ class TypeTokens {
   /// size down. The old chrome keeps [railLabel] until UI-D-09 deletes it.
   /// Tracking comes down with the size: at [railLabel]'s 0.6 the longest
   /// caption still overruns its tile by a letter.
-  TextStyle get railCaption =>
-      railLabel.copyWith(fontSize: 8, letterSpacing: 0.3);
+  TextStyle get railCaption => railLabel.copyWith(fontSize: 8, letterSpacing: 0.3);
 
   /// A row in a dense list: the browser's folders, patterns and samples
   /// (UI-B-04). Smaller than [body] because the mockup's browser rows are
@@ -913,8 +912,7 @@ class TypeTokens {
 
   /// The selected row: same size, more weight, full-strength ink. Weight
   /// rather than size, so selection never reflows the list.
-  TextStyle get listRowSelected =>
-      listRow.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
+  TextStyle get listRowSelected => listRow.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
 
   /// The dim mono trailing a list row: a count (`12`, `4×`) or a kind tag
   /// (`piano roll`).
@@ -1031,8 +1029,7 @@ class TypeTokens {
   /// design gives the values a user glances at most often. Tightened because
   /// MartianMono runs wide, and at the default line height the value + unit
   /// stack does not fit a 44px box.
-  TextStyle get readoutValue =>
-      numeric.copyWith(fontSize: 21, letterSpacing: -0.5, height: 1.15);
+  TextStyle get readoutValue => numeric.copyWith(fontSize: 21, letterSpacing: -0.5, height: 1.15);
 
   /// The unit label under a readout value — [microCaps] on the same tightened
   /// leading so the pair stacks inside the box.
@@ -1106,10 +1103,8 @@ class TypeTokens {
   /// difference is not cosmetic: at 19 the three top-bar wells were 64px wider
   /// between them than the design draws, which is most of the reason the bar
   /// could not fit the window's own minimum width.
-  TextStyle get numericLarge =>
-      numeric.copyWith(fontSize: 15, letterSpacing: -0.5);
-  TextStyle get numericSmall =>
-      numeric.copyWith(fontSize: 11, color: textMuted);
+  TextStyle get numericLarge => numeric.copyWith(fontSize: 15, letterSpacing: -0.5);
+  TextStyle get numericSmall => numeric.copyWith(fontSize: 11, color: textMuted);
 
   /// An empty state's headline (UI-B-11 §3). The largest UI type in the app —
   /// an empty screen has one job, and this is where it says it.
@@ -1132,8 +1127,7 @@ class TypeTokens {
     color: textSecondary,
   );
 
-  TextStyle get proseStrong =>
-      prose.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
+  TextStyle get proseStrong => prose.copyWith(fontWeight: FontWeight.w700, color: textPrimary);
 
   /// A popover or overlay row (UI-B-11 §6) and the dim shortcut trailing it.
   TextStyle get menuRow => TextStyle(
@@ -1143,8 +1137,7 @@ class TypeTokens {
     color: textSecondary,
   );
 
-  TextStyle get menuRowActive =>
-      menuRow.copyWith(fontWeight: FontWeight.w600, color: textPrimary);
+  TextStyle get menuRowActive => menuRow.copyWith(fontWeight: FontWeight.w600, color: textPrimary);
 
   /// A floating window's title, and the dim `· Drums Bus selected` beside it.
   TextStyle get windowTitle => TextStyle(
@@ -1395,8 +1388,7 @@ class OneBeatTheme extends InheritedWidget {
   final OneBeatTokens tokens;
 
   static OneBeatTokens of(BuildContext context) {
-    final OneBeatTheme? theme = context
-        .dependOnInheritedWidgetOfExactType<OneBeatTheme>();
+    final OneBeatTheme? theme = context.dependOnInheritedWidgetOfExactType<OneBeatTheme>();
     assert(
       theme != null,
       'No OneBeatTheme found. Wrap the app in OneBeatTheme.',

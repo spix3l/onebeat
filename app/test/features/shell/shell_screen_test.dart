@@ -70,8 +70,7 @@ void main() {
             child: Overlay(
               initialEntries: <OverlayEntry>[
                 OverlayEntry(
-                  builder: (BuildContext context) =>
-                      ShellBinding(client: client),
+                  builder: (BuildContext context) => ShellBinding(client: client),
                 ),
               ],
             ),

@@ -366,8 +366,7 @@ class WaveformPainter extends CustomPainter {
       // Sample position mapped across the preview, so the same envelope fills
       // whatever width the strip gives it.
       final double t = bars == 1 ? 0 : i / (bars - 1);
-      final double amplitude = samples[(t * (samples.length - 1)).round()]
-          .clamp(0.0, 1.0);
+      final double amplitude = samples[(t * (samples.length - 1)).round()].clamp(0.0, 1.0);
       final double half = mid * amplitude;
       final double x = i * barPitch + barPitch / 2;
       canvas.drawLine(Offset(x, mid - half), Offset(x, mid + half), _bar);
@@ -422,17 +421,14 @@ class MiniKeyboard extends StatelessWidget {
     final double blackWidth = whiteWidth * _blackWidthRatio;
     for (int octave = 0; octave < octaves; octave++) {
       for (final (int semitone, int after) in blackSemitones) {
-        final double centre =
-            (octave * whiteSemitones.length + after + 1) * whiteWidth;
+        final double centre = (octave * whiteSemitones.length + after + 1) * whiteWidth;
         if ((dx - centre).abs() <= blackWidth / 2) {
           return baseNote + octave * 12 + semitone;
         }
       }
     }
     final int index = (dx / whiteWidth).floor().clamp(0, _whiteCount - 1);
-    return baseNote +
-        (index ~/ whiteSemitones.length) * 12 +
-        whiteSemitones[index % whiteSemitones.length];
+    return baseNote + (index ~/ whiteSemitones.length) * 12 + whiteSemitones[index % whiteSemitones.length];
   }
 
   static const double _blackWidthRatio = 0.62;
@@ -448,8 +444,7 @@ class MiniKeyboard extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTapDown: onKeyPress == null
           ? null
-          : (TapDownDetails details) =>
-                onKeyPress!(noteAt(details.localPosition.dx, width, height)),
+          : (TapDownDetails details) => onKeyPress!(noteAt(details.localPosition.dx, width, height)),
       child: SizedBox(
         width: width,
         height: height,
@@ -458,8 +453,7 @@ class MiniKeyboard extends StatelessWidget {
             whiteCount: _whiteCount,
             blacks: <int>[
               for (int octave = 0; octave < octaves; octave++)
-                for (final (int _, int after) in blackSemitones)
-                  octave * whiteSemitones.length + after,
+                for (final (int _, int after) in blackSemitones) octave * whiteSemitones.length + after,
             ],
             white: tokens.color.textPrimary,
             black: tokens.color.surfaceSunken,
@@ -578,8 +572,7 @@ class _NoteGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_NoteGlyphPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(_NoteGlyphPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _ArrowPainter extends CustomPainter {

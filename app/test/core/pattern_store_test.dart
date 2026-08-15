@@ -138,16 +138,12 @@ void main() {
 
     test('one clone serves a whole multi-clip selection', () {
       final EditorHarness harness = EditorHarness()..seedArrangement();
-      final List<String> ids = harness.arrangement.clips
-          .map((ArrangementClip clip) => clip.id)
-          .toList();
+      final List<String> ids = harness.arrangement.clips.map((ArrangementClip clip) => clip.id).toList();
 
       harness.patterns.makeUnique(ids);
       harness.arrangement.refresh();
 
-      final Set<String> patternIds = harness.arrangement.clips
-          .map((ArrangementClip clip) => clip.patternId)
-          .toSet();
+      final Set<String> patternIds = harness.arrangement.clips.map((ArrangementClip clip) => clip.patternId).toSet();
       expect(patternIds.length, 1, reason: 'both clips share the one clone');
       expect(harness.patterns.patterns.length, 2);
     });

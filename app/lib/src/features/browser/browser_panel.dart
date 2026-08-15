@@ -181,8 +181,7 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
   @override
   void didUpdateWidget(covariant ObBrowserPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.vm.searchQuery != oldWidget.vm.searchQuery &&
-        widget.vm.searchQuery != _query) {
+    if (widget.vm.searchQuery != oldWidget.vm.searchQuery && widget.vm.searchQuery != _query) {
       _query = widget.vm.searchQuery;
     }
   }
@@ -304,51 +303,50 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
             Container(height: tokens.border.hairline, color: color.line),
           ],
           Expanded(
-            child:
-                widget.vm.nodes.isEmpty
-                    ? _BrowserEmptyState(
-                      heading: widget.vm.emptyHeading,
-                      buttonLabel: widget.vm.emptyButtonLabel,
-                      onAddFolder: widget.onAddFolder,
-                    )
-                    : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        // The empty-state CTA becomes a compact action once the
-                        // first pack exists. It must stay reachable so users can
-                        // import a second pack without deleting the first one.
-                        if (widget.onAddFolder != null)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              tokens.spacing.sm,
-                              tokens.spacing.sm,
-                              tokens.spacing.sm,
-                              0,
-                            ),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: ObButton(
-                                label: widget.vm.emptyButtonLabel,
-                                icon: ObKitGlyphKind.folder,
-                                tone: ObButtonTone.secondary,
-                                onTap: widget.onAddFolder,
-                              ),
-                            ),
+            child: widget.vm.nodes.isEmpty
+                ? _BrowserEmptyState(
+                    heading: widget.vm.emptyHeading,
+                    buttonLabel: widget.vm.emptyButtonLabel,
+                    onAddFolder: widget.onAddFolder,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // The empty-state CTA becomes a compact action once the
+                      // first pack exists. It must stay reachable so users can
+                      // import a second pack without deleting the first one.
+                      if (widget.onAddFolder != null)
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            tokens.spacing.sm,
+                            tokens.spacing.sm,
+                            tokens.spacing.sm,
+                            0,
                           ),
-                        Expanded(
-                          child: ListView(
-                            controller: _scrollController,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: tokens.spacing.sm,
-                              vertical: tokens.spacing.sm,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ObButton(
+                              label: widget.vm.emptyButtonLabel,
+                              icon: ObKitGlyphKind.folder,
+                              tone: ObButtonTone.secondary,
+                              onTap: widget.onAddFolder,
                             ),
-                            children: <Widget>[
-                              for (final Widget row in _rows(nodes, 0)) row,
-                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      Expanded(
+                        child: ListView(
+                          controller: _scrollController,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: tokens.spacing.sm,
+                            vertical: tokens.spacing.sm,
+                          ),
+                          children: <Widget>[
+                            for (final Widget row in _rows(nodes, 0)) row,
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -360,14 +358,9 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
     final List<Widget> rows = <Widget>[];
     for (final BrowserNodeVm node in nodes) {
       final bool selected = node.id == widget.vm.selectedId;
-      final VoidCallback? tap =
-          widget.onTap == null ? null : () => widget.onTap!(node.id);
-      final VoidCallback? doubleTap =
-          widget.onDoubleTap == null
-              ? null
-              : () => widget.onDoubleTap!(node.id);
-      final VoidCallback? toggle =
-          widget.onToggle == null ? null : () => widget.onToggle!(node.id);
+      final VoidCallback? tap = widget.onTap == null ? null : () => widget.onTap!(node.id);
+      final VoidCallback? doubleTap = widget.onDoubleTap == null ? null : () => widget.onDoubleTap!(node.id);
+      final VoidCallback? toggle = widget.onToggle == null ? null : () => widget.onToggle!(node.id);
       switch (node) {
         case BrowserFolderVm():
           rows.add(
@@ -439,14 +432,12 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
         curve: tokens.motion.standard,
         alignment: Alignment.topCenter,
         clipBehavior: Clip.hardEdge,
-        child:
-            node is BrowserFolderVm && node.expanded ||
-                    node is BrowserPatternVm && node.expanded
-                ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                )
-                : const SizedBox.shrink(),
+        child: node is BrowserFolderVm && node.expanded || node is BrowserPatternVm && node.expanded
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              )
+            : const SizedBox.shrink(),
       ),
     );
   }
@@ -554,21 +545,17 @@ class _RowState extends State<_Row> {
     }
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: Listener(
-        onPointerDown:
-            widget.activateOnPress && widget.onTap != null
-                ? (PointerDownEvent event) {
-                  // Only the primary button auditions; a right-click that opens
-                  // a context menu must not make noise.
-                  if (event.buttons == kPrimaryButton) widget.onTap!();
-                }
-                : null,
+        onPointerDown: widget.activateOnPress && widget.onTap != null
+            ? (PointerDownEvent event) {
+                // Only the primary button auditions; a right-click that opens
+                // a context menu must not make noise.
+                if (event.buttons == kPrimaryButton) widget.onTap!();
+              }
+            : null,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.activateOnPress ? null : widget.onTap,
@@ -627,10 +614,7 @@ class BrowserFolderRow extends StatelessWidget {
       onTap: onToggle ?? onTap,
       children: <Widget>[
         ObBrowserGlyph(
-          kind:
-              node.expanded
-                  ? ObBrowserGlyphKind.folderOpen
-                  : ObBrowserGlyphKind.folder,
+          kind: node.expanded ? ObBrowserGlyphKind.folderOpen : ObBrowserGlyphKind.folder,
           color: tokens.color.textSecondary,
         ),
         SizedBox(width: tokens.spacing.sm),
@@ -706,10 +690,7 @@ class BrowserPatternRow extends StatelessWidget {
           SizedBox(width: tokens.spacing.sm),
           Text(
             badge,
-            style:
-                selected
-                    ? tokens.type.listRowMeta.copyWith(color: color.textPrimary)
-                    : tokens.type.listRowMeta,
+            style: selected ? tokens.type.listRowMeta.copyWith(color: color.textPrimary) : tokens.type.listRowMeta,
           ),
         ],
       ],

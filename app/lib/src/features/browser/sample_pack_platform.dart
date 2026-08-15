@@ -28,9 +28,7 @@ class SamplePackPlatform {
 
   Future<List<String>> loadFolders() async {
     try {
-      final List<Object?> result =
-          await _channel.invokeListMethod<Object?>('loadSampleFolders') ??
-          const <Object?>[];
+      final List<Object?> result = await _channel.invokeListMethod<Object?>('loadSampleFolders') ?? const <Object?>[];
       return result.whereType<String>().toList(growable: false);
     } on MissingPluginException {
       return const <String>[];
@@ -84,11 +82,9 @@ class SamplePackPlatform {
       final Object? argument = call.arguments;
       if (call.method == 'samplePackFoldersDropped' && argument is List<Object?>) {
         onFolders(argument.whereType<String>().toList(growable: false));
-      } else if (call.method == 'audioFilesDropped' &&
-          argument is Map<Object?, Object?>) {
+      } else if (call.method == 'audioFilesDropped' && argument is Map<Object?, Object?>) {
         final List<String> paths =
-            (argument['paths'] as List<Object?>?)?.whereType<String>().toList() ??
-            const <String>[];
+            (argument['paths'] as List<Object?>?)?.whereType<String>().toList() ?? const <String>[];
         final double x = (argument['x'] as num?)?.toDouble() ?? 0;
         final double y = (argument['y'] as num?)?.toDouble() ?? 0;
         if (paths.isNotEmpty) {

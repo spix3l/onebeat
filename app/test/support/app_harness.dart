@@ -12,8 +12,7 @@ import 'package:onebeat/src/core/action_registry.dart';
 import 'package:onebeat/src/core/pattern_store.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/features/piano_roll/piano_roll_binding.dart';
-import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart'
-    hide ticksPerBar, ticksPerQuarter, GridChoice;
+import 'package:onebeat/src/features/piano_roll/piano_roll_store.dart' hide ticksPerBar, ticksPerQuarter, GridChoice;
 import 'package:onebeat/src/features/playlist/playlist_binding.dart';
 import 'package:onebeat/src/features/playlist/playlist_store.dart';
 
@@ -69,8 +68,7 @@ Future<void> loadAppFonts() async {
   TestWidgetsFlutterBinding.ensureInitialized();
   const Map<String, String> families = <String, String>{
     'Archivo': '../third_party/fonts/archivo/Archivo[wdth,wght].ttf',
-    'MartianMono':
-        '../third_party/fonts/martian_mono/MartianMono[wdth,wght].ttf',
+    'MartianMono': '../third_party/fonts/martian_mono/MartianMono[wdth,wght].ttf',
   };
   for (final MapEntry<String, String> family in families.entries) {
     final FontLoader loader = FontLoader(family.key)

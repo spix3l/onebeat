@@ -12,8 +12,7 @@ import '../../support/ui_harness.dart';
 import 'fixture.dart';
 
 List<StepVm> _steps32(List<int> lit) => <StepVm>[
-  for (int i = 1; i <= 32; i++)
-    lit.contains(i) ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
+  for (int i = 1; i <= 32; i++) lit.contains(i) ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
 ];
 
 RackRowVm _row(RackRowVm base, List<StepVm> steps) => RackRowVm(
@@ -52,8 +51,7 @@ void main() {
 
     final ScrollableState horizontal = tester.state(
       find.byWidgetPredicate(
-        (Widget widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.right,
+        (Widget widget) => widget is Scrollable && widget.axisDirection == AxisDirection.right,
       ),
     );
     expect(

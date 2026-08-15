@@ -39,8 +39,7 @@ BoxDecoration _cellDecoration(WidgetTester tester, int index) {
 
 /// The border colour of step [index] as rendered — the one part of the cell
 /// that carries three different meanings (playing, lit, at rest).
-Color? _cellBorder(WidgetTester tester, int index) =>
-    (_cellDecoration(tester, index).border! as Border).top.color;
+Color? _cellBorder(WidgetTester tester, int index) => (_cellDecoration(tester, index).border! as Border).top.color;
 
 void main() {
   setUpAll(loadAppFonts);
@@ -61,8 +60,7 @@ void main() {
               key: const Key('rows'),
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                for (final RackRowVm row in _board)
-                  ObRackRow(vm: row, playingStep: demoPlayingStep),
+                for (final RackRowVm row in _board) ObRackRow(vm: row, playingStep: demoPlayingStep),
               ],
             ),
           ),
@@ -135,9 +133,7 @@ void main() {
     // border's gutter and the row's own padding.
     await tester.tapAt(
       Offset(
-        tokens.size.rackSelectedEdgeWidth +
-            tokens.spacing.md +
-            tokens.size.rackPowerSize / 2,
+        tokens.size.rackSelectedEdgeWidth + tokens.spacing.md + tokens.size.rackPowerSize / 2,
         tokens.size.rackLaneHeight / 2,
       ),
     );
@@ -290,8 +286,7 @@ void main() {
       pan: 0.5,
       route: 'Master',
       steps: <StepVm>[
-        for (int i = 0; i < 16; i++)
-          i == 9 ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
+        for (int i = 0; i < 16; i++) i == 9 ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
       ],
     );
 
@@ -307,9 +302,7 @@ void main() {
       if (step == 9) continue;
       expect(
         _cellDecoration(tester, step).color,
-        (step ~/ 4).isEven
-            ? tokens.color.stepRestLifted
-            : tokens.color.stepRest,
+        (step ~/ 4).isEven ? tokens.color.stepRestLifted : tokens.color.stepRest,
         reason: 'step ${step + 1} sits on the wrong band',
       );
     }
@@ -324,5 +317,4 @@ void main() {
     expect(lit.color, isNull);
     expect(lit.gradient, isNotNull);
   });
-
 }

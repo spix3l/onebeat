@@ -210,10 +210,7 @@ abstract final class FocusPolicy {
   /// the field had been suppressing.
   static void returnToEditor() {
     final FocusNode? editor = _editor;
-    final FocusNode? target =
-        editor != null && editor.context != null && editor.context!.mounted
-            ? editor
-            : _shellRoot;
+    final FocusNode? target = editor != null && editor.context != null && editor.context!.mounted ? editor : _shellRoot;
     if (target == null || target.context == null || !target.context!.mounted) {
       return;
     }
@@ -363,22 +360,21 @@ String describeActivator(ShortcutActivator activator) {
 }
 
 String _keyLabel(LogicalKeyboardKey key) {
-  final String? special =
-      <LogicalKeyboardKey, String>{
-        LogicalKeyboardKey.backspace: '⌫',
-        LogicalKeyboardKey.delete: '⌦',
-        LogicalKeyboardKey.escape: 'esc',
-        LogicalKeyboardKey.enter: '⏎',
-        LogicalKeyboardKey.space: 'space',
-        LogicalKeyboardKey.tab: '⇥',
-        LogicalKeyboardKey.arrowUp: '↑',
-        LogicalKeyboardKey.arrowDown: '↓',
-        LogicalKeyboardKey.arrowLeft: '←',
-        LogicalKeyboardKey.arrowRight: '→',
-        LogicalKeyboardKey.equal: '=',
-        LogicalKeyboardKey.minus: '−',
-        LogicalKeyboardKey.slash: '/',
-      }[key];
+  final String? special = <LogicalKeyboardKey, String>{
+    LogicalKeyboardKey.backspace: '⌫',
+    LogicalKeyboardKey.delete: '⌦',
+    LogicalKeyboardKey.escape: 'esc',
+    LogicalKeyboardKey.enter: '⏎',
+    LogicalKeyboardKey.space: 'space',
+    LogicalKeyboardKey.tab: '⇥',
+    LogicalKeyboardKey.arrowUp: '↑',
+    LogicalKeyboardKey.arrowDown: '↓',
+    LogicalKeyboardKey.arrowLeft: '←',
+    LogicalKeyboardKey.arrowRight: '→',
+    LogicalKeyboardKey.equal: '=',
+    LogicalKeyboardKey.minus: '−',
+    LogicalKeyboardKey.slash: '/',
+  }[key];
   if (special != null) return special;
   final String label = key.keyLabel;
   return label.length == 1 ? label.toUpperCase() : label;

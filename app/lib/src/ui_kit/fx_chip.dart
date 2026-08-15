@@ -57,12 +57,7 @@ class _ObFxChipState extends State<ObFxChip> {
           height: tokens.size.chipHeight,
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
           decoration: BoxDecoration(
-            color:
-                widget.active
-                    ? color.accentWash
-                    : (_hover && enabled
-                        ? color.surfaceHover
-                        : color.surfaceWell),
+            color: widget.active ? color.accentWash : (_hover && enabled ? color.surfaceHover : color.surfaceWell),
             borderRadius: tokens.radius.controlBorder,
             border: Border.all(
               color: widget.active ? color.accentBright : color.lineStrong,
@@ -83,12 +78,11 @@ class _ObFxChipState extends State<ObFxChip> {
               SizedBox(width: tokens.spacing.xs),
               Text(
                 widget.label,
-                style:
-                    widget.mono
-                        ? tokens.type.numericSmall.copyWith(
-                          color: color.textPrimary,
-                        )
-                        : tokens.type.label.copyWith(color: color.textPrimary),
+                style: widget.mono
+                    ? tokens.type.numericSmall.copyWith(
+                        color: color.textPrimary,
+                      )
+                    : tokens.type.label.copyWith(color: color.textPrimary),
               ),
             ],
           ),

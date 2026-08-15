@@ -65,8 +65,7 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
-  final void Function(int rowIndex, TapDownDetails details)?
-  onRowSecondaryTapDown;
+  final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(Object data)? onAddInstrument;
   final void Function(int oldIndex, int newIndex)? onReorderRow;
@@ -89,10 +88,8 @@ class ChannelRackScreen extends StatelessWidget {
   final VoidCallback? onInspectorAddFx;
   final VoidCallback? onInspectorRouteTap;
   final ValueChanged<int>? onInspectorKeyPress;
-  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
-  onPointerDownStep;
-  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
-  onPointerMoveStep;
+  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
+  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)? onPointerMoveStep;
   final VoidCallback? onPointerUpStep;
   final VoidCallback? onPointerCancelStep;
 
@@ -137,8 +134,7 @@ class ChannelRackScreen extends StatelessWidget {
                     constraints.maxWidth - chrome,
                   ),
                 );
-                final double contentWidth =
-                    chrome + rackGridWidth(rackTokens.size, vm.stepCount);
+                final double contentWidth = chrome + rackGridWidth(rackTokens.size, vm.stepCount);
                 return OneBeatTheme(
                   tokens: rackTokens,
                   child: SingleChildScrollView(
@@ -315,10 +311,7 @@ class _ChannelRackHeader extends StatelessWidget {
           for (final PatternTabVm pattern in patterns) ...<Widget>[
             _PatternTab(
               tab: pattern,
-              onTap:
-                  onSelectPattern == null
-                      ? null
-                      : () => onSelectPattern!(pattern.id),
+              onTap: onSelectPattern == null ? null : () => onSelectPattern!(pattern.id),
             ),
             SizedBox(width: tokens.spacing.xs),
           ],
@@ -376,8 +369,7 @@ class _PatternTab extends StatelessWidget {
               Container(
                 padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xxs),
                 decoration: BoxDecoration(
-                  color:
-                      tab.selected ? color.accentBright : color.surfaceRaised,
+                  color: tab.selected ? color.accentBright : color.surfaceRaised,
                   borderRadius: tokens.radius.controlBorder,
                 ),
                 child: Text(
@@ -502,15 +494,12 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
-  final void Function(int rowIndex, TapDownDetails details)?
-  onRowSecondaryTapDown;
+  final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(Object data)? onAddInstrument;
   final void Function(int oldIndex, int newIndex)? onReorderRow;
-  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
-  onPointerDownStep;
-  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
-  onPointerMoveStep;
+  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
+  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)? onPointerMoveStep;
   final VoidCallback? onPointerUpStep;
   final VoidCallback? onPointerCancelStep;
 
@@ -530,50 +519,47 @@ class _RackRowsScrollArea extends StatelessWidget {
     final void Function(Object)? add = onAddInstrument;
 
     return DragTarget<Object>(
-      onAcceptWithDetails:
-          add == null
-              ? null
-              : (DragTargetDetails<Object> details) => add(details.data),
-      builder: (
-        BuildContext context,
-        List<Object?> candidates,
-        List<Object?> rejected,
-      ) {
-        if (rows.isEmpty) {
-          return Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(tokens.spacing.lg),
-              child: ObEmptyState(
-                vm: _emptyVm,
-                actions: <Widget>[
-                  ObButton(
-                    label: 'Add channel',
-                    icon: ObKitGlyphKind.plus,
-                    tone: ObButtonTone.primary,
-                    onTap: onAddChannel,
+      onAcceptWithDetails: add == null ? null : (DragTargetDetails<Object> details) => add(details.data),
+      builder:
+          (
+            BuildContext context,
+            List<Object?> candidates,
+            List<Object?> rejected,
+          ) {
+            if (rows.isEmpty) {
+              return Center(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.all(tokens.spacing.lg),
+                  child: ObEmptyState(
+                    vm: _emptyVm,
+                    actions: <Widget>[
+                      ObButton(
+                        label: 'Add channel',
+                        icon: ObKitGlyphKind.plus,
+                        tone: ObButtonTone.primary,
+                        onTap: onAddChannel,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          );
-        }
+                ),
+              );
+            }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            // A reorderable list rather than a plain Column: the lanes are the
-            // channel order, and the order is data the user edits. This list
-            // adds no drag handles of its own — the name block opts in via
-            // ObRackRow.reorderIndex — so dragging across the step cells still
-            // paints steps.
-            Expanded(
-              child: ReorderableList(
-                itemCount: rows.length,
-                // onReorderItem, not onReorder: it hands back a newIndex that
-                // already accounts for the dragged row being lifted out.
-                onReorderItem: onReorderRow ?? (int _, int _) {},
-                itemBuilder:
-                    (BuildContext context, int i) => _RackRowItem(
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // A reorderable list rather than a plain Column: the lanes are the
+                // channel order, and the order is data the user edits. This list
+                // adds no drag handles of its own — the name block opts in via
+                // ObRackRow.reorderIndex — so dragging across the step cells still
+                // paints steps.
+                Expanded(
+                  child: ReorderableList(
+                    itemCount: rows.length,
+                    // onReorderItem, not onReorder: it hands back a newIndex that
+                    // already accounts for the dragged row being lifted out.
+                    onReorderItem: onReorderRow ?? (int _, int _) {},
+                    itemBuilder: (BuildContext context, int i) => _RackRowItem(
                       key: ValueKey<String>('rack-row-${rows[i].name}-$i'),
                       index: i,
                       row: rows[i],
@@ -594,11 +580,11 @@ class _RackRowsScrollArea extends StatelessWidget {
                       onPointerUpStep: onPointerUpStep,
                       onPointerCancelStep: onPointerCancelStep,
                     ),
-              ),
-            ),
-          ],
-        );
-      },
+                  ),
+                ),
+              ],
+            );
+          },
     );
   }
 }
@@ -640,10 +626,8 @@ class _RackRowItem extends StatelessWidget {
   final ValueChanged<int>? onRouteTap;
   final void Function(int rowIndex, TapDownDetails details)? onSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
-  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)?
-  onPointerDownStep;
-  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)?
-  onPointerMoveStep;
+  final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
+  final void Function(PointerMoveEvent event, int rowIndex, int stepIndex)? onPointerMoveStep;
   final VoidCallback? onPointerUpStep;
   final VoidCallback? onPointerCancelStep;
 
@@ -653,77 +637,51 @@ class _RackRowItem extends StatelessWidget {
     final void Function(int, Object)? drop = onDropInstrument;
 
     return DragTarget<Object>(
-      onAcceptWithDetails:
-          drop == null
-              ? null
-              : (DragTargetDetails<Object> details) =>
-                  drop(index, details.data),
-      builder: (
-        BuildContext context,
-        List<Object?> candidates,
-        List<Object?> rejected,
-      ) {
-        final bool hovering = candidates.isNotEmpty;
-        return Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: hovering ? tokens.color.accent : tokens.color.none,
-              width: hovering ? tokens.border.emphasis : 0,
-            ),
-          ),
-          child: Listener(
-            onPointerUp:
-                onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
-            onPointerCancel:
-                onPointerCancelStep == null
-                    ? null
-                    : (_) => onPointerCancelStep!(),
-            child: ObRackRow(
-              vm: row,
-              reorderIndex: reorderable ? index : null,
-              playingStep: playingStep,
-              playingTick: playingTick,
-              onTap: onSelectRow == null ? null : () => onSelectRow!(index),
-              // Only plug-in lanes double-tap into their plug-in window; the
-              // recognizer would delay single-click selection everywhere else.
-              onDoubleTap:
-                  row.hostsPlugin && onRowDoubleTap != null
-                      ? () => onRowDoubleTap!(index)
-                      : null,
-              onSecondaryTapDown:
-                  onSecondaryTapDown == null
+      onAcceptWithDetails: drop == null ? null : (DragTargetDetails<Object> details) => drop(index, details.data),
+      builder:
+          (
+            BuildContext context,
+            List<Object?> candidates,
+            List<Object?> rejected,
+          ) {
+            final bool hovering = candidates.isNotEmpty;
+            return Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: hovering ? tokens.color.accent : tokens.color.none,
+                  width: hovering ? tokens.border.emphasis : 0,
+                ),
+              ),
+              child: Listener(
+                onPointerUp: onPointerUpStep == null ? null : (_) => onPointerUpStep!(),
+                onPointerCancel: onPointerCancelStep == null ? null : (_) => onPointerCancelStep!(),
+                child: ObRackRow(
+                  vm: row,
+                  reorderIndex: reorderable ? index : null,
+                  playingStep: playingStep,
+                  playingTick: playingTick,
+                  onTap: onSelectRow == null ? null : () => onSelectRow!(index),
+                  // Only plug-in lanes double-tap into their plug-in window; the
+                  // recognizer would delay single-click selection everywhere else.
+                  onDoubleTap: row.hostsPlugin && onRowDoubleTap != null ? () => onRowDoubleTap!(index) : null,
+                  onSecondaryTapDown: onSecondaryTapDown == null
                       ? null
-                      : (TapDownDetails details) =>
-                          onSecondaryTapDown!(index, details),
-              onPower:
-                  onTogglePower == null ? null : () => onTogglePower!(index),
-              onStepTap:
-                  onStepTap == null
+                      : (TapDownDetails details) => onSecondaryTapDown!(index, details),
+                  onPower: onTogglePower == null ? null : () => onTogglePower!(index),
+                  onStepTap: onStepTap == null ? null : (int step) => onStepTap!(index, step),
+                  onPointerDownStep: onPointerDownStep == null
                       ? null
-                      : (int step) => onStepTap!(index, step),
-              onPointerDownStep:
-                  onPointerDownStep == null
+                      : (PointerDownEvent event, int step) => onPointerDownStep!(event, index, step),
+                  onPointerMoveStep: onPointerMoveStep == null
                       ? null
-                      : (PointerDownEvent event, int step) =>
-                          onPointerDownStep!(event, index, step),
-              onPointerMoveStep:
-                  onPointerMoveStep == null
-                      ? null
-                      : (PointerMoveEvent event, int step) =>
-                          onPointerMoveStep!(event, index, step),
-              onVol:
-                  onVolChanged == null
-                      ? null
-                      : (double val) => onVolChanged!(index, val),
-              onPan:
-                  onPanChanged == null
-                      ? null
-                      : (double val) => onPanChanged!(index, val),
-              onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
-            ),
-          ),
-        );
-      },
+                      : (PointerMoveEvent event, int step) => onPointerMoveStep!(event, index, step),
+                  onVol: onVolChanged == null ? null : (double val) => onVolChanged!(index, val),
+                  onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
+                  onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
+                ),
+              ),
+            );
+          },
     );
   }
 }

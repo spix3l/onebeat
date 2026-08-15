@@ -120,8 +120,7 @@ class PianoRollScreen extends StatelessWidget {
   final ValueChanged<String>? onLaneChanged;
   final void Function(TapDownDetails details, double height)? onVelocityTapDown;
   final VoidCallback? onVelocityDragStart;
-  final void Function(DragUpdateDetails details, double height)?
-      onVelocityDragUpdate;
+  final void Function(DragUpdateDetails details, double height)? onVelocityDragUpdate;
   final VoidCallback? onVelocityDragEnd;
 
   /// The scroll rails report absolute positions: a tick for the horizontal
@@ -294,9 +293,7 @@ class _VerticalRail extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final double rows = viewport.rowHeight <= 0
-            ? 1
-            : constraints.maxHeight / viewport.rowHeight;
+        final double rows = viewport.rowHeight <= 0 ? 1 : constraints.maxHeight / viewport.rowHeight;
         final ValueChanged<int>? notify = onScrollTopKey;
         return PrScrollbar(
           axis: Axis.vertical,
@@ -305,11 +302,12 @@ class _VerticalRail extends StatelessWidget {
           contentExtent: prKeyCount.toDouble(),
           onOffsetChanged: notify == null
               ? null
-              : (double offset) =>
-                  notify((prHighestKey - offset.round()).clamp(
+              : (double offset) => notify(
+                  (prHighestKey - offset.round()).clamp(
                     prLowestKey,
                     prHighestKey,
-                  )),
+                  ),
+                ),
         );
       },
     );
@@ -340,17 +338,14 @@ class _HorizontalRail extends StatelessWidget {
           Expanded(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
-                final double visibleTicks =
-                    constraints.maxWidth * viewport.ticksPerPx;
+                final double visibleTicks = constraints.maxWidth * viewport.ticksPerPx;
                 return PrScrollbar(
                   axis: Axis.horizontal,
                   offset: viewport.firstVisibleTick.toDouble(),
                   viewportExtent: visibleTicks,
                   // Never shorter than what is on screen, so the thumb fills
                   // the track instead of inverting when a pattern is empty.
-                  contentExtent: contentEndTicks < visibleTicks
-                      ? visibleTicks
-                      : contentEndTicks.toDouble(),
+                  contentExtent: contentEndTicks < visibleTicks ? visibleTicks : contentEndTicks.toDouble(),
                   onOffsetChanged: onScrollTicks,
                 );
               },
@@ -494,9 +489,7 @@ class _InteractiveGridArea extends StatelessWidget {
         }
         return MouseRegion(
           cursor: gridCursor,
-          onHover: onGridHover == null
-              ? null
-              : (PointerHoverEvent event) => onGridHover!(event.localPosition),
+          onHover: onGridHover == null ? null : (PointerHoverEvent event) => onGridHover!(event.localPosition),
           onExit: onGridExit == null ? null : (_) => onGridExit!(),
           child: Listener(
             // The right-button sweep. A raw pointer path, so it never enters the
@@ -572,8 +565,7 @@ class _InteractiveVelocityArea extends StatelessWidget {
   final ValueChanged<String>? onLaneChanged;
   final void Function(TapDownDetails details, double height)? onVelocityTapDown;
   final VoidCallback? onVelocityDragStart;
-  final void Function(DragUpdateDetails details, double height)?
-      onVelocityDragUpdate;
+  final void Function(DragUpdateDetails details, double height)? onVelocityDragUpdate;
   final VoidCallback? onVelocityDragEnd;
 
   @override

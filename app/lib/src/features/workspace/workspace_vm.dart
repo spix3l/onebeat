@@ -42,13 +42,12 @@ class WorkspaceLayoutsVm {
   final String resetLabel;
 
   /// What the pill shows — the current layout's name.
-  String get currentName =>
-      layouts
-          .firstWhere(
-            (LayoutVm l) => l.current,
-            orElse: () => layouts.first,
-          )
-          .name;
+  String get currentName => layouts
+      .firstWhere(
+        (LayoutVm l) => l.current,
+        orElse: () => layouts.first,
+      )
+      .name;
 }
 
 /// Which edge of the target a dock chip offers.

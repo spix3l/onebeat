@@ -47,14 +47,12 @@ void main() {
     () {
       const int oneSecond = 1000000000;
 
-      final MeterState fast =
-          MeterState()
-            ..update(snapshotAt(0, 1.0), motion)
-            ..update(snapshotAt(1000000, 1.0), motion);
-      final MeterState slow =
-          MeterState()
-            ..update(snapshotAt(0, 1.0), motion)
-            ..update(snapshotAt(1000000, 1.0), motion);
+      final MeterState fast = MeterState()
+        ..update(snapshotAt(0, 1.0), motion)
+        ..update(snapshotAt(1000000, 1.0), motion);
+      final MeterState slow = MeterState()
+        ..update(snapshotAt(0, 1.0), motion)
+        ..update(snapshotAt(1000000, 1.0), motion);
 
       // 120 frames of silence across one second.
       for (int frame = 1; frame <= 120; frame++) {
@@ -73,8 +71,7 @@ void main() {
   );
 
   test('a stalled engine timestamp still decays the meter', () {
-    final MeterState meter =
-        MeterState()..update(snapshotAt(1000, 1.0), motion);
+    final MeterState meter = MeterState()..update(snapshotAt(1000, 1.0), motion);
     final double afterPeak = meter.left.levelDb;
     for (int frame = 0; frame < 200; frame++) {
       meter.update(snapshotAt(1000, 0), motion);
@@ -84,8 +81,7 @@ void main() {
 
   test('peak hold sits above the level and then falls', () {
     const int step = 8333333; // 120 Hz
-    final MeterState meter =
-        MeterState()..update(snapshotAt(step, 1.0), motion);
+    final MeterState meter = MeterState()..update(snapshotAt(step, 1.0), motion);
     for (int frame = 2; frame < 60; frame++) {
       meter.update(snapshotAt(step * frame, 0), motion);
     }
@@ -98,8 +94,7 @@ void main() {
   });
 
   test('clipping is reported at and above full scale', () {
-    final MeterState meter =
-        MeterState()..update(snapshotAt(1000, 1.0), motion);
+    final MeterState meter = MeterState()..update(snapshotAt(1000, 1.0), motion);
     expect(meter.clipping, isTrue);
     meter.update(snapshotAt(2000, 0.5), motion);
     expect(meter.clipping, isFalse);

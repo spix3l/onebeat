@@ -329,8 +329,7 @@ class _MeterSliverPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MeterSliverPainter oldDelegate) =>
-      oldDelegate.level != level;
+  bool shouldRepaint(_MeterSliverPainter oldDelegate) => oldDelegate.level != level;
 }
 
 class _ExportButton extends StatefulWidget {
@@ -349,12 +348,9 @@ class _ExportButtonState extends State<_ExportButton> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,

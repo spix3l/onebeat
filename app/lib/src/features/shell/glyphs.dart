@@ -35,9 +35,7 @@ class ObChromeGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final SizeTokens size = OneBeatTheme.of(context).size;
-    final double side = scale == ObGlyphScale.transport
-        ? size.transportGlyphSize
-        : size.iconSize;
+    final double side = scale == ObGlyphScale.transport ? size.transportGlyphSize : size.iconSize;
     return SizedBox(
       width: side,
       height: side,
@@ -66,13 +64,12 @@ class _ChromeGlyphPainter extends CustomPainter {
     final double w = size.width;
     final double h = size.height;
     final double weight = w / 8;
-    final Paint stroke =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = weight
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = weight
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     switch (kind) {
       case ObChromeGlyphKind.undo:
       case ObChromeGlyphKind.redo:
@@ -90,8 +87,7 @@ class _ChromeGlyphPainter extends CustomPainter {
         }
         final Offset centre = Offset(w * 0.5, h * 0.52);
         final double r = w * 0.33;
-        Offset onRing(double angle) =>
-            centre + Offset(math.cos(angle), math.sin(angle)) * r;
+        Offset onRing(double angle) => centre + Offset(math.cos(angle), math.sin(angle)) * r;
 
         // The ring opens across the top — the one place a reader looks first —
         // and runs anti-clockwise, which is the direction the head then has to
@@ -122,12 +118,11 @@ class _ChromeGlyphPainter extends CustomPainter {
         // Optically centred rather than geometrically: a triangle's mass sits
         // behind its apex, so the shape is nudged left of the box's middle.
         // Rounded at the corners to match the stop square's radius.
-        final Path path =
-            Path()
-              ..moveTo(w * 0.30, h * 0.18)
-              ..lineTo(w * 0.82, h * 0.5)
-              ..lineTo(w * 0.30, h * 0.82)
-              ..close();
+        final Path path = Path()
+          ..moveTo(w * 0.30, h * 0.18)
+          ..lineTo(w * 0.82, h * 0.5)
+          ..lineTo(w * 0.30, h * 0.82)
+          ..close();
         canvas
           ..drawPath(path, fill)
           ..drawPath(
@@ -160,15 +155,14 @@ class _ChromeGlyphPainter extends CustomPainter {
 
         // The right half: top edge from the break, round the right end, back
         // along the bottom to the other break.
-        final Path right =
-            Path()
-              ..moveTo(cx + gapHalf, track.top)
-              ..lineTo(track.right - radius, track.top)
-              ..arcToPoint(
-                Offset(track.right - radius, track.bottom),
-                radius: Radius.circular(radius),
-              )
-              ..lineTo(cx + gapHalf, track.bottom);
+        final Path right = Path()
+          ..moveTo(cx + gapHalf, track.top)
+          ..lineTo(track.right - radius, track.top)
+          ..arcToPoint(
+            Offset(track.right - radius, track.bottom),
+            radius: Radius.circular(radius),
+          )
+          ..lineTo(cx + gapHalf, track.bottom);
         // The left half is that path rotated half a turn about the centre.
         canvas
           ..drawPath(right, stroke)
@@ -252,6 +246,5 @@ class _ChromeGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ChromeGlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind || oldDelegate.color != color;
+  bool shouldRepaint(_ChromeGlyphPainter oldDelegate) => oldDelegate.kind != kind || oldDelegate.color != color;
 }

@@ -69,8 +69,7 @@ class UiAction {
   final String description;
 
   /// Display form, e.g. `⌘D`. Derived, never typed.
-  String get shortcut =>
-      activator == null ? '' : describeActivator(activator!);
+  String get shortcut => activator == null ? '' : describeActivator(activator!);
 
   /// The tooltip: label plus shortcut, which is the pairing that teaches the
   /// keyboard path to someone who found the action with a mouse (FR-UX-18).
@@ -82,13 +81,10 @@ ValueKey<String> actionKey(String id) => ValueKey<String>('action:$id');
 
 // Shorthands. `_meta` rather than `_cmd` because these are logical modifiers;
 // the glyph mapping to ⌘ happens once, in describeActivator.
-SingleActivator _meta(LogicalKeyboardKey key) =>
-    SingleActivator(key, meta: true);
-SingleActivator _metaShift(LogicalKeyboardKey key) =>
-    SingleActivator(key, meta: true, shift: true);
+SingleActivator _meta(LogicalKeyboardKey key) => SingleActivator(key, meta: true);
+SingleActivator _metaShift(LogicalKeyboardKey key) => SingleActivator(key, meta: true, shift: true);
 SingleActivator _bare(LogicalKeyboardKey key) => SingleActivator(key);
-SingleActivator _shift(LogicalKeyboardKey key) =>
-    SingleActivator(key, shift: true);
+SingleActivator _shift(LogicalKeyboardKey key) => SingleActivator(key, shift: true);
 
 /// The declared surface.
 abstract final class ActionRegistry {
@@ -393,8 +389,7 @@ abstract final class ActionRegistry {
       id: 'clip.offset',
       label: 'Source offset',
       area: ActionArea.clip,
-      description:
-          '⌥-drag inside the clip shifts the window into the pattern (DM-Q2).',
+      description: '⌥-drag inside the clip shifts the window into the pattern (DM-Q2).',
     ),
     const UiAction(
       id: 'clip.loop',
@@ -423,16 +418,12 @@ abstract final class ActionRegistry {
     ),
   ];
 
-  static List<UiAction> forArea(ActionArea area) =>
-      all.where((UiAction action) => action.area == area).toList();
+  static List<UiAction> forArea(ActionArea area) => all.where((UiAction action) => action.area == area).toList();
 
-  static List<UiAction> forScope(ShortcutScope scope) =>
-      all.where((UiAction action) => action.scope == scope).toList();
+  static List<UiAction> forScope(ShortcutScope scope) => all.where((UiAction action) => action.scope == scope).toList();
 
-  static UiAction byId(String id) =>
-      all.firstWhere((UiAction action) => action.id == id);
+  static UiAction byId(String id) => all.firstWhere((UiAction action) => action.id == id);
 
   /// Everything with a binding, for the shortcut sheet and the palette.
-  static List<UiAction> get bound =>
-      all.where((UiAction action) => action.activator != null).toList();
+  static List<UiAction> get bound => all.where((UiAction action) => action.activator != null).toList();
 }

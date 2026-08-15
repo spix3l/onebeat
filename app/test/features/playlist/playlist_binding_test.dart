@@ -13,8 +13,7 @@ import 'package:onebeat/src/features/playlist/playlist_store.dart';
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
 
-class _FakePlaylistEngineClient extends FakeEngineClient
-    implements EngineClient {
+class _FakePlaylistEngineClient extends FakeEngineClient implements EngineClient {
   _FakePlaylistEngineClient();
 
   bool isPlaying = false;

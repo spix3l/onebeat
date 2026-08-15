@@ -22,8 +22,5 @@ class PlaylistMarquee {
   int get highLane => startLane < endLane ? endLane : startLane;
 
   bool contains(ArrangementClip clip, int laneIndex) =>
-      laneIndex >= lowLane &&
-      laneIndex <= highLane &&
-      clip.endTicks > lowTick &&
-      clip.startTicks < highTick;
+      laneIndex >= lowLane && laneIndex <= highLane && clip.endTicks > lowTick && clip.startTicks < highTick;
 }

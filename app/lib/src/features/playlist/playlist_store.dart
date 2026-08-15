@@ -98,12 +98,10 @@ class PlaylistStore extends ChangeNotifier {
     }
 
     if (selectedPatternId.isEmpty && patterns.isNotEmpty) {
-      final PatternSummary? current = patterns
-          .cast<PatternSummary?>()
-          .firstWhere(
-            (PatternSummary? p) => p?.isCurrent ?? false,
-            orElse: () => patterns.first,
-          );
+      final PatternSummary? current = patterns.cast<PatternSummary?>().firstWhere(
+        (PatternSummary? p) => p?.isCurrent ?? false,
+        orElse: () => patterns.first,
+      );
       selectedPatternId = current?.id ?? '';
     }
 
@@ -127,8 +125,7 @@ class PlaylistStore extends ChangeNotifier {
 
   bool isSelected(ArrangementClip clip) => selectedClipIds.contains(clip.id);
 
-  bool isHighlighted(ArrangementClip clip) =>
-      selectedPatternId.isNotEmpty && clip.patternId == selectedPatternId;
+  bool isHighlighted(ArrangementClip clip) => selectedPatternId.isNotEmpty && clip.patternId == selectedPatternId;
 
   int get contentEndTicks {
     int end = ticksPerBar * 8;
@@ -306,10 +303,7 @@ class PlaylistStore extends ChangeNotifier {
     }
     refresh();
     final ArrangementClip? added = clips.cast<ArrangementClip?>().firstWhere(
-      (ArrangementClip? clip) =>
-          clip?.isAudio == true &&
-          clip?.laneId == laneId &&
-          clip?.startTicks == start,
+      (ArrangementClip? clip) => clip?.isAudio == true && clip?.laneId == laneId && clip?.startTicks == start,
       orElse: () => null,
     );
     if (added != null) selectClip(added.id);
@@ -447,8 +441,7 @@ class PlaylistStore extends ChangeNotifier {
       ..addAll(
         clips
             .where(
-              (ArrangementClip clip) =>
-                  marquee!.contains(clip, laneIndexes[clip.laneId] ?? 0),
+              (ArrangementClip clip) => marquee!.contains(clip, laneIndexes[clip.laneId] ?? 0),
             )
             .map((ArrangementClip clip) => clip.id),
       );

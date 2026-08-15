@@ -21,8 +21,7 @@ class ObProseRun {
   final bool strong;
 
   @override
-  bool operator ==(Object other) =>
-      other is ObProseRun && other.text == text && other.strong == strong;
+  bool operator ==(Object other) => other is ObProseRun && other.text == text && other.strong == strong;
 
   @override
   int get hashCode => Object.hash(text, strong);
@@ -55,14 +54,13 @@ class ObProse extends StatelessWidget {
         (style == null
             ? tokens.type.proseStrong
             : base.copyWith(
-              fontWeight: FontWeight.w700,
-              color: tokens.color.textPrimary,
-            ));
+                fontWeight: FontWeight.w700,
+                color: tokens.color.textPrimary,
+              ));
     return Text.rich(
       TextSpan(
         children: <InlineSpan>[
-          for (final ObProseRun run in runs)
-            TextSpan(text: run.text, style: run.strong ? strong : base),
+          for (final ObProseRun run in runs) TextSpan(text: run.text, style: run.strong ? strong : base),
         ],
       ),
       textAlign: align,

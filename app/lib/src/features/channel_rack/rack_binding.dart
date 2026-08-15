@@ -55,8 +55,7 @@ class RackBinding extends StatefulWidget {
   State<RackBinding> createState() => _RackBindingState();
 }
 
-class _RackBindingState extends State<RackBinding>
-    with SingleTickerProviderStateMixin {
+class _RackBindingState extends State<RackBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   late final RackStore _store;
   bool _ownsController = false;
@@ -157,19 +156,16 @@ class _RackBindingState extends State<RackBinding>
     // which is a fixed default and can differ from where the audio loops.
     final double startBeats = snapshot.loopStartBeats;
     final double endBeats = snapshot.loopEndBeats;
-    final double loopLengthBeats =
-        endBeats > startBeats ? endBeats - startBeats : 0.0;
+    final double loopLengthBeats = endBeats > startBeats ? endBeats - startBeats : 0.0;
     final double inLoop = snapshot.positionBeats - startBeats;
-    final double looped =
-        loopLengthBeats > 0.0 ? inLoop % loopLengthBeats : inLoop;
+    final double looped = loopLengthBeats > 0.0 ? inLoop % loopLengthBeats : inLoop;
     final double currentTicks = (looped < 0.0 ? 0.0 : looped) * 960.0;
     return currentTicks.round();
   }
 
   Color _resolveInstrumentColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
-      final int parsed =
-          int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
+      final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
       }
@@ -220,26 +216,16 @@ class _RackBindingState extends State<RackBinding>
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type:
-              inst != null && inst.pluginName.isNotEmpty
-                  ? inst.pluginName
-                  : 'Empty channel',
+          type: inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel',
           color: color,
           steps: stepVms,
-          vol:
-              _gains[row.instrumentId] ??
-              (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
-          pan:
-              _pans[row.instrumentId] ??
-              (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
+          vol: _gains[row.instrumentId] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 1.0),
+          pan: _pans[row.instrumentId] ?? (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
           route: '→ D1',
           powered: !(inst?.muted ?? false),
           selected: _store.selectedInstrumentId == row.instrumentId,
           previewNotes: _previewNotesFor(row),
-          hostsPlugin:
-              inst != null &&
-              inst.pluginId.isNotEmpty &&
-              inst.pluginId != _kSamplePluginId,
+          hostsPlugin: inst != null && inst.pluginId.isNotEmpty && inst.pluginId != _kSamplePluginId,
         ),
       );
     }
@@ -261,23 +247,15 @@ class _RackBindingState extends State<RackBinding>
         subtitle:
             '${selectedInst?.pluginName.isNotEmpty == true ? selectedInst!.pluginName : "Sampler"} · channel ${(selectedInst?.order ?? (instIndex >= 0 ? instIndex : 0)) + 1}',
         color: inspColor,
-        vol:
-            _gains[selectedId] ??
-            (selectedInst != null ? selectedInst.gain.clamp(0.0, 1.0) : 0.78),
+        vol: _gains[selectedId] ?? (selectedInst != null ? selectedInst.gain.clamp(0.0, 1.0) : 0.78),
         volText: _volText(selectedId, selectedInst),
-        pan:
-            _pans[selectedId] ??
-            (selectedInst != null
-                ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0)
-                : 0.5),
+        pan: _pans[selectedId] ?? (selectedInst != null ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
         panText: _panText(selectedId, selectedInst),
         route: 'M1 · Music',
         muted: selectedInst?.muted ?? false,
         soloed: _soloedInstrumentIds.contains(selectedId),
         hostsPlugin:
-            selectedInst != null &&
-            selectedInst.pluginId.isNotEmpty &&
-            selectedInst.pluginId != _kSamplePluginId,
+            selectedInst != null && selectedInst.pluginId.isNotEmpty && selectedInst.pluginId != _kSamplePluginId,
       );
     }
 
@@ -304,17 +282,14 @@ class _RackBindingState extends State<RackBinding>
   /// The value under the inspector's VOL knob, formatted as the rounded
   /// percentage the mockup shows.
   String _volText(String id, ProjectInstrument? inst) {
-    final double v =
-        _gains[id] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 0.78);
+    final double v = _gains[id] ?? (inst != null ? inst.gain.clamp(0.0, 1.0) : 0.78);
     return '${(v * 100).round()}';
   }
 
   /// The value under the inspector's PAN knob: `· C` for centre, else `L`/`R`
   /// with the magnitude.
   String _panText(String id, ProjectInstrument? inst) {
-    final double p =
-        _pans[id] ??
-        (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5);
+    final double p = _pans[id] ?? (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5);
     final double signed = (p - 0.5) * 2.0;
     if (signed.abs() < 0.02) return '· C';
     return signed < 0 ? '· L' : '· R';
@@ -493,9 +468,7 @@ class _RackBindingState extends State<RackBinding>
     final String? id = _store.selectedInstrumentId;
     if (id == null) return;
     final ProjectInstrument? inst = _store.instrumentFor(id);
-    if (inst == null ||
-        inst.pluginId.isEmpty ||
-        inst.pluginId == _kSamplePluginId) {
+    if (inst == null || inst.pluginId.isEmpty || inst.pluginId == _kSamplePluginId) {
       return;
     }
     _openPluginFromMenu(id);
@@ -564,10 +537,7 @@ class _RackBindingState extends State<RackBinding>
     final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
     // A lane that hosts a plug-in gets the window-opening row; a sample or
     // empty lane has no window to open, so the row is simply absent.
-    final bool hostsPlugin =
-        inst != null &&
-        inst.pluginId.isNotEmpty &&
-        inst.pluginId != _kSamplePluginId;
+    final bool hostsPlugin = inst != null && inst.pluginId.isNotEmpty && inst.pluginId != _kSamplePluginId;
     final bool soloed = _soloedInstrumentIds.contains(instrumentId);
 
     // The channel rows, with their actions in the same order. The flat index
@@ -780,43 +750,40 @@ class _RackBindingState extends State<RackBinding>
           onInspectorSolo: _onInspectorSolo,
           onInspectorOpenPlugin: _onInspectorOpenPlugin,
           onInspectorKeyPress: (int note) => _store.auditionNote(note),
-          onPointerDownStep: (
-            PointerDownEvent event,
-            int rowIndex,
-            int stepIndex,
-          ) {
-            final List<RackRow> visible = _store.rows;
-            if (rowIndex < 0 || rowIndex >= visible.length) return;
-            final RackRow row = visible[rowIndex];
-            final bool velocityMode =
-                event.buttons == kSecondaryMouseButton ||
-                HardwareKeyboard.instance.isAltPressed;
-            if (velocityMode) {
-              _store.beginVelocityPaint();
-              _store.setVelocity(row.instrumentId, stepIndex, 12900);
-            } else {
-              final bool active =
-                  stepIndex < row.steps.length
-                      ? !row.steps[stepIndex].active
-                      : true;
-              _store.beginPaint(row.instrumentId, stepIndex, active: active);
-            }
-          },
-          onPointerMoveStep: (
-            PointerMoveEvent event,
-            int rowIndex,
-            int stepIndex,
-          ) {
-            final List<RackRow> visible = _store.rows;
-            if (rowIndex < 0 || rowIndex >= visible.length) return;
-            final RackRow row = visible[rowIndex];
-            if (event.buttons == kSecondaryMouseButton ||
-                HardwareKeyboard.instance.isAltPressed) {
-              _store.setVelocity(row.instrumentId, stepIndex, 12900);
-            } else {
-              _store.paintStep(row.instrumentId, stepIndex);
-            }
-          },
+          onPointerDownStep:
+              (
+                PointerDownEvent event,
+                int rowIndex,
+                int stepIndex,
+              ) {
+                final List<RackRow> visible = _store.rows;
+                if (rowIndex < 0 || rowIndex >= visible.length) return;
+                final RackRow row = visible[rowIndex];
+                final bool velocityMode =
+                    event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed;
+                if (velocityMode) {
+                  _store.beginVelocityPaint();
+                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
+                } else {
+                  final bool active = stepIndex < row.steps.length ? !row.steps[stepIndex].active : true;
+                  _store.beginPaint(row.instrumentId, stepIndex, active: active);
+                }
+              },
+          onPointerMoveStep:
+              (
+                PointerMoveEvent event,
+                int rowIndex,
+                int stepIndex,
+              ) {
+                final List<RackRow> visible = _store.rows;
+                if (rowIndex < 0 || rowIndex >= visible.length) return;
+                final RackRow row = visible[rowIndex];
+                if (event.buttons == kSecondaryMouseButton || HardwareKeyboard.instance.isAltPressed) {
+                  _store.setVelocity(row.instrumentId, stepIndex, 12900);
+                } else {
+                  _store.paintStep(row.instrumentId, stepIndex);
+                }
+              },
           onPointerUpStep: () {
             _store.commitPaint();
             _store.commitVelocityPaint();
@@ -828,10 +795,7 @@ class _RackBindingState extends State<RackBinding>
         ),
         if (_showRenameDialog)
           RenameChannelDialog(
-            initialName:
-                renameId == null
-                    ? ''
-                    : (_store.instrumentFor(renameId)?.name ?? ''),
+            initialName: renameId == null ? '' : (_store.instrumentFor(renameId)?.name ?? ''),
             onSubmit: _submitRename,
             onClose: _closeRenameDialog,
           ),

@@ -27,8 +27,7 @@ class RackStore extends ChangeNotifier {
 
   /// Notes per instrument, read for rows that have a sequence so the rack can
   /// draw a piano-roll preview for melodies.
-  final Map<String, List<SequenceNote>> notesByInstrument =
-      <String, List<SequenceNote>>{};
+  final Map<String, List<SequenceNote>> notesByInstrument = <String, List<SequenceNote>>{};
 
   String? selectedInstrumentId;
   String? selectedVelocityInstrument;
@@ -56,10 +55,8 @@ class RackStore extends ChangeNotifier {
   void refreshIfInstrumentsChanged() {
     final List<ProjectInstrument> now = _client.readInstruments();
     if (now.length == instruments.length) {
-      final Set<String> nowIds =
-          now.map((ProjectInstrument inst) => inst.id).toSet();
-      final Set<String> cachedIds =
-          instruments.map((ProjectInstrument inst) => inst.id).toSet();
+      final Set<String> nowIds = now.map((ProjectInstrument inst) => inst.id).toSet();
+      final Set<String> cachedIds = instruments.map((ProjectInstrument inst) => inst.id).toSet();
       if (nowIds.length == cachedIds.length && nowIds.containsAll(cachedIds)) {
         return;
       }
@@ -226,14 +223,10 @@ class RackStore extends ChangeNotifier {
     final String? instrumentId = selectedVelocityInstrument;
     final int? step = selectedVelocityStep;
     final RackRow? row = instrumentId == null ? null : rowFor(instrumentId);
-    if (instrumentId == null ||
-        step == null ||
-        row == null ||
-        step >= row.steps.length) {
+    if (instrumentId == null || step == null || row == null || step >= row.steps.length) {
       return;
     }
-    final int current =
-        row.steps[step].active ? row.steps[step].velocity : 12900;
+    final int current = row.steps[step].active ? row.steps[step].velocity : 12900;
     setVelocity(instrumentId, step, (current + delta).clamp(1, 16383));
   }
 
@@ -296,8 +289,7 @@ class RackStore extends ChangeNotifier {
   }
 
   /// The notes of [instrumentId], or an empty list when it has none.
-  List<SequenceNote> notesFor(String instrumentId) =>
-      notesByInstrument[instrumentId] ?? const <SequenceNote>[];
+  List<SequenceNote> notesFor(String instrumentId) => notesByInstrument[instrumentId] ?? const <SequenceNote>[];
 
   void undo() {
     _client.undoProject();

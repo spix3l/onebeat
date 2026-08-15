@@ -11,10 +11,7 @@ const int demoPlayingStep = 6;
 /// drummer would count them.
 List<StepVm> stepsAt(List<int> lit, {Map<int, double> velocities = const {}}) {
   return <StepVm>[
-    for (int i = 1; i <= 16; i++)
-      lit.contains(i)
-          ? StepVm(on: true, velocity: velocities[i] ?? 1)
-          : const StepVm.off(),
+    for (int i = 1; i <= 16; i++) lit.contains(i) ? StepVm(on: true, velocity: velocities[i] ?? 1) : const StepVm.off(),
   ];
 }
 

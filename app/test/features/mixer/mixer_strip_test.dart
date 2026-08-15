@@ -46,8 +46,7 @@ void main() {
             child: _Board(
               key: const Key('meters'),
               children: <Widget>[
-                for (final MixerStripVm strip in demoMeterStrips)
-                  ObMixerStrip.meter(vm: strip),
+                for (final MixerStripVm strip in demoMeterStrips) ObMixerStrip.meter(vm: strip),
               ],
             ),
           ),
@@ -56,8 +55,7 @@ void main() {
             child: _Board(
               key: const Key('faders'),
               children: <Widget>[
-                for (final MixerStripVm strip in demoFaderStrips)
-                  ObMixerStrip.fader(vm: strip),
+                for (final MixerStripVm strip in demoFaderStrips) ObMixerStrip.fader(vm: strip),
               ],
             ),
           ),
@@ -86,11 +84,10 @@ void main() {
       ),
       size: const Size(200, 400),
     );
-    final List<double> widths =
-        tester
-            .widgetList<StripMeter>(find.byType(StripMeter))
-            .map((StripMeter m) => m.width!)
-            .toList();
+    final List<double> widths = tester
+        .widgetList<StripMeter>(find.byType(StripMeter))
+        .map((StripMeter m) => m.width!)
+        .toList();
     expect(widths, <double>[
       tokens.size.mixerMeterWidth,
       tokens.size.mixerMasterMeterWidth,
@@ -140,8 +137,7 @@ void main() {
       tester,
       _Board(
         children: <Widget>[
-          for (final MixerStripVm strip in demoMeterStrips)
-            ObMixerStrip.meter(vm: strip),
+          for (final MixerStripVm strip in demoMeterStrips) ObMixerStrip.meter(vm: strip),
         ],
       ),
       size: const Size(400, 480),

@@ -122,8 +122,7 @@ class EngineSnapshot {
   final int latencyFramesRoundTrip;
   final int scheduleEventCount;
 
-  double get latencyMilliseconds =>
-      sampleRate <= 0 ? 0 : (latencyFramesRoundTrip / sampleRate) * 1000.0;
+  double get latencyMilliseconds => sampleRate <= 0 ? 0 : (latencyFramesRoundTrip / sampleRate) * 1000.0;
 }
 
 /// One notification from the engine (device change, error, sample loaded).
@@ -317,13 +316,7 @@ abstract interface class ProjectFileClient {
   void openProject(String path);
 }
 
-class EngineClient
-    implements
-        RackClient,
-        NoteClient,
-        PatternClient,
-        ArrangementClient,
-        ProjectFileClient {
+class EngineClient implements RackClient, NoteClient, PatternClient, ArrangementClient, ProjectFileClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -413,11 +406,7 @@ class EngineClient
 
   bool get isDisposed => _disposed;
 
-  String get deviceName =>
-      _bindings
-          .ob_engine_output_device_name(_engine)
-          .cast<Utf8>()
-          .toDartString();
+  String get deviceName => _bindings.ob_engine_output_device_name(_engine).cast<Utf8>().toDartString();
 
   void startAudio() {
     final ob_status status = _bindings.ob_engine_start(_engine);
@@ -451,8 +440,7 @@ class EngineClient
   void setTempo(double bpm) => _post(cmdSetTempo, f64a: bpm);
   void setLoop(double startBeats, double endBeats, {required bool enabled}) =>
       _post(cmdSetLoop, i64: enabled ? 1 : 0, f64a: startBeats, f64b: endBeats);
-  void noteOn(int note, double velocity) =>
-      _post(cmdNoteOn, i64: note, f64a: velocity);
+  void noteOn(int note, double velocity) => _post(cmdNoteOn, i64: note, f64a: velocity);
   void noteOff(int note) => _post(cmdNoteOff, i64: note);
   void allNotesOff() => _post(cmdAllNotesOff);
   void setMasterGain(double gain) => _post(cmdSetMasterGain, f64a: gain);
@@ -554,8 +542,7 @@ class EngineClient
   /// Returns false if a scan is already running.
   bool startPluginScan({List<String> directories = const <String>[]}) {
     if (directories.isEmpty) {
-      return _bindings.ob_engine_plugin_scan_start(_engine, nullptr) ==
-          ob_status.OB_OK;
+      return _bindings.ob_engine_plugin_scan_start(_engine, nullptr) == ob_status.OB_OK;
     }
     // NUL-separated and double-NUL-terminated, which is what the ABI takes so
     // that neither side has to own an array of string pointers.
@@ -586,8 +573,7 @@ class EngineClient
   bool retryPluginScan(String path) {
     final Pointer<Utf8> encoded = path.toNativeUtf8();
     try {
-      return _bindings.ob_engine_plugin_retry(_engine, encoded.cast<Char>()) ==
-          ob_status.OB_OK;
+      return _bindings.ob_engine_plugin_retry(_engine, encoded.cast<Char>()) == ob_status.OB_OK;
     } finally {
       calloc.free(encoded);
     }
@@ -615,8 +601,7 @@ class EngineClient
   List<PluginListing> readPluginList(int count) {
     final List<PluginListing> plugins = <PluginListing>[];
     for (int index = 0; index < count; index++) {
-      if (_bindings.ob_engine_plugin_at(_engine, index, _pluginInfo) !=
-          ob_status.OB_OK) {
+      if (_bindings.ob_engine_plugin_at(_engine, index, _pluginInfo) != ob_status.OB_OK) {
         break; // the list changed under us; the next generation will re-read it
       }
       final ob_plugin_info p = _pluginInfo.ref;
@@ -673,8 +658,7 @@ class EngineClient
 
   HostedInstance? readHostedInstance() {
     if (_bindings.ob_engine_instance_count(_engine) == 0 ||
-        _bindings.ob_engine_instance_at(_engine, 0, _instanceInfo) !=
-            ob_status.OB_OK) {
+        _bindings.ob_engine_instance_at(_engine, 0, _instanceInfo) != ob_status.OB_OK) {
       return null;
     }
     final ob_instance_info value = _instanceInfo.ref;
@@ -696,8 +680,7 @@ class EngineClient
     );
   }
 
-  void addPlugin(PluginListing plugin) =>
-      addPluginByPath(plugin.path, plugin.id);
+  void addPlugin(PluginListing plugin) => addPluginByPath(plugin.path, plugin.id);
 
   /// Adds a WAV-backed project instrument. The engine keeps the source path in
   /// the instrument reference so the sample survives project save/reopen.
@@ -768,8 +751,7 @@ class EngineClient
     final int count = _bindings.ob_engine_instrument_count(_engine);
     final List<ProjectInstrument> result = <ProjectInstrument>[];
     for (int index = 0; index < count; index++) {
-      if (_bindings.ob_engine_instrument_at(_engine, index, _instrumentInfo) !=
-          ob_status.OB_OK) {
+      if (_bindings.ob_engine_instrument_at(_engine, index, _instrumentInfo) != ob_status.OB_OK) {
         break;
       }
       final ob_instrument_info value = _instrumentInfo.ref;
@@ -798,8 +780,7 @@ class EngineClient
 
   void selectInstrument(String id) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_select(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_select(_engine, native),
   );
 
   void renameInstrument(String id, String name) => _withTwoNativeStrings(
@@ -816,15 +797,14 @@ class EngineClient
         _bindings.ob_engine_instrument_recolor(_engine, nativeId, nativeColor),
   );
 
-  void setInstrumentMuted(String id, {required bool muted}) =>
-      _withNativeString(
-        id,
-        (Pointer<Char> native) => _bindings.ob_engine_instrument_set_muted(
-          _engine,
-          native,
-          muted ? 1 : 0,
-        ),
-      );
+  void setInstrumentMuted(String id, {required bool muted}) => _withNativeString(
+    id,
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_set_muted(
+      _engine,
+      native,
+      muted ? 1 : 0,
+    ),
+  );
 
   void replaceInstrument(String id, PluginListing plugin) {
     final Pointer<Utf8> nativeId = id.toNativeUtf8();
@@ -848,42 +828,36 @@ class EngineClient
 
   void reorderInstrument(String id, int order) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_reorder(_engine, native, order),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_reorder(_engine, native, order),
   );
 
   void duplicateInstrument(String id) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_duplicate(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_duplicate(_engine, native),
   );
 
   void deleteInstrument(String id) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_remove(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_remove(_engine, native),
   );
 
   /// Adds an empty channel (no plug-in) — a blank lane to drop an instrument
   /// into. [name] may be empty for a generated name.
   void addEmptyInstrument(String name) => _withNativeString(
     name,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_add_empty(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_add_empty(_engine, native),
   );
 
   /// Per-channel gain (linear 0..2) applied to the active voice.
   void setInstrumentGain(String id, double gain) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_set_gain(_engine, native, gain),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_set_gain(_engine, native, gain),
   );
 
   /// Per-channel pan (-1..1) applied to the active voice.
   void setInstrumentPan(String id, double pan) => _withNativeString(
     id,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_instrument_set_pan(_engine, native, pan),
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_set_pan(_engine, native, pan),
   );
 
   @override
@@ -891,17 +865,9 @@ class EngineClient
   @override
   bool get canRedoProject => _bindings.ob_engine_project_can_redo(_engine) != 0;
   @override
-  String get undoProjectName =>
-      _bindings
-          .ob_engine_project_undo_name(_engine)
-          .cast<Utf8>()
-          .toDartString();
+  String get undoProjectName => _bindings.ob_engine_project_undo_name(_engine).cast<Utf8>().toDartString();
   @override
-  String get redoProjectName =>
-      _bindings
-          .ob_engine_project_redo_name(_engine)
-          .cast<Utf8>()
-          .toDartString();
+  String get redoProjectName => _bindings.ob_engine_project_redo_name(_engine).cast<Utf8>().toDartString();
   @override
   void undoProject() => _check(_bindings.ob_engine_project_undo(_engine));
   @override
@@ -951,58 +917,49 @@ class EngineClient
   @override
   void setRackRowGrid(String instrumentId, int gridTicks) => _withNativeString(
     instrumentId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_rack_set_row_grid(_engine, native, gridTicks),
+    (Pointer<Char> native) => _bindings.ob_engine_rack_set_row_grid(_engine, native, gridTicks),
   );
 
   @override
-  void setRackLength(int steps) =>
-      _check(_bindings.ob_engine_rack_set_length(_engine, steps));
+  void setRackLength(int steps) => _check(_bindings.ob_engine_rack_set_length(_engine, steps));
 
   @override
-  void setRackSwing(double swing) =>
-      _check(_bindings.ob_engine_rack_set_swing(_engine, swing));
+  void setRackSwing(double swing) => _check(_bindings.ob_engine_rack_set_swing(_engine, swing));
 
   @override
   void toggleRackStep(String instrumentId, int step) => _withNativeString(
     instrumentId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_rack_toggle_step(_engine, native, step),
+    (Pointer<Char> native) => _bindings.ob_engine_rack_toggle_step(_engine, native, step),
   );
 
   @override
-  void setRackStepVelocity(String instrumentId, int step, int velocity) =>
-      _withNativeString(
-        instrumentId,
-        (Pointer<Char> native) => _bindings.ob_engine_rack_set_step_velocity(
-          _engine,
-          native,
-          step,
-          velocity,
-        ),
-      );
+  void setRackStepVelocity(String instrumentId, int step, int velocity) => _withNativeString(
+    instrumentId,
+    (Pointer<Char> native) => _bindings.ob_engine_rack_set_step_velocity(
+      _engine,
+      native,
+      step,
+      velocity,
+    ),
+  );
 
   @override
   void removeRackSequence(String instrumentId) => _withNativeString(
     instrumentId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_rack_remove_sequence(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_rack_remove_sequence(_engine, native),
   );
 
   @override
   void beginRackGesture(String name) => _withNativeString(
     name,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_rack_gesture_begin(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_rack_gesture_begin(_engine, native),
   );
 
   @override
-  void commitRackGesture() =>
-      _check(_bindings.ob_engine_rack_gesture_commit(_engine));
+  void commitRackGesture() => _check(_bindings.ob_engine_rack_gesture_commit(_engine));
 
   @override
-  void abortRackGesture() =>
-      _check(_bindings.ob_engine_rack_gesture_abort(_engine));
+  void abortRackGesture() => _check(_bindings.ob_engine_rack_gesture_abort(_engine));
 
   // --- notes: the piano roll (OB-3-10) --------------------------------------
 
@@ -1098,16 +1055,15 @@ class EngineClient
   }) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
-        _bindings.ob_engine_notes_move(
-          _engine,
-          id,
-          buffer,
-          count,
-          deltaTicks,
-          semitones,
-          snapTicks,
-        ),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings.ob_engine_notes_move(
+      _engine,
+      id,
+      buffer,
+      count,
+      deltaTicks,
+      semitones,
+      snapTicks,
+    ),
   );
 
   @override
@@ -1119,15 +1075,14 @@ class EngineClient
   }) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
-        _bindings.ob_engine_notes_resize(
-          _engine,
-          id,
-          buffer,
-          count,
-          lengthDelta,
-          snapTicks,
-        ),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings.ob_engine_notes_resize(
+      _engine,
+      id,
+      buffer,
+      count,
+      lengthDelta,
+      snapTicks,
+    ),
   );
 
   @override
@@ -1138,8 +1093,8 @@ class EngineClient
   ) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings
-        .ob_engine_notes_set_velocity(_engine, id, buffer, count, velocity),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_set_velocity(_engine, id, buffer, count, velocity),
   );
 
   @override
@@ -1151,15 +1106,14 @@ class EngineClient
   }) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
-        _bindings.ob_engine_notes_quantise(
-          _engine,
-          id,
-          buffer,
-          count,
-          gridTicks,
-          strength,
-        ),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings.ob_engine_notes_quantise(
+      _engine,
+      id,
+      buffer,
+      count,
+      gridTicks,
+      strength,
+    ),
   );
 
   @override
@@ -1170,20 +1124,18 @@ class EngineClient
   }) => _withNotes(
     instrumentId,
     notes,
-    (Pointer<Char> id, Pointer<ob_note> buffer, int count) => _bindings
-        .ob_engine_notes_duplicate(_engine, id, buffer, count, deltaTicks),
+    (Pointer<Char> id, Pointer<ob_note> buffer, int count) =>
+        _bindings.ob_engine_notes_duplicate(_engine, id, buffer, count, deltaTicks),
   );
 
   @override
-  void auditionNoteOn(int key, double velocity) =>
-      noteOn(key, velocity.clamp(0.0, 1.0));
+  void auditionNoteOn(int key, double velocity) => noteOn(key, velocity.clamp(0.0, 1.0));
 
   @override
   void auditionNoteOff(int key) => noteOff(key);
 
   /// Auditions the sample-preview slot rather than the selected rack channel.
-  void previewNoteOn(int key, double velocity) =>
-      _post(cmdPreviewNoteOn, i64: key, f64a: velocity.clamp(0.0, 1.0));
+  void previewNoteOn(int key, double velocity) => _post(cmdPreviewNoteOn, i64: key, f64a: velocity.clamp(0.0, 1.0));
 
   void previewNoteOff(int key) => _post(cmdPreviewNoteOff, i64: key);
 
@@ -1226,45 +1178,39 @@ class EngineClient
   @override
   void selectPattern(String patternId) => _withNativeString(
     patternId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_pattern_select(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_select(_engine, native),
   );
 
   @override
   void createPattern(String name) => _withNativeString(
     name,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_pattern_create(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_create(_engine, native),
   );
 
   @override
   void renamePattern(String patternId, String name) => _withTwoNativeStrings(
     patternId,
     name,
-    (Pointer<Char> id, Pointer<Char> value) =>
-        _bindings.ob_engine_pattern_rename(_engine, id, value),
+    (Pointer<Char> id, Pointer<Char> value) => _bindings.ob_engine_pattern_rename(_engine, id, value),
   );
 
   @override
   void recolorPattern(String patternId, String color) => _withTwoNativeStrings(
     patternId,
     color,
-    (Pointer<Char> id, Pointer<Char> value) =>
-        _bindings.ob_engine_pattern_recolor(_engine, id, value),
+    (Pointer<Char> id, Pointer<Char> value) => _bindings.ob_engine_pattern_recolor(_engine, id, value),
   );
 
   @override
   void duplicatePattern(String patternId) => _withNativeString(
     patternId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_pattern_duplicate(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_duplicate(_engine, native),
   );
 
   @override
   void removePattern(String patternId) => _withNativeString(
     patternId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_pattern_remove(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_pattern_remove(_engine, native),
   );
 
   @override
@@ -1278,8 +1224,7 @@ class EngineClient
     final String packed = '${clipIds.join(nul)}$nul$nul';
     _withNativeString(
       packed,
-      (Pointer<Char> native) =>
-          _bindings.ob_engine_clips_make_unique(_engine, native),
+      (Pointer<Char> native) => _bindings.ob_engine_clips_make_unique(_engine, native),
     );
   }
 
@@ -1319,60 +1264,53 @@ class EngineClient
   void renameLane(String laneId, String name) => _withTwoNativeStrings(
     laneId,
     name,
-    (Pointer<Char> id, Pointer<Char> value) =>
-        _bindings.ob_engine_lane_rename(_engine, id, value),
+    (Pointer<Char> id, Pointer<Char> value) => _bindings.ob_engine_lane_rename(_engine, id, value),
   );
 
   @override
   void recolorLane(String laneId, String color) => _withTwoNativeStrings(
     laneId,
     color,
-    (Pointer<Char> id, Pointer<Char> value) =>
-        _bindings.ob_engine_lane_recolor(_engine, id, value),
+    (Pointer<Char> id, Pointer<Char> value) => _bindings.ob_engine_lane_recolor(_engine, id, value),
   );
 
   @override
   void reorderLane(String laneId, int order) => _withNativeString(
     laneId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_lane_reorder(_engine, native, order),
+    (Pointer<Char> native) => _bindings.ob_engine_lane_reorder(_engine, native, order),
   );
 
   @override
   void setLaneHeight(String laneId, int height) => _withNativeString(
     laneId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_lane_set_height(_engine, native, height),
+    (Pointer<Char> native) => _bindings.ob_engine_lane_set_height(_engine, native, height),
   );
 
   @override
   void setLaneMuted(String laneId, {required bool muted}) => _withNativeString(
     laneId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_lane_set_muted(_engine, native, muted ? 1 : 0),
+    (Pointer<Char> native) => _bindings.ob_engine_lane_set_muted(_engine, native, muted ? 1 : 0),
   );
 
   @override
-  void setLaneSoloed(String laneId, {required bool soloed}) =>
-      _withNativeString(
-        laneId,
-        (Pointer<Char> native) => _bindings.ob_engine_lane_set_soloed(
-          _engine,
-          native,
-          soloed ? 1 : 0,
-        ),
-      );
+  void setLaneSoloed(String laneId, {required bool soloed}) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) => _bindings.ob_engine_lane_set_soloed(
+      _engine,
+      native,
+      soloed ? 1 : 0,
+    ),
+  );
 
   @override
-  void setLaneCollapsed(String laneId, {required bool collapsed}) =>
-      _withNativeString(
-        laneId,
-        (Pointer<Char> native) => _bindings.ob_engine_lane_set_collapsed(
-          _engine,
-          native,
-          collapsed ? 1 : 0,
-        ),
-      );
+  void setLaneCollapsed(String laneId, {required bool collapsed}) => _withNativeString(
+    laneId,
+    (Pointer<Char> native) => _bindings.ob_engine_lane_set_collapsed(
+      _engine,
+      native,
+      collapsed ? 1 : 0,
+    ),
+  );
 
   @override
   void removeLane(String laneId) => _withNativeString(
@@ -1430,19 +1368,16 @@ class EngineClient
   );
 
   @override
-  void moveClip(String clipId, {String laneId = '', required int startTicks}) =>
-      _withTwoNativeStrings(
-        clipId,
-        laneId,
-        (Pointer<Char> clip, Pointer<Char> lane) =>
-            _bindings.ob_engine_clip_move(_engine, clip, lane, startTicks),
-      );
+  void moveClip(String clipId, {String laneId = '', required int startTicks}) => _withTwoNativeStrings(
+    clipId,
+    laneId,
+    (Pointer<Char> clip, Pointer<Char> lane) => _bindings.ob_engine_clip_move(_engine, clip, lane, startTicks),
+  );
 
   @override
   void resizeClip(String clipId, int lengthTicks) => _withNativeString(
     clipId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_clip_resize(_engine, native, lengthTicks),
+    (Pointer<Char> native) => _bindings.ob_engine_clip_resize(_engine, native, lengthTicks),
   );
 
   @override
@@ -1453,8 +1388,7 @@ class EngineClient
   }) => _withTwoNativeStrings(
     clipId,
     laneId,
-    (Pointer<Char> clip, Pointer<Char> lane) =>
-        _bindings.ob_engine_clip_duplicate(_engine, clip, lane, startTicks),
+    (Pointer<Char> clip, Pointer<Char> lane) => _bindings.ob_engine_clip_duplicate(_engine, clip, lane, startTicks),
   );
 
   @override
@@ -1466,33 +1400,29 @@ class EngineClient
   @override
   void setClipMuted(String clipId, {required bool muted}) => _withNativeString(
     clipId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_clip_set_muted(_engine, native, muted ? 1 : 0),
+    (Pointer<Char> native) => _bindings.ob_engine_clip_set_muted(_engine, native, muted ? 1 : 0),
   );
 
   @override
   void setClipLoop(String clipId, {required bool loop}) => _withNativeString(
     clipId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_clip_set_loop(_engine, native, loop ? 1 : 0),
+    (Pointer<Char> native) => _bindings.ob_engine_clip_set_loop(_engine, native, loop ? 1 : 0),
   );
 
   @override
-  void setClipWindowStart(String clipId, int windowStartTicks) =>
-      _withNativeString(
-        clipId,
-        (Pointer<Char> native) => _bindings.ob_engine_clip_set_window_start(
-          _engine,
-          native,
-          windowStartTicks,
-        ),
-      );
+  void setClipWindowStart(String clipId, int windowStartTicks) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_clip_set_window_start(
+      _engine,
+      native,
+      windowStartTicks,
+    ),
+  );
 
   @override
   void setClipTranspose(String clipId, int semitones) => _withNativeString(
     clipId,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_clip_set_transpose(_engine, native, semitones),
+    (Pointer<Char> native) => _bindings.ob_engine_clip_set_transpose(_engine, native, semitones),
   );
 
   // --- project files (OB-3-05's writer, reachable from the UI) --------------
@@ -1514,29 +1444,24 @@ class EngineClient
   );
 
   @override
-  String get projectPath =>
-      _bindings.ob_engine_project_path(_engine).cast<Utf8>().toDartString();
+  String get projectPath => _bindings.ob_engine_project_path(_engine).cast<Utf8>().toDartString();
 
   @override
-  String get projectName =>
-      _bindings.ob_engine_project_name(_engine).cast<Utf8>().toDartString();
+  String get projectName => _bindings.ob_engine_project_name(_engine).cast<Utf8>().toDartString();
 
   @override
   void setProjectName(String name) => _withNativeString(
     name,
-    (Pointer<Char> native) =>
-        _bindings.ob_engine_project_set_name(_engine, native),
+    (Pointer<Char> native) => _bindings.ob_engine_project_set_name(_engine, native),
   );
 
   @override
-  bool get isProjectModified =>
-      _bindings.ob_engine_project_is_modified(_engine) != 0;
+  bool get isProjectModified => _bindings.ob_engine_project_is_modified(_engine) != 0;
 
   /// The canonical `project.json` bytes as the project stands. Byte-identical
   /// for a given model on any machine, which is what makes it usable as a
   /// save/reopen equality check (docs/project-format.md §6).
-  String get projectJson =>
-      _bindings.ob_engine_project_json(_engine).cast<Utf8>().toDartString();
+  String get projectJson => _bindings.ob_engine_project_json(_engine).cast<Utf8>().toDartString();
 
   void _withNativeString(String value, ob_status Function(Pointer<Char>) call) {
     final Pointer<Utf8> native = value.toNativeUtf8();
@@ -1562,14 +1487,11 @@ class EngineClient
     }
   }
 
-  void removePlugin(int instanceId) =>
-      _check(_bindings.ob_engine_instance_remove(_engine, instanceId));
+  void removePlugin(int instanceId) => _check(_bindings.ob_engine_instance_remove(_engine, instanceId));
 
-  void openPluginEditor(int instanceId) =>
-      _check(_bindings.ob_engine_instance_editor_open(_engine, instanceId));
+  void openPluginEditor(int instanceId) => _check(_bindings.ob_engine_instance_editor_open(_engine, instanceId));
 
-  void restartPlugin(int instanceId) =>
-      _check(_bindings.ob_engine_instance_restart(_engine, instanceId));
+  void restartPlugin(int instanceId) => _check(_bindings.ob_engine_instance_restart(_engine, instanceId));
 
   List<HostedParameter> readParameters(HostedInstance instance) {
     final List<HostedParameter> result = <HostedParameter>[];
@@ -1600,12 +1522,9 @@ class EngineClient
     return result;
   }
 
-  void beginParameterGesture(int paramId) =>
-      _post(cmdPluginParamBegin, i64: paramId);
-  void setParameter(int paramId, double value) =>
-      _post(cmdPluginParamValue, i64: paramId, f64a: value);
-  void endParameterGesture(int paramId) =>
-      _post(cmdPluginParamEnd, i64: paramId);
+  void beginParameterGesture(int paramId) => _post(cmdPluginParamBegin, i64: paramId);
+  void setParameter(int paramId, double value) => _post(cmdPluginParamValue, i64: paramId, f64a: value);
+  void endParameterGesture(int paramId) => _post(cmdPluginParamEnd, i64: paramId);
 
   void _check(ob_status status) {
     if (status != ob_status.OB_OK) {
@@ -1645,18 +1564,16 @@ class EngineClient
 /// implement [EngineClient] do not need native audio plumbing just to test the
 /// pattern editor.
 extension AudioClipEngineClient on EngineClient {
-  void addAudioClip(String laneId, String samplePath, int startTicks) =>
-      _withTwoNativeStrings(
-        laneId,
-        samplePath,
-        (Pointer<Char> nativeLane, Pointer<Char> nativePath) =>
-            _bindings.ob_engine_audio_clip_add(
-              _engine,
-              nativeLane,
-              nativePath,
-              startTicks,
-            ),
-      );
+  void addAudioClip(String laneId, String samplePath, int startTicks) => _withTwoNativeStrings(
+    laneId,
+    samplePath,
+    (Pointer<Char> nativeLane, Pointer<Char> nativePath) => _bindings.ob_engine_audio_clip_add(
+      _engine,
+      nativeLane,
+      nativePath,
+      startTicks,
+    ),
+  );
 }
 
 /// Mirrors `ob_scan_state`.
@@ -1709,8 +1626,7 @@ class PluginScanStatus {
   /// scan is in [ScanState.probing].
   final String current;
 
-  bool get isScanning =>
-      state == ScanState.discovering || state == ScanState.probing;
+  bool get isScanning => state == ScanState.discovering || state == ScanState.probing;
 }
 
 /// One row of the plug-in list, as the UI sees it.
@@ -1757,8 +1673,7 @@ class PluginListing {
   final int noteOutputCount;
 
   bool get isUsable => outcome == ScanOutcome.ok;
-  bool get isQuarantined =>
-      outcome == ScanOutcome.crashed || outcome == ScanOutcome.timedOut;
+  bool get isQuarantined => outcome == ScanOutcome.crashed || outcome == ScanOutcome.timedOut;
 }
 
 class HostedInstance {

@@ -48,8 +48,7 @@ class _ObReadoutState extends State<ObReadout> {
   @override
   void didUpdateWidget(covariant ObReadout oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value &&
-        _controller.text == oldWidget.value) {
+    if (oldWidget.value != widget.value && _controller.text == oldWidget.value) {
       _controller.text = widget.value;
     }
   }
@@ -87,14 +86,14 @@ class _ObReadoutState extends State<ObReadout> {
           onSubmit == null
               ? Text(widget.value, maxLines: 1, style: tokens.type.readoutValue)
               : SizedBox(
-                width: 92,
-                height: 25,
-                child: _EditableReadout(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  onSubmit: onSubmit,
+                  width: 92,
+                  height: 25,
+                  child: _EditableReadout(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    onSubmit: onSubmit,
+                  ),
                 ),
-              ),
           SizedBox(height: tokens.spacing.xxs),
           Text(widget.unit, maxLines: 1, style: tokens.type.readoutUnit),
         ],

@@ -160,12 +160,8 @@ class ObRoutingPanel extends StatelessWidget {
           for (int i = 0; i < vm.sends.length; i++) ...<Widget>[
             SendRow(
               vm: vm.sends[i],
-              onChanged:
-                  onSendChange == null
-                      ? null
-                      : (double value) => onSendChange!(i, value),
-              onPrePostToggle:
-                  onPrePostToggle == null ? null : () => onPrePostToggle!(i),
+              onChanged: onSendChange == null ? null : (double value) => onSendChange!(i, value),
+              onPrePostToggle: onPrePostToggle == null ? null : () => onPrePostToggle!(i),
             ),
             SizedBox(height: tokens.spacing.xs),
           ],
@@ -278,10 +274,7 @@ class _FeedRowState extends State<FeedRow> {
           height: tokens.size.routingRowHeight,
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
           decoration: BoxDecoration(
-            color:
-                widget.into
-                    ? color.accentWash
-                    : (_hover ? color.surfaceWell : color.surfaceRaised),
+            color: widget.into ? color.accentWash : (_hover ? color.surfaceWell : color.surfaceRaised),
             borderRadius: tokens.radius.panelBorder,
             border: Border.all(
               color: widget.into ? color.accentMuted : color.line,
@@ -310,12 +303,11 @@ class _FeedRowState extends State<FeedRow> {
               Text(
                 widget.vm.routeText,
                 maxLines: 1,
-                style:
-                    widget.into
-                        ? tokens.type.numericSmall.copyWith(
-                          color: color.accentBright,
-                        )
-                        : tokens.type.numericSmall,
+                style: widget.into
+                    ? tokens.type.numericSmall.copyWith(
+                        color: color.accentBright,
+                      )
+                    : tokens.type.numericSmall,
               ),
             ],
           ),
@@ -398,14 +390,8 @@ class _SendSlider extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown:
-          onChanged == null
-              ? null
-              : (TapDownDetails d) => report(d.localPosition),
-      onHorizontalDragUpdate:
-          onChanged == null
-              ? null
-              : (DragUpdateDetails d) => report(d.localPosition),
+      onTapDown: onChanged == null ? null : (TapDownDetails d) => report(d.localPosition),
+      onHorizontalDragUpdate: onChanged == null ? null : (DragUpdateDetails d) => report(d.localPosition),
       child: SizedBox(
         width: width,
         height: cap,
@@ -651,17 +637,15 @@ class _ConnectorPainter extends CustomPainter {
   final double stroke;
   final double glyph;
 
-  late final Paint _line =
-      Paint()
-        ..color = color
-        ..strokeWidth = stroke;
-  late final Paint _head =
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = glyph
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..color = color;
+  late final Paint _line = Paint()
+    ..color = color
+    ..strokeWidth = stroke;
+  late final Paint _head = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = glyph
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..color = color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -681,6 +665,5 @@ class _ConnectorPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ConnectorPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(_ConnectorPainter oldDelegate) => oldDelegate.color != color;
 }

@@ -56,8 +56,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '01',
     category: 'Acoustic',
     name: 'Steel String Pluck',
-    description:
-        'Crisp, resonant dreadnought acoustic steel strings with full body resonance',
+    description: 'Crisp, resonant dreadnought acoustic steel strings with full body resonance',
     tone: 0.75,
     body: 0.70,
     decay: 0.65,
@@ -80,8 +79,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '02',
     category: 'Acoustic',
     name: 'Nylon Fingerstyle',
-    description:
-        'Intimate, warm classical nylon guitar with delicate fingerstyle transients',
+    description: 'Intimate, warm classical nylon guitar with delicate fingerstyle transients',
     tone: 0.45,
     body: 0.80,
     decay: 0.55,
@@ -104,8 +102,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '03',
     category: 'Acoustic',
     name: '12-String Shimmer',
-    description:
-        'Chimey, shimmering 12-string acoustic with octave resonance and stereo spread',
+    description: 'Chimey, shimmering 12-string acoustic with octave resonance and stereo spread',
     tone: 0.85,
     body: 0.60,
     decay: 0.75,
@@ -128,8 +125,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '04',
     category: 'Acoustic',
     name: 'Muted Folk',
-    description:
-        'Tight palm-muted acoustic rhythm guitar with punchy percussive attack',
+    description: 'Tight palm-muted acoustic rhythm guitar with punchy percussive attack',
     tone: 0.50,
     body: 0.65,
     decay: 0.35,
@@ -152,8 +148,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '05',
     category: 'Acoustic',
     name: 'Resonator Slide',
-    description:
-        'Metallic dobro-style resonator guitar with rich mid harmonics and slide sustain',
+    description: 'Metallic dobro-style resonator guitar with rich mid harmonics and slide sustain',
     tone: 0.80,
     body: 0.50,
     decay: 0.80,
@@ -176,8 +171,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '06',
     category: 'Electric',
     name: 'Clean Strat Pluck',
-    description:
-        'Glassy single-coil electric tone with bell-like attack and transparent presence',
+    description: 'Glassy single-coil electric tone with bell-like attack and transparent presence',
     tone: 0.75,
     body: 0.40,
     decay: 0.60,
@@ -200,8 +194,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '07',
     category: 'Electric',
     name: 'Warm Jazz Archtop',
-    description:
-        'Mellow hollowbody jazz guitar with neck humbucker and dark woody warmth',
+    description: 'Mellow hollowbody jazz guitar with neck humbucker and dark woody warmth',
     tone: 0.40,
     body: 0.75,
     decay: 0.70,
@@ -224,8 +217,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '08',
     category: 'Electric',
     name: 'Overdriven Lead',
-    description:
-        'Saturated singing tube overdrive lead guitar with harmonic sustain and crunch',
+    description: 'Saturated singing tube overdrive lead guitar with harmonic sustain and crunch',
     tone: 0.70,
     body: 0.55,
     decay: 0.85,
@@ -248,8 +240,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '09',
     category: 'Electric',
     name: '80s Chorus Dream',
-    description:
-        'Lush stereo modulated chorus electric guitar with ambient shimmering space',
+    description: 'Lush stereo modulated chorus electric guitar with ambient shimmering space',
     tone: 0.80,
     body: 0.45,
     decay: 0.75,
@@ -272,8 +263,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '10',
     category: 'Electric',
     name: 'Ambient Slide',
-    description:
-        'Cavernous ambient swelling guitar with wide plate reverberation and long tail',
+    description: 'Cavernous ambient swelling guitar with wide plate reverberation and long tail',
     tone: 0.60,
     body: 0.60,
     decay: 0.90,
@@ -296,8 +286,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '11',
     category: 'Acoustic',
     name: 'Flamenco Passion',
-    description:
-        'High-tension spanish flamenco nylon guitar with aggressive rasp and snap attack',
+    description: 'High-tension spanish flamenco nylon guitar with aggressive rasp and snap attack',
     tone: 0.70,
     body: 0.70,
     decay: 0.50,
@@ -320,8 +309,7 @@ const List<GuitarPresetData> kGuitarPresets = <GuitarPresetData>[
     id: '12',
     category: 'Electric',
     name: 'Lo-Fi Muted',
-    description:
-        'Warm vintage vinyl-filtered electric guitar with subtle tape flutter and saturation',
+    description: 'Warm vintage vinyl-filtered electric guitar with subtle tape flutter and saturation',
     tone: 0.35,
     body: 0.65,
     decay: 0.45,
@@ -446,8 +434,7 @@ class _GuitarStockEditorState extends State<GuitarStockEditor> {
   }
 
   void _handlePrevPreset() {
-    final int next =
-        (_presetIndex - 1 + kGuitarPresets.length) % kGuitarPresets.length;
+    final int next = (_presetIndex - 1 + kGuitarPresets.length) % kGuitarPresets.length;
     widget.onPresetChanged?.call(next);
   }
 
@@ -704,8 +691,7 @@ class _MiniKnobPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MiniKnobPainter oldDelegate) =>
-      oldDelegate.value != value;
+  bool shouldRepaint(_MiniKnobPainter oldDelegate) => oldDelegate.value != value;
 }
 
 class _TopMiniSlider extends StatelessWidget {
@@ -805,9 +791,7 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       height: 38,
       decoration: BoxDecoration(
-        color: _isPillHovered
-            ? const Color(0xFFBDCBD5)
-            : const Color(0xFFB0BFC9),
+        color: _isPillHovered ? const Color(0xFFBDCBD5) : const Color(0xFFB0BFC9),
         borderRadius: BorderRadius.circular(5),
         boxShadow: const <BoxShadow>[
           BoxShadow(
@@ -833,21 +817,15 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: _isDownHovered
-                      ? const Color(0x18000000)
-                      : const Color(0x00000000),
+                  color: _isDownHovered ? const Color(0x18000000) : const Color(0x00000000),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(5),
                     bottomLeft: Radius.circular(5),
                   ),
                 ),
                 child: _ChevronArrow(
-                  direction: widget.isMenuOpen
-                      ? _ChevronDirection.up
-                      : _ChevronDirection.down,
-                  color: _isDownHovered
-                      ? const Color(0xFF14181D)
-                      : const Color(0xFF2C343B),
+                  direction: widget.isMenuOpen ? _ChevronDirection.up : _ChevronDirection.down,
+                  color: _isDownHovered ? const Color(0xFF14181D) : const Color(0xFF2C343B),
                   size: 11,
                   strokeWidth: 2.0,
                 ),
@@ -868,9 +846,7 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
                   child: Text(
                     widget.presetName,
                     style: TextStyle(
-                      color: _isPillHovered
-                          ? const Color(0xFF1A2228)
-                          : const Color(0xFF2C343B),
+                      color: _isPillHovered ? const Color(0xFF1A2228) : const Color(0xFF2C343B),
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.2,
@@ -897,15 +873,11 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: _isPrevHovered
-                      ? const Color(0x18000000)
-                      : const Color(0x00000000),
+                  color: _isPrevHovered ? const Color(0x18000000) : const Color(0x00000000),
                 ),
                 child: _ChevronArrow(
                   direction: _ChevronDirection.left,
-                  color: _isPrevHovered
-                      ? const Color(0xFF14181D)
-                      : const Color(0xFF3B454F),
+                  color: _isPrevHovered ? const Color(0xFF14181D) : const Color(0xFF3B454F),
                   size: 10,
                   strokeWidth: 2.0,
                 ),
@@ -924,9 +896,7 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(6, 10, 14, 10),
                 decoration: BoxDecoration(
-                  color: _isNextHovered
-                      ? const Color(0x18000000)
-                      : const Color(0x00000000),
+                  color: _isNextHovered ? const Color(0x18000000) : const Color(0x00000000),
                   borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(5),
                     bottomRight: Radius.circular(5),
@@ -934,9 +904,7 @@ class _PresetHeaderBarState extends State<_PresetHeaderBar> {
                 ),
                 child: _ChevronArrow(
                   direction: _ChevronDirection.right,
-                  color: _isNextHovered
-                      ? const Color(0xFF14181D)
-                      : const Color(0xFF3B454F),
+                  color: _isNextHovered ? const Color(0xFF14181D) : const Color(0xFF3B454F),
                   size: 10,
                   strokeWidth: 2.0,
                 ),
@@ -1078,8 +1046,7 @@ class _VerticalFaderState extends State<_VerticalFader> {
         MouseRegion(
           cursor: SystemMouseCursors.resizeUpDown,
           child: GestureDetector(
-            onVerticalDragUpdate: (DragUpdateDetails d) =>
-                _handleDrag(d, faderHeight),
+            onVerticalDragUpdate: (DragUpdateDetails d) => _handleDrag(d, faderHeight),
             child: SizedBox(
               width: faderWidth,
               height: faderHeight,
@@ -1255,8 +1222,7 @@ class _GlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind || oldDelegate.color != color;
+  bool shouldRepaint(_GlyphPainter oldDelegate) => oldDelegate.kind != kind || oldDelegate.color != color;
 }
 
 // ---------------------------------------------------------------------------
@@ -1473,8 +1439,7 @@ class _BigWheelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BigWheelPainter oldDelegate) =>
-      oldDelegate.value != value;
+  bool shouldRepaint(_BigWheelPainter oldDelegate) => oldDelegate.value != value;
 }
 
 // ---------------------------------------------------------------------------
@@ -1721,11 +1686,7 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
     for (int k = startMidi; k <= endMidi; k++) {
       final int noteInOctave = k % 12;
       final bool isBlack =
-          noteInOctave == 1 ||
-          noteInOctave == 3 ||
-          noteInOctave == 6 ||
-          noteInOctave == 8 ||
-          noteInOctave == 10;
+          noteInOctave == 1 || noteInOctave == 3 || noteInOctave == 6 || noteInOctave == 8 || noteInOctave == 10;
       if (!isBlack) {
         whiteKeys.add(k);
       }
@@ -1744,9 +1705,7 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
                   _WhiteKeyWidget(
                     midiKey: midi,
                     width: keyWidth,
-                    isActiveRange:
-                        midi >= kMinActiveGuitarKey &&
-                        midi <= kMaxActiveGuitarKey,
+                    isActiveRange: midi >= kMinActiveGuitarKey && midi <= kMaxActiveGuitarKey,
                     isPressed: _activeKey == midi,
                     onDown: () => _handlePointerDown(midi),
                     onUp: () => _handlePointerUp(midi),
@@ -1756,11 +1715,7 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
 
             // Black Keys Overlay
             for (int k = startMidi; k <= endMidi; k++)
-              if (k % 12 == 1 ||
-                  k % 12 == 3 ||
-                  k % 12 == 6 ||
-                  k % 12 == 8 ||
-                  k % 12 == 10)
+              if (k % 12 == 1 || k % 12 == 3 || k % 12 == 6 || k % 12 == 8 || k % 12 == 10)
                 _BlackKeyPositionedWidget(
                   midiKey: k,
                   whiteKeys: whiteKeys,
@@ -1858,9 +1813,7 @@ class _WhiteKeyWidgetState extends State<_WhiteKeyWidget> {
         : const Color(0xFF5A5F6B); // Subdued outer range
 
     return MouseRegion(
-      cursor: widget.isActiveRange
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
+      cursor: widget.isActiveRange ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -1913,9 +1866,7 @@ class _BlackKeyWidgetState extends State<_BlackKeyWidget> {
         : const Color(0xFF383C45);
 
     return MouseRegion(
-      cursor: widget.isActiveRange
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
+      cursor: widget.isActiveRange ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -2115,9 +2066,7 @@ class _PresetListItemState extends State<_PresetListItem> {
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(6),
-            border: widget.isSelected
-                ? Border.all(color: const Color(0x6626C6DA), width: 1)
-                : null,
+            border: widget.isSelected ? Border.all(color: const Color(0x6626C6DA), width: 1) : null,
           ),
           child: Row(
             children: <Widget>[
@@ -2126,9 +2075,7 @@ class _PresetListItemState extends State<_PresetListItem> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: widget.preset.category == 'Acoustic'
-                      ? const Color(0xFF81C784)
-                      : const Color(0xFFCE93D8),
+                  color: widget.preset.category == 'Acoustic' ? const Color(0xFF81C784) : const Color(0xFFCE93D8),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -2144,9 +2091,7 @@ class _PresetListItemState extends State<_PresetListItem> {
                       style: TextStyle(
                         color: textColor,
                         fontSize: 12.5,
-                        fontWeight: widget.isSelected
-                            ? FontWeight.w700
-                            : FontWeight.w600,
+                        fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w600,
                         fontFamily: 'Inter',
                       ),
                     ),
@@ -2154,9 +2099,7 @@ class _PresetListItemState extends State<_PresetListItem> {
                     Text(
                       widget.preset.description,
                       style: TextStyle(
-                        color: _isHovered
-                            ? const Color(0xFFA6ABB6)
-                            : const Color(0xFF7A808C),
+                        color: _isHovered ? const Color(0xFFA6ABB6) : const Color(0xFF7A808C),
                         fontSize: 10.5,
                       ),
                       maxLines: 1,
@@ -2269,7 +2212,5 @@ class _ChevronPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChevronPainter oldDelegate) =>
-      oldDelegate.direction != direction ||
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth;
+      oldDelegate.direction != direction || oldDelegate.color != color || oldDelegate.strokeWidth != strokeWidth;
 }

@@ -11,10 +11,7 @@ void main() {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final ArrangementStore store = harness.arrangement;
     final ArrangementClip clip = store.clips.first;
-    final String otherLane =
-        store.lanes
-            .firstWhere((ArrangementLane lane) => lane.id != clip.laneId)
-            .id;
+    final String otherLane = store.lanes.firstWhere((ArrangementLane lane) => lane.id != clip.laneId).id;
 
     store
       ..selectClip(clip.id)

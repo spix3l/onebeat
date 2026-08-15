@@ -41,8 +41,7 @@ class _ScriptedPanels implements ProjectFilePanels {
 }
 
 class _FakeBundles implements ProjectBundles {
-  _FakeBundles([Set<String>? present])
-    : present = present ?? <String>{};
+  _FakeBundles([Set<String>? present]) : present = present ?? <String>{};
 
   final Set<String> present;
   final List<String> deleted = <String>[];

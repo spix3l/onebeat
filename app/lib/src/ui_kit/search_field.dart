@@ -76,12 +76,9 @@ class _ObSearchFieldState extends State<ObSearchField> {
     final String? shortcut = widget.shortcut;
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: Listener(
         behavior: HitTestBehavior.opaque,
         onPointerDown: (_) => _handleTap(),

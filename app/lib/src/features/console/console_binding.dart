@@ -69,16 +69,20 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
 
     final String now = DateTime.now().toIso8601String().substring(11, 23);
     setState(() {
-      _logs.add(LogEntry(
-        timestamp: now,
-        message: '> $text',
-        level: LogLevel.info,
-      ));
-      _logs.add(LogEntry(
-        timestamp: now,
-        message: 'Executed: $text',
-        level: LogLevel.info,
-      ));
+      _logs.add(
+        LogEntry(
+          timestamp: now,
+          message: '> $text',
+          level: LogLevel.info,
+        ),
+      );
+      _logs.add(
+        LogEntry(
+          timestamp: now,
+          message: 'Executed: $text',
+          level: LogLevel.info,
+        ),
+      );
       _inputController.clear();
     });
 

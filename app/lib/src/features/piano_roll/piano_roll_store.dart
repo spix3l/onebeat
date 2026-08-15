@@ -41,8 +41,7 @@ class MusicalScale {
     MusicalScale('Blues', <int>[0, 3, 5, 6, 7, 10]),
   ];
 
-  bool contains(int key, int root) =>
-      intervals.contains(((key - root) % 12 + 12) % 12);
+  bool contains(int key, int root) => intervals.contains(((key - root) % 12 + 12) % 12);
 }
 
 const List<String> pitchClassNames = <String>[
@@ -61,11 +60,9 @@ const List<String> pitchClassNames = <String>[
 ];
 
 /// A black key on the drawn keyboard.
-bool isAccidental(int key) =>
-    const <int>[1, 3, 6, 8, 10].contains(((key % 12) + 12) % 12);
+bool isAccidental(int key) => const <int>[1, 3, 6, 8, 10].contains(((key % 12) + 12) % 12);
 
-String keyName(int key) =>
-    '${pitchClassNames[((key % 12) + 12) % 12]}${(key ~/ 12) - 1}';
+String keyName(int key) => '${pitchClassNames[((key % 12) + 12) % 12]}${(key ~/ 12) - 1}';
 
 /// What a drag gesture is currently doing.
 enum PianoDragKind { none, draw, move, resize, marquee, velocity, erase }
@@ -171,12 +168,10 @@ class PianoRollStore extends ChangeNotifier {
     try {
       patterns = _client.readPatterns();
       if (patterns.isNotEmpty) {
-        final PatternSummary? current = patterns
-            .cast<PatternSummary?>()
-            .firstWhere(
-              (PatternSummary? p) => p?.isCurrent ?? false,
-              orElse: () => patterns.first,
-            );
+        final PatternSummary? current = patterns.cast<PatternSummary?>().firstWhere(
+          (PatternSummary? p) => p?.isCurrent ?? false,
+          orElse: () => patterns.first,
+        );
         patternId = current?.id ?? patterns.first.id;
       }
     } catch (_) {
@@ -186,12 +181,10 @@ class PianoRollStore extends ChangeNotifier {
     try {
       instruments = _client.readInstruments();
       if (instrumentId.isEmpty && instruments.isNotEmpty) {
-        final ProjectInstrument? sel = instruments
-            .cast<ProjectInstrument?>()
-            .firstWhere(
-              (ProjectInstrument? inst) => inst?.selected ?? false,
-              orElse: () => instruments.first,
-            );
+        final ProjectInstrument? sel = instruments.cast<ProjectInstrument?>().firstWhere(
+          (ProjectInstrument? inst) => inst?.selected ?? false,
+          orElse: () => instruments.first,
+        );
         instrumentId = sel?.id ?? instruments.first.id;
       }
     } catch (_) {
@@ -539,8 +532,7 @@ class PianoRollStore extends ChangeNotifier {
     _clipboard =
         selection
             .map(
-              (SequenceNote note) =>
-                  note.copyWith(startTicks: note.startTicks - lowest),
+              (SequenceNote note) => note.copyWith(startTicks: note.startTicks - lowest),
             )
             .toList()
           ..sort((SequenceNote a, SequenceNote b) {
@@ -576,15 +568,13 @@ class PianoRollStore extends ChangeNotifier {
     }
     _commitGesture();
     final Set<int> pasted = <int>{
-      for (final SequenceNote note in _clipboard)
-        Object.hash(origin + note.startTicks, note.key),
+      for (final SequenceNote note in _clipboard) Object.hash(origin + note.startTicks, note.key),
     };
     selection.clear();
     refresh();
     selection.addAll(
       notes.where(
-        (SequenceNote note) =>
-            pasted.contains(Object.hash(note.startTicks, note.key)),
+        (SequenceNote note) => pasted.contains(Object.hash(note.startTicks, note.key)),
       ),
     );
     notifyListeners();
@@ -608,10 +598,7 @@ class PianoRollStore extends ChangeNotifier {
     if (selection.isEmpty || instrumentId.isEmpty) return;
     final int clamped = velocity.clamp(1, 16383);
     _client.setNoteVelocity(instrumentId, selection.toList(), clamped);
-    final List<SequenceNote> updated =
-        selection
-            .map((SequenceNote note) => note.copyWith(velocity: clamped))
-            .toList();
+    final List<SequenceNote> updated = selection.map((SequenceNote note) => note.copyWith(velocity: clamped)).toList();
     selection
       ..clear()
       ..addAll(updated);
@@ -673,9 +660,7 @@ class PianoRollStore extends ChangeNotifier {
   List<SequenceNote> notesNearTick(int tick, int toleranceTicks) {
     final SequenceNote? nearest = noteNearTick(tick, toleranceTicks);
     if (nearest == null) return const <SequenceNote>[];
-    return notes
-        .where((SequenceNote note) => note.startTicks == nearest.startTicks)
-        .toList();
+    return notes.where((SequenceNote note) => note.startTicks == nearest.startTicks).toList();
   }
 
   void quantiseSelection({double strength = 1.0}) {
@@ -694,15 +679,14 @@ class PianoRollStore extends ChangeNotifier {
   }
 
   void _shiftSelection({int deltaTicks = 0, int semitones = 0}) {
-    final List<SequenceNote> moved =
-        selection
-            .map(
-              (SequenceNote note) => note.copyWith(
-                startTicks: note.startTicks + deltaTicks,
-                key: note.key + semitones,
-              ),
-            )
-            .toList();
+    final List<SequenceNote> moved = selection
+        .map(
+          (SequenceNote note) => note.copyWith(
+            startTicks: note.startTicks + deltaTicks,
+            key: note.key + semitones,
+          ),
+        )
+        .toList();
     selection
       ..clear()
       ..addAll(moved);
@@ -749,15 +733,13 @@ class PianoRollStore extends ChangeNotifier {
     final int step = lengthDelta - _dragLengthDelta;
     if (step == 0) return;
     _client.resizeNotes(instrumentId, selection.toList(), lengthDelta: step);
-    final List<SequenceNote> resized =
-        selection
-            .map(
-              (SequenceNote note) => note.copyWith(
-                lengthTicks:
-                    note.lengthTicks + step < 1 ? 1 : note.lengthTicks + step,
-              ),
-            )
-            .toList();
+    final List<SequenceNote> resized = selection
+        .map(
+          (SequenceNote note) => note.copyWith(
+            lengthTicks: note.lengthTicks + step < 1 ? 1 : note.lengthTicks + step,
+          ),
+        )
+        .toList();
     selection
       ..clear()
       ..addAll(resized);
@@ -933,10 +915,7 @@ class MarqueeSelection {
   int get highKey => startKey < endKey ? endKey : startKey;
 
   bool contains(SequenceNote note) =>
-      note.key >= lowKey &&
-      note.key <= highKey &&
-      note.endTicks > lowTick &&
-      note.startTicks < highTick;
+      note.key >= lowKey && note.key <= highKey && note.endTicks > lowTick && note.startTicks < highTick;
 }
 
 @immutable

@@ -91,9 +91,7 @@ class _ExtensionBindingState extends State<ExtensionBinding> {
     final bool isHumanize = id == 'ext_humanize';
     return ExtensionDetailVm(
       name: isHumanize ? 'Humanize Grooves' : 'Euclidean Rhythms',
-      meta: isHumanize
-          ? 'by @luma · v1.2.0 · wasm32-wasi'
-          : 'by @onebeat · v2.0.1 · wasm32-wasi',
+      meta: isHumanize ? 'by @luma · v1.2.0 · wasm32-wasi' : 'by @onebeat · v2.0.1 · wasm32-wasi',
       icon: isHumanize ? ObKitGlyphKind.waveform : ObKitGlyphKind.grid,
       description: <ObProseRun>[
         ObProseRun(

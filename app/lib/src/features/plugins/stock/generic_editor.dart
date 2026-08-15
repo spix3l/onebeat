@@ -58,8 +58,7 @@ class GenericParamEditor extends StatelessWidget {
                   onChanged: onParameterChanged == null
                       ? null
                       : (double v) {
-                          final double denorm =
-                              param.minimum + v * (param.maximum - param.minimum);
+                          final double denorm = param.minimum + v * (param.maximum - param.minimum);
                           onParameterChanged!(param.id, denorm);
                         },
                 ),
@@ -68,9 +67,7 @@ class GenericParamEditor extends StatelessWidget {
               SizedBox(
                 width: tokens.size.parameterValueWidth,
                 child: Text(
-                  param.display.isNotEmpty
-                      ? param.display
-                      : param.value.toStringAsFixed(2),
+                  param.display.isNotEmpty ? param.display : param.value.toStringAsFixed(2),
                   style: tokens.type.numericSmall,
                   textAlign: TextAlign.right,
                 ),

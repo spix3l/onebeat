@@ -6,6 +6,7 @@ import '../../ui_kit/floating_window.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import 'stock/generic_editor.dart';
 import 'stock/guitar_editor.dart';
+import 'stock/lowkey_editor.dart';
 import 'stock/piano_editor.dart';
 import 'stock/sampler_editor.dart';
 import 'stock/synth_editor.dart';
@@ -59,15 +60,15 @@ class _PluginBindingState extends State<PluginBinding> {
         for (final HostedParameter parameter in _parameters)
           parameter.id == paramId
               ? HostedParameter(
-                id: parameter.id,
-                name: parameter.name,
-                module: parameter.module,
-                display: parameter.display,
-                value: value,
-                minimum: parameter.minimum,
-                maximum: parameter.maximum,
-                defaultValue: parameter.defaultValue,
-              )
+                  id: parameter.id,
+                  name: parameter.name,
+                  module: parameter.module,
+                  display: parameter.display,
+                  value: value,
+                  minimum: parameter.minimum,
+                  maximum: parameter.maximum,
+                  defaultValue: parameter.defaultValue,
+                )
               : parameter,
       ];
     });
@@ -78,10 +79,7 @@ class _PluginBindingState extends State<PluginBinding> {
     for (final HostedParameter parameter in _parameters) {
       final String name = parameter.name.toLowerCase();
       if (name == key || name.contains(key)) return parameter;
-      if (key == 'pitch' &&
-          (name.contains('pitch') ||
-              name.contains('transpose') ||
-              name.contains('tune'))) {
+      if (key == 'pitch' && (name.contains('pitch') || name.contains('transpose') || name.contains('tune'))) {
         return parameter;
       }
     }
@@ -92,17 +90,13 @@ class _PluginBindingState extends State<PluginBinding> {
     final HostedParameter? parameter = _stockParameter(label);
     if (parameter == null) return fallback;
     final double span = parameter.maximum - parameter.minimum;
-    return span > 0
-        ? ((parameter.value - parameter.minimum) / span).clamp(0.0, 1.0)
-        : fallback;
+    return span > 0 ? ((parameter.value - parameter.minimum) / span).clamp(0.0, 1.0) : fallback;
   }
 
   void _onStockChanged(String label, double value) {
     final HostedParameter? parameter = _stockParameter(label);
     if (parameter == null) return;
-    final double next =
-        parameter.minimum +
-        value.clamp(0.0, 1.0) * (parameter.maximum - parameter.minimum);
+    final double next = parameter.minimum + value.clamp(0.0, 1.0) * (parameter.maximum - parameter.minimum);
     _onParamChanged(parameter.id, next);
   }
 
@@ -152,14 +146,79 @@ class _PluginBindingState extends State<PluginBinding> {
     _onStockChanged('attack', preset.attack);
   }
 
+  void _onLowkeyPresetSelected(int index) {
+    if (index < 0 || index >= kLowkeyPresets.length) return;
+    final LowkeyPresetData preset = kLowkeyPresets[index];
+    _onStockChanged('preset', index / kLowkeyPresets.length);
+    _onStockChanged('tone', preset.tone);
+    _onStockChanged('body', preset.body);
+    _onStockChanged('decay', preset.decay);
+    _onStockChanged('release', preset.release);
+    _onStockChanged('room', preset.room);
+    _onStockChanged('width', preset.width);
+    _onStockChanged('output', preset.output);
+    _onStockChanged('pick position', preset.pickPos);
+    _onStockChanged('damping', preset.damping);
+    _onStockChanged('pickup', preset.pickup);
+    _onStockChanged('drive', preset.drive);
+    _onStockChanged('chorus', preset.chorus);
+    _onStockChanged('reverb size', preset.reverbSize);
+    _onStockChanged('dynamics', preset.dynamics);
+    _onStockChanged('pitch', preset.pitch);
+    _onStockChanged('mod rate', preset.modRate);
+    _onStockChanged('attack', preset.attack);
+  }
+
   @override
   Widget build(BuildContext context) {
     final String lower = widget.pluginName.toLowerCase();
     final bool isPiano = lower.contains('piano');
     final bool isGuitar = lower.contains('guitar');
+    final bool isLowkey = lower.contains('lowkey');
 
     Widget editorContent;
-    if (isPiano) {
+    if (isLowkey) {
+      editorContent = LowkeyStockEditor(
+        preset: _stockValue('preset', 0.0),
+        tone: _stockValue('tone', 0.35),
+        body: _stockValue('body', 0.80),
+        decay: _stockValue('decay', 0.60),
+        release: _stockValue('release', 0.40),
+        room: _stockValue('room', 0.10),
+        width: _stockValue('width', 0.50),
+        output: _stockValue('output', 0.80),
+        pickPos: _stockValue('pick position', 0.50),
+        damping: _stockValue('damping', 0.60),
+        pickup: _stockValue('pickup', 0.10),
+        drive: _stockValue('drive', 0.05),
+        chorus: _stockValue('chorus', 0.00),
+        reverbSize: _stockValue('reverb size', 0.20),
+        dynamics: _stockValue('dynamics', 0.80),
+        pitch: _stockValue('pitch', 0.50),
+        modRate: _stockValue('mod rate', 0.20),
+        attack: _stockValue('attack', 0.30),
+        onPresetChanged: _onLowkeyPresetSelected,
+        onToneChanged: (double v) => _onStockChanged('tone', v),
+        onBodyChanged: (double v) => _onStockChanged('body', v),
+        onDecayChanged: (double v) => _onStockChanged('decay', v),
+        onReleaseChanged: (double v) => _onStockChanged('release', v),
+        onRoomChanged: (double v) => _onStockChanged('room', v),
+        onWidthChanged: (double v) => _onStockChanged('width', v),
+        onOutputChanged: (double v) => _onStockChanged('output', v),
+        onPickPosChanged: (double v) => _onStockChanged('pick position', v),
+        onDampingChanged: (double v) => _onStockChanged('damping', v),
+        onPickupChanged: (double v) => _onStockChanged('pickup', v),
+        onDriveChanged: (double v) => _onStockChanged('drive', v),
+        onChorusChanged: (double v) => _onStockChanged('chorus', v),
+        onReverbSizeChanged: (double v) => _onStockChanged('reverb size', v),
+        onDynamicsChanged: (double v) => _onStockChanged('dynamics', v),
+        onPitchChanged: (double v) => _onStockChanged('pitch', v),
+        onModRateChanged: (double v) => _onStockChanged('mod rate', v),
+        onAttackChanged: (double v) => _onStockChanged('attack', v),
+        onAuditionNoteOn: widget.client.auditionNoteOn,
+        onAuditionNoteOff: widget.client.auditionNoteOff,
+      );
+    } else if (isPiano) {
       editorContent = PianoStockEditor(
         preset: _stockValue('preset', 0.0),
         tone: _stockValue('tone', 0.65),
@@ -293,8 +352,8 @@ class _PluginBindingState extends State<PluginBinding> {
 
     return ObFloatingWindow.plugin(
       vm: windowVm,
-      width: isPiano ? 720 : (isGuitar ? 860 : tokens.size.pluginWindowWidth),
-      height: isPiano ? 430 : (isGuitar ? 520 : tokens.size.pluginWindowHeight),
+      width: isPiano ? 720 : (isGuitar ? 860 : (isLowkey ? 900 : tokens.size.pluginWindowWidth)),
+      height: isPiano ? 430 : (isGuitar ? 520 : (isLowkey ? 680 : tokens.size.pluginWindowHeight)),
       onDragUpdate: widget.onDragUpdate,
       child: editorContent,
     );

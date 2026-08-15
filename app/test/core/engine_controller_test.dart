@@ -51,8 +51,7 @@ class _ControllerHost extends StatefulWidget {
   State<_ControllerHost> createState() => _ControllerHostState();
 }
 
-class _ControllerHostState extends State<_ControllerHost>
-    with SingleTickerProviderStateMixin {
+class _ControllerHostState extends State<_ControllerHost> with SingleTickerProviderStateMixin {
   late final EngineController controller;
 
   @override

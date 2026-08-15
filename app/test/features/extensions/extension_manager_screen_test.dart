@@ -73,8 +73,7 @@ class _PanelBackdrop extends StatelessWidget {
 }
 
 /// One mockup-sized window the golden is recorded in.
-Widget _variant(Widget frame) =>
-    SizedBox(width: 1600, height: 1000, child: frame);
+Widget _variant(Widget frame) => SizedBox(width: 1600, height: 1000, child: frame);
 
 void main() {
   setUpAll(loadAppFonts);
@@ -300,8 +299,7 @@ void main() {
     final PreviewPainter base = build(notes);
     expect(build(notes).shouldRepaint(base), isFalse);
     expect(
-      build(const <PreviewNoteVm>[PreviewNoteVm(x: 0.2, y: 0.1)])
-          .shouldRepaint(base),
+      build(const <PreviewNoteVm>[PreviewNoteVm(x: 0.2, y: 0.1)]).shouldRepaint(base),
       isTrue,
     );
   });

@@ -166,12 +166,9 @@ class _FieldState extends State<_Field> {
     final bool engaged = widget.open || _hover;
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
@@ -274,36 +271,29 @@ class _MenuRowState extends State<_MenuRow> {
     final bool highlight = widget.checked || _hover;
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
           height: tokens.size.menuItemHeight,
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
-          color:
-              widget.checked
-                  ? color.accentWash
-                  : (_hover ? color.surfaceHover : color.none),
+          color: widget.checked ? color.accentWash : (_hover ? color.surfaceHover : color.none),
           child: Row(
             children: <Widget>[
               SizedBox(
                 width: tokens.size.iconSize,
                 height: tokens.size.iconSize,
-                child:
-                    widget.checked
-                        ? CustomPaint(
-                          painter: _CheckPainter(
-                            color: color.accentBright,
-                            stroke: tokens.border.glyph,
-                          ),
-                        )
-                        : null,
+                child: widget.checked
+                    ? CustomPaint(
+                        painter: _CheckPainter(
+                          color: color.accentBright,
+                          stroke: tokens.border.glyph,
+                        ),
+                      )
+                    : null,
               ),
               SizedBox(width: tokens.spacing.xs),
               Text(
@@ -328,12 +318,11 @@ class _ChevronPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double cx = size.width / 2;
     final double cy = size.height / 2;
     canvas.drawLine(Offset(cx - 3, cy - 1), Offset(cx, cy + 2), paint);
@@ -352,17 +341,15 @@ class _CheckPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
-    final Path path =
-        Path()
-          ..moveTo(size.width * 0.22, size.height * 0.52)
-          ..lineTo(size.width * 0.44, size.height * 0.74)
-          ..lineTo(size.width * 0.8, size.height * 0.3);
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    final Path path = Path()
+      ..moveTo(size.width * 0.22, size.height * 0.52)
+      ..lineTo(size.width * 0.44, size.height * 0.74)
+      ..lineTo(size.width * 0.8, size.height * 0.3);
     canvas.drawPath(path, paint);
   }
 

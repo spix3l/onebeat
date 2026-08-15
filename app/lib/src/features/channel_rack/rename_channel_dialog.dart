@@ -100,9 +100,7 @@ class _RenameChannelDialogState extends State<RenameChannelDialog> {
                   ),
                   SizedBox(height: tokens.spacing.sm),
                   Text(
-                    valid
-                        ? 'Applies everywhere this channel appears.'
-                        : 'Give the channel a name.',
+                    valid ? 'Applies everywhere this channel appears.' : 'Give the channel a name.',
                     style: tokens.type.label.copyWith(
                       color: valid ? color.textMuted : color.danger,
                     ),
@@ -167,8 +165,7 @@ class _NameField extends StatelessWidget {
       // it the only way out of a modal with focus in a text box is the mouse.
       child: Shortcuts(
         shortcuts: <ShortcutActivator, Intent>{
-          const SingleActivator(LogicalKeyboardKey.escape):
-              const DismissIntent(),
+          const SingleActivator(LogicalKeyboardKey.escape): const DismissIntent(),
         },
         child: Actions(
           actions: <Type, Action<Intent>>{

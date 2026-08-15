@@ -39,8 +39,7 @@ void main() {
           expect(
             seen.containsKey(key),
             isFalse,
-            reason:
-                '$key is claimed by both ${seen[key]} and ${action.id} in ${area.label}',
+            reason: '$key is claimed by both ${seen[key]} and ${action.id} in ${area.label}',
           );
           seen[key] = action.id;
         }
@@ -72,10 +71,14 @@ void main() {
           shortcuts: <ShortcutActivator, Intent>{
             const SingleActivator(
               LogicalKeyboardKey.keyB,
-            ): const RunActionIntent('tool'),
+            ): const RunActionIntent(
+              'tool',
+            ),
             const SingleActivator(
               LogicalKeyboardKey.backspace,
-            ): const RunActionIntent('delete'),
+            ): const RunActionIntent(
+              'delete',
+            ),
           },
           handlers: <String, VoidCallback>{
             'tool': () => toolChanges++,
@@ -116,7 +119,9 @@ void main() {
           shortcuts: <ShortcutActivator, Intent>{
             const SingleActivator(
               LogicalKeyboardKey.keyB,
-            ): const RunActionIntent('tool'),
+            ): const RunActionIntent(
+              'tool',
+            ),
           },
           handlers: <String, VoidCallback>{'tool': () => toolChanges++},
           child: Focus(focusNode: canvas, child: const SizedBox.expand()),
@@ -148,7 +153,9 @@ void main() {
             const SingleActivator(
               LogicalKeyboardKey.keyZ,
               meta: true,
-            ): const RunActionIntent('undo'),
+            ): const RunActionIntent(
+              'undo',
+            ),
           },
           handlers: <String, VoidCallback>{'undo': () => undos++},
           child: EditableText(

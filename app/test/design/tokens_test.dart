@@ -10,14 +10,10 @@ import 'package:onebeat/src/design/tokens.dart';
 /// WCAG relative luminance.
 double _luminance(Color color) {
   double channel(double value) {
-    return value <= 0.03928
-        ? value / 12.92
-        : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+    return value <= 0.03928 ? value / 12.92 : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
   }
 
-  return (0.2126 * channel(color.r)) +
-      (0.7152 * channel(color.g)) +
-      (0.0722 * channel(color.b));
+  return (0.2126 * channel(color.r)) + (0.7152 * channel(color.g)) + (0.0722 * channel(color.b));
 }
 
 double contrastRatio(Color foreground, Color background) {

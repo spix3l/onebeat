@@ -203,10 +203,9 @@ void main() {
   testWidgets('⌘S saves in place once the project has a file', (
     WidgetTester tester,
   ) async {
-    final _FakeEngineClient client =
-        _FakeEngineClient()
-          ..projectPathValue = '/Music/Night Drive.obt'
-          ..projectNameValue = 'Night Drive';
+    final _FakeEngineClient client = _FakeEngineClient()
+      ..projectPathValue = '/Music/Night Drive.obt'
+      ..projectNameValue = 'Night Drive';
 
     await pumpForTest(
       tester,
@@ -228,10 +227,9 @@ void main() {
   testWidgets('the rename dialog renames the project and its bundle', (
     WidgetTester tester,
   ) async {
-    final _FakeEngineClient client =
-        _FakeEngineClient()
-          ..projectPathValue = '/Music/Old.obt'
-          ..projectNameValue = 'Old';
+    final _FakeEngineClient client = _FakeEngineClient()
+      ..projectPathValue = '/Music/Old.obt'
+      ..projectNameValue = 'Old';
 
     await pumpForTest(
       tester,

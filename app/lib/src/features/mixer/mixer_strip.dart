@@ -91,10 +91,9 @@ class ObMixerStrip extends StatelessWidget {
     final SizeTokens size = tokens.size;
     final bool fader = kind == MixerStripKind.fader;
 
-    final double width =
-        fader
-            ? size.mixerFaderStripWidth
-            : (vm.isMaster ? size.mixerMasterStripWidth : size.mixerStripWidth);
+    final double width = fader
+        ? size.mixerFaderStripWidth
+        : (vm.isMaster ? size.mixerMasterStripWidth : size.mixerStripWidth);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -126,12 +125,11 @@ class ObMixerStrip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style:
-                  vm.selected || vm.isMaster
-                      ? tokens.type.stripName.copyWith(
-                        color: color.textPrimary,
-                      )
-                      : tokens.type.stripName,
+              style: vm.selected || vm.isMaster
+                  ? tokens.type.stripName.copyWith(
+                      color: color.textPrimary,
+                    )
+                  : tokens.type.stripName,
             ),
             SizedBox(height: tokens.spacing.xs),
             Container(
@@ -162,22 +160,18 @@ class ObMixerStrip extends StatelessWidget {
             ],
             SizedBox(height: tokens.spacing.sm),
             Expanded(
-              child:
-                  fader
-                      ? StripFader(
-                        position: vm.fader,
-                        selected: vm.selected,
-                        onChanged: onFader,
-                      )
-                      : Center(
-                        child: StripMeter(
-                          level: vm.level,
-                          width:
-                              vm.isMaster
-                                  ? size.mixerMasterMeterWidth
-                                  : size.mixerMeterWidth,
-                        ),
+              child: fader
+                  ? StripFader(
+                      position: vm.fader,
+                      selected: vm.selected,
+                      onChanged: onFader,
+                    )
+                  : Center(
+                      child: StripMeter(
+                        level: vm.level,
+                        width: vm.isMaster ? size.mixerMasterMeterWidth : size.mixerMeterWidth,
                       ),
+                    ),
             ),
             SizedBox(height: tokens.spacing.sm),
             Text(

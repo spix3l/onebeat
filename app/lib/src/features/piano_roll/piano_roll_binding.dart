@@ -36,8 +36,7 @@ class PianoRollBinding extends StatefulWidget {
   State<PianoRollBinding> createState() => _PianoRollBindingState();
 }
 
-class _PianoRollBindingState extends State<PianoRollBinding>
-    with SingleTickerProviderStateMixin {
+class _PianoRollBindingState extends State<PianoRollBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   late final PianoRollStore _store;
   final FocusNode _focus = FocusNode(debugLabel: 'piano-roll-binding');
@@ -75,8 +74,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
 
   /// The tick at the centre of the canvas — the anchor a zoom button or a
   /// keyboard zoom holds still, since neither has a pointer to zoom about.
-  double get _centreTick =>
-      _store.scrollTicks + (_gridSize.width / 2) / _store.pixelsPerTick;
+  double get _centreTick => _store.scrollTicks + (_gridSize.width / 2) / _store.pixelsPerTick;
 
   /// How much music is on screen, in ticks. One horizontal page.
   double get _visibleTicks => _gridSize.width / _store.pixelsPerTick;
@@ -156,8 +154,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
 
   Color _resolveInstrumentColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
-      final int parsed =
-          int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
+      final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
       }
@@ -178,9 +175,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
   /// notes and switching back is the round trip a modifier exists to remove —
   /// and with the pencil up, ⌥-dragging used to *draw*, which is the opposite
   /// of what a selection modifier should do.
-  bool get _isLasso =>
-      HardwareKeyboard.instance.isAltPressed ||
-      HardwareKeyboard.instance.isMetaPressed;
+  bool get _isLasso => HardwareKeyboard.instance.isAltPressed || HardwareKeyboard.instance.isMetaPressed;
 
   int _maybeSnap(int tick) => _snapOff ? tick : _store.snapDown(tick);
 
@@ -204,20 +199,15 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     final PrViewport viewport = _buildViewport(tokens);
 
     // Toolbar VM
-    final PatternSummary? currentPattern = _store.patterns
-        .cast<PatternSummary?>()
-        .firstWhere(
-          (PatternSummary? p) => p?.id == _store.patternId,
-          orElse:
-              () => _store.patterns.isNotEmpty ? _store.patterns.first : null,
-        );
+    final PatternSummary? currentPattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+      (PatternSummary? p) => p?.id == _store.patternId,
+      orElse: () => _store.patterns.isNotEmpty ? _store.patterns.first : null,
+    );
     final String patternName = currentPattern?.name ?? 'Pattern';
 
-    final ProjectInstrument?
-    currentInst = _store.instruments.cast<ProjectInstrument?>().firstWhere(
+    final ProjectInstrument? currentInst = _store.instruments.cast<ProjectInstrument?>().firstWhere(
       (ProjectInstrument? inst) => inst?.id == _store.instrumentId,
-      orElse:
-          () => _store.instruments.isNotEmpty ? _store.instruments.first : null,
+      orElse: () => _store.instruments.isNotEmpty ? _store.instruments.first : null,
     );
     final String instName = currentInst?.name ?? _store.instrumentId;
 
@@ -229,10 +219,9 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       currentInst?.color,
     );
 
-    final List<String> patternNames =
-        _store.patterns.isNotEmpty
-            ? _store.patterns.map((PatternSummary p) => p.name).toList()
-            : <String>[patternName];
+    final List<String> patternNames = _store.patterns.isNotEmpty
+        ? _store.patterns.map((PatternSummary p) => p.name).toList()
+        : <String>[patternName];
 
     final PrToolbarVm toolbarVm = PrToolbarVm(
       crumbs: <String>['Piano roll', patternName, instName],
@@ -269,8 +258,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     ];
 
     final Set<int> selectedIds = <int>{
-      for (final SequenceNote sel in _store.selection)
-        Object.hash(sel.startTicks, sel.key),
+      for (final SequenceNote sel in _store.selection) Object.hash(sel.startTicks, sel.key),
     };
 
     // Playhead calculation.
@@ -285,11 +273,9 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     if (snapshot.playing) {
       final double startBeats = snapshot.loopStartBeats;
       final double endBeats = snapshot.loopEndBeats;
-      final double loopLengthBeats =
-          endBeats > startBeats ? endBeats - startBeats : 0.0;
+      final double loopLengthBeats = endBeats > startBeats ? endBeats - startBeats : 0.0;
       final double inLoop = snapshot.positionBeats - startBeats;
-      final double looped =
-          loopLengthBeats > 0.0 ? inLoop % loopLengthBeats : inLoop;
+      final double looped = loopLengthBeats > 0.0 ? inLoop % loopLengthBeats : inLoop;
       playheadTick = ((looped < 0.0 ? 0.0 : looped) * ticksPerQuarter).round();
     }
 
@@ -439,9 +425,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       view.noteAt(local.dy),
     );
     if (hit == null) return MouseCursor.defer;
-    return _onResizeEdge(hit, local.dx, view)
-        ? SystemMouseCursors.resizeLeftRight
-        : SystemMouseCursors.grab;
+    return _onResizeEdge(hit, local.dx, view) ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
   }
 
   void _onGridHover(Offset local, PrViewport view) {
@@ -462,8 +446,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
   /// The pointer is the only thing on screen that says *where you are working*
   /// — a paste that ignored it and went back to where the copy was taken from
   /// made ⌘C ⌘V useless for moving a phrase anywhere.
-  int get _pasteTick =>
-      _hoverTick == null ? _store.nextFreeTick : _maybeSnap(_hoverTick!);
+  int get _pasteTick => _hoverTick == null ? _store.nextFreeTick : _maybeSnap(_hoverTick!);
 
   // ----- Erasing ------------------------------------------------------------
 
@@ -504,15 +487,13 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       return;
     }
     final double step = view.rowHeight / 2;
-    final int samples =
-        step <= 0 ? 1 : ((local - from).distance / step).ceil().clamp(1, 64);
+    final int samples = step <= 0 ? 1 : ((local - from).distance / step).ceil().clamp(1, 64);
     for (int i = 1; i <= samples; i++) {
       _eraseAt(Offset.lerp(from, local, i / samples)!, view);
     }
   }
 
-  void _eraseAt(Offset local, PrViewport view) =>
-      _store.eraseAt(view.tickAt(local.dx), view.noteAt(local.dy));
+  void _eraseAt(Offset local, PrViewport view) => _store.eraseAt(view.tickAt(local.dx), view.noteAt(local.dy));
 
   void _onPanStart(DragStartDetails details, PrViewport view) {
     FocusPolicy.take(_focus);
@@ -566,8 +547,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       case PianoDragKind.move:
         int deltaTicks = tick - _dragOriginTick;
         if (!_snapOff && _store.snapTicks > 0) {
-          deltaTicks =
-              (deltaTicks / _store.snapTicks).round() * _store.snapTicks;
+          deltaTicks = (deltaTicks / _store.snapTicks).round() * _store.snapTicks;
         }
         _store.updateMove(deltaTicks, key - _dragOriginKey);
       case PianoDragKind.resize:
@@ -665,8 +645,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
 
     // A chord. The selected voices if any of them are selected, otherwise the
     // whole stack.
-    final List<SequenceNote> selected =
-        hits.where(_store.selection.contains).toList();
+    final List<SequenceNote> selected = hits.where(_store.selection.contains).toList();
     for (final SequenceNote note in selected.isEmpty ? hits : selected) {
       _store.setNoteVelocity(note, velocity);
     }
@@ -768,42 +747,62 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         // you, rather than a modifier you have to remember on an empty canvas.
         const SingleActivator(
           LogicalKeyboardKey.arrowUp,
-        ): const _NudgeKeyIntent(1),
+        ): const _NudgeKeyIntent(
+          1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowDown,
-        ): const _NudgeKeyIntent(-1),
+        ): const _NudgeKeyIntent(
+          -1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowUp,
           shift: true,
-        ): const _NudgeKeyIntent(12),
+        ): const _NudgeKeyIntent(
+          12,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowDown,
           shift: true,
-        ): const _NudgeKeyIntent(-12),
+        ): const _NudgeKeyIntent(
+          -12,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowLeft,
-        ): const _NudgeTimeIntent(-1),
+        ): const _NudgeTimeIntent(
+          -1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowRight,
-        ): const _NudgeTimeIntent(1),
+        ): const _NudgeTimeIntent(
+          1,
+        ),
 
         // Explicit panning, which works whatever is selected.
         const SingleActivator(
           LogicalKeyboardKey.arrowUp,
           alt: true,
-        ): const _PanIntent(deltaKeys: 1),
+        ): const _PanIntent(
+          deltaKeys: 1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowDown,
           alt: true,
-        ): const _PanIntent(deltaKeys: -1),
+        ): const _PanIntent(
+          deltaKeys: -1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowLeft,
           alt: true,
-        ): const _PanIntent(deltaBeats: -1),
+        ): const _PanIntent(
+          deltaBeats: -1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.arrowRight,
           alt: true,
-        ): const _PanIntent(deltaBeats: 1),
+        ): const _PanIntent(
+          deltaBeats: 1,
+        ),
         const SingleActivator(LogicalKeyboardKey.pageUp): const _PanIntent(
           pages: 1,
         ),
@@ -813,11 +812,15 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         const SingleActivator(
           LogicalKeyboardKey.pageUp,
           shift: true,
-        ): const _PanIntent(horizontalPages: -1),
+        ): const _PanIntent(
+          horizontalPages: -1,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.pageDown,
           shift: true,
-        ): const _PanIntent(horizontalPages: 1),
+        ): const _PanIntent(
+          horizontalPages: 1,
+        ),
         const SingleActivator(LogicalKeyboardKey.home): const _HomeIntent(),
 
         // Zoom. Both the main-row and the numpad keys, because a laptop and a
@@ -825,29 +828,43 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         const SingleActivator(
           LogicalKeyboardKey.equal,
           meta: true,
-        ): const _ZoomIntent(1.25),
+        ): const _ZoomIntent(
+          1.25,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.add,
           meta: true,
-        ): const _ZoomIntent(1.25),
+        ): const _ZoomIntent(
+          1.25,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.minus,
           meta: true,
-        ): const _ZoomIntent(0.8),
+        ): const _ZoomIntent(
+          0.8,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.numpadSubtract,
           meta: true,
-        ): const _ZoomIntent(0.8),
+        ): const _ZoomIntent(
+          0.8,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.equal,
           meta: true,
           shift: true,
-        ): const _ZoomIntent(1.25, vertical: true),
+        ): const _ZoomIntent(
+          1.25,
+          vertical: true,
+        ),
         const SingleActivator(
           LogicalKeyboardKey.minus,
           meta: true,
           shift: true,
-        ): const _ZoomIntent(0.8, vertical: true),
+        ): const _ZoomIntent(
+          0.8,
+          vertical: true,
+        ),
 
         // Tools, matching the letters in their tooltips.
         const SingleActivator(LogicalKeyboardKey.keyP): const _ToolIntent(
@@ -861,23 +878,16 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         ),
 
         const SingleActivator(LogicalKeyboardKey.delete): const _DeleteIntent(),
-        const SingleActivator(LogicalKeyboardKey.backspace):
-            const _DeleteIntent(),
+        const SingleActivator(LogicalKeyboardKey.backspace): const _DeleteIntent(),
         const SingleActivator(LogicalKeyboardKey.escape): const CancelIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyA, meta: true):
-            const _SelectAllIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-            const _DuplicateIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyA, meta: true): const _SelectAllIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true): const _DuplicateIntent(),
         // ⌘B is FL's duplicate: the selection again, one selection-length
         // later. ⌘D is kept as the alias the rest of the app already used.
-        const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
-            const _DuplicateIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyC, meta: true):
-            const _CopyIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyX, meta: true):
-            const _CutIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
-            const _PasteIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyB, meta: true): const _DuplicateIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): const _CopyIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true): const _CutIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): const _PasteIntent(),
         const SingleActivator(LogicalKeyboardKey.keyQ): const _QuantiseIntent(),
       },
       handlers: const <String, VoidCallback>{},
@@ -905,8 +915,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
         ),
         _NudgeTimeIntent: CallbackAction<_NudgeTimeIntent>(
           onInvoke: (_NudgeTimeIntent intent) {
-            final int step =
-                _store.snapTicks > 0 ? _store.snapTicks : ticksPerQuarter ~/ 4;
+            final int step = _store.snapTicks > 0 ? _store.snapTicks : ticksPerQuarter ~/ 4;
             if (!_store.hasSelection) {
               _pan(deltaTicks: (step * intent.direction).toDouble());
               return null;
@@ -919,13 +928,10 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onInvoke: (_PanIntent intent) {
             final int rows = _visibleRows;
             _pan(
-              deltaTicks:
-                  intent.deltaBeats * ticksPerQuarter.toDouble() +
-                  intent.horizontalPages * _visibleTicks,
+              deltaTicks: intent.deltaBeats * ticksPerQuarter.toDouble() + intent.horizontalPages * _visibleTicks,
               // A vertical page is one row short of the viewport, so the row
               // you were reading is still on screen after the jump.
-              deltaKeys:
-                  intent.deltaKeys + intent.pages * (rows > 1 ? rows - 1 : 1),
+              deltaKeys: intent.deltaKeys + intent.pages * (rows > 1 ? rows - 1 : 1),
             );
             return null;
           },
@@ -1007,10 +1013,8 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onTool: (PrTool tool) => _store.setTool(tool),
           onScale: _onSelectScaleByName,
           onSnap: _onSelectSnapByLabel,
-          onZoomIn:
-              () => _store.zoomHorizontally(1.25, anchorTick: _centreTick),
-          onZoomOut:
-              () => _store.zoomHorizontally(0.8, anchorTick: _centreTick),
+          onZoomIn: () => _store.zoomHorizontally(1.25, anchorTick: _centreTick),
+          onZoomOut: () => _store.zoomHorizontally(0.8, anchorTick: _centreTick),
           onBack: widget.onBackToPlaylist,
           onKeyPress: (int key) => _store.audition(key),
           onTapDown: (TapDownDetails d) => _onTapDown(d, view),
@@ -1025,25 +1029,17 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onGridHover: (Offset local) => _onGridHover(local, view),
           onGridExit: _onGridExit,
           gridCursor: _gridCursor,
-          onPointerSignal:
-              (PointerSignalEvent e) => _onPointerSignal(e, view, gutter),
+          onPointerSignal: (PointerSignalEvent e) => _onPointerSignal(e, view, gutter),
           onPointerPanZoomStart: _onPanZoomStart,
-          onPointerPanZoomUpdate:
-              (PointerPanZoomUpdateEvent e) =>
-                  _onPanZoomUpdate(e, view, gutter),
+          onPointerPanZoomUpdate: (PointerPanZoomUpdateEvent e) => _onPanZoomUpdate(e, view, gutter),
           onPointerPanZoomEnd: (_) => _lastPinchScale = 1.0,
           onScrollTicks: (double ticks) => _store.panTo(ticks, _store.topKey),
           onScrollTopKey: (int key) => _store.panTo(_store.scrollTicks, key),
           onGridSize: _onGridSize,
-          onLaneChanged:
-              (String lane) => setState(() => _selectedVelocityLane = lane),
-          onVelocityTapDown:
-              (TapDownDetails d, double h) =>
-                  _onVelocityTapDown(d, h, view, gutter),
+          onLaneChanged: (String lane) => setState(() => _selectedVelocityLane = lane),
+          onVelocityTapDown: (TapDownDetails d, double h) => _onVelocityTapDown(d, h, view, gutter),
           onVelocityDragStart: _store.beginVelocityGesture,
-          onVelocityDragUpdate:
-              (DragUpdateDetails d, double h) =>
-                  _onVelocityDragUpdate(d, h, view, gutter),
+          onVelocityDragUpdate: (DragUpdateDetails d, double h) => _onVelocityDragUpdate(d, h, view, gutter),
           onVelocityDragEnd: _store.endDrag,
         ),
       ),

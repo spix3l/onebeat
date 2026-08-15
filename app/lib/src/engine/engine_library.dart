@@ -26,9 +26,7 @@ class EngineLoadException implements Exception {
   // "Looked in:" heading to that message is noise in a string a user reads.
   @override
   String toString() =>
-      searchedPaths.isEmpty
-          ? message
-          : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
+      searchedPaths.isEmpty ? message : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
 }
 
 const String _libraryFileName = 'libonebeat_engine.dylib';

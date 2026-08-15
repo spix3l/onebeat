@@ -160,8 +160,7 @@ class FakeEngineClient implements EngineClient {
     required double strength,
   }) => _transform(instrumentId, notes, (SequenceNote note) {
     final int target = ((note.startTicks / gridTicks).round()) * gridTicks;
-    final int moved =
-        note.startTicks + ((target - note.startTicks) * strength).round();
+    final int moved = note.startTicks + ((target - note.startTicks) * strength).round();
     return note.copyWith(startTicks: moved);
   });
 
@@ -185,9 +184,7 @@ class FakeEngineClient implements EngineClient {
 
   // ----- patterns -----------------------------------------------------------
 
-  int _usageOf(String patternId) => clips.values
-      .where((MutableClip clip) => clip.patternId == patternId)
-      .length;
+  int _usageOf(String patternId) => clips.values.where((MutableClip clip) => clip.patternId == patternId).length;
 
   @override
   List<PatternSummary> readPatterns() => patterns.values
@@ -226,12 +223,10 @@ class FakeEngineClient implements EngineClient {
   }
 
   @override
-  void renamePattern(String patternId, String name) =>
-      patterns[patternId]?.name = name;
+  void renamePattern(String patternId, String name) => patterns[patternId]?.name = name;
 
   @override
-  void recolorPattern(String patternId, String color) =>
-      patterns[patternId]?.color = color;
+  void recolorPattern(String patternId, String color) => patterns[patternId]?.color = color;
 
   @override
   void duplicatePattern(String patternId) {
@@ -256,8 +251,7 @@ class FakeEngineClient implements EngineClient {
   void makeClipsUnique(List<String> clipIds) {
     if (clipIds.isEmpty) return;
     final MutableClip? first = clips[clipIds.first];
-    final MutablePattern? source =
-        first == null ? null : patterns[first.patternId];
+    final MutablePattern? source = first == null ? null : patterns[first.patternId];
     if (source == null) return;
     final String id = _mint('pat');
     patterns[id] = source.cloneAs(id, '${source.name} 2');
@@ -281,9 +275,7 @@ class FakeEngineClient implements EngineClient {
             color: lane.color,
             order: lane.order,
             height: lane.height,
-            clipCount: clips.values
-                .where((MutableClip clip) => clip.laneId == lane.id)
-                .length,
+            clipCount: clips.values.where((MutableClip clip) => clip.laneId == lane.id).length,
             muted: lane.muted,
             soloed: lane.soloed,
             collapsed: lane.collapsed,
@@ -308,20 +300,16 @@ class FakeEngineClient implements EngineClient {
   void reorderLane(String laneId, int order) => lanes[laneId]?.order = order;
 
   @override
-  void setLaneHeight(String laneId, int height) =>
-      lanes[laneId]?.height = height;
+  void setLaneHeight(String laneId, int height) => lanes[laneId]?.height = height;
 
   @override
-  void setLaneMuted(String laneId, {required bool muted}) =>
-      lanes[laneId]?.muted = muted;
+  void setLaneMuted(String laneId, {required bool muted}) => lanes[laneId]?.muted = muted;
 
   @override
-  void setLaneSoloed(String laneId, {required bool soloed}) =>
-      lanes[laneId]?.soloed = soloed;
+  void setLaneSoloed(String laneId, {required bool soloed}) => lanes[laneId]?.soloed = soloed;
 
   @override
-  void setLaneCollapsed(String laneId, {required bool collapsed}) =>
-      lanes[laneId]?.collapsed = collapsed;
+  void setLaneCollapsed(String laneId, {required bool collapsed}) => lanes[laneId]?.collapsed = collapsed;
 
   @override
   void removeLane(String laneId) {
@@ -392,8 +380,7 @@ class FakeEngineClient implements EngineClient {
   }
 
   @override
-  void resizeClip(String clipId, int lengthTicks) =>
-      clips[clipId]?.lengthTicks = lengthTicks;
+  void resizeClip(String clipId, int lengthTicks) => clips[clipId]?.lengthTicks = lengthTicks;
 
   @override
   void duplicateClip(
@@ -415,20 +402,16 @@ class FakeEngineClient implements EngineClient {
   void removeClip(String clipId) => clips.remove(clipId);
 
   @override
-  void setClipMuted(String clipId, {required bool muted}) =>
-      clips[clipId]?.muted = muted;
+  void setClipMuted(String clipId, {required bool muted}) => clips[clipId]?.muted = muted;
 
   @override
-  void setClipLoop(String clipId, {required bool loop}) =>
-      clips[clipId]?.loop = loop;
+  void setClipLoop(String clipId, {required bool loop}) => clips[clipId]?.loop = loop;
 
   @override
-  void setClipWindowStart(String clipId, int windowStartTicks) =>
-      clips[clipId]?.windowStartTicks = windowStartTicks;
+  void setClipWindowStart(String clipId, int windowStartTicks) => clips[clipId]?.windowStartTicks = windowStartTicks;
 
   @override
-  void setClipTranspose(String clipId, int semitones) =>
-      clips[clipId]?.transpose = semitones;
+  void setClipTranspose(String clipId, int semitones) => clips[clipId]?.transpose = semitones;
 
   // ----- project files ------------------------------------------------------
   // Written out rather than left to noSuchMethod: these return values, and a
@@ -492,8 +475,7 @@ class MutablePattern {
   String color;
   int lengthTicks;
   double swing = 0;
-  final Map<String, List<SequenceNote>> sequences =
-      <String, List<SequenceNote>>{};
+  final Map<String, List<SequenceNote>> sequences = <String, List<SequenceNote>>{};
 
   MutablePattern cloneAs(String newId, String newName) {
     final MutablePattern clone = MutablePattern(

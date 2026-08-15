@@ -25,8 +25,8 @@ class StepVm {
   /// without a second control to look at.
   final double velocity;
 
-/// A step that is off; `const StepVm.off()` reads better in a fixture than
-/// `StepVm(on: false)` sixteen times.
+  /// A step that is off; `const StepVm.off()` reads better in a fixture than
+  /// `StepVm(on: false)` sixteen times.
   const StepVm.off() : this(on: false);
 }
 
@@ -136,8 +136,7 @@ class ObRackRow extends StatelessWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
   final VoidCallback? onPower;
   final ValueChanged<int>? onStepTap;
-  final void Function(PointerDownEvent event, int stepIndex)?
-      onPointerDownStep;
+  final void Function(PointerDownEvent event, int stepIndex)? onPointerDownStep;
   final void Function(PointerMoveEvent event, int stepIndex)? onPointerMoveStep;
   final ValueChanged<double>? onVol;
   final ValueChanged<double>? onPan;
@@ -276,8 +275,7 @@ class ObStepGrid extends StatelessWidget {
   final List<StepVm> steps;
   final int? playingStep;
   final ValueChanged<int>? onStepTap;
-  final void Function(PointerDownEvent event, int stepIndex)?
-      onPointerDownStep;
+  final void Function(PointerDownEvent event, int stepIndex)? onPointerDownStep;
   final void Function(PointerMoveEvent event, int stepIndex)? onPointerMoveStep;
 
   /// Cells per visual group. Four in every mockup; a parameter because a
@@ -287,17 +285,13 @@ class ObStepGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final bool painting =
-        onPointerDownStep != null || onPointerMoveStep != null;
+    final bool painting = onPointerDownStep != null || onPointerMoveStep != null;
     final List<Widget> cells = <Widget>[];
     for (int i = 0; i < steps.length; i++) {
       if (i > 0) {
         cells.add(
           SizedBox(
-            width:
-                i % groupSize == 0
-                    ? tokens.size.rackStepGroupGap
-                    : tokens.size.rackStepGap,
+            width: i % groupSize == 0 ? tokens.size.rackStepGroupGap : tokens.size.rackStepGap,
           ),
         );
       }
@@ -310,9 +304,7 @@ class ObStepGrid extends StatelessWidget {
           lifted: (i ~/ groupSize).isEven,
           // A binding that paints from pointer events must not also run the
           // ordinary tap toggle, or one click would add and remove the step.
-          onTap: painting || onStepTap == null
-              ? null
-              : () => onStepTap!(i),
+          onTap: painting || onStepTap == null ? null : () => onStepTap!(i),
         ),
       );
     }
@@ -346,9 +338,7 @@ class ObStepGrid extends StatelessWidget {
       if (position.dx >= left && position.dx < right) return index;
       left = right;
       if (index < steps.length - 1) {
-        left += index % groupSize == groupSize - 1
-            ? size.rackStepGroupGap
-            : size.rackStepGap;
+        left += index % groupSize == groupSize - 1 ? size.rackStepGroupGap : size.rackStepGap;
       }
     }
     return null;
@@ -461,10 +451,9 @@ class _RackPianoPreviewPainter extends CustomPainter {
     final Color? head = playheadColor;
     if (tick != null && head != null && end > 0) {
       final double x = (tick / end) * size.width;
-      final Paint headPaint =
-          Paint()
-            ..color = head
-            ..strokeWidth = playheadWidth;
+      final Paint headPaint = Paint()
+        ..color = head
+        ..strokeWidth = playheadWidth;
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
@@ -513,17 +502,14 @@ class _StepCell extends StatelessWidget {
           width: side,
           height: side,
           decoration: BoxDecoration(
-            color: step.on
-                ? null
-                : (lifted ? color.stepRestLifted : color.stepRest),
-            gradient:
-                step.on
-                    ? LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: color.stepGradient(step.velocity),
-                    )
-                    : null,
+            color: step.on ? null : (lifted ? color.stepRestLifted : color.stepRest),
+            gradient: step.on
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: color.stepGradient(step.velocity),
+                  )
+                : null,
             // The corner follows the cell. r8 on the design's 30px square is a
             // rounded square; the same 8 on a shrunk cell is a circle, and a
             // grid of circles stops reading as a row of steps.
@@ -534,12 +520,8 @@ class _StepCell extends StatelessWidget {
               // The playing column outlines every cell in it, lit or not —
               // that is what makes it read as a column rather than as a
               // brighter step.
-              color:
-                  playing
-                      ? color.textSecondary
-                      : (step.on ? color.accentBright : color.surfaceWell),
-              width:
-                  playing ? tokens.border.emphasis : tokens.border.hairline,
+              color: playing ? color.textSecondary : (step.on ? color.accentBright : color.surfaceWell),
+              width: playing ? tokens.border.emphasis : tokens.border.hairline,
             ),
           ),
         ),
@@ -598,12 +580,11 @@ class _PowerGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
     // A ring broken at the top, with the stem through the break.
@@ -621,8 +602,7 @@ class _PowerGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_PowerGlyphPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.stroke != stroke;
+  bool shouldRepaint(_PowerGlyphPainter oldDelegate) => oldDelegate.color != color || oldDelegate.stroke != stroke;
 }
 
 /// Half the break in the power glyph's ring, in radians. Named so the gap

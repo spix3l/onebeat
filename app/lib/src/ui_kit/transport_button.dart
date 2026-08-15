@@ -59,12 +59,9 @@ class _ObTransportButtonState extends State<ObTransportButton> {
     }
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,

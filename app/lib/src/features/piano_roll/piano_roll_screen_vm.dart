@@ -14,8 +14,7 @@ class PianoRollScreenVm {
     this.velocityLanes = const <String>['VEL', 'PAN'],
     this.contentEndTicks = 0,
     this.hasInstrument = true,
-    this.emptyMessage =
-        'Select an instrument in the channel rack to edit its notes here.',
+    this.emptyMessage = 'Select an instrument in the channel rack to edit its notes here.',
     this.canUndo = false,
     this.canRedo = false,
   });

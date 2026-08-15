@@ -142,10 +142,7 @@ class _ListPanel extends StatelessWidget {
                   _ExtensionRow(
                     vm: ext,
                     onTap: onSelect == null ? null : () => onSelect!(ext.id),
-                    onToggle:
-                        onToggle == null
-                            ? null
-                            : (bool on) => onToggle!(ext.id, on),
+                    onToggle: onToggle == null ? null : (bool on) => onToggle!(ext.id, on),
                   ),
                   SizedBox(height: tokens.spacing.xs),
                 ],
@@ -284,14 +281,8 @@ class _IconTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
-    final Color fill =
-        danger
-            ? color.dangerWash
-            : (accent ? color.accentWash : color.surfaceWell);
-    final Color ink =
-        danger
-            ? color.danger
-            : (accent ? color.accentBright : color.textSecondary);
+    final Color fill = danger ? color.dangerWash : (accent ? color.accentWash : color.surfaceWell);
+    final Color ink = danger ? color.danger : (accent ? color.accentBright : color.textSecondary);
     return Container(
       width: size,
       height: size,
@@ -303,7 +294,9 @@ class _IconTile extends StatelessWidget {
           width: tokens.border.hairline,
         ),
       ),
-      child: Center(child: ObKitGlyph(kind: icon, color: ink)),
+      child: Center(
+        child: ObKitGlyph(kind: icon, color: ink),
+      ),
     );
   }
 }
@@ -345,8 +338,7 @@ class ObSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
-    final double inset =
-        (tokens.size.extSwitchHeight - tokens.size.extSwitchKnobSize) / 2;
+    final double inset = (tokens.size.extSwitchHeight - tokens.size.extSwitchKnobSize) / 2;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onChanged == null ? null : () => onChanged!(!on),
@@ -525,8 +517,7 @@ class _CapabilityRow extends StatelessWidget {
             ),
             child: Center(
               child: ObKitGlyph(
-                kind:
-                    vm.granted ? ObKitGlyphKind.check : ObKitGlyphKind.cross,
+                kind: vm.granted ? ObKitGlyphKind.check : ObKitGlyphKind.cross,
                 color: vm.granted ? color.accentBright : color.textMuted,
                 size: ObKitGlyphSize.inline,
               ),
@@ -796,7 +787,9 @@ class _EmptyExtras extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               for (int i = 0; i < steps.length; i++)
-                Expanded(child: _Step(index: i + 1, vm: steps[i])),
+                Expanded(
+                  child: _Step(index: i + 1, vm: steps[i]),
+                ),
             ],
           ),
         ),
@@ -952,8 +945,7 @@ class _NeighbourPanel extends StatelessWidget {
               _PanelListRow(vm: row),
               SizedBox(height: tokens.spacing.xs),
             ],
-            if (vm.wells.isNotEmpty || vm.knobs.isNotEmpty)
-              Expanded(child: _RackBody(vm: vm)),
+            if (vm.wells.isNotEmpty || vm.knobs.isNotEmpty) Expanded(child: _RackBody(vm: vm)),
           ],
         ),
       ),
@@ -1171,10 +1163,7 @@ class _ExtensionPanel extends StatelessWidget {
               if (i > 0) SizedBox(height: tokens.spacing.xs),
               _ParamRow(
                 vm: vm.params[i],
-                onChanged:
-                    onParam == null
-                        ? null
-                        : (double value) => onParam!(i, value),
+                onChanged: onParam == null ? null : (double value) => onParam!(i, value),
               ),
             ],
             SizedBox(height: tokens.spacing.sm),
@@ -1295,13 +1284,11 @@ class _ParamRow extends StatelessWidget {
               builder: (BuildContext context, BoxConstraints constraints) {
                 return GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTapDown:
-                      onChanged == null
-                          ? null
-                          : (TapDownDetails details) => onChanged!(
-                            (details.localPosition.dx / constraints.maxWidth)
-                                .clamp(0.0, 1.0),
-                          ),
+                  onTapDown: onChanged == null
+                      ? null
+                      : (TapDownDetails details) => onChanged!(
+                          (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0),
+                        ),
                   child: Stack(
                     alignment: Alignment.centerLeft,
                     children: <Widget>[
@@ -1330,10 +1317,7 @@ class _ParamRow extends StatelessWidget {
                       if (vm.readoutOnTrack)
                         Padding(
                           padding: EdgeInsets.only(
-                            left:
-                                constraints.maxWidth *
-                                    vm.value.clamp(0.0, 1.0) +
-                                tokens.spacing.sm,
+                            left: constraints.maxWidth * vm.value.clamp(0.0, 1.0) + tokens.spacing.sm,
                           ),
                           child: Text(
                             vm.readout,
@@ -1424,10 +1408,9 @@ class PreviewPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..color = gridLine
-          ..strokeWidth = lineWidth;
+    final Paint line = Paint()
+      ..color = gridLine
+      ..strokeWidth = lineWidth;
     for (int i = 1; i < _columns; i++) {
       final double x = size.width * i / _columns;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
@@ -1450,6 +1433,5 @@ class PreviewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(PreviewPainter oldDelegate) =>
-      oldDelegate.notes != notes || oldDelegate.note != note;
+  bool shouldRepaint(PreviewPainter oldDelegate) => oldDelegate.notes != notes || oldDelegate.note != note;
 }

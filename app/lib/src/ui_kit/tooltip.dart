@@ -52,8 +52,7 @@ class _ObTooltipState extends State<ObTooltip> {
 
   void _schedule() {
     _timer?.cancel();
-    final Duration delay =
-        widget.waitDuration ?? OneBeatTheme.of(context).motion.tooltipDelay;
+    final Duration delay = widget.waitDuration ?? OneBeatTheme.of(context).motion.tooltipDelay;
     _timer = Timer(delay, () {
       if (mounted) _portal.show();
     });

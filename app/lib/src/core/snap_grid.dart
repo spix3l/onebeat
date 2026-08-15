@@ -16,8 +16,7 @@ class SnapGridChoice {
     SnapGridChoice('None', 0),
   ];
 
-  static List<String> get labels =>
-      all.map((SnapGridChoice choice) => choice.label).toList();
+  static List<String> get labels => all.map((SnapGridChoice choice) => choice.label).toList();
 
   static List<String> get rackLabels => <String>[
     for (final int index in <int>[0, 1, 3, 2, 4, 6]) all[index].label,

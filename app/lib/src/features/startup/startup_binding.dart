@@ -36,7 +36,9 @@ class _StartupBindingState extends State<StartupBinding> {
     icon: ObKitGlyphKind.waveform,
     heading: 'Welcome to OneBeat',
     body: <ObProseRun>[
-      ObProseRun('Create a new beat, open an existing project, or load the factory demo template to explore the sound engine.'),
+      ObProseRun(
+        'Create a new beat, open an existing project, or load the factory demo template to explore the sound engine.',
+      ),
     ],
     footnote: 'Audio engine initialized · CoreAudio 48.0 kHz 128 samples',
   );
@@ -45,7 +47,9 @@ class _StartupBindingState extends State<StartupBinding> {
     icon: ObKitGlyphKind.warning,
     heading: 'Unsaved Session Detected',
     body: <ObProseRun>[
-      ObProseRun('An unexpected session interruption was detected. Would you like to recover your unsaved project edits?'),
+      ObProseRun(
+        'An unexpected session interruption was detected. Would you like to recover your unsaved project edits?',
+      ),
     ],
     footnote: 'Autosave checkpoint found from recent session',
   );

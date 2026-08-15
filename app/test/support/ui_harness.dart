@@ -22,8 +22,7 @@ Future<void> loadAppFonts() async {
   TestWidgetsFlutterBinding.ensureInitialized();
   const Map<String, String> families = <String, String>{
     'Archivo': '../third_party/fonts/archivo/Archivo[wdth,wght].ttf',
-    'MartianMono':
-        '../third_party/fonts/martian_mono/MartianMono[wdth,wght].ttf',
+    'MartianMono': '../third_party/fonts/martian_mono/MartianMono[wdth,wght].ttf',
   };
   for (final MapEntry<String, String> family in families.entries) {
     final FontLoader loader = FontLoader(family.key)

@@ -22,3 +22,7 @@ linter:
     - require_trailing_commas
     - unnecessary_parenthesis
     - use_super_parameters
+
+formatter: 
+  page_width: 120
+  trailing_commas: preserve

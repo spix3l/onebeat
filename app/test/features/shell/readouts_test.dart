@@ -13,7 +13,9 @@ void main() {
   ) async {
     await pumpUi(
       tester,
-      const Center(child: ObReadout(value: '124.00', unit: 'BPM')),
+      const Center(
+        child: ObReadout(value: '124.00', unit: 'BPM'),
+      ),
       size: const Size(200, 100),
     );
     expect(find.text('124.00'), findsOneWidget);

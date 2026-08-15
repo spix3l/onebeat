@@ -60,16 +60,16 @@ class PreferencesDialog extends StatelessWidget {
                       padding: EdgeInsets.all(tokens.spacing.lg),
                       child: switch (vm.activeTab) {
                         0 => _AudioTabContent(
-                            vm: vm.audio,
-                            onBufferChanged: onBufferChanged,
-                          ),
+                          vm: vm.audio,
+                          onBufferChanged: onBufferChanged,
+                        ),
                         1 => _PluginsTabContent(
-                            folders: vm.folders,
-                            isScanning: vm.isScanning,
-                            onAddFolder: onAddFolder,
-                            onRemoveFolder: onRemoveFolder,
-                            onRescanPlugins: onRescanPlugins,
-                          ),
+                          folders: vm.folders,
+                          isScanning: vm.isScanning,
+                          onAddFolder: onAddFolder,
+                          onRemoveFolder: onRemoveFolder,
+                          onRescanPlugins: onRescanPlugins,
+                        ),
                         _ => _ShortcutsTabContent(shortcuts: vm.shortcuts),
                       },
                     ),
@@ -207,9 +207,7 @@ class _PrefTabItem extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected ? color.surfaceOverlay : null,
             borderRadius: tokens.radius.controlBorder,
-            border: selected
-                ? Border.all(color: color.accent, width: tokens.border.hairline)
-                : null,
+            border: selected ? Border.all(color: color.accent, width: tokens.border.hairline) : null,
           ),
           child: Row(
             children: <Widget>[
@@ -362,9 +360,7 @@ class _BufferChoicePill extends StatelessWidget {
             vertical: tokens.spacing.xs,
           ),
           decoration: BoxDecoration(
-            color: selected
-                ? tokens.color.surfaceOverlay
-                : tokens.color.surfaceDeep,
+            color: selected ? tokens.color.surfaceOverlay : tokens.color.surfaceDeep,
             borderRadius: tokens.radius.controlBorder,
             border: Border.all(
               color: selected ? tokens.color.accent : tokens.color.line,
@@ -374,9 +370,7 @@ class _BufferChoicePill extends StatelessWidget {
           child: Text(
             '$buffer',
             style: tokens.type.numeric.copyWith(
-              color: selected
-                  ? tokens.color.textPrimary
-                  : tokens.color.textMuted,
+              color: selected ? tokens.color.textPrimary : tokens.color.textMuted,
             ),
           ),
         ),

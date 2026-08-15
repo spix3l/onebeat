@@ -24,8 +24,7 @@ class MixerBinding extends StatefulWidget {
   State<MixerBinding> createState() => _MixerBindingState();
 }
 
-class _MixerBindingState extends State<MixerBinding>
-    with SingleTickerProviderStateMixin {
+class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   bool _ownsController = false;
 
@@ -70,8 +69,7 @@ class _MixerBindingState extends State<MixerBinding>
 
   Color _resolveColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
-      final int parsed =
-          int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
+      final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
       }
@@ -83,9 +81,7 @@ class _MixerBindingState extends State<MixerBinding>
     final List<ProjectInstrument> instruments = widget.client.readInstruments();
     final EngineSnapshot snapshot = _controller.snapshot;
     final double masterLevel =
-        (dbToFraction(_controller.meter.left.levelDb) +
-                dbToFraction(_controller.meter.right.levelDb)) /
-            2.0;
+        (dbToFraction(_controller.meter.left.levelDb) + dbToFraction(_controller.meter.right.levelDb)) / 2.0;
 
     final List<MixerStripVm> stripVms = <MixerStripVm>[
       for (int i = 0; i < instruments.length; i++)
@@ -132,8 +128,7 @@ class _MixerBindingState extends State<MixerBinding>
     );
 
     // Selected track for routing panel
-    final String selectedName = (_selectedTrackIndex >= 0 &&
-            _selectedTrackIndex < instruments.length)
+    final String selectedName = (_selectedTrackIndex >= 0 && _selectedTrackIndex < instruments.length)
         ? instruments[_selectedTrackIndex].name
         : 'Master';
 

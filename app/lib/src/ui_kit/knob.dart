@@ -111,32 +111,27 @@ class _KnobPainter extends CustomPainter {
     final Paint fill = Paint()..color = color.knobTrack;
     canvas.drawCircle(center, radius, fill);
 
-    final Paint ring =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..color = color.lineStrong;
+    final Paint ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..color = color.lineStrong;
     canvas.drawCircle(center, radius, ring);
 
     // The pointer runs from the centre out to the ring; a hub dot keeps the
     // centre from reading as hollow when the pointer is near vertical.
-    final double angle =
-        -math.pi / 2 +
-        _knobSweepDegrees * math.pi / 180 * (value.clamp(0.0, 1.0) - 0.5);
+    final double angle = -math.pi / 2 + _knobSweepDegrees * math.pi / 180 * (value.clamp(0.0, 1.0) - 0.5);
     final Offset tip = Offset(
       center.dx + radius * math.cos(angle),
       center.dy + radius * math.sin(angle),
     );
-    final Paint pointer =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = tokens.border.emphasis
-          ..strokeCap = StrokeCap.round
-          ..color = accent ? color.accentBright : color.knobIndicator;
+    final Paint pointer = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tokens.border.emphasis
+      ..strokeCap = StrokeCap.round
+      ..color = accent ? color.accentBright : color.knobIndicator;
     canvas.drawLine(center, tip, pointer);
   }
 
   @override
-  bool shouldRepaint(_KnobPainter oldDelegate) =>
-      oldDelegate.value != value || oldDelegate.accent != accent;
+  bool shouldRepaint(_KnobPainter oldDelegate) => oldDelegate.value != value || oldDelegate.accent != accent;
 }

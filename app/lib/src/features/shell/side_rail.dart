@@ -23,8 +23,7 @@ class RailItemVm {
   final String label;
 
   @override
-  bool operator ==(Object other) =>
-      other is RailItemVm && other.icon == icon && other.label == label;
+  bool operator ==(Object other) => other is RailItemVm && other.icon == icon && other.label == label;
 
   @override
   int get hashCode => Object.hash(icon, label);

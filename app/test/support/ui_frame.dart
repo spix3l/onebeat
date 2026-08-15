@@ -107,7 +107,10 @@ class UiFrame extends StatelessWidget {
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[ObSideRail(vm: rail), Expanded(child: content)],
+            children: <Widget>[
+              ObSideRail(vm: rail),
+              Expanded(child: content),
+            ],
           ),
         ),
         ObStatusBar(vm: status),
@@ -116,8 +119,7 @@ class UiFrame extends StatelessWidget {
 
     return ColoredBox(
       color: tokens.color.surfaceSunken,
-      child:
-          overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
+      child: overlay == null ? frame : Stack(children: <Widget>[frame, overlay]),
     );
   }
 }

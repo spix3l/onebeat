@@ -57,8 +57,7 @@ class _PrScrollbarState extends State<PrScrollbar> {
   /// Kept so the thumb does not jump under the cursor on the first frame.
   double _grabWithinThumb = 0;
 
-  double get _maxOffset =>
-      math.max(0, widget.contentExtent - widget.viewportExtent);
+  double get _maxOffset => math.max(0, widget.contentExtent - widget.viewportExtent);
 
   /// The thumb, as (start, length) fractions of the track.
   ({double start, double length}) _thumb() {
@@ -96,41 +95,34 @@ class _PrScrollbarState extends State<PrScrollbar> {
       onExit: (_) => setState(() => _hover = false),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
-          final double track =
-              horizontal ? constraints.maxWidth : constraints.maxHeight;
+          final double track = horizontal ? constraints.maxWidth : constraints.maxHeight;
           // A thumb shorter than this stops being grabbable, so it is floored
           // in pixels and the travel maths is told about the floor.
-          final double minThumbFraction =
-              track <= 0 ? 1.0 : (tokens.size.prScrollbarMinThumb / track).clamp(0.0, 1.0);
+          final double minThumbFraction = track <= 0 ? 1.0 : (tokens.size.prScrollbarMinThumb / track).clamp(0.0, 1.0);
 
           void handle(Offset local, {required bool starting}) {
             if (track <= 0) return;
-            final double fraction =
-                ((horizontal ? local.dx : local.dy) / track).clamp(0.0, 1.0);
+            final double fraction = ((horizontal ? local.dx : local.dy) / track).clamp(0.0, 1.0);
             if (starting) {
               final ({double start, double length}) thumb = _thumb();
               final double length = math.max(thumb.length, minThumbFraction);
-              final bool onThumb =
-                  fraction >= thumb.start && fraction <= thumb.start + length;
+              final bool onThumb = fraction >= thumb.start && fraction <= thumb.start + length;
               // Grabbing the thumb keeps the grip point; clicking the track
               // centres the thumb on the click, which is the platform
               // behaviour and is what makes a long track usable.
-              _grabWithinThumb =
-                  onThumb && length > 0 ? (fraction - thumb.start) / length : 0.5;
+              _grabWithinThumb = onThumb && length > 0 ? (fraction - thumb.start) / length : 0.5;
             }
             _scrollTo(fraction, minThumbFraction);
           }
 
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (TapDownDetails d) =>
-                handle(d.localPosition, starting: true),
+            onTapDown: (TapDownDetails d) => handle(d.localPosition, starting: true),
             onPanDown: (DragDownDetails d) {
               setState(() => _dragging = true);
               handle(d.localPosition, starting: true);
             },
-            onPanUpdate: (DragUpdateDetails d) =>
-                handle(d.localPosition, starting: false),
+            onPanUpdate: (DragUpdateDetails d) => handle(d.localPosition, starting: false),
             onPanEnd: (_) => setState(() => _dragging = false),
             onPanCancel: () => setState(() => _dragging = false),
             child: SizedBox(
@@ -191,12 +183,10 @@ class _PrScrollbarPainter extends CustomPainter {
   final double inset;
 
   late final Paint _track = Paint()..color = track;
-  late final Paint _edge =
-      Paint()
-        ..color = border
-        ..strokeWidth = lineWidth;
-  late final Paint _thumb =
-      Paint()..color = lit && enabled ? thumbLit : thumbColor;
+  late final Paint _edge = Paint()
+    ..color = border
+    ..strokeWidth = lineWidth;
+  late final Paint _thumb = Paint()..color = lit && enabled ? thumbLit : thumbColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -215,10 +205,9 @@ class _PrScrollbarPainter extends CustomPainter {
     final double extent = horizontal ? size.width : size.height;
     final double length = math.max(thumb.length, minThumbFraction) * extent;
     final double start = thumb.start * extent;
-    final Rect rect =
-        horizontal
-            ? Rect.fromLTWH(start, inset, length, size.height - inset * 2)
-            : Rect.fromLTWH(inset, start, size.width - inset * 2, length);
+    final Rect rect = horizontal
+        ? Rect.fromLTWH(start, inset, length, size.height - inset * 2)
+        : Rect.fromLTWH(inset, start, size.width - inset * 2, length);
     canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), _thumb);
   }
 

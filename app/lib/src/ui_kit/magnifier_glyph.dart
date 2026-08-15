@@ -30,12 +30,11 @@ class _MagnifierPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double lens = size.width * 0.62;
     final Offset lensCenter = Offset(size.width * 0.42, size.height * 0.42);
     canvas.drawCircle(lensCenter, lens / 2, paint);
@@ -47,6 +46,5 @@ class _MagnifierPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MagnifierPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.stroke != stroke;
+  bool shouldRepaint(_MagnifierPainter oldDelegate) => oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

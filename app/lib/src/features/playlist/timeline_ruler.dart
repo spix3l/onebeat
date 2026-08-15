@@ -119,10 +119,9 @@ class PlaylistRulerPainter extends CustomPainter {
   final double lineWidth;
   final TextStyle style;
 
-  late final Paint _rule =
-      Paint()
-        ..color = line
-        ..strokeWidth = lineWidth;
+  late final Paint _rule = Paint()
+    ..color = line
+    ..strokeWidth = lineWidth;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
   @override

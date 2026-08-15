@@ -5,8 +5,7 @@ import 'package:onebeat/src/features/export/export_binding.dart';
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
 
-class _FakeExportEngineClient extends FakeEngineClient implements EngineClient {
-}
+class _FakeExportEngineClient extends FakeEngineClient implements EngineClient {}
 
 void main() {
   setUpAll(loadAppFonts);

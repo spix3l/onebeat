@@ -31,13 +31,12 @@ class MixerScreenVm {
     int? selectedTrackIndex,
     RoutingPanelVm? routingPanel,
     MixerMode? mode,
-  }) =>
-      MixerScreenVm(
-        title: title ?? this.title,
-        strips: strips ?? this.strips,
-        masterStrip: masterStrip ?? this.masterStrip,
-        selectedTrackIndex: selectedTrackIndex ?? this.selectedTrackIndex,
-        routingPanel: routingPanel ?? this.routingPanel,
-        mode: mode ?? this.mode,
-      );
+  }) => MixerScreenVm(
+    title: title ?? this.title,
+    strips: strips ?? this.strips,
+    masterStrip: masterStrip ?? this.masterStrip,
+    selectedTrackIndex: selectedTrackIndex ?? this.selectedTrackIndex,
+    routingPanel: routingPanel ?? this.routingPanel,
+    mode: mode ?? this.mode,
+  );
 }

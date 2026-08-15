@@ -113,17 +113,12 @@ class _ObClipCardState extends State<ObClipCard> {
     // space rather than the card's local space. Keep a small, separated band
     // for that coordinate space so the card centre never becomes a resize hit.
     final bool positionedEdge = local.dx >= width + handle;
-    return widget.onResizeStart != null &&
-        width > 0 &&
-        (inCardEdge || positionedEdge);
+    return widget.onResizeStart != null && width > 0 && (inCardEdge || positionedEdge);
   }
 
   void _onPanStart(DragStartDetails details) {
     final RenderBox? box = context.findRenderObject() as RenderBox?;
-    final Offset cardLocal =
-        box == null
-            ? details.localPosition
-            : box.globalToLocal(details.globalPosition);
+    final Offset cardLocal = box == null ? details.localPosition : box.globalToLocal(details.globalPosition);
     _resizing = _isResizeEdge(cardLocal);
     if (_resizing) {
       widget.onResizeStart?.call(details);
@@ -162,38 +157,29 @@ class _ObClipCardState extends State<ObClipCard> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
-    final bool enabled =
-        widget.onTap != null ||
-        widget.onDoubleTap != null ||
-        widget.onPanStart != null;
+    final bool enabled = widget.onTap != null || widget.onDoubleTap != null || widget.onPanStart != null;
 
     return MouseRegion(
-      cursor:
-          enabled
-              ? (_resizeEdgeHover
-                  ? SystemMouseCursors.resizeLeftRight
-                  : SystemMouseCursors.click)
-              : MouseCursor.defer,
-      onEnter:
-          enabled
-              ? (PointerEnterEvent event) => setState(() {
-                _hover = true;
-                _resizeEdgeHover = _isResizeEdge(event.localPosition);
-              })
-              : null,
-      onHover:
-          enabled
-              ? (PointerHoverEvent event) => setState(() {
-                _resizeEdgeHover = _isResizeEdge(event.localPosition);
-              })
-              : null,
-      onExit:
-          enabled
-              ? (_) => setState(() {
-                _hover = false;
-                _resizeEdgeHover = false;
-              })
-              : null,
+      cursor: enabled
+          ? (_resizeEdgeHover ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.click)
+          : MouseCursor.defer,
+      onEnter: enabled
+          ? (PointerEnterEvent event) => setState(() {
+              _hover = true;
+              _resizeEdgeHover = _isResizeEdge(event.localPosition);
+            })
+          : null,
+      onHover: enabled
+          ? (PointerHoverEvent event) => setState(() {
+              _resizeEdgeHover = _isResizeEdge(event.localPosition);
+            })
+          : null,
+      onExit: enabled
+          ? (_) => setState(() {
+              _hover = false;
+              _resizeEdgeHover = false;
+            })
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
@@ -212,10 +198,7 @@ class _ObClipCardState extends State<ObClipCard> {
             border: Border.all(
               // Selection brightens the edge rather than the fill: the fill is
               // the clip's identity and must not change when you click it.
-              color:
-                  widget.vm.selected
-                      ? color.clipSelectedOutline
-                      : (_hover ? color.textPrimary : color.none),
+              color: widget.vm.selected ? color.clipSelectedOutline : (_hover ? color.textPrimary : color.none),
               width: tokens.border.emphasis,
             ),
           ),
@@ -329,18 +312,14 @@ class AudioWaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (samples.isEmpty || size.width <= 0 || size.height <= 0) return;
-    final Paint paint =
-        Paint()
-          ..color = color
-          ..strokeCap = StrokeCap.round
-          ..strokeWidth = math.max(1.0, size.width / samples.length * 0.62);
+    final Paint paint = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = math.max(1.0, size.width / samples.length * 0.62);
     final double middle = size.height / 2;
     final double halfHeight = size.height * 0.44;
     for (int index = 0; index < samples.length; index++) {
-      final double x =
-          samples.length == 1
-              ? size.width / 2
-              : index * size.width / (samples.length - 1);
+      final double x = samples.length == 1 ? size.width / 2 : index * size.width / (samples.length - 1);
       final double half = halfHeight * samples[index].clamp(0.0, 1.0);
       canvas.drawLine(
         Offset(x, middle - half),

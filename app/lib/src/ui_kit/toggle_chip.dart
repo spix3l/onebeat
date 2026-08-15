@@ -37,20 +37,14 @@ class _ObToggleChipState extends State<ObToggleChip> {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
     final String letter = widget.tone == ObToggleTone.mute ? 'M' : 'S';
-    final Color fill =
-        widget.on
-            ? (widget.tone == ObToggleTone.mute ? color.danger : color.warning)
-            : (_hover && widget.onTap != null
-                ? color.surfaceHover
-                : color.surfaceWell);
+    final Color fill = widget.on
+        ? (widget.tone == ObToggleTone.mute ? color.danger : color.warning)
+        : (_hover && widget.onTap != null ? color.surfaceHover : color.surfaceWell);
 
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter:
-          widget.onTap == null ? null : (_) => setState(() => _hover = true),
-      onExit:
-          widget.onTap == null ? null : (_) => setState(() => _hover = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.onTap == null ? null : (_) => setState(() => _hover = true),
+      onExit: widget.onTap == null ? null : (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,

@@ -100,10 +100,7 @@ class _ObButtonState extends State<ObButton> {
         onTap: widget.onTap,
         child: Container(
           width: widget.width,
-          height:
-              widget.large
-                  ? tokens.size.buttonLargeHeight
-                  : tokens.size.buttonHeight,
+          height: widget.large ? tokens.size.buttonLargeHeight : tokens.size.buttonHeight,
           constraints: BoxConstraints(minWidth: tokens.size.buttonMinWidth),
           padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
           decoration: BoxDecoration(

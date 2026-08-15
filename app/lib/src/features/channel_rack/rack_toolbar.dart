@@ -126,13 +126,12 @@ class ObRackToolbar extends StatelessWidget {
               for (final int option in RackToolbarVm.stepOptions) '$option',
             ],
             width: tokens.size.rackSnapFieldWidth,
-            onSelected:
-                onSteps == null
-                    ? null
-                    : (String value) {
-                      final int? parsed = int.tryParse(value);
-                      if (parsed != null) onSteps!(parsed);
-                    },
+            onSelected: onSteps == null
+                ? null
+                : (String value) {
+                    final int? parsed = int.tryParse(value);
+                    if (parsed != null) onSteps!(parsed);
+                  },
           ),
           SizedBox(width: tokens.spacing.sm),
           Text('· loop', maxLines: 1, style: tokens.type.numericSmall),
@@ -175,11 +174,7 @@ class ObRackHeader extends StatelessWidget {
           // whole power-plus-chip block so the caption fits without pushing
           // `CHANNEL` off the name column.
           SizedBox(
-            width:
-                size.rackPowerSize +
-                tokens.spacing.sm +
-                size.rackColorChipSize +
-                tokens.spacing.md,
+            width: size.rackPowerSize + tokens.spacing.sm + size.rackColorChipSize + tokens.spacing.md,
             child: Text('PWR', style: style, maxLines: 1),
           ),
           SizedBox(
@@ -376,12 +371,11 @@ class _RackToolPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double w = size.width;
     final double h = size.height;
 
@@ -417,21 +411,18 @@ class _RackToolPainter extends CustomPainter {
       case RackToolKind.automation:
         // A single pulse: flat, spike, flat — automation as "a value that
         // moves".
-        final Path path =
-            Path()
-              ..moveTo(w * 0.24, h * 0.5)
-              ..lineTo(w * 0.38, h * 0.5)
-              ..lineTo(w * 0.46, h * 0.28)
-              ..lineTo(w * 0.56, h * 0.72)
-              ..lineTo(w * 0.64, h * 0.5)
-              ..lineTo(w * 0.76, h * 0.5);
+        final Path path = Path()
+          ..moveTo(w * 0.24, h * 0.5)
+          ..lineTo(w * 0.38, h * 0.5)
+          ..lineTo(w * 0.46, h * 0.28)
+          ..lineTo(w * 0.56, h * 0.72)
+          ..lineTo(w * 0.64, h * 0.5)
+          ..lineTo(w * 0.76, h * 0.5);
         canvas.drawPath(path, line);
     }
   }
 
   @override
   bool shouldRepaint(_RackToolPainter oldDelegate) =>
-      oldDelegate.kind != kind ||
-      oldDelegate.color != color ||
-      oldDelegate.stroke != stroke;
+      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

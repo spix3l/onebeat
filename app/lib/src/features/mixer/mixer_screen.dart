@@ -72,35 +72,19 @@ class MixerScreen extends StatelessWidget {
                         for (int i = 0; i < vm.strips.length; i++) ...<Widget>[
                           ObMixerStrip.meter(
                             vm: vm.strips[i],
-                            onTap: onSelectTrack == null
-                                ? null
-                                : () => onSelectTrack!(i),
-                            onMute: onToggleMute == null
-                                ? null
-                                : () => onToggleMute!(i),
-                            onSolo: onToggleSolo == null
-                                ? null
-                                : () => onToggleSolo!(i),
-                            onFader: onFader == null
-                                ? null
-                                : (double v) => onFader!(i, v),
+                            onTap: onSelectTrack == null ? null : () => onSelectTrack!(i),
+                            onMute: onToggleMute == null ? null : () => onToggleMute!(i),
+                            onSolo: onToggleSolo == null ? null : () => onToggleSolo!(i),
+                            onFader: onFader == null ? null : (double v) => onFader!(i, v),
                           ),
                           SizedBox(width: tokens.spacing.xs),
                         ],
                         ObMixerStrip.meter(
                           vm: vm.masterStrip,
-                          onTap: onSelectTrack == null
-                              ? null
-                              : () => onSelectTrack!(-1),
-                          onMute: onToggleMute == null
-                              ? null
-                              : () => onToggleMute!(-1),
-                          onSolo: onToggleSolo == null
-                              ? null
-                              : () => onToggleSolo!(-1),
-                          onFader: onFader == null
-                              ? null
-                              : (double v) => onFader!(-1, v),
+                          onTap: onSelectTrack == null ? null : () => onSelectTrack!(-1),
+                          onMute: onToggleMute == null ? null : () => onToggleMute!(-1),
+                          onSolo: onToggleSolo == null ? null : () => onToggleSolo!(-1),
+                          onFader: onFader == null ? null : (double v) => onFader!(-1, v),
                         ),
                       ],
                     ),
@@ -170,25 +154,19 @@ class _MixerHeader extends StatelessWidget {
                   label: 'Focus',
                   icon: ObKitGlyphKind.menuLines,
                   selected: mode == MixerMode.trackFocus,
-                  onPressed: onModeChanged == null
-                      ? null
-                      : () => onModeChanged!(MixerMode.trackFocus),
+                  onPressed: onModeChanged == null ? null : () => onModeChanged!(MixerMode.trackFocus),
                 ),
                 _ModeTabButton(
                   label: 'Graph',
                   icon: ObKitGlyphKind.grid,
                   selected: mode == MixerMode.graphOverview,
-                  onPressed: onModeChanged == null
-                      ? null
-                      : () => onModeChanged!(MixerMode.graphOverview),
+                  onPressed: onModeChanged == null ? null : () => onModeChanged!(MixerMode.graphOverview),
                 ),
                 _ModeTabButton(
                   label: 'Matrix',
                   icon: ObKitGlyphKind.expand,
                   selected: mode == MixerMode.matrixView,
-                  onPressed: onModeChanged == null
-                      ? null
-                      : () => onModeChanged!(MixerMode.matrixView),
+                  onPressed: onModeChanged == null ? null : () => onModeChanged!(MixerMode.matrixView),
                 ),
               ],
             ),

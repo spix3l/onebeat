@@ -103,13 +103,12 @@ class KitGlyphPainter extends CustomPainter {
     final double h = size.height;
     // Strokes scale with the box so a glyph at [ObKitGlyphSize.feature] does
     // not read as a hairline drawing of the same mark.
-    final Paint line =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke * (w / 16)
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = color;
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke * (w / 16)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
     final Paint fill = Paint()..color = color;
 
     void poly(List<Offset> points, {bool closed = false}) {
@@ -312,12 +311,11 @@ class KitGlyphPainter extends CustomPainter {
           Offset(w * 0.88, h * 0.78),
         ], closed: true);
       case ObKitGlyphKind.play:
-        final Path path =
-            Path()
-              ..moveTo(w * 0.30, h * 0.16)
-              ..lineTo(w * 0.84, h * 0.5)
-              ..lineTo(w * 0.30, h * 0.84)
-              ..close();
+        final Path path = Path()
+          ..moveTo(w * 0.30, h * 0.16)
+          ..lineTo(w * 0.84, h * 0.5)
+          ..lineTo(w * 0.30, h * 0.84)
+          ..close();
         canvas.drawPath(path, fill);
       case ObKitGlyphKind.undo:
         canvas.drawArc(
@@ -349,7 +347,5 @@ class KitGlyphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(KitGlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind ||
-      oldDelegate.color != color ||
-      oldDelegate.stroke != stroke;
+      oldDelegate.kind != kind || oldDelegate.color != color || oldDelegate.stroke != stroke;
 }

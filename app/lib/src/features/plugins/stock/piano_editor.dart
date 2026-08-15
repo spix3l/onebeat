@@ -407,8 +407,7 @@ class PianoStockEditor extends StatelessWidget {
                         onPrev: onPresetChanged == null
                             ? null
                             : () => onPresetChanged!(
-                                (currentIdx - 1 + kPianoPresets.length) %
-                                    kPianoPresets.length,
+                                (currentIdx - 1 + kPianoPresets.length) % kPianoPresets.length,
                               ),
                         onNext: onPresetChanged == null
                             ? null
@@ -481,8 +480,7 @@ class PianoStockEditor extends StatelessWidget {
                                 PianoHardwareKnob(
                                   label: 'VELOCITY',
                                   value: velocitySens,
-                                  displayValue:
-                                      '${(velocitySens * 100).toInt()}%',
+                                  displayValue: '${(velocitySens * 100).toInt()}%',
                                   onChanged: onVelocitySensChanged,
                                 ),
                               ],
@@ -501,15 +499,13 @@ class PianoStockEditor extends StatelessWidget {
                                 PianoHardwareFader(
                                   label: 'A',
                                   value: attack,
-                                  displayValue:
-                                      '${((0.001 + attack * attack * 0.4) * 1000).toInt()}MS',
+                                  displayValue: '${((0.001 + attack * attack * 0.4) * 1000).toInt()}MS',
                                   onChanged: onAttackChanged,
                                 ),
                                 PianoHardwareFader(
                                   label: 'D',
                                   value: decay,
-                                  displayValue:
-                                      '${(0.12 + decay * decay * 12.0).toStringAsFixed(1)}S',
+                                  displayValue: '${(0.12 + decay * decay * 12.0).toStringAsFixed(1)}S',
                                   onChanged: onDecayChanged,
                                 ),
                                 PianoHardwareFader(
@@ -521,8 +517,7 @@ class PianoStockEditor extends StatelessWidget {
                                 PianoHardwareFader(
                                   label: 'R',
                                   value: release,
-                                  displayValue:
-                                      '${(0.03 + release * release * 5.0).toStringAsFixed(1)}S',
+                                  displayValue: '${(0.03 + release * release * 5.0).toStringAsFixed(1)}S',
                                   onChanged: onReleaseChanged,
                                 ),
                               ],
@@ -547,8 +542,7 @@ class PianoStockEditor extends StatelessWidget {
                                 PianoHardwareKnob(
                                   label: 'SIZE',
                                   value: reverbSize,
-                                  displayValue:
-                                      '${(reverbSize * 100).toInt()}%',
+                                  displayValue: '${(reverbSize * 100).toInt()}%',
                                   onChanged: onReverbSizeChanged,
                                 ),
                                 PianoHardwareKnob(
@@ -739,8 +733,7 @@ class _PianoKnobPainter extends CustomPainter {
     canvas.drawCircle(center, radius - 1.0, capPaint);
 
     // Pointer Angle (from -135 deg to +135 deg)
-    final double sweep =
-        -2.35619 + value.clamp(0.0, 1.0) * 4.71239; // -135 to +135 deg in rad
+    final double sweep = -2.35619 + value.clamp(0.0, 1.0) * 4.71239; // -135 to +135 deg in rad
     final double pointerLength = radius * 0.72;
     final Offset pointerEnd = Offset(
       center.dx + pointerLength * math.sin(sweep),
@@ -755,8 +748,7 @@ class _PianoKnobPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PianoKnobPainter oldDelegate) =>
-      oldDelegate.value != value;
+  bool shouldRepaint(covariant _PianoKnobPainter oldDelegate) => oldDelegate.value != value;
 }
 
 // ---------------------------------------------------------------------------
@@ -808,13 +800,11 @@ class _PianoHardwareFaderState extends State<PianoHardwareFader> {
           child: LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) {
               final double trackHeight = constraints.maxHeight;
-              final double thumbY =
-                  (1.0 - widget.value.clamp(0.0, 1.0)) * (trackHeight - 12.0);
+              final double thumbY = (1.0 - widget.value.clamp(0.0, 1.0)) * (trackHeight - 12.0);
 
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onVerticalDragUpdate: (DragUpdateDetails d) =>
-                    _onDrag(d, trackHeight - 12.0),
+                onVerticalDragUpdate: (DragUpdateDetails d) => _onDrag(d, trackHeight - 12.0),
                 child: SizedBox(
                   width: 22,
                   height: trackHeight,
@@ -970,9 +960,7 @@ class _PianoLcdPresetDisplayState extends State<PianoLcdPresetDisplay> {
             color: const Color(0xFF2C2A29),
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: _isOpen
-                  ? const Color(0xFF8A847C)
-                  : const Color(0xFF4A4643),
+              color: _isOpen ? const Color(0xFF8A847C) : const Color(0xFF4A4643),
               width: 1.0,
             ),
             boxShadow: const <BoxShadow>[
@@ -1059,8 +1047,7 @@ class PianoPresetStepperButton extends StatefulWidget {
   final VoidCallback? onTap;
 
   @override
-  State<PianoPresetStepperButton> createState() =>
-      _PianoPresetStepperButtonState();
+  State<PianoPresetStepperButton> createState() => _PianoPresetStepperButtonState();
 }
 
 class _PianoPresetStepperButtonState extends State<PianoPresetStepperButton> {
@@ -1069,8 +1056,7 @@ class _PianoPresetStepperButtonState extends State<PianoPresetStepperButton> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      cursor:
-          widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
@@ -1080,9 +1066,7 @@ class _PianoPresetStepperButtonState extends State<PianoPresetStepperButton> {
           width: 18,
           height: 18,
           decoration: BoxDecoration(
-            color: _hover && widget.onTap != null
-                ? const Color(0xFF3D3A38)
-                : const Color(0x00000000),
+            color: _hover && widget.onTap != null ? const Color(0xFF3D3A38) : const Color(0x00000000),
             borderRadius: BorderRadius.circular(3),
           ),
           alignment: Alignment.center,
@@ -1090,8 +1074,7 @@ class _PianoPresetStepperButtonState extends State<PianoPresetStepperButton> {
             size: const Size(6, 9),
             painter: _StepperArrowPainter(
               isLeft: widget.isLeft,
-              color:
-                  _hover ? const Color(0xFFE4E1DA) : const Color(0xFFA6A097),
+              color: _hover ? const Color(0xFFE4E1DA) : const Color(0xFFA6A097),
             ),
           ),
         ),
@@ -1156,8 +1139,7 @@ class _HamburgerIconPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _HamburgerIconPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _HamburgerIconPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _ChevronDownPainter extends CustomPainter {
@@ -1185,8 +1167,7 @@ class _ChevronDownPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ChevronDownPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(covariant _ChevronDownPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _PianoPresetDropdownMenu extends StatelessWidget {
@@ -1263,9 +1244,7 @@ class _PianoPresetMenuItemState extends State<_PianoPresetMenuItem> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: widget.isSelected
-                ? const Color(0xFF383533)
-                : (_hover ? const Color(0xFF2E2B2A) : null),
+            color: widget.isSelected ? const Color(0xFF383533) : (_hover ? const Color(0xFF2E2B2A) : null),
           ),
           child: Row(
             children: <Widget>[
@@ -1276,9 +1255,7 @@ class _PianoPresetMenuItemState extends State<_PianoPresetMenuItem> {
                   fontFamily: 'Inter',
                   fontSize: 9.5,
                   fontWeight: FontWeight.w700,
-                  color: widget.isSelected
-                      ? const Color(0xFFE4E1DA)
-                      : const Color(0xFF7A746C),
+                  color: widget.isSelected ? const Color(0xFFE4E1DA) : const Color(0xFF7A746C),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1289,13 +1266,9 @@ class _PianoPresetMenuItemState extends State<_PianoPresetMenuItem> {
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 10.0,
-                    fontWeight: widget.isSelected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
+                    fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500,
                     letterSpacing: 0.5,
-                    color: widget.isSelected
-                        ? const Color(0xFFE4E1DA)
-                        : const Color(0xFFA6A097),
+                    color: widget.isSelected ? const Color(0xFFE4E1DA) : const Color(0xFFA6A097),
                   ),
                 ),
               ),
@@ -1423,9 +1396,7 @@ class _PianoBottomSectionState extends State<PianoBottomSection> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: _octave == oct
-                              ? const Color(0xFFE4E1DA)
-                              : const Color(0xFF1E1C1B),
+                          color: _octave == oct ? const Color(0xFFE4E1DA) : const Color(0xFF1E1C1B),
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
@@ -1434,9 +1405,7 @@ class _PianoBottomSectionState extends State<PianoBottomSection> {
                             fontFamily: 'Inter',
                             fontSize: 8.0,
                             fontWeight: FontWeight.w700,
-                            color: _octave == oct
-                                ? const Color(0xFF2C2A29)
-                                : const Color(0xFF8A847C),
+                            color: _octave == oct ? const Color(0xFF2C2A29) : const Color(0xFF8A847C),
                           ),
                         ),
                       ),
@@ -1517,9 +1486,7 @@ class _PianoPitchModWheelsState extends State<PianoPitchModWheels> {
   @override
   Widget build(BuildContext context) {
     final double pitchSt = (_pitch - 0.5) * 48.0;
-    final String pitchLabel = pitchSt.abs() < 0.05
-        ? '0 ST'
-        : '${pitchSt > 0 ? '+' : ''}${pitchSt.round()} ST';
+    final String pitchLabel = pitchSt.abs() < 0.05 ? '0 ST' : '${pitchSt > 0 ? '+' : ''}${pitchSt.round()} ST';
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1730,8 +1697,7 @@ class _BigVolPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _BigVolPainter oldDelegate) =>
-      oldDelegate.value != value;
+  bool shouldRepaint(covariant _BigVolPainter oldDelegate) => oldDelegate.value != value;
 }
 
 // ---------------------------------------------------------------------------
@@ -1837,10 +1803,8 @@ class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
                         isPressed: _activeKeys.contains(
                           startMidi + whiteKeyOffsets[i],
                         ),
-                        onPointerDown: () =>
-                            _press(startMidi + whiteKeyOffsets[i]),
-                        onPointerUp: () =>
-                            _release(startMidi + whiteKeyOffsets[i]),
+                        onPointerDown: () => _press(startMidi + whiteKeyOffsets[i]),
+                        onPointerUp: () => _release(startMidi + whiteKeyOffsets[i]),
                       ),
                     ),
                 ],

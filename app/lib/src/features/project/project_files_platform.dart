@@ -48,18 +48,15 @@ class ProjectFilePlatform implements ProjectFilePanels {
     String directory = '',
   }) async {
     try {
-      final String? chosen = await _channel
-          .invokeMethod<String>('pickProjectDestination', <String, String>{
-            'suggestedName': suggestedName,
-            'directory': directory,
-          });
+      final String? chosen = await _channel.invokeMethod<String>('pickProjectDestination', <String, String>{
+        'suggestedName': suggestedName,
+        'directory': directory,
+      });
       if (chosen == null || chosen.isEmpty) return null;
       // Belt and braces: NSSavePanel appends the extension for us, but a user
       // who types `Track.obt.obt` or edits the field in an unusual way must
       // still end up with one bundle called `Track.obt`.
-      return chosen.endsWith('.$projectExtension')
-          ? chosen
-          : '$chosen.$projectExtension';
+      return chosen.endsWith('.$projectExtension') ? chosen : '$chosen.$projectExtension';
     } on MissingPluginException {
       return null;
     } on PlatformException {

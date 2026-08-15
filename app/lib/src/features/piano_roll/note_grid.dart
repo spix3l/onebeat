@@ -169,8 +169,7 @@ class PianoRollVm {
   }
 
   /// True when the scale actually distinguishes rows from one another.
-  bool get hasScale =>
-      scaleIntervals.isNotEmpty && scaleIntervals.length < 12;
+  bool get hasScale => scaleIntervals.isNotEmpty && scaleIntervals.length < 12;
 }
 
 /// The roll canvas: row banding, grid lines, ghosts, notes, playhead.
@@ -193,9 +192,7 @@ class PrNoteGrid extends StatelessWidget {
     final int tick = vm.viewport.tickAt(local.dx);
     final int midi = vm.viewport.noteAt(local.dy);
     for (final PrNoteVm note in vm.notes) {
-      if (note.midiNote == midi &&
-          tick >= note.startTick &&
-          tick < note.startTick + note.lengthTicks) {
+      if (note.midiNote == midi && tick >= note.startTick && tick < note.startTick + note.lengthTicks) {
         return note;
       }
     }
@@ -219,8 +216,7 @@ class PrNoteGrid extends StatelessWidget {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapUp:
-          onAddNote == null && onSelectNote == null ? null : _handleTap,
+      onTapUp: onAddNote == null && onSelectNote == null ? null : _handleTap,
       // The roll sits against the key column, and a note that starts before the
       // visible area has a negative x. Without a clip the painter would draw it
       // straight over the keys — the one thing a piano roll must never do. The
@@ -282,26 +278,22 @@ class PrGridPainter extends CustomPainter {
   /// legible behind the note that caused it.
   late final Paint _activeRow = Paint()..color = color.accentWash;
 
-  late final Paint _rowLine =
-      Paint()
-        ..color = color.gridLine
-        ..strokeWidth = lineWidth;
+  late final Paint _rowLine = Paint()
+    ..color = color.gridLine
+    ..strokeWidth = lineWidth;
 
   /// The snap division, drawn fainter than a beat. This is the one line whose
   /// spacing changes with the Snap control, which is what makes that control
   /// legible before you draw anything.
-  late final Paint _subdivisionLine =
-      Paint()
-        ..color = color.gridLineSubdivision
-        ..strokeWidth = lineWidth;
-  late final Paint _beatLine =
-      Paint()
-        ..color = color.gridLine
-        ..strokeWidth = lineWidth;
-  late final Paint _barLine =
-      Paint()
-        ..color = color.gridLineStrong
-        ..strokeWidth = lineWidth;
+  late final Paint _subdivisionLine = Paint()
+    ..color = color.gridLineSubdivision
+    ..strokeWidth = lineWidth;
+  late final Paint _beatLine = Paint()
+    ..color = color.gridLine
+    ..strokeWidth = lineWidth;
+  late final Paint _barLine = Paint()
+    ..color = color.gridLineStrong
+    ..strokeWidth = lineWidth;
   late final Paint _ghost = Paint()..color = color.noteGhost;
   late final Paint _note = Paint()..color = color.noteFill;
   late final Paint _selected = Paint()..color = color.noteSelected;
@@ -311,15 +303,13 @@ class PrGridPainter extends CustomPainter {
   /// user acts on them differently.
   late final Paint _sounding = Paint()..color = color.accentBright;
   late final Paint _marqueeFill = Paint()..color = color.marqueeFill;
-  late final Paint _marqueeStroke =
-      Paint()
-        ..color = color.accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = lineWidth;
-  late final Paint _playhead =
-      Paint()
-        ..color = color.playhead
-        ..strokeWidth = playheadWidth;
+  late final Paint _marqueeStroke = Paint()
+    ..color = color.accent
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = lineWidth;
+  late final Paint _playhead = Paint()
+    ..color = color.playhead
+    ..strokeWidth = playheadWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -356,11 +346,7 @@ class PrGridPainter extends CustomPainter {
     // Below roughly this spacing the subdivision stops being a grid and starts
     // being a texture, so it drops out rather than filling the canvas.
     if (subdivision > 0 && subdivision / view.ticksPerPx >= 4.0) {
-      for (
-        int tick = (view.firstVisibleTick ~/ subdivision) * subdivision;
-        tick <= lastTick;
-        tick += subdivision
-      ) {
+      for (int tick = (view.firstVisibleTick ~/ subdivision) * subdivision; tick <= lastTick; tick += subdivision) {
         if (tick % prTicksPerBeat == 0) continue;
         final double x = view.xOf(tick);
         if (x < 0) continue;
@@ -390,17 +376,12 @@ class PrGridPainter extends CustomPainter {
     }
     final int? playing = vm.playheadTick;
     for (final PrNoteVm note in vm.notes) {
-      final bool sounding =
-          playing != null &&
-          playing >= note.startTick &&
-          playing < note.startTick + note.lengthTicks;
+      final bool sounding = playing != null && playing >= note.startTick && playing < note.startTick + note.lengthTicks;
       _paintNote(
         canvas,
         view,
         note,
-        vm.selected.contains(note.id)
-            ? _selected
-            : (sounding ? _sounding : _note),
+        vm.selected.contains(note.id) ? _selected : (sounding ? _sounding : _note),
       );
     }
 
@@ -424,8 +405,7 @@ class PrGridPainter extends CustomPainter {
     PrNoteVm note,
     Paint paint,
   ) {
-    final double top =
-        view.yOf(note.midiNote) + (view.rowHeight - noteHeight) / 2;
+    final double top = view.yOf(note.midiNote) + (view.rowHeight - noteHeight) / 2;
     final double left = view.xOf(note.startTick);
     final double width = note.lengthTicks / view.ticksPerPx;
     canvas.drawRRect(
@@ -439,9 +419,7 @@ class PrGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(PrGridPainter oldDelegate) =>
-      !identical(oldDelegate.vm, vm) ||
-      oldDelegate.color != color ||
-      oldDelegate.noteHeight != noteHeight;
+      !identical(oldDelegate.vm, vm) || oldDelegate.color != color || oldDelegate.noteHeight != noteHeight;
 }
 
 /// The bar numbers above the canvas, on the same x mapping as the grid.
@@ -481,10 +459,9 @@ class _BarRulerPainter extends CustomPainter {
   final double lineWidth;
   final TextStyle style;
 
-  late final Paint _rule =
-      Paint()
-        ..color = line
-        ..strokeWidth = lineWidth;
+  late final Paint _rule = Paint()
+    ..color = line
+    ..strokeWidth = lineWidth;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
   @override
@@ -517,6 +494,5 @@ class _BarRulerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BarRulerPainter oldDelegate) =>
-      oldDelegate.viewport != viewport || oldDelegate.line != line;
+  bool shouldRepaint(_BarRulerPainter oldDelegate) => oldDelegate.viewport != viewport || oldDelegate.line != line;
 }

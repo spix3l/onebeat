@@ -48,8 +48,7 @@ void main() {
     }
     stopwatch.stop();
 
-    final double perPaintMillis =
-        stopwatch.elapsedMicroseconds / 1000.0 / iterations;
+    final double perPaintMillis = stopwatch.elapsedMicroseconds / 1000.0 / iterations;
     final double percentOfBudget = perPaintMillis / budget120Hz * 100;
 
     debugPrint(

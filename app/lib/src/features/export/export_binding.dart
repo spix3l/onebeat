@@ -87,8 +87,7 @@ class _ExportBindingState extends State<ExportBinding> {
       _ => 128.0,
     };
 
-    final double totalBytes =
-        durationSeconds * rate * 2 * bytesPerSample * _selectedStems.length;
+    final double totalBytes = durationSeconds * rate * 2 * bytesPerSample * _selectedStems.length;
     final double mb = totalBytes / (1024 * 1024);
     return '~${mb.toStringAsFixed(1)} MB';
   }
@@ -121,7 +120,8 @@ class _ExportBindingState extends State<ExportBinding> {
     });
 
     _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (Timer t) { // token-lint-ok: simulated timer
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (Timer t) {
+      // token-lint-ok: simulated timer
       if (!mounted) {
         t.cancel();
         return;

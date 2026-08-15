@@ -189,8 +189,7 @@ void main() {
   });
 
   test('a marquee selects notes it overlaps and no others', () {
-    final EditorHarness harness = EditorHarness()
-      ..seedNotes('inst_a', count: 4);
+    final EditorHarness harness = EditorHarness()..seedNotes('inst_a', count: 4);
     final PianoRollStore roll = harness.pianoRoll;
 
     // Notes sit at ticks 0/240/480/720 on keys 60..63.

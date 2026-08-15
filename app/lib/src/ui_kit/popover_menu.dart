@@ -74,8 +74,7 @@ class ObPopoverMenuVm {
   final bool wide;
 
   /// Flat row order, so a caller can map an index back to a row.
-  List<ObMenuRowVm> get rows =>
-      <ObMenuRowVm>[for (final ObMenuSectionVm s in sections) ...s.rows];
+  List<ObMenuRowVm> get rows => <ObMenuRowVm>[for (final ObMenuSectionVm s in sections) ...s.rows];
 }
 
 class ObPopoverMenu extends StatelessWidget {
@@ -199,10 +198,7 @@ class _RowState extends State<_Row> {
         ink = color.danger;
     }
 
-    final Color? background =
-        active
-            ? color.accent
-            : (_hover && enabled ? color.surfaceHover : null);
+    final Color? background = active ? color.accent : (_hover && enabled ? color.surfaceHover : null);
     final String? shortcut = row.shortcut;
 
     return MouseRegion(
@@ -217,13 +213,12 @@ class _RowState extends State<_Row> {
           child: Container(
             height: tokens.size.popoverRowHeight,
             padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
-            decoration:
-                background == null
-                    ? null
-                    : BoxDecoration(
-                      color: background,
-                      borderRadius: tokens.radius.controlBorder,
-                    ),
+            decoration: background == null
+                ? null
+                : BoxDecoration(
+                    color: background,
+                    borderRadius: tokens.radius.controlBorder,
+                  ),
             child: Row(
               children: <Widget>[
                 if (row.checkable)
@@ -233,17 +228,13 @@ class _RowState extends State<_Row> {
                     width: tokens.size.checkboxSize,
                     child: ObKitGlyph(kind: row.icon!, color: ink),
                   ),
-                if (row.checkable || row.icon != null)
-                  SizedBox(width: tokens.spacing.md),
+                if (row.checkable || row.icon != null) SizedBox(width: tokens.spacing.md),
                 Expanded(
                   child: Text(
                     row.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        active
-                            ? tokens.type.menuRowActive
-                            : tokens.type.menuRow.copyWith(color: ink),
+                    style: active ? tokens.type.menuRowActive : tokens.type.menuRow.copyWith(color: ink),
                   ),
                 ),
                 if (shortcut != null) ...<Widget>[
@@ -276,29 +267,22 @@ class _CheckBox extends StatelessWidget {
       height: tokens.size.checkboxSize,
       child: Container(
         decoration: BoxDecoration(
-          color:
-              checked
-                  ? (onAccent ? color.textPrimary : color.accent)
-                  : color.none,
+          color: checked ? (onAccent ? color.textPrimary : color.accent) : color.none,
           borderRadius: BorderRadius.all(tokens.radius.sm),
           border: Border.all(
-            color:
-                checked
-                    ? (onAccent ? color.textPrimary : color.accent)
-                    : color.lineStrong,
+            color: checked ? (onAccent ? color.textPrimary : color.accent) : color.lineStrong,
             width: tokens.border.hairline,
           ),
         ),
-        child:
-            checked
-                ? Center(
-                  child: ObKitGlyph(
-                    kind: ObKitGlyphKind.check,
-                    color: onAccent ? color.accent : color.textPrimary,
-                    size: ObKitGlyphSize.inline,
-                  ),
-                )
-                : null,
+        child: checked
+            ? Center(
+                child: ObKitGlyph(
+                  kind: ObKitGlyphKind.check,
+                  color: onAccent ? color.accent : color.textPrimary,
+                  size: ObKitGlyphSize.inline,
+                ),
+              )
+            : null,
       ),
     );
   }

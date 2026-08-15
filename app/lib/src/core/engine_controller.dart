@@ -43,8 +43,7 @@ class EngineController extends ChangeNotifier {
     for (final EngineEvent event in client.pollEvents()) {
       switch (event.type) {
         case evtDeviceLost:
-          status =
-              'Output device "${event.text}" disappeared. Playing on the default device.';
+          status = 'Output device "${event.text}" disappeared. Playing on the default device.';
         case evtDeviceChanged:
           status = 'Output device changed to "${event.text}".';
         case evtError:

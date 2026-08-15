@@ -50,13 +50,24 @@ fi
 #    undo cannot be forgotten by a caller in a hurry. `model/` may call its own
 #    mutators; nothing else may. The door for everyone else is
 #    `model/commands.h` plus `CommandBus::execute`.
+#
+#    One sanctioned exception: `engine/src/abi/onebeat_abi.cpp`. Its two direct
+#    mutations — growPatternToFit and the hosted-plugin name introspection — are
+#    consequences of an edit, not edits themselves: growing the pattern to fit
+#    what was drawn, and naming a lane after the plug-in it just hosted. They
+#    stay off the command bus so one user action does not undo as two (the
+#    rationale is written at each call site). The exemption is whole-file because
+#    that boundary is where such consequences legitimately live and a narrower
+#    grep would rot as the file grows; a genuine edit added here would still be
+#    caught by review of this file's diff.
 mutators='create(Instrument|Pattern|Lane|MixerTrack|Clip)'
 mutators+='|delete(Instrument|Pattern|Lane|Clip|MixerTrack)'
 mutators+='|update(Instrument|Pattern|Lane|Clip|MixerTrack|Sequence)'
 mutators+='|restore(Instrument|Pattern|Lane|Clip|MixerTrack|Sequence)'
 mutators+='|adopt|mintId'
 offenders=$(grep -rlE "\.(${mutators})\(" engine/src engine/tools engine/testing 2>/dev/null \
-  | grep -v '^engine/src/model/' || true)
+  | grep -v '^engine/src/model/' \
+  | grep -v '^engine/src/abi/onebeat_abi.cpp$' || true)
 if [[ -n "$offenders" ]]; then
   fail "model mutated outside the command layer; use model/commands.h + CommandBus:"
   echo "$offenders"

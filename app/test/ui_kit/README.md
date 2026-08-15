@@ -14,6 +14,11 @@ this folder consistent:
    `devicePixelRatio: 1.0` surface, disabled animations, and a golden in the
    colocated `goldens/` folder. Never `pumpWidget` + `matchesGoldenFile`
    directly.
+3. Regenerate with the **Flutter version CI pins** (the `FLUTTER_VERSION` in
+   `.github/workflows/ci.yml`). Text layout changes between Flutter patches, so
+   a golden written on any other version is pixel-different on the runner:
+   `flutter test --update-goldens` on the pinned version, then commit only the
+   pngs whose widget actually changed.
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';

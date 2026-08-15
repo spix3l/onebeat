@@ -19,9 +19,7 @@ Future<List<double>> loadAudioWaveform(
     file = await File(path).open();
     final int fileLength = await file.length();
     final Uint8List header = await file.read(12);
-    if (header.length < 12 ||
-        _ascii(header, 0, 4) != 'RIFF' ||
-        _ascii(header, 8, 4) != 'WAVE') {
+    if (header.length < 12 || _ascii(header, 0, 4) != 'RIFF' || _ascii(header, 8, 4) != 'WAVE') {
       return const <double>[];
     }
 
@@ -91,8 +89,7 @@ Future<List<double>> loadAudioWaveform(
       final ByteData data = ByteData.sublistView(bytes);
       for (int index = 0; index < completeFrames; index++) {
         final int offset = index * blockAlign;
-        final double amplitude =
-            _sampleAmplitude(data, offset, audioFormat, bitsPerSample);
+        final double amplitude = _sampleAmplitude(data, offset, audioFormat, bitsPerSample);
         final int bucket = math.min(
           bucketCount - 1,
           ((frame + index) * bucketCount) ~/ frameCount,
@@ -117,17 +114,12 @@ Future<List<double>> loadAudioWaveform(
   }
 }
 
-String _ascii(Uint8List bytes, int offset, int length) =>
-    String.fromCharCodes(bytes.sublist(offset, offset + length));
+String _ascii(Uint8List bytes, int offset, int length) => String.fromCharCodes(bytes.sublist(offset, offset + length));
 
-int _u16(Uint8List bytes, int offset) =>
-    bytes[offset] | (bytes[offset + 1] << 8);
+int _u16(Uint8List bytes, int offset) => bytes[offset] | (bytes[offset + 1] << 8);
 
 int _u32(Uint8List bytes, int offset) =>
-    bytes[offset] |
-    (bytes[offset + 1] << 8) |
-    (bytes[offset + 2] << 16) |
-    (bytes[offset + 3] << 24);
+    bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
 
 double _sampleAmplitude(
   ByteData data,
@@ -141,16 +133,13 @@ double _sampleAmplitude(
     case 16:
       return (data.getInt16(offset, Endian.little).abs() / 32768.0).clamp(0.0, 1.0);
     case 24:
-      final int value = data.getUint8(offset) |
-          (data.getUint8(offset + 1) << 8) |
-          (data.getInt8(offset + 2) << 16);
+      final int value = data.getUint8(offset) | (data.getUint8(offset + 1) << 8) | (data.getInt8(offset + 2) << 16);
       return (value.abs() / 8388608.0).clamp(0.0, 1.0);
     case 32:
       if (format == 3) {
         return data.getFloat32(offset, Endian.little).abs().clamp(0.0, 1.0);
       }
-      return (data.getInt32(offset, Endian.little).abs() / 2147483648.0)
-          .clamp(0.0, 1.0);
+      return (data.getInt32(offset, Endian.little).abs() / 2147483648.0).clamp(0.0, 1.0);
     default:
       return 0.0;
   }

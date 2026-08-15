@@ -25,8 +25,7 @@ import 'package:onebeat/src/features/piano_roll/velocity_lane.dart';
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
 
-class _FakePianoRollEngineClient extends FakeEngineClient
-    implements EngineClient {
+class _FakePianoRollEngineClient extends FakeEngineClient implements EngineClient {
   _FakePianoRollEngineClient({
     this.isPlaying = false,
     this.positionBeats = 0.0,
@@ -746,8 +745,7 @@ void main() {
     // stack follows it. Refusing to act read as the lane being broken.
     await tester.tapAt(onStem);
     await tester.pump();
-    final Set<int> moved =
-        store.notes.map((SequenceNote n) => n.velocity).toSet();
+    final Set<int> moved = store.notes.map((SequenceNote n) => n.velocity).toSet();
     expect(moved.length, 1, reason: 'all three voices landed on one value');
     expect(moved.single, isNot(12900));
 
@@ -789,8 +787,7 @@ void main() {
     );
     await tester.pump();
 
-    PianoRollScreen screen() =>
-        tester.widget(find.byType(PianoRollScreen)) as PianoRollScreen;
+    PianoRollScreen screen() => tester.widget(find.byType(PianoRollScreen)) as PianoRollScreen;
     expect(screen().vm.roll.activeKeys, isEmpty);
 
     final Rect keys = tester.getRect(find.byType(PrKeyColumn));
@@ -929,10 +926,7 @@ void main() {
 
       final Rect keys = tester.getRect(find.byType(PrKeyColumn));
       final double rowY = keys.top + 7;
-      MouseCursor cursor() =>
-          tester
-              .widget<PianoRollScreen>(find.byType(PianoRollScreen))
-              .gridCursor;
+      MouseCursor cursor() => tester.widget<PianoRollScreen>(find.byType(PianoRollScreen)).gridCursor;
 
       final TestPointer mouse = TestPointer(1, PointerDeviceKind.mouse);
       await tester.sendEventToBinding(

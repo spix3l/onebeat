@@ -115,10 +115,7 @@ class _RenameProjectDialogState extends State<RenameProjectDialog> {
                                   '“$_typed.$projectExtension” in the same folder.'
                             : 'Used as the file name the first time you save.'),
                     style: tokens.type.label.copyWith(
-                      color:
-                          problem == null
-                              ? tokens.color.textMuted
-                              : tokens.color.danger,
+                      color: problem == null ? tokens.color.textMuted : tokens.color.danger,
                     ),
                   ),
                   SizedBox(height: tokens.spacing.lg),
@@ -181,8 +178,7 @@ class _NameField extends StatelessWidget {
       // it the only way out of a modal with focus in a text box is the mouse.
       child: Shortcuts(
         shortcuts: <ShortcutActivator, Intent>{
-          const SingleActivator(LogicalKeyboardKey.escape):
-              const DismissIntent(),
+          const SingleActivator(LogicalKeyboardKey.escape): const DismissIntent(),
         },
         child: Actions(
           actions: <Type, Action<Intent>>{

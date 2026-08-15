@@ -42,12 +42,11 @@ class _TransportGlyphPainter extends CustomPainter {
     final double h = size.height;
     switch (kind) {
       case GlyphKind.play:
-        final Path path =
-            Path()
-              ..moveTo(w * 0.28, h * 0.12)
-              ..lineTo(w * 0.85, h * 0.5)
-              ..lineTo(w * 0.28, h * 0.88)
-              ..close();
+        final Path path = Path()
+          ..moveTo(w * 0.28, h * 0.12)
+          ..lineTo(w * 0.85, h * 0.5)
+          ..lineTo(w * 0.28, h * 0.88)
+          ..close();
         canvas.drawPath(path, paint);
       case GlyphKind.stop:
         canvas.drawRect(
@@ -61,20 +60,18 @@ class _TransportGlyphPainter extends CustomPainter {
           Rect.fromLTWH(w * 0.16, h * 0.14, w * 0.12, h * 0.72),
           paint,
         );
-        final Path path =
-            Path()
-              ..moveTo(w * 0.88, h * 0.12)
-              ..lineTo(w * 0.36, h * 0.5)
-              ..lineTo(w * 0.88, h * 0.88)
-              ..close();
+        final Path path = Path()
+          ..moveTo(w * 0.88, h * 0.12)
+          ..lineTo(w * 0.36, h * 0.5)
+          ..lineTo(w * 0.88, h * 0.88)
+          ..close();
         canvas.drawPath(path, paint);
       case GlyphKind.loop:
-        final Paint stroke =
-            Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = size.width / 8
-              ..strokeCap = StrokeCap.round
-              ..color = color;
+        final Paint stroke = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = size.width / 8
+          ..strokeCap = StrokeCap.round
+          ..color = color;
         final Rect loop = Rect.fromLTWH(w * 0.24, h * 0.26, w * 0.52, h * 0.48);
         canvas.drawRRect(
           RRect.fromRectAndRadius(loop, Radius.circular(size.width * 0.14)),
@@ -105,8 +102,7 @@ class _TransportGlyphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TransportGlyphPainter oldDelegate) =>
-      oldDelegate.kind != kind || oldDelegate.color != color;
+  bool shouldRepaint(_TransportGlyphPainter oldDelegate) => oldDelegate.kind != kind || oldDelegate.color != color;
 }
 
 /// A rail glyph at [SizeTokens.railGlyphSize]; honours the IconTheme that
@@ -116,12 +112,9 @@ class RailGlyph extends StatelessWidget {
 
   final CustomPainter Function(Color color) _builder;
 
-  static RailGlyph grid() =>
-      RailGlyph((color) => _RailGridPainter(color: color));
-  static RailGlyph sliders() =>
-      RailGlyph((color) => _RailSlidersPainter(color: color));
-  static RailGlyph wave() =>
-      RailGlyph((color) => _RailWavePainter(color: color));
+  static RailGlyph grid() => RailGlyph((color) => _RailGridPainter(color: color));
+  static RailGlyph sliders() => RailGlyph((color) => _RailSlidersPainter(color: color));
+  static RailGlyph wave() => RailGlyph((color) => _RailWavePainter(color: color));
 
   @override
   Widget build(BuildContext context) {
@@ -162,8 +155,7 @@ class _RailGridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RailGridPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(_RailGridPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _RailSlidersPainter extends CustomPainter {
@@ -173,12 +165,11 @@ class _RailSlidersPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = size.width * 0.09
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.09
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double inset = size.width * 0.2;
     final double x1 = size.width * 0.3;
     final double x2 = size.width * 0.7;
@@ -205,8 +196,7 @@ class _RailSlidersPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RailSlidersPainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(_RailSlidersPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _RailWavePainter extends CustomPainter {
@@ -216,12 +206,11 @@ class _RailWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint stroke =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = size.width * 0.09
-          ..strokeCap = StrokeCap.round
-          ..color = color;
+    final Paint stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.09
+      ..strokeCap = StrokeCap.round
+      ..color = color;
     final double midX = size.width / 2;
     final double inset = size.width * 0.18;
     canvas.drawLine(
@@ -242,6 +231,5 @@ class _RailWavePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RailWavePainter oldDelegate) =>
-      oldDelegate.color != color;
+  bool shouldRepaint(_RailWavePainter oldDelegate) => oldDelegate.color != color;
 }

@@ -26,8 +26,7 @@ class PrKeyColumn extends StatelessWidget {
   /// Semitone offsets that are black keys, from C.
   static const Set<int> blackPitchClasses = <int>{1, 3, 6, 8, 10};
 
-  static bool isBlack(int midiNote) =>
-      blackPitchClasses.contains(((midiNote % 12) + 12) % 12);
+  static bool isBlack(int midiNote) => blackPitchClasses.contains(((midiNote % 12) + 12) % 12);
 
   /// `C5` for MIDI 72 — the label the mockup prints on every C row.
   static String octaveLabel(int midiNote) => 'C${midiNote ~/ 12 - 1}';
@@ -37,11 +36,9 @@ class PrKeyColumn extends StatelessWidget {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown:
-          onKeyPress == null
-              ? null
-              : (TapDownDetails details) =>
-                  onKeyPress!(viewport.noteAt(details.localPosition.dy)),
+      onTapDown: onKeyPress == null
+          ? null
+          : (TapDownDetails details) => onKeyPress!(viewport.noteAt(details.localPosition.dy)),
       child: SizedBox(
         width: tokens.size.prKeyColumnWidth,
         child: CustomPaint(
@@ -89,10 +86,9 @@ class _KeyColumnPainter extends CustomPainter {
   late final Paint _white = Paint()..color = white;
   late final Paint _black = Paint()..color = black;
   late final Paint _active = Paint()..color = active;
-  late final Paint _line =
-      Paint()
-        ..color = line
-        ..strokeWidth = lineWidth;
+  late final Paint _line = Paint()
+    ..color = line
+    ..strokeWidth = lineWidth;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
   @override

@@ -127,18 +127,13 @@ class ObFloatingWindow extends StatelessWidget {
                   Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onPanUpdate:
-                          onDragUpdate == null
-                              ? null
-                              : (DragUpdateDetails details) =>
-                                  onDragUpdate!(details.delta),
+                      onPanUpdate: onDragUpdate == null
+                          ? null
+                          : (DragUpdateDetails details) => onDragUpdate!(details.delta),
                       child: Row(
                         children: <Widget>[
                           SizedBox(
-                            width:
-                                reserveSystemControls
-                                    ? tokens.size.titleBarInset
-                                    : tokens.spacing.md,
+                            width: reserveSystemControls ? tokens.size.titleBarInset : tokens.spacing.md,
                           ),
                           Text(vm.title, style: tokens.type.windowTitle),
                           if (subtitle != null) ...<Widget>[
@@ -170,8 +165,7 @@ class ObFloatingWindow extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          for (final ObWindowAction action in vm.actions)
-                            _HeaderButton(action: action),
+                          for (final ObWindowAction action in vm.actions) _HeaderButton(action: action),
                         ],
                       ),
                     ),
@@ -203,12 +197,10 @@ class _HeaderButtonState extends State<_HeaderButton> {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final bool enabled = widget.action.onTap != null;
     final bool isClose = widget.action.icon == ObKitGlyphKind.close;
-    final Color hoverColor =
-        isClose ? tokens.color.dangerWash : tokens.color.accentWash;
-    final Color iconColor =
-        _hover && enabled
-            ? (isClose ? tokens.color.danger : tokens.color.accentBright)
-            : tokens.color.textSecondary;
+    final Color hoverColor = isClose ? tokens.color.dangerWash : tokens.color.accentWash;
+    final Color iconColor = _hover && enabled
+        ? (isClose ? tokens.color.danger : tokens.color.accentBright)
+        : tokens.color.textSecondary;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       onEnter: enabled ? (_) => setState(() => _hover = true) : null,

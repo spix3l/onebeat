@@ -83,8 +83,7 @@ class ObStatusBar extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          if (hint != null)
-            Text(hint, maxLines: 1, style: tokens.type.menu),
+          if (hint != null) Text(hint, maxLines: 1, style: tokens.type.menu),
         ],
       ),
     );

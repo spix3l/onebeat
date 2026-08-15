@@ -60,10 +60,7 @@ ObPopoverMenuVm layoutsMenuVm(WorkspaceLayoutsVm vm) {
               label: layout.name,
               checkable: true,
               checked: layout.current,
-              tone:
-                  layout.current
-                      ? ObMenuRowTone.active
-                      : ObMenuRowTone.normal,
+              tone: layout.current ? ObMenuRowTone.active : ObMenuRowTone.normal,
             ),
         ],
       ),

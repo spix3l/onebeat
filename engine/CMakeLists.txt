@@ -238,6 +238,40 @@ add_custom_command(TARGET onebeat_stock_guitar POST_BUILD
           "${ONEBEAT_GUITAR_BUNDLE}/Contents/Info.plist"
   VERBATIM)
 
+add_library(onebeat_stock_lowkey MODULE
+  stock_plugins/lowkey/lowkey_clap.cpp
+  stock_plugins/guitar/guitar_engine.cpp)
+target_include_directories(onebeat_stock_lowkey SYSTEM PRIVATE
+  ${ONEBEAT_THIRD_PARTY}/clap/include)
+target_link_libraries(onebeat_stock_lowkey PRIVATE onebeat_flags)
+set_target_properties(onebeat_stock_lowkey PROPERTIES
+  PREFIX ""
+  SUFFIX ".dylib"
+  OUTPUT_NAME "Lowkey"
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stock-plugin-binaries
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+
+set(ONEBEAT_LOWKEY_BUNDLE "${ONEBEAT_STOCK_PLUGIN_DIR}/Lowkey.clap")
+file(WRITE "${CMAKE_BINARY_DIR}/Lowkey-Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\"><dict>
+<key>CFBundleExecutable</key><string>Lowkey</string>
+<key>CFBundleIdentifier</key><string>dev.onebeat.stock.lowkey</string>
+<key>CFBundleName</key><string>Lowkey</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+<key>CFBundleShortVersionString</key><string>${PROJECT_VERSION}</string>
+<key>CFBundleVersion</key><string>${PROJECT_VERSION}</string>
+</dict></plist>
+")
+add_custom_command(TARGET onebeat_stock_lowkey POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${ONEBEAT_LOWKEY_BUNDLE}/Contents/MacOS"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:onebeat_stock_lowkey>"
+          "${ONEBEAT_LOWKEY_BUNDLE}/Contents/MacOS/Lowkey"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/Lowkey-Info.plist"
+          "${ONEBEAT_LOWKEY_BUNDLE}/Contents/Info.plist"
+  VERBATIM)
+
 # ---------------------------------------------------------------------------
 # Test harness + tests
 # ---------------------------------------------------------------------------
