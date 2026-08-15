@@ -57,7 +57,7 @@ class PlaylistVm {
 
   final String headerTitle;
 
-  /// `Untitled.onebeat · 124 BPM · 4/4`.
+  /// `124 BPM · 4/4`.
   final String headerRight;
 
   /// The lane count the canvas has to make room for.
@@ -77,6 +77,7 @@ class PlaylistLaneVm {
     required this.muted,
     required this.soloed,
     required this.collapsed,
+    this.clipCount = 0,
   });
 
   final String id;
@@ -85,6 +86,10 @@ class PlaylistLaneVm {
   final bool muted;
   final bool soloed;
   final bool collapsed;
+
+  /// How many clips sit on the lane. The header prints it as a caption so an
+  /// empty track is legible as empty without scrolling the canvas to check.
+  final int clipCount;
 }
 
 class PlaylistCanvas extends StatelessWidget {
@@ -146,13 +151,12 @@ class PlaylistCanvas extends StatelessWidget {
 
     final Widget surface = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapUp:
-          onBackgroundTap == null
-              ? null
-              : (TapUpDetails details) => onBackgroundTap!(
-                details.localPosition.dx / vm.pxPerBar + vm.scrollTicks / ticksPerBar.toDouble(),
-                (details.localPosition.dy / size.playlistLaneHeight + vm.scrollLanes).floor(),
-              ),
+      onTapUp: onBackgroundTap == null
+          ? null
+          : (TapUpDetails details) => onBackgroundTap!(
+              details.localPosition.dx / vm.pxPerBar + vm.scrollTicks / ticksPerBar.toDouble(),
+              (details.localPosition.dy / size.playlistLaneHeight + vm.scrollLanes).floor(),
+            ),
       onPanStart: onBackgroundPanStart,
       onPanUpdate: onBackgroundPanUpdate,
       onPanEnd: onBackgroundPanEnd,
@@ -168,14 +172,13 @@ class PlaylistCanvas extends StatelessWidget {
           laneHeight: size.playlistLaneHeight,
           snapTicks: vm.snapTicks,
         ),
-        foregroundPainter:
-            vm.playheadBar16ths == null
-                ? null
-                : _PlayheadPainter(
-                  x: vm.playheadBar16ths! * vm.pxPerBar / 16 - vm.scrollTicks / ticksPerBar.toDouble() * vm.pxPerBar,
-                  color: tokens.color.playhead,
-                  width: size.playheadWidth,
-                ),
+        foregroundPainter: vm.playheadBar16ths == null
+            ? null
+            : _PlayheadPainter(
+                x: vm.playheadBar16ths! * vm.pxPerBar / 16 - vm.scrollTicks / ticksPerBar.toDouble() * vm.pxPerBar,
+                color: tokens.color.playhead,
+                width: size.playheadWidth,
+              ),
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: <Widget>[
@@ -203,24 +206,23 @@ class PlaylistCanvas extends StatelessWidget {
                   vm: clip,
                   onTap: onClipTap == null ? null : () => onClipTap!(clip.id),
                   onDoubleTap: onClipDoubleTap == null ? null : () => onClipDoubleTap!(clip.id),
-                  onPanStart:
-                      onClipPanStart == null ? null : (DragStartDetails details) => onClipPanStart!(clip.id, details),
-                  onPanUpdate:
-                      onClipPanUpdate == null
-                          ? null
-                          : (DragUpdateDetails details) => onClipPanUpdate!(clip.id, details),
+                  onPanStart: onClipPanStart == null
+                      ? null
+                      : (DragStartDetails details) => onClipPanStart!(clip.id, details),
+                  onPanUpdate: onClipPanUpdate == null
+                      ? null
+                      : (DragUpdateDetails details) => onClipPanUpdate!(clip.id, details),
                   onPanEnd: onClipPanEnd == null ? null : (DragEndDetails details) => onClipPanEnd!(clip.id, details),
                   onPanCancel: onClipPanCancel == null ? null : () => onClipPanCancel!(clip.id),
-                  onResizeStart:
-                      onClipResizeStart == null
-                          ? null
-                          : (DragStartDetails details) => onClipResizeStart!(clip.id, details),
-                  onResizeUpdate:
-                      onClipResizeUpdate == null
-                          ? null
-                          : (DragUpdateDetails details) => onClipResizeUpdate!(clip.id, details),
-                  onResizeEnd:
-                      onClipResizeEnd == null ? null : (DragEndDetails details) => onClipResizeEnd!(clip.id, details),
+                  onResizeStart: onClipResizeStart == null
+                      ? null
+                      : (DragStartDetails details) => onClipResizeStart!(clip.id, details),
+                  onResizeUpdate: onClipResizeUpdate == null
+                      ? null
+                      : (DragUpdateDetails details) => onClipResizeUpdate!(clip.id, details),
+                  onResizeEnd: onClipResizeEnd == null
+                      ? null
+                      : (DragEndDetails details) => onClipResizeEnd!(clip.id, details),
                   onResizeCancel: onClipResizeCancel == null ? null : () => onClipResizeCancel!(clip.id),
                 ),
               ),
@@ -233,28 +235,27 @@ class PlaylistCanvas extends StatelessWidget {
       onPointerSignal: (PointerSignalEvent event) {
         if (event is PointerScrollEvent) onScroll?.call(event.scrollDelta);
       },
-      onPointerPanZoomUpdate:
-          onPanZoom == null ? null : (PointerPanZoomUpdateEvent event) => onPanZoom!(event.panDelta),
+      onPointerPanZoomUpdate: onPanZoom == null
+          ? null
+          : (PointerPanZoomUpdateEvent event) => onPanZoom!(event.panDelta),
       child: surface,
     );
 
     return DragTarget<Object>(
-      onWillAcceptWithDetails:
-          (DragTargetDetails<Object> details) =>
-              onDrop != null && (details.data is SampleAsset || details.data is PlaylistInsertItem),
+      onWillAcceptWithDetails: (DragTargetDetails<Object> details) =>
+          onDrop != null && (details.data is SampleAsset || details.data is PlaylistInsertItem),
 
-      onAcceptWithDetails:
-          onDrop == null
-              ? null
-              : (DragTargetDetails<Object> details) {
-                final RenderBox box = context.findRenderObject()! as RenderBox;
-                final Offset local = box.globalToLocal(details.offset);
-                onDrop!(
-                  details.data,
-                  local.dx / vm.pxPerBar + vm.scrollTicks / ticksPerBar.toDouble(),
-                  (local.dy / size.playlistLaneHeight + vm.scrollLanes).floor(),
-                );
-              },
+      onAcceptWithDetails: onDrop == null
+          ? null
+          : (DragTargetDetails<Object> details) {
+              final RenderBox box = context.findRenderObject()! as RenderBox;
+              final Offset local = box.globalToLocal(details.offset);
+              onDrop!(
+                details.data,
+                local.dx / vm.pxPerBar + vm.scrollTicks / ticksPerBar.toDouble(),
+                (local.dy / size.playlistLaneHeight + vm.scrollLanes).floor(),
+              );
+            },
       builder: (BuildContext context, List<Object?> candidateData, List<dynamic> rejectedData) => input,
     );
   }
@@ -284,24 +285,23 @@ class _PlaylistBackgroundPainter extends CustomPainter {
   final double laneHeight;
   final int snapTicks;
 
-  late final Paint _line =
-      Paint()
-        ..color = gridLine
-        ..strokeWidth = lineWidth;
+  late final Paint _line = Paint()
+    ..color = gridLine
+    ..strokeWidth = lineWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final double firstBar = scrollBars.floorToDouble();
     final int visibleBars = (size.width / pxPerBar).ceil() + 2;
     final double stepBars = snapTicks > 0 ? (snapTicks / ticksPerBar.toDouble()).clamp(1 / 64, 64.0) : 1.0;
-    final Paint minor =
-        Paint()
-          ..color = gridLine.withValues(alpha: 0.55) // token-lint-ok: canvas grid hierarchy
-          ..strokeWidth = lineWidth;
-    final Paint horizontal =
-        Paint()
-          ..color = gridLine.withValues(alpha: 0.42) // token-lint-ok: canvas grid hierarchy
-          ..strokeWidth = lineWidth;
+    final Paint minor = Paint()
+      ..color = gridLine
+          .withValues(alpha: 0.55) // token-lint-ok: canvas grid hierarchy
+      ..strokeWidth = lineWidth;
+    final Paint horizontal = Paint()
+      ..color = gridLine
+          .withValues(alpha: 0.42) // token-lint-ok: canvas grid hierarchy
+      ..strokeWidth = lineWidth;
     for (int index = 0; index <= (visibleBars / stepBars).ceil(); index++) {
       final double bar = firstBar + index * stepBars;
       final double x = (bar - scrollBars) * pxPerBar;
@@ -340,10 +340,9 @@ class _PlayheadPainter extends CustomPainter {
   final Color color;
   final double width;
 
-  late final Paint _paint =
-      Paint()
-        ..color = color
-        ..strokeWidth = width;
+  late final Paint _paint = Paint()
+    ..color = color
+    ..strokeWidth = width;
 
   @override
   void paint(Canvas canvas, Size size) {

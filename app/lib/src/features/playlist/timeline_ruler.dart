@@ -19,7 +19,7 @@ class PlaylistHeader extends StatelessWidget {
 
   final String title;
 
-  /// `Untitled.onebeat · 124 BPM · 4/4`.
+  /// `124 BPM · 4/4`.
   final String right;
   final String snap;
   final ValueChanged<String>? onSnapChanged;
@@ -80,10 +80,10 @@ class PlaylistRuler extends StatelessWidget {
     if (onSeekBar == null) return ruler;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown:
-          (TapDownDetails details) => onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
-      onHorizontalDragUpdate:
-          (DragUpdateDetails details) => onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
+      onTapDown: (TapDownDetails details) =>
+          onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
+      onHorizontalDragUpdate: (DragUpdateDetails details) =>
+          onSeekBar!(details.localPosition.dx / pxPerBar + scrollTicks / ticksPerBar),
       child: ruler,
     );
   }
@@ -106,10 +106,9 @@ class PlaylistRulerPainter extends CustomPainter {
   final double lineWidth;
   final TextStyle style;
 
-  late final Paint _rule =
-      Paint()
-        ..color = line
-        ..strokeWidth = lineWidth;
+  late final Paint _rule = Paint()
+    ..color = line
+    ..strokeWidth = lineWidth;
   final TextPainter _text = TextPainter(textDirection: TextDirection.ltr);
 
   @override

@@ -31,7 +31,7 @@ void main() {
 
     // Playlist pane headers & copy
     expect(find.text('PLAYLIST'), findsOneWidget);
-    expect(find.text('Untitled.onebeat · nothing here yet'), findsOneWidget);
+    expect(find.text('nothing here yet'), findsOneWidget);
     expect(find.text('Add your first clip'), findsOneWidget);
     expect(find.text('Insert pattern clip'), findsOneWidget);
     expect(find.text('Drag audio here'), findsOneWidget);

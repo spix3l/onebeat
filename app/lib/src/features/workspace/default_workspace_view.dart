@@ -15,7 +15,7 @@ import '../../ui_kit/prose.dart';
 class DefaultWorkspaceVm {
   const DefaultWorkspaceVm({
     this.playlistTitle = 'PLAYLIST',
-    this.playlistSubtitle = 'Untitled.onebeat · nothing here yet',
+    this.playlistSubtitle = 'nothing here yet',
     this.rackTitle = 'CHANNEL RACK — Pattern 1 (empty)',
     this.rackSubtitle = 'a step is a note',
   });

@@ -100,6 +100,15 @@ class EngineController extends ChangeNotifier {
   bool get patternPreviewing => _patternPreviewing;
 
   void play() {
+    // Leaving preview is the engine's business too, not just this flag's. The
+    // engine keeps previewing until it is told to stop: it schedules the
+    // previewed pattern alone and loops it at that pattern's length. Pressing
+    // play without this line started the *song* over a one-bar preview
+    // schedule — the playlist looping bar 1, unpredictably, depending on
+    // whether a pattern had been auditioned earlier in the session.
+    if (_patternPreviewing) {
+      client.stopPatternPreview();
+    }
     _patternPreviewing = false;
     _previewPatternId = null;
     _previewInstrumentId = null;

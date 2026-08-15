@@ -373,8 +373,15 @@ class SizeTokens {
   double get stockPianoKeyboardHeight => 150;
 
   /// The compact title strip above the rack controls. The workspace gutters
-  /// provide the breathing room; this row only needs to hold its title and tabs.
+  /// provide the breathing room; this row only needs to hold its title and the
+  /// pattern select.
   double get rackHeaderHeight => 34;
+
+  /// The header's pattern select. Wider than [dropdownWidth] because a pattern
+  /// name is user data — the strip of tabs this replaced could not fit four
+  /// sample-named patterns in any window, and truncating the one field that
+  /// says which pattern you are editing would repeat that mistake in miniature.
+  double get rackPatternFieldWidth => 232;
   double get rackHeaderWidth => 316;
   double get rackRowHeight => 52;
   double get rackStepWidth => 34;
@@ -523,6 +530,20 @@ class SizeTokens {
 
   /// The ruler numbers every fourth bar, as the mockup labels them.
   int get playlistBarLabelEvery => 4;
+
+  /// The track header column, left to right (UI-B-08).
+  ///
+  /// The lane's identity colour is a spine down the header's left edge rather
+  /// than a swatch floating in it: a swatch reads as a button you can press,
+  /// and twelve of them stacked read as a column of buttons. A spine reads as
+  /// what it is — this row belongs to that colour — and it lines the header up
+  /// with the clips that carry the same colour out on the canvas.
+  double get playlistLaneSpineWidth => 3;
+
+  /// The disclosure triangle and the lane number get fixed columns so the
+  /// names start on one vertical line whether the number is `1` or `12`.
+  double get playlistLaneDiscloseSize => 14;
+  double get playlistLaneIndexWidth => 18;
 
   /// Shared editor chrome.
   double get playheadWidth => 2;

@@ -587,8 +587,10 @@ void main() {
 
     // The rack can show lanes without implying that one is selected.
     expect(find.text('CHANNEL RACK'), findsOneWidget);
+    // The header names the pattern being edited and only that one: the other
+    // patterns live in the select's menu, which is closed.
     expect(find.text('Main Groove'), findsOneWidget);
-    expect(find.text('Verse Drums'), findsOneWidget);
+    expect(find.text('Verse Drums'), findsNothing);
     expect(find.text('Kick 808'), findsOneWidget);
     expect(find.text('Snare'), findsOneWidget);
     expect(find.byType(ObChannelInspector), findsNothing);
@@ -722,7 +724,7 @@ void main() {
     expect(client.rows.first.steps[0].velocity, 9216);
   });
 
-  testWidgets('switching pattern tabs re-scopes pattern and rows', (WidgetTester tester) async {
+  testWidgets('switching patterns from the select re-scopes pattern and rows', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
 
     await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
@@ -730,7 +732,8 @@ void main() {
 
     expect(client.pattern.name, 'Main Groove');
 
-    // Tap 'Verse Drums' tab
+    await tester.tap(find.text('Main Groove'));
+    await tester.pump();
     await tester.tap(find.text('Verse Drums'));
     await tester.pump();
 
@@ -1058,6 +1061,7 @@ void main() {
     await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
     await tester.pump();
 
+    // Right-clicking the select acts on the pattern in the field.
     await rightClickPattern(tester, 'Main Groove');
     expect(find.text('Duplicate'), findsOneWidget);
     expect(find.text('Recolor'), findsOneWidget);
@@ -1065,16 +1069,17 @@ void main() {
     await tester.pump();
 
     expect(client.patternDuplicateCalls, 1);
+    // The copy is the pattern now being edited, so it is what the field shows.
     expect(find.text('Main Groove 2'), findsOneWidget);
 
-    await rightClickPattern(tester, 'Main Groove');
+    await rightClickPattern(tester, 'Main Groove 2');
     await tester.tap(find.text('Recolor'));
     await tester.pump();
 
     expect(client.patternRecolorCalls, 1);
-    expect(client.patterns.first.color, isNot('#EF6F91'));
+    expect(client.patterns.last.color, isNot('#EF6F91'));
 
-    await rightClickPattern(tester, 'Main Groove');
+    await rightClickPattern(tester, 'Main Groove 2');
     await tester.tap(find.text('Select next empty'));
     await tester.pump();
     expect(client.pattern.name, 'Empty Pattern');

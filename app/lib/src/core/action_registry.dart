@@ -334,11 +334,13 @@ abstract final class ActionRegistry {
       label: 'Add lane',
       area: ActionArea.arrangement,
     ),
-    UiAction(
+    // No key: ⌘B is duplicate in the arrangement, as it is in the piano roll
+    // and in FL. Placing is a click on an empty slot, which is how it is
+    // actually done — this entry stays for the command list's sake.
+    const UiAction(
       id: 'arrangement.placeClip',
       label: 'Place pattern',
       area: ActionArea.arrangement,
-      activator: _meta(LogicalKeyboardKey.keyB),
       description: 'Puts the current pattern on the selected lane.',
     ),
     UiAction(

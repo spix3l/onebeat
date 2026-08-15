@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/plugins/plugin_binding.dart';
 import 'package:onebeat/src/features/plugins/stock/piano_editor.dart';
+import 'package:onebeat/src/ui_kit/knob.dart';
 
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
@@ -36,9 +37,7 @@ class _FakePluginEngineClient extends FakeEngineClient implements EngineClient {
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('PluginBinding renders Piano stock editor for OneBeat Piano plugin', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('PluginBinding renders Piano stock editor for OneBeat Piano plugin', (WidgetTester tester) async {
     final _FakePluginEngineClient client = _FakePluginEngineClient();
 
     await pumpForTest(
@@ -115,20 +114,12 @@ void main() {
     expect(client.auditionedNotesOn.isNotEmpty, true);
   });
 
-  testWidgets('PluginBinding renders Synth stock editor for synth plugin', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('PluginBinding renders Synth stock editor for synth plugin', (WidgetTester tester) async {
     final _FakePluginEngineClient client = _FakePluginEngineClient();
 
     await pumpForTest(
       tester,
-      PluginBinding(
-        client: client,
-        trackId: 'inst_keys',
-        pluginName: 'Synth',
-        trackName: 'Soft Keys',
-        onClose: () {},
-      ),
+      PluginBinding(client: client, trackId: 'inst_keys', pluginName: 'Synth', trackName: 'Soft Keys', onClose: () {}),
     );
 
     expect(find.text('FILTER & TONE'), findsOneWidget);
@@ -136,20 +127,47 @@ void main() {
     expect(find.text('AMPLITUDE ENVELOPE'), findsOneWidget);
   });
 
-  testWidgets('PluginBinding renders Sampler stock editor for sampler plugin', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('PluginBinding renders Organ stock editor and updates parameters', (WidgetTester tester) async {
     final _FakePluginEngineClient client = _FakePluginEngineClient();
 
     await pumpForTest(
       tester,
       PluginBinding(
         client: client,
-        trackId: 'inst_kick',
-        pluginName: 'Sampler',
-        trackName: 'Kick 808',
+        trackId: 'inst_organ',
+        pluginName: 'OneBeat Organ',
+        trackName: 'Church Organ',
+        parameters: const <HostedParameter>[
+          HostedParameter(
+            id: 12,
+            name: 'Drive',
+            module: 'Tone',
+            display: '15 %',
+            value: 0.15,
+            minimum: 0.0,
+            maximum: 1.0,
+            defaultValue: 0.15,
+          ),
+        ],
         onClose: () {},
       ),
+    );
+
+    expect(find.text('TONEWHEEL ORGAN'), findsOneWidget);
+    expect(find.text('MOTION & SPACE'), findsOneWidget);
+    expect(find.text('ROTARY'), findsOneWidget);
+
+    await tester.drag(find.byType(ObKnob).at(3), const Offset(0, -24));
+    await tester.pump();
+    expect(client.paramValues.containsKey(12), true);
+  });
+
+  testWidgets('PluginBinding renders Sampler stock editor for sampler plugin', (WidgetTester tester) async {
+    final _FakePluginEngineClient client = _FakePluginEngineClient();
+
+    await pumpForTest(
+      tester,
+      PluginBinding(client: client, trackId: 'inst_kick', pluginName: 'Sampler', trackName: 'Kick 808', onClose: () {}),
     );
 
     expect(find.text('SAMPLE FILE'), findsOneWidget);
@@ -162,13 +180,7 @@ void main() {
 
     await pumpForTest(
       tester,
-      PluginBinding(
-        client: client,
-        trackId: 'inst_keys',
-        pluginName: 'Synth',
-        trackName: 'Soft Keys',
-        onClose: () {},
-      ),
+      PluginBinding(client: client, trackId: 'inst_keys', pluginName: 'Synth', trackName: 'Soft Keys', onClose: () {}),
     );
 
     expect(find.textContaining('Soft Keys · ACTIVE'), findsOneWidget);
@@ -178,9 +190,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('PluginBinding renders Guitar stock editor for OneBeat Guitar plugin', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('PluginBinding renders Guitar stock editor for OneBeat Guitar plugin', (WidgetTester tester) async {
     final _FakePluginEngineClient client = _FakePluginEngineClient();
 
     await pumpForTest(

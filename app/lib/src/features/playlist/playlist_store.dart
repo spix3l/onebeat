@@ -368,16 +368,52 @@ class PlaylistStore extends ChangeNotifier {
     }
   }
 
+  /// Duplicates the selection one selection-length later, and leaves the copies
+  /// selected (⌘B / ⌘D — the piano roll's [PianoRollStore.duplicateSelection]
+  /// behaviour, on clips).
+  ///
+  /// One offset for the whole selection, not one per clip: duplicating a
+  /// two-bar phrase spread over three lanes has to produce the same phrase two
+  /// bars later, and offsetting each clip by its own length would shear it.
+  /// Selecting the copies is what makes ⌘B repeatable — press it four times and
+  /// you have four bars of the phrase.
   void duplicateSelection() {
     if (selectedClipIds.isEmpty) return;
-    _client.beginGesture('Duplicate clips');
-    for (final String id in selectedClipIds.toList()) {
+    final List<ArrangementClip> selected = <ArrangementClip>[];
+    for (final String id in selectedClipIds) {
       final ArrangementClip? clip = clipById(id);
-      if (clip == null) continue;
-      _client.duplicateClip(id, startTicks: clip.endTicks);
+      if (clip != null) selected.add(clip);
+    }
+    if (selected.isEmpty) return;
+
+    int lowest = selected.first.startTicks;
+    int highest = selected.first.endTicks;
+    for (final ArrangementClip clip in selected) {
+      if (clip.startTicks < lowest) lowest = clip.startTicks;
+      if (clip.endTicks > highest) highest = clip.endTicks;
+    }
+    int delta = highest - lowest;
+    // Rounded *up* to the snap step, so the copy lands on the grid the user is
+    // working to rather than a step before it.
+    if (snap.ticks > 0) {
+      delta = ((delta + snap.ticks - 1) ~/ snap.ticks) * snap.ticks;
+    }
+    if (delta <= 0) return;
+
+    final Set<String> before = clips.map((ArrangementClip clip) => clip.id).toSet();
+    _client.beginGesture(selected.length == 1 ? 'Duplicate clip' : 'Duplicate clips');
+    for (final ArrangementClip clip in selected) {
+      _client.duplicateClip(clip.id, laneId: clip.laneId, startTicks: clip.startTicks + delta);
     }
     _client.commitGesture();
     refresh();
+
+    // The engine mints the ids, so the copies are "whatever is new" — read
+    // back rather than guessed at from positions, which two clips could share.
+    final Iterable<String> copies = clips
+        .map((ArrangementClip clip) => clip.id)
+        .where((String id) => !before.contains(id));
+    if (copies.isNotEmpty) selectClips(copies);
   }
 
   void deleteSelection() {
@@ -423,6 +459,15 @@ class PlaylistStore extends ChangeNotifier {
 
   void makeClipsUnique(List<String> clipIds) {
     _client.makeClipsUnique(clipIds);
+    refresh();
+  }
+
+  /// FL's "split by channel": the clip is replaced by one clip per channel of
+  /// its pattern, each on its own lane. The old selection is dropped — the
+  /// clip it named no longer exists.
+  void splitClipByChannel(String clipId) {
+    _client.splitClipByChannel(clipId);
+    selectedClipIds.clear();
     refresh();
   }
 

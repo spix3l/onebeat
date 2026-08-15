@@ -225,6 +225,11 @@ abstract interface class PatternClient {
 
   /// FR-SEQ-04: one clone, every listed clip repointed at it, one undo entry.
   void makeClipsUnique(List<String> clipIds);
+
+  /// Replaces one pattern clip with one clip per channel its pattern uses,
+  /// each on its own lane — FL's "split by channel", as one undo entry. A
+  /// pattern with fewer than two channels is left alone.
+  void splitClipByChannel(String clipId);
 }
 
 /// The arrangement's seam (OB-3-12, OB-3-13). Note what is absent: nothing here
@@ -1094,6 +1099,15 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
     const String nul = '\u0000';
     final String packed = '${clipIds.join(nul)}$nul$nul';
     _withNativeString(packed, (Pointer<Char> native) => _bindings.ob_engine_clips_make_unique(_engine, native));
+  }
+
+  @override
+  void splitClipByChannel(String clipId) {
+    if (clipId.isEmpty) return;
+    _withNativeString(
+      clipId,
+      (Pointer<Char> native) => _bindings.ob_engine_clip_split_by_channel(_engine, native),
+    );
   }
 
   // --- arrangement (OB-3-12, OB-3-13) ---------------------------------------

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/action_registry.dart';
 import '../../design/tokens.dart';
 import '../../ui_kit/button.dart';
+import '../../ui_kit/dropdown.dart';
 import '../../ui_kit/empty_state.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/prose.dart';
@@ -309,17 +310,14 @@ class _ChannelRackHeader extends StatelessWidget {
             children: <Widget>[
               Text(title, style: tokens.type.title),
               if (compact) SizedBox(width: tokens.spacing.lg) else const Spacer(),
-              for (final PatternTabVm pattern in patterns) ...<Widget>[
-                _PatternTab(
-                  tab: pattern,
-                  onTap: onSelectPattern == null ? null : () => onSelectPattern!(pattern.id),
-                  onSecondaryTapDown: onPatternSecondaryTapDown == null
-                      ? null
-                      : (TapDownDetails details) => onPatternSecondaryTapDown!(pattern.id, details),
+              if (patterns.isNotEmpty) ...<Widget>[
+                _PatternSelect(
+                  patterns: patterns,
+                  onSelect: onSelectPattern,
+                  onSecondaryTapDown: onPatternSecondaryTapDown,
                 ),
-                SizedBox(width: tokens.spacing.xs),
+                SizedBox(width: tokens.spacing.sm),
               ],
-              SizedBox(width: tokens.spacing.lg),
               _NewPatternButton(onTap: onCreatePattern),
               SizedBox(width: tokens.spacing.xs),
               _AddChannelAccentButton(onTap: onAddChannel),
@@ -363,62 +361,62 @@ class _NewPatternButton extends StatelessWidget {
   }
 }
 
-class _PatternTab extends StatelessWidget {
-  const _PatternTab({required this.tab, this.onTap, this.onSecondaryTapDown});
+/// The header's pattern select.
+///
+/// This was a strip of one chip per pattern. A project with more than a handful
+/// of patterns — or with patterns named after the samples they hold, which is
+/// what happens the moment a user drags a folder in — overflowed the header on
+/// any window, so the control that says *which pattern you are editing* was the
+/// first thing to fall off the screen. A select holds one row's width whatever
+/// the project does.
+///
+/// Right-click still opens the pattern menu (rename, duplicate, recolor,
+/// delete), now targeting the pattern in the field — the one the menu's actions
+/// are about anyway.
+class _PatternSelect extends StatelessWidget {
+  const _PatternSelect({required this.patterns, this.onSelect, this.onSecondaryTapDown});
 
-  final PatternTabVm tab;
-  final VoidCallback? onTap;
-  final ValueChanged<TapDownDetails>? onSecondaryTapDown;
+  final List<PatternTabVm> patterns;
+  final ValueChanged<String>? onSelect;
+  final void Function(String patternId, TapDownDetails details)? onSecondaryTapDown;
+
+  /// A pattern's row in the menu. The group is a prefix because that is how the
+  /// tabs read it, and it is what disambiguates two `Verse` patterns in
+  /// different groups.
+  static String _label(PatternTabVm pattern) =>
+      pattern.group.isEmpty ? pattern.name : '${pattern.group} · ${pattern.name}';
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final ColorTokens color = tokens.color;
+    final PatternTabVm current = patterns.firstWhere(
+      (PatternTabVm pattern) => pattern.selected,
+      orElse: () => patterns.first,
+    );
 
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onSecondaryTapDown: onSecondaryTapDown,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm, vertical: tokens.spacing.xs),
-        decoration: BoxDecoration(
-          color: tab.selected ? color.accent : color.surfaceWell,
-          borderRadius: tokens.radius.controlBorder,
-          border: Border.all(color: tab.selected ? color.accentBright : color.line, width: tokens.border.hairline),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (tab.group.isNotEmpty) ...<Widget>[
-              Text('${tab.group} · ', style: tokens.type.microCaps.copyWith(color: color.textMuted)),
-            ],
-            Text(
-              tab.name,
-              style: tokens.type.body.copyWith(
-                color: tab.selected ? color.textPrimary : color.textSecondary,
-                fontWeight: tab.selected ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-            if (tab.timeSignature != '4/4') ...<Widget>[
-              SizedBox(width: tokens.spacing.xs),
-              Text(tab.timeSignature, style: tokens.type.microCaps.copyWith(color: color.textMuted)),
-            ],
-            if (tab.count != null) ...<Widget>[
-              SizedBox(width: tokens.spacing.xs),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xxs),
-                decoration: BoxDecoration(
-                  color: tab.selected ? color.accentBright : color.surfaceRaised,
-                  borderRadius: tokens.radius.controlBorder,
-                ),
-                child: Text(
-                  '${tab.count}',
-                  style: tokens.type.numericSmall.copyWith(color: tab.selected ? color.textPrimary : color.textMuted),
-                ),
-              ),
-            ],
-          ],
-        ),
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapDown: onSecondaryTapDown == null
+          ? null
+          : (TapDownDetails details) => onSecondaryTapDown!(current.id, details),
+      child: ObDropdown(
+        label: 'Pattern',
+        value: _label(current),
+        items: <String>[for (final PatternTabVm pattern in patterns) _label(pattern)],
+        width: tokens.size.rackPatternFieldWidth,
+        onSelected: onSelect == null
+            ? null
+            : (String label) {
+                // Labels are what the select speaks; the store speaks ids. Two
+                // patterns can carry the same name, and the first match is the
+                // only sane reading of a click on a row that says that name.
+                for (final PatternTabVm pattern in patterns) {
+                  if (_label(pattern) == label) {
+                    onSelect!(pattern.id);
+                    return;
+                  }
+                }
+              },
       ),
     );
   }

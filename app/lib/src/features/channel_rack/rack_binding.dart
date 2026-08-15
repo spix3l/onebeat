@@ -65,6 +65,25 @@ class RackBinding extends StatefulWidget {
   State<RackBinding> createState() => _RackBindingState();
 }
 
+class _CopyChannelIntent extends Intent {
+  const _CopyChannelIntent();
+}
+
+class _CutChannelIntent extends Intent {
+  const _CutChannelIntent();
+}
+
+class _PasteChannelIntent extends Intent {
+  const _PasteChannelIntent();
+}
+
+class _ChannelClipboard {
+  const _ChannelClipboard({required this.instrument, required this.notes});
+
+  final ProjectInstrument instrument;
+  final List<SequenceNote> notes;
+}
+
 class _RackBindingState extends State<RackBinding> with SingleTickerProviderStateMixin {
   late final core.EngineController _controller;
   late final RackStore _store;
@@ -87,6 +106,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   String? _deletePatternId;
   String? _renameInstrumentId;
   String? _renamePatternId;
+  _ChannelClipboard? _channelClipboard;
 
   @override
   void initState() {
@@ -337,9 +357,10 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       rowVms.add(
         RackRowVm(
           name: inst?.name ?? row.instrumentId,
-          type: inst?.pluginId == _kSamplePluginId
-              ? 'Sampler'
-              : (inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel'),
+          type:
+              inst?.pluginId == _kSamplePluginId
+                  ? 'Sampler'
+                  : (inst != null && inst.pluginName.isNotEmpty ? inst.pluginName : 'Empty channel'),
 
           color: color,
           steps: stepVms,
@@ -388,8 +409,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final RackRow? velocityRow = velocityInstrument == null ? null : _store.rowFor(velocityInstrument);
     final RackStep? selectedStep =
         velocityRow != null && velocityStep != null && velocityStep < velocityRow.steps.length
-        ? velocityRow.steps[velocityStep]
-        : null;
+            ? velocityRow.steps[velocityStep]
+            : null;
 
     final RackToolbarVm toolbarVm = RackToolbarVm(
       channelType: 'Sampler',
@@ -410,9 +431,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       playingStep: playingStep,
       playingTick: playingTick,
       inspector: inspectorVm,
-      sharedPatternNotice: _patternStore.notice == null
-          ? null
-          : SharedPatternNoticeVm(message: _patternStore.notice!.message),
+      sharedPatternNotice:
+          _patternStore.notice == null ? null : SharedPatternNoticeVm(message: _patternStore.notice!.message),
       canUndo: _store.canUndo,
       canRedo: _store.canRedo,
     );
@@ -506,6 +526,59 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       final String instrumentId = visible[rowIndex].instrumentId;
       widget.client.selectInstrument(instrumentId);
       _store.selectInstrument(instrumentId);
+    }
+  }
+
+  void _copySelectedChannel() {
+    final String? id = _store.selectedInstrumentId;
+    final ProjectInstrument? instrument = id == null ? null : _store.instrumentFor(id);
+    if (instrument == null) return;
+    _channelClipboard = _ChannelClipboard(
+      instrument: instrument,
+      notes: List<SequenceNote>.of(_store.notesFor(instrument.id)),
+    );
+  }
+
+  void _cutSelectedChannel() {
+    final String? id = _store.selectedInstrumentId;
+    if (id == null) return;
+    _copySelectedChannel();
+    _deleteInstrument(id);
+  }
+
+  void _pasteChannel() {
+    final _ChannelClipboard? clipboard = _channelClipboard;
+    if (clipboard == null) return;
+    final String sourceId = clipboard.instrument.id;
+    final Set<String> existingIds = _store.instruments.map((ProjectInstrument instrument) => instrument.id).toSet();
+    try {
+      final bool sourceExists = existingIds.contains(sourceId);
+      if (sourceExists) {
+        widget.client.duplicateInstrument(sourceId);
+      } else if (clipboard.instrument.pluginId == _kSamplePluginId) {
+        widget.client.addSampleInstrument(clipboard.instrument.name, clipboard.instrument.pluginPath);
+      } else if (clipboard.instrument.pluginId.isEmpty) {
+        widget.client.addEmptyInstrument(clipboard.instrument.name);
+      } else {
+        widget.client.addPluginByPath(clipboard.instrument.pluginPath, clipboard.instrument.pluginId);
+      }
+      _store.refresh();
+      final ProjectInstrument? pasted = _store.instruments.cast<ProjectInstrument?>().firstWhere(
+        (ProjectInstrument? instrument) => instrument != null && !existingIds.contains(instrument.id),
+        orElse: () => null,
+      );
+      if (pasted != null && !sourceExists) {
+        for (final SequenceNote note in clipboard.notes) {
+          widget.client.addNote(pasted.id, note.startTicks, note.lengthTicks, note.key, velocity: note.velocity);
+        }
+        widget.client.renameInstrument(pasted.id, clipboard.instrument.name);
+        widget.client.recolorInstrument(pasted.id, clipboard.instrument.color);
+        widget.client.setInstrumentGain(pasted.id, clipboard.instrument.gain);
+        widget.client.setInstrumentPan(pasted.id, clipboard.instrument.pan);
+        _store.refresh();
+      }
+    } catch (_) {
+      // The command is a stub on a fake client.
     }
   }
 
@@ -686,105 +759,102 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _hideContextMenu();
     final OverlayState overlay = Overlay.of(context);
     _contextMenuEntry = OverlayEntry(
-      builder: (BuildContext overlayContext) => Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _hideContextMenu,
-              child: const SizedBox.expand(),
-            ),
-          ),
-          Positioned(
-            left: details.globalPosition.dx,
-            top: details.globalPosition.dy,
-            child: ObPopoverMenu(
-              vm: const ObPopoverMenuVm(
-                sections: <ObMenuSectionVm>[
-                  ObMenuSectionVm(
-                    rows: <ObMenuRowVm>[
-                      ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
-                      ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
-                      ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
-                      ObMenuRowVm(label: 'Time signature', icon: ObKitGlyphKind.note),
-                      ObMenuRowVm(label: 'Group', icon: ObKitGlyphKind.grid),
-                      ObMenuRowVm(label: 'Move earlier', icon: ObKitGlyphKind.chevronRight),
-                      ObMenuRowVm(label: 'Move later', icon: ObKitGlyphKind.chevronRight),
-                      ObMenuRowVm(label: 'Select next empty', icon: ObKitGlyphKind.chevronRight),
-                      ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
+      builder:
+          (BuildContext overlayContext) => Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _hideContextMenu,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Positioned(
+                left: details.globalPosition.dx,
+                top: details.globalPosition.dy,
+                child: ObPopoverMenu(
+                  vm: const ObPopoverMenuVm(
+                    sections: <ObMenuSectionVm>[
+                      ObMenuSectionVm(
+                        rows: <ObMenuRowVm>[
+                          ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
+                          ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+                          ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
+                          ObMenuRowVm(label: 'Time signature', icon: ObKitGlyphKind.note),
+                          ObMenuRowVm(label: 'Group', icon: ObKitGlyphKind.grid),
+                          ObMenuRowVm(label: 'Move earlier', icon: ObKitGlyphKind.chevronRight),
+                          ObMenuRowVm(label: 'Move later', icon: ObKitGlyphKind.chevronRight),
+                          ObMenuRowVm(label: 'Select next empty', icon: ObKitGlyphKind.chevronRight),
+                          ObMenuRowVm(label: 'Delete', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
+                        ],
+                      ),
                     ],
                   ),
-                ],
+                  onSelect: (int index) {
+                    _hideContextMenu();
+                    switch (index) {
+                      case 0:
+                        _beginPatternRename(patternId);
+                      case 1:
+                        _patternStore.duplicate(patternId);
+                        _store.refresh();
+                      case 2:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.recolor(patternId, _nextPatternColor(pattern.color));
+                          _store.refresh();
+                        }
+                      case 3:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          final String next = _nextPatternTimeSignature(pattern);
+                          final List<String> nextParts = next.split('/');
+                          _patternStore.setTimeSignature(patternId, int.parse(nextParts[0]), int.parse(nextParts[1]));
+                          _store.refresh();
+                        }
+                      case 4:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.setGroup(patternId, _nextPatternGroup(pattern.group));
+                          _store.refresh();
+                        }
+                      case 5:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.reorder(patternId, math.max(0, pattern.order - 1));
+                          _store.refresh();
+                        }
+                      case 6:
+                        final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
+                          (PatternSummary? item) => item?.id == patternId,
+                          orElse: () => null,
+                        );
+                        if (pattern != null) {
+                          _patternStore.reorder(patternId, pattern.order + 1);
+                          _store.refresh();
+                        }
+                      case 7:
+                        _selectNextEmptyPattern();
+                      case 8:
+                        _requestDeletePattern(patternId);
+                    }
+                  },
+                ),
               ),
-              onSelect: (int index) {
-                _hideContextMenu();
-                switch (index) {
-                  case 0:
-                    _beginPatternRename(patternId);
-                  case 1:
-                    _patternStore.duplicate(patternId);
-                    _store.refresh();
-                  case 2:
-                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                      (PatternSummary? item) => item?.id == patternId,
-                      orElse: () => null,
-                    );
-                    if (pattern != null) {
-                      _patternStore.recolor(patternId, _nextPatternColor(pattern.color));
-                      _store.refresh();
-                    }
-                  case 3:
-                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                      (PatternSummary? item) => item?.id == patternId,
-                      orElse: () => null,
-                    );
-                    if (pattern != null) {
-                      final String next = _nextPatternTimeSignature(pattern);
-                      final List<String> nextParts = next.split('/');
-                      _patternStore.setTimeSignature(
-                        patternId,
-                        int.parse(nextParts[0]),
-                        int.parse(nextParts[1]),
-                      );
-                      _store.refresh();
-                    }
-                  case 4:
-                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                      (PatternSummary? item) => item?.id == patternId,
-                      orElse: () => null,
-                    );
-                    if (pattern != null) {
-                      _patternStore.setGroup(patternId, _nextPatternGroup(pattern.group));
-                      _store.refresh();
-                    }
-                  case 5:
-                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                      (PatternSummary? item) => item?.id == patternId,
-                      orElse: () => null,
-                    );
-                    if (pattern != null) {
-                      _patternStore.reorder(patternId, math.max(0, pattern.order - 1));
-                      _store.refresh();
-                    }
-                  case 6:
-                    final PatternSummary? pattern = _store.patterns.cast<PatternSummary?>().firstWhere(
-                      (PatternSummary? item) => item?.id == patternId,
-                      orElse: () => null,
-                    );
-                    if (pattern != null) {
-                      _patternStore.reorder(patternId, pattern.order + 1);
-                      _store.refresh();
-                    }
-                  case 7:
-                    _selectNextEmptyPattern();
-                  case 8:
-                    _requestDeletePattern(patternId);
-                }
-              },
-            ),
+            ],
           ),
-        ],
-      ),
     );
     overlay.insert(_contextMenuEntry!);
   }
@@ -1037,6 +1107,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       shortcuts: <ShortcutActivator, Intent>{
         ...shortcutsForArea(ActionArea.pattern),
         const SingleActivator(LogicalKeyboardKey.space): const _TogglePatternPreviewIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): const _CopyChannelIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true): const _CutChannelIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): const _PasteChannelIntent(),
       },
       handlers: <String, VoidCallback>{'pattern.create': _onCreatePattern},
       extraActions: <Type, Action<Intent>>{
@@ -1049,6 +1122,24 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
             } else {
               _controller.playPatternPreview(pattern.id);
             }
+            return null;
+          },
+        ),
+        _CopyChannelIntent: CallbackAction<_CopyChannelIntent>(
+          onInvoke: (_) {
+            _copySelectedChannel();
+            return null;
+          },
+        ),
+        _CutChannelIntent: CallbackAction<_CutChannelIntent>(
+          onInvoke: (_) {
+            _cutSelectedChannel();
+            return null;
+          },
+        ),
+        _PasteChannelIntent: CallbackAction<_PasteChannelIntent>(
+          onInvoke: (_) {
+            _pasteChannel();
             return null;
           },
         ),
@@ -1127,15 +1218,16 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
             ),
             if (_showRenameDialog)
               RenameChannelDialog(
-                initialName: _renamePattern
-                    ? (_store.patterns
-                              .cast<PatternSummary?>()
-                              .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
-                              ?.name ??
-                          '')
-                    : renameId == null
-                    ? ''
-                    : (_store.instrumentFor(renameId)?.name ?? ''),
+                initialName:
+                    _renamePattern
+                        ? (_store.patterns
+                                .cast<PatternSummary?>()
+                                .firstWhere((PatternSummary? item) => item?.id == _renamePatternId, orElse: () => null)
+                                ?.name ??
+                            '')
+                        : renameId == null
+                        ? ''
+                        : (_store.instrumentFor(renameId)?.name ?? ''),
                 onSubmit: _submitRename,
                 onClose: _closeRenameDialog,
                 title: _renamePattern ? 'Rename pattern' : 'Rename channel',

@@ -159,8 +159,16 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     });
   }
 
+  /// The colour every entity carries until something recolours it
+  /// (`entities.h`). Stored, so it arrives here indistinguishable from a
+  /// deliberate choice — and a project of twelve lanes then paints twelve
+  /// identical blue headers, which tells the user nothing about which lane is
+  /// which. Treated as "no colour chosen" so untouched lanes and clips fall
+  /// through to the cycling identity palette instead.
+  static const String _unassignedColor = '#6C8CFF';
+
   Color _resolveColor(int index, String? colorStr) {
-    if (colorStr != null && colorStr.isNotEmpty) {
+    if (colorStr != null && colorStr.isNotEmpty && colorStr.toUpperCase() != _unassignedColor) {
       final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
       if (parsed != 0) {
         return Color(0xFF000000 | parsed);
@@ -198,8 +206,9 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
         if (instrument.name.isNotEmpty) names.add(instrument.name);
         for (final SequenceNote note in sequence) {
           if (notes.length >= 96) break;
-          final double patternLength =
-              current.lengthTicks <= 0 ? ticksPerBar.toDouble() : current.lengthTicks.toDouble();
+          final double patternLength = current.lengthTicks <= 0
+              ? ticksPerBar.toDouble()
+              : current.lengthTicks.toDouble();
           notes.add(
             ClipPreviewNoteVm(
               x: note.startTicks / patternLength,
@@ -278,10 +287,11 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
         PlaylistLaneVm(
           id: lane.id,
           name: lane.name,
-          color: _resolveColor(_store.lanes.indexOf(lane), lane.color),
+          color: _resolveColor(laneOrderMap[lane.id] ?? 0, lane.color),
           muted: lane.muted,
           soloed: lane.soloed,
           collapsed: lane.collapsed,
+          clipCount: lane.clipCount,
         ),
     ];
 
@@ -293,15 +303,14 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
 
     final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final PlaylistMarquee? marquee = _store.marquee;
-    final Rect? marqueeRect =
-        marquee == null
-            ? null
-            : Rect.fromLTRB(
-              (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-              (marquee.lowLane - _store.scrollLanes) * tokens.size.playlistLaneHeight,
-              (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
-              (marquee.highLane + 1 - _store.scrollLanes) * tokens.size.playlistLaneHeight,
-            );
+    final Rect? marqueeRect = marquee == null
+        ? null
+        : Rect.fromLTRB(
+            (marquee.lowTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+            (marquee.lowLane - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+            (marquee.highTick - _store.scrollTicks) / ticksPerBar * pxPerBar,
+            (marquee.highLane + 1 - _store.scrollLanes) * tokens.size.playlistLaneHeight,
+          );
 
     final PlaylistVm canvasVm = PlaylistVm(
       clips: clipVms,
@@ -314,7 +323,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       snapTicks: _store.snap.ticks,
       marqueeRect: marqueeRect,
       headerTitle: 'Playlist',
-      headerRight: 'Untitled.onebeat · ${snapshot.tempoBpm.toStringAsFixed(0)} BPM · 4/4',
+      headerRight: '${snapshot.tempoBpm.toStringAsFixed(0)} BPM · 4/4',
     );
 
     ClipInspectorVm inspectorVm = const ClipInspectorVm(selectedCount: 0);
@@ -329,10 +338,9 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           clipId: clip.id,
           name: clip.name,
           color: _resolveColor(laneIndex, clip.color),
-          usageText:
-              clip.isAudio
-                  ? 'Audio file · full source duration'
-                  : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
+          usageText: clip.isAudio
+              ? 'Audio file · full source duration'
+              : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
           isShared: !clip.isAudio && clip.isShared,
           isAudio: clip.isAudio,
           startBar: (clip.startTicks / ticksPerBar).round(),
@@ -630,6 +638,9 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.delete): _DeleteIntent(),
         SingleActivator(LogicalKeyboardKey.backspace): _DeleteIntent(),
+        // ⌘B is FL's duplicate, and the key the piano roll already answers to;
+        // ⌘D is kept as the alias the rest of the app uses.
+        SingleActivator(LogicalKeyboardKey.keyB, meta: true): _DuplicateIntent(),
         SingleActivator(LogicalKeyboardKey.keyD, meta: true): _DuplicateIntent(),
         SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
         SingleActivator(LogicalKeyboardKey.escape): CancelIntent(),
@@ -732,6 +743,10 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           },
           onMakeUnique: () {
             _store.makeClipsUnique(_store.selectedClipIds.toList());
+          },
+          onSplitByChannel: () {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip != null) _store.splitClipByChannel(clip.id);
           },
           onLaneMute: (String laneId) {
             final ArrangementLane? lane = _store.lanes.cast<ArrangementLane?>().firstWhere(
