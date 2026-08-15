@@ -111,7 +111,7 @@ void main() {
       ),
     );
     final BoxDecoration decoration = card.decoration! as BoxDecoration;
-    expect(decoration.color, channelColors[0]);
+    expect(decoration.color, channelColors[0].withValues(alpha: 0.58));
     expect(
       (decoration.border! as Border).top.color,
       OneBeatTokens.dark().color.clipSelectedOutline,

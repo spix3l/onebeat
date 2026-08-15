@@ -95,17 +95,16 @@ class _ObClipCardState extends State<ObClipCard> {
             vertical: tokens.spacing.xs,
           ),
           decoration: BoxDecoration(
-              // Keep the saturated identity colour, but let the arrangement
-              // grid show through the clip body.
-              color: widget.vm.color.withValues(alpha: 0.58),
+            // Keep the saturated identity colour, but let the arrangement
+            // grid show through the clip body.
+            color: widget.vm.color.withValues(alpha: 0.58),
             borderRadius: BorderRadius.all(tokens.radius.lg),
             border: Border.all(
               // Selection brightens the edge rather than the fill: the fill is
               // the clip's identity and must not change when you click it.
-              color:
-                  widget.vm.selected
-                      ? color.clipSelectedOutline
-                      : (_hover ? color.textPrimary : color.none),
+              color: widget.vm.selected
+                  ? color.clipSelectedOutline
+                  : (_hover ? color.textPrimary : color.none),
               width: tokens.border.emphasis,
             ),
           ),
