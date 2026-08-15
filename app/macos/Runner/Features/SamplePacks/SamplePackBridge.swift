@@ -10,13 +10,16 @@ final class SamplePackBridge {
   private let channel: FlutterMethodChannel
   private let store: SamplePackStore
   private let folderPicker: SamplePackFolderPicker
+  private weak var window: NSWindow?
 
   init(
     messenger: FlutterBinaryMessenger,
+    window: NSWindow? = nil,
     store: SamplePackStore = SamplePackStore(),
     folderPicker: SamplePackFolderPicker = SamplePackFolderPicker()
   ) {
     self.channel = FlutterMethodChannel(name: Self.channelName, binaryMessenger: messenger)
+    self.window = window
     self.store = store
     self.folderPicker = folderPicker
     channel.setMethodCallHandler { [weak self] call, result in
@@ -39,10 +42,42 @@ final class SamplePackBridge {
       return false
     }
 
-    let paths = urls.map(\.path)
-    guard !paths.isEmpty else { return false }
-    channel.invokeMethod("samplePackFoldersDropped", arguments: paths)
-    return true
+    var folders: [String] = []
+    var audioFiles: [String] = []
+    for url in urls {
+      var isDirectory: ObjCBool = false
+      guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+        continue
+      }
+      if isDirectory.boolValue {
+        folders.append(url.path)
+      } else if Self.isSupportedAudioFile(url) {
+        audioFiles.append(url.path)
+      }
+    }
+
+    let location = sender.draggingLocation
+    let contentHeight = window?.contentView?.bounds.height ?? 0
+    let position: [String: Double] = [
+      "x": Double(location.x),
+      // Cocoa's window origin is bottom-left; Flutter's is top-left.
+      "y": Double(contentHeight > 0 ? contentHeight - location.y : location.y),
+    ]
+
+    if !folders.isEmpty {
+      channel.invokeMethod("samplePackFoldersDropped", arguments: folders)
+    }
+    if !audioFiles.isEmpty {
+      channel.invokeMethod(
+        "audioFilesDropped",
+        arguments: ["paths": audioFiles, "x": position["x"]!, "y": position["y"]!]
+      )
+    }
+    return !folders.isEmpty || !audioFiles.isEmpty
+  }
+
+  private static func isSupportedAudioFile(_ url: URL) -> Bool {
+    url.pathExtension.lowercased() == "wav"
   }
 
   private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

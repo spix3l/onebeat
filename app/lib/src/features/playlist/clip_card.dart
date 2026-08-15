@@ -42,10 +42,22 @@ class ClipVm {
 }
 
 class ObClipCard extends StatefulWidget {
-  const ObClipCard({required this.vm, this.onTap, super.key});
+  const ObClipCard({
+    required this.vm,
+    this.onTap,
+    this.onPanStart,
+    this.onPanUpdate,
+    this.onPanEnd,
+    this.onPanCancel,
+    super.key,
+  });
 
   final ClipVm vm;
   final VoidCallback? onTap;
+  final GestureDragStartCallback? onPanStart;
+  final GestureDragUpdateCallback? onPanUpdate;
+  final GestureDragEndCallback? onPanEnd;
+  final VoidCallback? onPanCancel;
 
   @override
   State<ObClipCard> createState() => _ObClipCardState();
@@ -58,7 +70,7 @@ class _ObClipCardState extends State<ObClipCard> {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
-    final bool enabled = widget.onTap != null;
+    final bool enabled = widget.onTap != null || widget.onPanStart != null;
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
@@ -67,6 +79,10 @@ class _ObClipCardState extends State<ObClipCard> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
+        onPanStart: widget.onPanStart,
+        onPanUpdate: widget.onPanUpdate,
+        onPanEnd: widget.onPanEnd,
+        onPanCancel: widget.onPanCancel,
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: tokens.spacing.sm,

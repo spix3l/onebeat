@@ -12,6 +12,7 @@ class ClipInspectorVm {
     this.color = const Color(0xFF6C8CFF), // token-lint-ok: fallback track swatch
     this.usageText = '',
     this.isShared = false,
+    this.isAudio = false,
     this.startBar = 0,
     this.lengthBars = 1,
     this.offsetBeats = 0,
@@ -26,6 +27,7 @@ class ClipInspectorVm {
   final Color color;
   final String usageText;
   final bool isShared;
+  final bool isAudio;
   final int startBar;
   final int lengthBars;
   final int offsetBeats;

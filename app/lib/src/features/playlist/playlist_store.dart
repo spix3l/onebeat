@@ -124,6 +124,13 @@ class PlaylistStore extends ChangeNotifier {
     return snapped < 0 ? 0 : snapped;
   }
 
+  /// Snaps a movement delta without clamping it. Unlike an absolute position,
+  /// a drag delta is allowed to be negative so a clip can move left.
+  int snapDelta(int delta) {
+    if (snap.ticks <= 0) return delta;
+    return ((delta / snap.ticks).round()) * snap.ticks;
+  }
+
   void setSnap(GridChoice value) {
     snap = value;
     notifyListeners();

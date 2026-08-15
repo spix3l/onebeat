@@ -7,6 +7,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../browser/sample_pack.dart';
 import 'clip_card.dart';
 
 @immutable
@@ -48,23 +49,35 @@ class PlaylistCanvas extends StatelessWidget {
   const PlaylistCanvas({
     required this.vm,
     this.onClipTap,
+    this.onClipPanStart,
+    this.onClipPanUpdate,
+    this.onClipPanEnd,
+    this.onClipPanCancel,
     this.onBackgroundTap,
+    this.onDrop,
     super.key,
   });
 
   final PlaylistVm vm;
   final ValueChanged<int>? onClipTap;
+  final void Function(int clipId, DragStartDetails details)? onClipPanStart;
+  final void Function(int clipId, DragUpdateDetails details)? onClipPanUpdate;
+  final void Function(int clipId, DragEndDetails details)? onClipPanEnd;
+  final ValueChanged<int>? onClipPanCancel;
 
   /// Fired with the (bar, lane) of a tap on empty canvas — fractional bar,
   /// because snapping is the store's decision, not the canvas's.
   final void Function(double bar, int lane)? onBackgroundTap;
+
+  /// Fired when a browser asset is dropped onto empty playlist space.
+  final void Function(Object data, double bar, int lane)? onDrop;
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final SizeTokens size = tokens.size;
 
-    return GestureDetector(
+    final Widget surface = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapUp:
           onBackgroundTap == null
@@ -102,11 +115,47 @@ class PlaylistCanvas extends StatelessWidget {
                   vm: clip,
                   onTap:
                       onClipTap == null ? null : () => onClipTap!(clip.id),
+                  onPanStart: onClipPanStart == null
+                      ? null
+                      : (DragStartDetails details) =>
+                          onClipPanStart!(clip.id, details),
+                  onPanUpdate: onClipPanUpdate == null
+                      ? null
+                      : (DragUpdateDetails details) =>
+                          onClipPanUpdate!(clip.id, details),
+                  onPanEnd: onClipPanEnd == null
+                      ? null
+                      : (DragEndDetails details) =>
+                          onClipPanEnd!(clip.id, details),
+                  onPanCancel: onClipPanCancel == null
+                      ? null
+                      : () => onClipPanCancel!(clip.id),
                 ),
               ),
           ],
         ),
       ),
+    );
+
+    return DragTarget<Object>(
+      onWillAcceptWithDetails: (DragTargetDetails<Object> details) =>
+          onDrop != null && details.data is SampleAsset,
+      onAcceptWithDetails: onDrop == null
+          ? null
+          : (DragTargetDetails<Object> details) {
+              final RenderBox box = context.findRenderObject()! as RenderBox;
+              final Offset local = box.globalToLocal(details.offset);
+              onDrop!(
+                details.data,
+                local.dx / vm.pxPerBar,
+                (local.dy / size.playlistLaneHeight).floor(),
+              );
+            },
+      builder: (
+        BuildContext context,
+        List<Object?> candidateData,
+        List<dynamic> rejectedData,
+      ) => surface,
     );
   }
 }

@@ -11,8 +11,14 @@ import 'timeline_ruler.dart';
 class PlaylistScreen extends StatelessWidget {
   const PlaylistScreen({
     required this.vm,
+    this.canvasKey,
     this.onClipTap,
+    this.onClipPanStart,
+    this.onClipPanUpdate,
+    this.onClipPanEnd,
+    this.onClipPanCancel,
     this.onBackgroundTap,
+    this.onDrop,
     this.onStartChanged,
     this.onLengthChanged,
     this.onOffsetChanged,
@@ -24,8 +30,14 @@ class PlaylistScreen extends StatelessWidget {
   });
 
   final PlaylistScreenVm vm;
+  final Key? canvasKey;
   final ValueChanged<int>? onClipTap;
+  final void Function(int clipId, DragStartDetails details)? onClipPanStart;
+  final void Function(int clipId, DragUpdateDetails details)? onClipPanUpdate;
+  final void Function(int clipId, DragEndDetails details)? onClipPanEnd;
+  final ValueChanged<int>? onClipPanCancel;
   final void Function(double bar, int lane)? onBackgroundTap;
+  final void Function(Object data, double bar, int lane)? onDrop;
   final ValueChanged<int>? onStartChanged;
   final ValueChanged<int>? onLengthChanged;
   final ValueChanged<int>? onOffsetChanged;
@@ -71,9 +83,15 @@ class PlaylistScreen extends StatelessWidget {
                                 tokens.size.playlistLaneHeight)
                             .clamp(600.0, 4000.0),
                         child: PlaylistCanvas(
+                          key: canvasKey,
                           vm: vm.canvas,
                           onClipTap: onClipTap,
+                          onClipPanStart: onClipPanStart,
+                          onClipPanUpdate: onClipPanUpdate,
+                          onClipPanEnd: onClipPanEnd,
+                          onClipPanCancel: onClipPanCancel,
                           onBackgroundTap: onBackgroundTap,
+                          onDrop: onDrop,
                         ),
                       ),
                     ),
@@ -323,31 +341,33 @@ class _SingleClipInspectorContent extends StatelessWidget {
             ),
           ],
         ),
-        const _InspectorDivider(),
-        _InspectorStepperRow(
-          label: 'Transpose',
-          value: '${vm.transpose > 0 ? "+" : ""}${vm.transpose} st',
-          onMinus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose - 1),
-          onPlus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose + 1),
-        ),
-        SizedBox(height: tokens.spacing.xs),
-        Text(
-          'Non-destructive: the pattern is untouched.',
-          style: tokens.type.label,
-        ),
-        SizedBox(height: tokens.spacing.md),
-        ObButton(
-          label: 'Make unique',
-          onTap: onMakeUnique,
-          width: double.infinity,
-        ),
-        SizedBox(height: tokens.spacing.xs),
-        Text(
-          vm.isShared
-              ? 'Creates a unique clone of this pattern.'
-              : 'This clip already has the pattern to itself.',
-          style: tokens.type.label,
-        ),
+        if (!vm.isAudio) ...<Widget>[
+          const _InspectorDivider(),
+          _InspectorStepperRow(
+            label: 'Transpose',
+            value: '${vm.transpose > 0 ? "+" : ""}${vm.transpose} st',
+            onMinus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose - 1),
+            onPlus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose + 1),
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            'Non-destructive: the pattern is untouched.',
+            style: tokens.type.label,
+          ),
+          SizedBox(height: tokens.spacing.md),
+          ObButton(
+            label: 'Make unique',
+            onTap: onMakeUnique,
+            width: double.infinity,
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            vm.isShared
+                ? 'Creates a unique clone of this pattern.'
+                : 'This clip already has the pattern to itself.',
+            style: tokens.type.label,
+          ),
+        ],
       ],
     );
   }

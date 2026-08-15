@@ -1,5 +1,17 @@
-// Native bridge for sample pack folders (macOS).
+// Native bridge for sample pack folders and direct audio-file drops (macOS).
 import 'package:flutter/services.dart';
+
+class AudioFileDrop {
+  const AudioFileDrop({
+    required this.paths,
+    required this.x,
+    required this.y,
+  });
+
+  final List<String> paths;
+  final double x;
+  final double y;
+}
 
 class SamplePackPlatform {
   static const MethodChannel _channel = MethodChannel('onebeat/sample_packs');
@@ -39,18 +51,30 @@ class SamplePackPlatform {
     }
   }
 
-  void setFolderDropHandler(ValueChanged<List<String>> onDrop) {
+  void setDropHandler({
+    required ValueChanged<List<String>> onFolders,
+    required ValueChanged<AudioFileDrop> onAudioFiles,
+  }) {
     _channel.setMethodCallHandler((MethodCall call) async {
-      if (call.method != 'samplePackFoldersDropped') return null;
       final Object? argument = call.arguments;
-      if (argument is List<Object?>) {
-        onDrop(argument.whereType<String>().toList(growable: false));
+      if (call.method == 'samplePackFoldersDropped' && argument is List<Object?>) {
+        onFolders(argument.whereType<String>().toList(growable: false));
+      } else if (call.method == 'audioFilesDropped' &&
+          argument is Map<Object?, Object?>) {
+        final List<String> paths =
+            (argument['paths'] as List<Object?>?)?.whereType<String>().toList() ??
+            const <String>[];
+        final double x = (argument['x'] as num?)?.toDouble() ?? 0;
+        final double y = (argument['y'] as num?)?.toDouble() ?? 0;
+        if (paths.isNotEmpty) {
+          onAudioFiles(AudioFileDrop(paths: paths, x: x, y: y));
+        }
       }
       return null;
     });
   }
 
-  void clearFolderDropHandler() {
+  void clearDropHandler() {
     _channel.setMethodCallHandler(null);
   }
 }

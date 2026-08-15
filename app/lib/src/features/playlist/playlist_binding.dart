@@ -6,6 +6,8 @@ import '../../core/engine_controller.dart' as core;
 import '../../core/shortcuts.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
+import '../browser/sample_pack.dart';
+import '../browser/sample_pack_platform.dart';
 import 'clip_card.dart';
 import 'playlist_canvas.dart';
 import 'playlist_screen.dart';
@@ -18,6 +20,7 @@ class PlaylistBinding extends StatefulWidget {
     this.controller,
     this.store,
     this.onOpenPattern,
+    this.externalAudioDrop,
     super.key,
   });
 
@@ -25,6 +28,7 @@ class PlaylistBinding extends StatefulWidget {
   final core.EngineController? controller;
   final PlaylistStore? store;
   final void Function(String patternId, String clipId)? onOpenPattern;
+  final AudioFileDrop? externalAudioDrop;
 
   @override
   State<PlaylistBinding> createState() => _PlaylistBindingState();
@@ -35,8 +39,12 @@ class _PlaylistBindingState extends State<PlaylistBinding>
   late final core.EngineController _controller;
   late final PlaylistStore _store;
   final FocusNode _focus = FocusNode(debugLabel: 'playlist-binding');
+  final GlobalKey _canvasKey = GlobalKey();
   bool _ownsController = false;
   bool _ownsStore = false;
+  String _draggingClipId = '';
+  int _dragStartLane = 0;
+  Offset _dragPixels = Offset.zero;
 
   @override
   void initState() {
@@ -61,6 +69,19 @@ class _PlaylistBindingState extends State<PlaylistBinding>
 
     _controller.addListener(_onEngineChanged);
     _store.addListener(_onStoreChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _consumeExternalAudioDrop(widget.externalAudioDrop);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PlaylistBinding oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.externalAudioDrop, oldWidget.externalAudioDrop)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _consumeExternalAudioDrop(widget.externalAudioDrop);
+      });
+    }
   }
 
   @override
@@ -159,10 +180,13 @@ class _PlaylistBindingState extends State<PlaylistBinding>
           clipId: clip.id,
           name: clip.name,
           color: _resolveColor(laneIndex, clip.color),
-          usageText: clip.isShared
-              ? 'Pattern used in ${clip.usageCount} clips'
-              : 'Pattern used once',
-          isShared: clip.isShared,
+          usageText: clip.isAudio
+              ? 'Audio file · full source duration'
+              : (clip.isShared
+                  ? 'Pattern used in ${clip.usageCount} clips'
+                  : 'Pattern used once'),
+          isShared: !clip.isAudio && clip.isShared,
+          isAudio: clip.isAudio,
           startBar: (clip.startTicks / ticksPerBar).round(),
           lengthBars: (clip.lengthTicks / ticksPerBar).ceil().clamp(1, 1000),
           offsetBeats: (clip.windowStartTicks / ticksPerQuarter).round(),
@@ -191,6 +215,103 @@ class _PlaylistBindingState extends State<PlaylistBinding>
         return;
       }
     }
+  }
+
+  void _consumeExternalAudioDrop(AudioFileDrop? drop) {
+    if (!mounted || drop == null) return;
+    final RenderBox? box =
+        _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final Offset local = box.globalToLocal(Offset(drop.x, drop.y));
+    final double bar = local.dx /
+        (OneBeatTokens.dark().size.playlistPxPerBar * _store.horizontalZoom);
+    final int lane =
+        (local.dy / OneBeatTokens.dark().size.playlistLaneHeight).floor();
+    for (final String path in drop.paths) {
+      final String extension = path.split('.').last.toLowerCase();
+      if (!SamplePackScanner.supportedExtensions.contains(extension)) continue;
+      _onSampleDrop(
+        SampleAsset(id: 'sample:$path', name: path.split('/').last, path: path),
+        bar,
+        lane,
+      );
+    }
+  }
+
+  void _onClipPanStart(int hashId, DragStartDetails details) {
+    final ArrangementClip? clip = _store.clips.cast<ArrangementClip?>().firstWhere(
+          (ArrangementClip? item) => item?.id.hashCode == hashId,
+          orElse: () => null,
+        );
+    if (clip == null) return;
+    FocusPolicy.takeUnlessTyping(_focus);
+    if (!_store.selectedClipIds.contains(clip.id)) {
+      _store.selectClip(clip.id);
+    }
+    _draggingClipId = clip.id;
+    _dragStartLane = _store.lanes.indexWhere(
+      (ArrangementLane lane) => lane.id == clip.laneId,
+    ).clamp(0, _store.lanes.length - 1);
+    _dragPixels = Offset.zero;
+    _store.beginClipDrag(ClipDragKind.move);
+  }
+
+  void _onClipPanUpdate(int hashId, DragUpdateDetails details) {
+    if (_draggingClipId.isEmpty) return;
+    _dragPixels += details.delta;
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
+    final int deltaTicks = _store.snapDelta(
+      (_dragPixels.dx / pxPerBar * ticksPerBar).round(),
+    );
+    if (_store.lanes.isEmpty) return;
+    final int laneIndex = (_dragStartLane +
+            (_dragPixels.dy / tokens.size.playlistLaneHeight).round())
+        .clamp(0, _store.lanes.length - 1);
+    _store.updateClipMove(deltaTicks, laneId: _store.lanes[laneIndex].id);
+  }
+
+  void _onClipPanEnd(int hashId, DragEndDetails details) {
+    if (_draggingClipId.isEmpty) return;
+    _store.endClipDrag();
+    _draggingClipId = '';
+    _dragStartLane = 0;
+    _dragPixels = Offset.zero;
+  }
+
+  void _onClipPanCancel(int hashId) {
+    if (_draggingClipId.isEmpty) return;
+    _store.cancelClipDrag();
+    _draggingClipId = '';
+    _dragStartLane = 0;
+    _dragPixels = Offset.zero;
+  }
+
+  void _onSampleDrop(Object data, double bar, int lane) {
+    if (data is! SampleAsset) return;
+    if (_store.lanes.isEmpty) {
+      _store.addLane('Track 1');
+    }
+    if (_store.lanes.isEmpty) return;
+
+    final int targetLaneIndex = lane.clamp(0, _store.lanes.length - 1);
+    final ArrangementLane targetLane = _store.lanes[targetLaneIndex];
+    final int startTicks = _store.snapTick((bar * ticksPerBar).round());
+    try {
+      widget.client.addAudioClip(targetLane.id, data.path, startTicks);
+    } catch (_) {
+      // A malformed or unreadable file is rejected by the native loader.
+      return;
+    }
+    _store.refresh();
+    final ArrangementClip? added = _store.clips.cast<ArrangementClip?>().firstWhere(
+          (ArrangementClip? clip) =>
+              clip?.isAudio == true &&
+              clip?.laneId == targetLane.id &&
+              clip?.startTicks == startTicks,
+          orElse: () => null,
+        );
+    if (added != null) _store.selectClip(added.id);
   }
 
   void _onBackgroundTap(double bar, int lane) {
@@ -259,8 +380,14 @@ class _PlaylistBindingState extends State<PlaylistBinding>
         focusNode: _focus,
         child: PlaylistScreen(
           vm: vm,
+          canvasKey: _canvasKey,
           onClipTap: _onClipTap,
+          onClipPanStart: _onClipPanStart,
+          onClipPanUpdate: _onClipPanUpdate,
+          onClipPanEnd: _onClipPanEnd,
+          onClipPanCancel: _onClipPanCancel,
           onBackgroundTap: _onBackgroundTap,
+          onDrop: _onSampleDrop,
           onStartChanged: (int bar) {
             final ArrangementClip? clip = _store.selectedClip;
             if (clip != null) {

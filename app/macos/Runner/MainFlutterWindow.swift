@@ -23,7 +23,8 @@ class MainFlutterWindow: NSWindow, NSDraggingDestination {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     samplePackBridge = SamplePackBridge(
-      messenger: flutterViewController.engine.binaryMessenger
+      messenger: flutterViewController.engine.binaryMessenger,
+      window: self
     )
     registerForDraggedTypes([.fileURL])
 
