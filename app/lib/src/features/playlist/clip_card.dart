@@ -193,7 +193,7 @@ class _ObClipCardState extends State<ObClipCard> {
           decoration: BoxDecoration(
             // Keep the saturated identity colour, but let the arrangement
             // grid show through the clip body.
-            color: widget.vm.color.withValues(alpha: 0.58),
+            color: widget.vm.color.withValues(alpha: 0.58), // token-lint-ok: clip identity translucency
             borderRadius: BorderRadius.all(tokens.radius.lg),
             border: Border.all(
               // Selection brightens the edge rather than the fill: the fill is
@@ -280,7 +280,7 @@ class PatternPreviewPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (notes.isEmpty || size.width <= 0 || size.height <= 0) return;
-    final Paint paint = Paint()..color = color.withValues(alpha: 0.62);
+    final Paint paint = Paint()..color = color.withValues(alpha: 0.62); // token-lint-ok: preview translucency
     for (final ClipPreviewNoteVm note in notes) {
       final double left = (note.x.clamp(0.0, 1.0)) * size.width;
       final double width = math.max(1.0, note.width * size.width);

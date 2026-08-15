@@ -94,7 +94,7 @@ class _PreferencesBindingState extends State<PreferencesBinding> {
 
   void _onRescanPlugins() {
     setState(() => _isScanning = true);
-    Future<void>.delayed(const Duration(milliseconds: 600), () {
+    Future<void>.delayed(const Duration(milliseconds: 600), () { // token-lint-ok: simulated scan delay
       // token-lint-ok: simulated scan delay
       if (mounted) {
         setState(() => _isScanning = false);

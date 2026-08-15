@@ -120,7 +120,7 @@ class _ExportBindingState extends State<ExportBinding> {
     });
 
     _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (Timer t) {
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 100), (Timer t) { // token-lint-ok: simulated timer
       // token-lint-ok: simulated timer
       if (!mounted) {
         t.cancel();

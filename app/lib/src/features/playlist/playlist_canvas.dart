@@ -277,10 +277,10 @@ class _PlaylistBackgroundPainter extends CustomPainter {
     final int visibleBars = (size.width / pxPerBar).ceil() + 2;
     final double stepBars = snapTicks > 0 ? (snapTicks / ticksPerBar.toDouble()).clamp(1 / 64, 64.0) : 1.0;
     final Paint minor = Paint()
-      ..color = gridLine.withValues(alpha: 0.55)
+      ..color = gridLine.withValues(alpha: 0.55) // token-lint-ok: canvas grid hierarchy
       ..strokeWidth = lineWidth;
     final Paint horizontal = Paint()
-      ..color = gridLine.withValues(alpha: 0.42)
+      ..color = gridLine.withValues(alpha: 0.42) // token-lint-ok: canvas grid hierarchy
       ..strokeWidth = lineWidth;
     for (int index = 0; index <= (visibleBars / stepBars).ceil(); index++) {
       final double bar = firstBar + index * stepBars;

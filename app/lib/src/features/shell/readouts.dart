@@ -86,8 +86,8 @@ class _ObReadoutState extends State<ObReadout> {
           onSubmit == null
               ? Text(widget.value, maxLines: 1, style: tokens.type.readoutValue)
               : SizedBox(
-                  width: 92,
-                  height: 25,
+                  width: 92, // token-lint-ok: fixed editable readout width
+                  height: 25, // token-lint-ok: fixed editable readout height
                   child: _EditableReadout(
                     controller: _controller,
                     focusNode: _focusNode,

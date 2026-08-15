@@ -27,7 +27,9 @@ LINT_ROOTS = [
     REPO_ROOT / "app" / "lib" / "src" / "features",
     REPO_ROOT / "app" / "lib" / "main.dart",
 ]
-EXEMPT_DIRS = {"design", "generated"}
+# Stock plugin editors are self-contained branded canvases. Their dimensions and
+# colours intentionally belong to the plugin skin rather than the app token set.
+EXEMPT_DIRS = {"design", "generated", "stock"}
 
 Rule = tuple[str, re.Pattern[str], str]
 

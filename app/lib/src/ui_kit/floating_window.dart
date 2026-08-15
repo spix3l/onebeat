@@ -153,7 +153,7 @@ class ObFloatingWindow extends StatelessWidget {
                   ),
                   if (vm.actions.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.all(3),
+                      padding: const EdgeInsets.all(3), // token-lint-ok: fixed header action inset
                       decoration: BoxDecoration(
                         color: color.surfaceSunken,
                         borderRadius: BorderRadius.all(tokens.radius.md),
@@ -209,8 +209,8 @@ class _HeaderButtonState extends State<_HeaderButton> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.action.onTap,
         child: Container(
-          width: 30,
-          height: 30,
+          width: 30, // token-lint-ok: fixed header action hit target
+          height: 30, // token-lint-ok: fixed header action hit target
           margin: EdgeInsets.only(left: tokens.spacing.xs),
           decoration: BoxDecoration(
             color: _hover && enabled ? hoverColor : null,

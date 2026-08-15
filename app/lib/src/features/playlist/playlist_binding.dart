@@ -236,7 +236,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       for (int index = 0; index < count; index++)
         ClipPreviewNoteVm(
           x: count == 1 ? 0.08 : index / (count - 1) * 0.88,
-          width: 0.025,
+          width: 0.025, // token-lint-ok: normalized clip-preview ratio
           y: ((index * 17) % 100) / 100.0,
         ),
     ];
