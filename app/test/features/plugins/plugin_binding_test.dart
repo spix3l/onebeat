@@ -71,12 +71,12 @@ void main() {
     await tester.pump();
 
     // Verify preset parameter was updated
-    expect(client.paramValues.containsKey(107), isTrue);
+    expect(client.paramValues.containsKey(107), true);
 
     // Tap on a piano key in preview keyboard
     await tester.tap(find.byType(PianoWhiteKey).first);
     await tester.pump();
-    expect(client.auditionedNotesOn.isNotEmpty, isTrue);
+    expect(client.auditionedNotesOn.isNotEmpty, true);
   });
 
   testWidgets('PluginBinding renders Synth stock editor for synth plugin', (
@@ -141,5 +141,46 @@ void main() {
     await tester.tap(find.byType(PluginBinding));
     await tester.pump();
   });
+
+  testWidgets('PluginBinding renders Guitar stock editor for OneBeat Guitar plugin', (
+    WidgetTester tester,
+  ) async {
+    final _FakePluginEngineClient client = _FakePluginEngineClient();
+
+    await pumpForTest(
+      tester,
+      PluginBinding(
+        client: client,
+        trackId: 'inst_guitar',
+        pluginName: 'OneBeat Guitar',
+        trackName: 'Lead Guitar',
+        parameters: const <HostedParameter>[
+          HostedParameter(id: 100, name: 'Tone', module: 'String', display: '70 %', value: 0.70, minimum: 0.0, maximum: 1.0, defaultValue: 0.70),
+          HostedParameter(id: 101, name: 'Body', module: 'Resonance', display: '65 %', value: 0.65, minimum: 0.0, maximum: 1.0, defaultValue: 0.65),
+          HostedParameter(id: 107, name: 'Preset', module: 'Model', display: 'Acoustic: Steel String', value: 0.0, minimum: 0.0, maximum: 1.0, defaultValue: 0.0),
+          HostedParameter(id: 114, name: 'Dynamics', module: 'Dynamics', display: '80 %', value: 0.80, minimum: 0.0, maximum: 1.0, defaultValue: 0.80),
+        ],
+        onClose: () {},
+      ),
+    );
+
+    expect(find.text('ONE AUDIO'), findsOneWidget);
+    expect(find.text('DYNAMICS'), findsOneWidget);
+    expect(find.text('REVERB'), findsOneWidget);
+    expect(find.text('* Acoustic: Steel String Pluck *'), findsOneWidget);
+    expect(find.text('v 1.0.0'), findsOneWidget);
+
+    // Tap on preset bar to open dropdown
+    await tester.tap(find.text('* Acoustic: Steel String Pluck *'));
+    await tester.pump();
+
+    // Tap on Nylon Fingerstyle preset in dropdown
+    await tester.tap(find.text('Nylon Fingerstyle'));
+    await tester.pump();
+
+    // Verify preset parameter was updated
+    expect(client.paramValues.containsKey(107), true);
+  });
 }
+
 

@@ -87,10 +87,12 @@ target_include_directories(onebeat_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_compile_definitions(onebeat_tests PRIVATE
   OB_TEST_PLUGIN_DIR="${OB_TEST_PLUGIN_DIR}"
   OB_STOCK_PIANO="${ONEBEAT_PIANO_BUNDLE}"
+  OB_STOCK_GUITAR="${ONEBEAT_GUITAR_BUNDLE}"
   OB_TEST_HELPER="$<TARGET_FILE:onebeat_plugin_host>"
   OB_DEMO_BUNDLE="${CMAKE_CURRENT_SOURCE_DIR}/../../docs/examples/demo.obt")
 add_dependencies(onebeat_tests
   onebeat_stock_piano
+  onebeat_stock_guitar
   onebeat_plugin_host ob_test_plugin_ok ob_test_plugin_crash ob_test_plugin_hang
   ob_test_plugin_process_crash ob_test_plugin_process_hang ob_test_plugin_gui)
 

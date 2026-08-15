@@ -175,6 +175,39 @@ TEST_SUITE("engine") {
     CHECK(restored == doctest::Approx(0.83));
   }
 
+  TEST_CASE("The shipped stock guitar is a complete public CLAP instrument") {
+    ClapRig rig(OB_STOCK_GUITAR, "dev.onebeat.stock.guitar");
+    CHECK(std::string(rig.plugin->name().text()) == "OneBeat Guitar");
+    CHECK(rig.plugin->audioPortCount(PortDirection::Input) == 0);
+    CHECK(rig.plugin->audioPortCount(PortDirection::Output) == 1);
+    CHECK(rig.plugin->notePortCount(PortDirection::Input) == 1);
+    CHECK(rig.plugin->paramCount() == 18);
+    CHECK(rig.plugin->latencyFrames() == 0);
+    CHECK(rig.plugin->guiExtension() == nullptr);
+
+    // Note render check
+    CHECK(rig.render({PluginEvent::noteOn(0, 64, 0.85)}) > 0.005F);
+    for (int block = 0; block < 8; ++block) CHECK(rig.render({}) > 0.0005F);
+    CHECK(rig.render({PluginEvent::noteOff(0, 64)}) > 0.00001F);
+
+    // Test preset switching & electric amp drive
+    rig.render({PluginEvent::paramValue(0, 107, 0.5)});  // Electric Clean Strat
+    rig.render({PluginEvent::paramValue(0, 111, 0.7)});  // Amp Drive
+    CHECK(rig.render({PluginEvent::noteOn(0, 57, 0.9)}) > 0.005F);
+
+    // Test state save & load
+    rig.render({PluginEvent::paramValue(0, 100, 0.77), PluginEvent::paramValue(0, 101, 0.62)});
+    MemoryStateWriter saved;
+    REQUIRE(rig.plugin->saveState(saved));
+    CHECK(saved.bytes().size() > 2 * sizeof(double));
+    rig.render({PluginEvent::paramValue(0, 100, 0.15)});
+    MemoryStateReader reader(saved.bytes());
+    REQUIRE(rig.plugin->loadState(reader));
+    double restored = 0.0;
+    REQUIRE(rig.plugin->paramValue(100, restored));
+    CHECK(restored == doctest::Approx(0.77));
+  }
+
   TEST_CASE("The CLAP adapter maps identity, ports, parameters and latency") {
     ClapRig rig;
     CHECK(std::string(rig.plugin->name().text()) == "OneBeat Test Synth");

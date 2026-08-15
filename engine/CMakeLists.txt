@@ -202,6 +202,42 @@ add_custom_command(TARGET onebeat_stock_piano POST_BUILD
           "${ONEBEAT_PIANO_BUNDLE}/Contents/Info.plist"
   VERBATIM)
 
+add_library(onebeat_stock_guitar MODULE
+  stock_plugins/guitar/guitar_clap.cpp
+  stock_plugins/guitar/guitar_engine.cpp)
+target_include_directories(onebeat_stock_guitar SYSTEM PRIVATE
+  ${ONEBEAT_THIRD_PARTY}/clap/include)
+target_link_libraries(onebeat_stock_guitar PRIVATE onebeat_flags)
+set_target_properties(onebeat_stock_guitar PROPERTIES
+  PREFIX ""
+  SUFFIX ".dylib"
+  OUTPUT_NAME "OneBeat Guitar"
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stock-plugin-binaries
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN ON)
+
+set(ONEBEAT_GUITAR_BUNDLE "${ONEBEAT_STOCK_PLUGIN_DIR}/OneBeat Guitar.clap")
+file(WRITE "${CMAKE_BINARY_DIR}/OneBeatGuitar-Info.plist"
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<plist version=\"1.0\">
+<dict>
+  <key>CFBundleExecutable</key><string>OneBeat Guitar</string>
+  <key>CFBundleIdentifier</key><string>dev.onebeat.stock.guitar</string>
+  <key>CFBundleName</key><string>OneBeat Guitar</string>
+  <key>CFBundlePackageType</key><string>BNDL</string>
+  <key>CFBundleShortVersionString</key><string>${PROJECT_VERSION}</string>
+  <key>CFBundleVersion</key><string>${PROJECT_VERSION}</string>
+</dict>
+</plist>
+")
+add_custom_command(TARGET onebeat_stock_guitar POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${ONEBEAT_GUITAR_BUNDLE}/Contents/MacOS"
+  COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:onebeat_stock_guitar>"
+          "${ONEBEAT_GUITAR_BUNDLE}/Contents/MacOS/OneBeat Guitar"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/OneBeatGuitar-Info.plist"
+          "${ONEBEAT_GUITAR_BUNDLE}/Contents/Info.plist"
+  VERBATIM)
+
 # ---------------------------------------------------------------------------
 # Test harness + tests
 # ---------------------------------------------------------------------------
