@@ -461,6 +461,12 @@ class PianoRollStore extends ChangeNotifier {
     _gestureOpen = true;
   }
 
+  void _commitGesture() {
+    if (!_gestureOpen) return;
+    _client.commitGesture();
+    _gestureOpen = false;
+  }
+
   void addNoteAt(int tick, int key, {int? length, int velocity = 12900}) {
     if (instrumentId.isEmpty) return;
     final int start = snapDown(tick);
@@ -508,6 +514,96 @@ class PianoRollStore extends ChangeNotifier {
     _client.duplicateNotes(instrumentId, selection.toList(), deltaTicks: delta);
     _shiftSelection(deltaTicks: delta);
     refresh();
+  }
+
+  // ----- Clipboard ----------------------------------------------------------
+
+  /// The copied phrase, held with its start ticks relative to [_clipboardTick]
+  /// — a *shape*, so it can be dropped anywhere rather than only back where it
+  /// came from.
+  ///
+  /// Static, because a clipboard the user cannot carry between instruments is
+  /// not a clipboard. Every roll shares one, the way ⌘C works everywhere else.
+  static List<SequenceNote> _clipboard = const <SequenceNote>[];
+  static int _clipboardTick = 0;
+
+  bool get hasClipboard => _clipboard.isNotEmpty;
+
+  /// The tick the copied phrase was taken from — where a plain paste puts it
+  /// back.
+  int get clipboardTick => _clipboardTick;
+
+  /// The first free slot on the timeline: the snap step at or after the last
+  /// note's end.
+  ///
+  /// Where a paste lands when the pointer is not over the canvas — the next
+  /// place you could have written something, so a blind ⌘V appends rather than
+  /// dropping a copy on top of the bar you are looking at.
+  int get nextFreeTick {
+    final int end = noteEndTicks;
+    if (end <= 0) return 0;
+    if (snapTicks <= 0) return end;
+    return ((end + snapTicks - 1) ~/ snapTicks) * snapTicks;
+  }
+
+  void copySelection() {
+    if (selection.isEmpty) return;
+    int lowest = 1 << 62;
+    for (final SequenceNote note in selection) {
+      if (note.startTicks < lowest) lowest = note.startTicks;
+    }
+    _clipboardTick = lowest;
+    _clipboard = selection
+        .map(
+          (SequenceNote note) =>
+              note.copyWith(startTicks: note.startTicks - lowest),
+        )
+        .toList()
+      ..sort((SequenceNote a, SequenceNote b) {
+        final int byTick = a.startTicks.compareTo(b.startTicks);
+        return byTick != 0 ? byTick : a.key.compareTo(b.key);
+      });
+    notifyListeners();
+  }
+
+  void cutSelection() {
+    if (selection.isEmpty) return;
+    copySelection();
+    deleteSelection();
+  }
+
+  /// Drops the copied phrase at [atTick], or back where it was copied from.
+  ///
+  /// The paste becomes the selection, so the very next gesture — a nudge, a
+  /// drag, another paste — acts on what you just made rather than on what you
+  /// copied it from.
+  void pasteClipboard({int? atTick}) {
+    if (_clipboard.isEmpty || instrumentId.isEmpty) return;
+    final int origin = atTick ?? _clipboardTick;
+    _beginGesture('Paste notes');
+    for (final SequenceNote note in _clipboard) {
+      _client.addNote(
+        instrumentId,
+        origin + note.startTicks,
+        note.lengthTicks,
+        note.key,
+        velocity: note.velocity,
+      );
+    }
+    _commitGesture();
+    final Set<int> pasted = <int>{
+      for (final SequenceNote note in _clipboard)
+        Object.hash(origin + note.startTicks, note.key),
+    };
+    selection.clear();
+    refresh();
+    selection.addAll(
+      notes.where(
+        (SequenceNote note) =>
+            pasted.contains(Object.hash(note.startTicks, note.key)),
+      ),
+    );
+    notifyListeners();
   }
 
   void transposeSelection(int semitones) {
@@ -588,8 +684,7 @@ class PianoRollStore extends ChangeNotifier {
   ///
   /// The lane is one-dimensional: it has an x for time and a y for the value,
   /// and no axis left over for pitch. So a chord is a genuinely ambiguous
-  /// target, and the lane must say which note it means rather than quietly
-  /// editing all of them.
+  /// target; the caller resolves it against the selection.
   List<SequenceNote> notesNearTick(int tick, int toleranceTicks) {
     final SequenceNote? nearest = noteNearTick(tick, toleranceTicks);
     if (nearest == null) return const <SequenceNote>[];
@@ -732,10 +827,7 @@ class PianoRollStore extends ChangeNotifier {
     }
     dragKind = PianoDragKind.none;
     marquee = null;
-    if (_gestureOpen) {
-      _client.commitGesture();
-      _gestureOpen = false;
-    }
+    _commitGesture();
     _dragDeltaTicks = 0;
     _dragSemitones = 0;
     _dragLengthDelta = 0;

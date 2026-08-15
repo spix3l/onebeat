@@ -99,9 +99,8 @@ class _RackBindingState extends State<RackBinding>
 
   void _onEngineChanged() {
     if (mounted) {
-      // The engine can change the instrument set without a store action — the
-      // shell seeds the default channel on the first tick. Refresh cheaply when
-      // the set moved, then rebuild either way.
+      // The engine can change the instrument set without a store action.
+      // Refresh cheaply when the set moved, then rebuild either way.
       _store.refreshIfInstrumentsChanged();
       setState(() {});
     }
@@ -367,8 +366,6 @@ class _RackBindingState extends State<RackBinding>
 
   void _onAddChannel() => _addChannelLane();
 
-  void _onDoubleTap() => _addChannelLane();
-
   void _onVolChanged(int rowIndex, double value) {
     final List<RackRow> visible = _store.rows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
@@ -595,7 +592,6 @@ class _RackBindingState extends State<RackBinding>
       onVolChanged: _onVolChanged,
       onPanChanged: _onPanChanged,
       onAddChannel: _onAddChannel,
-      onDoubleTap: _onDoubleTap,
       onRowSecondaryTapDown: _onRowSecondaryTapDown,
       onDropInstrument: _onDropInstrument,
       onAddInstrument: _onAddInstrument,

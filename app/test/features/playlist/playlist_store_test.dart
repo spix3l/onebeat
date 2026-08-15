@@ -11,9 +11,10 @@ void main() {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final ArrangementStore store = harness.arrangement;
     final ArrangementClip clip = store.clips.first;
-    final String otherLane = store.lanes
-        .firstWhere((ArrangementLane lane) => lane.id != clip.laneId)
-        .id;
+    final String otherLane =
+        store.lanes
+            .firstWhere((ArrangementLane lane) => lane.id != clip.laneId)
+            .id;
 
     store
       ..selectClip(clip.id)
@@ -72,6 +73,41 @@ void main() {
     expect(store.clipById(id)!.repeatCount, 3);
   });
 
+  test('a marquee selects clips by time and lane', () {
+    final EditorHarness harness = EditorHarness()..seedArrangement();
+    final ArrangementStore store = harness.arrangement;
+    final ArrangementClip clip = store.clips.first;
+    final int lane = store.lanes.indexWhere(
+      (ArrangementLane candidate) => candidate.id == clip.laneId,
+    );
+
+    store
+      ..beginMarquee(clip.startTicks, lane)
+      ..updateMarquee(clip.endTicks, lane)
+      ..endMarquee();
+
+    expect(store.selectedClipIds, contains(clip.id));
+    expect(store.dragKind, ClipDragKind.none);
+    expect(store.marquee, isNull);
+  });
+
+  test('a dropped pattern item creates the requested pattern clip', () {
+    final EditorHarness harness = EditorHarness()..seedArrangement();
+    final ArrangementStore store = harness.arrangement;
+    final String laneId = store.lanes.first.id;
+    final int before = store.clips.length;
+
+    store.placeItem(
+      const PlaylistInsertItem(id: 'pattern:pat_a', patternId: 'pat_a'),
+      laneId,
+      1920,
+    );
+
+    expect(store.clips.length, before + 1);
+    expect(store.clips.last.patternId, 'pat_a');
+    expect(store.clips.last.startTicks, 3840);
+  });
+
   test('deleting a clip clears it from the selection', () {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final ArrangementStore store = harness.arrangement;
@@ -93,10 +129,7 @@ void main() {
     store.moveLaneTo(last, 0);
 
     expect(store.lanes.first.id, last);
-    expect(
-      store.lanes.map((ArrangementLane lane) => lane.order),
-      <int>[0, 1],
-    );
+    expect(store.lanes.map((ArrangementLane lane) => lane.order), <int>[0, 1]);
   });
 
   test('the lane event gate is a lane field, never an instrument one', () {

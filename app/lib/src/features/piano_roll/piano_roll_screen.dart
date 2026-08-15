@@ -43,6 +43,7 @@ class PianoRollScreen extends StatelessWidget {
     this.onBack,
     this.onKeyPress,
     this.onTapDown,
+    this.onTapUp,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
@@ -51,6 +52,7 @@ class PianoRollScreen extends StatelessWidget {
     this.onEraseUpdate,
     this.onEraseEnd,
     this.onGridHover,
+    this.onGridExit,
     this.gridCursor = MouseCursor.defer,
     this.onPointerSignal,
     this.onPointerPanZoomStart,
@@ -78,6 +80,10 @@ class PianoRollScreen extends StatelessWidget {
   final ValueChanged<int>? onKeyPress;
 
   final void Function(TapDownDetails details)? onTapDown;
+
+  /// A click that ended without travelling. Separate from [onTapDown] because
+  /// only the release tells a click apart from the start of a drag.
+  final void Function(TapUpDetails details)? onTapUp;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
@@ -96,6 +102,10 @@ class PianoRollScreen extends StatelessWidget {
   /// Pointer position over the canvas, so the cursor can say what a click at
   /// that spot would do before the click happens.
   final ValueChanged<Offset>? onGridHover;
+
+  /// The pointer leaving the canvas. A paste needs to know it no longer has a
+  /// position to land on.
+  final VoidCallback? onGridExit;
   final MouseCursor gridCursor;
 
   final void Function(PointerSignalEvent event)? onPointerSignal;
@@ -180,6 +190,7 @@ class PianoRollScreen extends StatelessWidget {
                             roll: vm.roll,
                             onKeyPress: onKeyPress,
                             onTapDown: onTapDown,
+                            onTapUp: onTapUp,
                             onPanStart: onPanStart,
                             onPanUpdate: onPanUpdate,
                             onPanEnd: onPanEnd,
@@ -188,6 +199,7 @@ class PianoRollScreen extends StatelessWidget {
                             onEraseUpdate: onEraseUpdate,
                             onEraseEnd: onEraseEnd,
                             onGridHover: onGridHover,
+                            onGridExit: onGridExit,
                             gridCursor: gridCursor,
                             onGridSize: onGridSize,
                           ),
@@ -356,6 +368,7 @@ class _GridRow extends StatelessWidget {
     required this.roll,
     this.onKeyPress,
     this.onTapDown,
+    this.onTapUp,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
@@ -364,6 +377,7 @@ class _GridRow extends StatelessWidget {
     this.onEraseUpdate,
     this.onEraseEnd,
     this.onGridHover,
+    this.onGridExit,
     this.gridCursor = MouseCursor.defer,
     this.onGridSize,
   });
@@ -371,6 +385,10 @@ class _GridRow extends StatelessWidget {
   final PianoRollVm roll;
   final ValueChanged<int>? onKeyPress;
   final void Function(TapDownDetails details)? onTapDown;
+
+  /// A click that ended without travelling. Separate from [onTapDown] because
+  /// only the release tells a click apart from the start of a drag.
+  final void Function(TapUpDetails details)? onTapUp;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
@@ -379,6 +397,10 @@ class _GridRow extends StatelessWidget {
   final ValueChanged<Offset>? onEraseUpdate;
   final VoidCallback? onEraseEnd;
   final ValueChanged<Offset>? onGridHover;
+
+  /// The pointer leaving the canvas. A paste needs to know it no longer has a
+  /// position to land on.
+  final VoidCallback? onGridExit;
   final MouseCursor gridCursor;
   final ValueChanged<Size>? onGridSize;
 
@@ -396,6 +418,7 @@ class _GridRow extends StatelessWidget {
           child: _InteractiveGridArea(
             roll: roll,
             onTapDown: onTapDown,
+            onTapUp: onTapUp,
             onPanStart: onPanStart,
             onPanUpdate: onPanUpdate,
             onPanEnd: onPanEnd,
@@ -404,6 +427,7 @@ class _GridRow extends StatelessWidget {
             onEraseUpdate: onEraseUpdate,
             onEraseEnd: onEraseEnd,
             onGridHover: onGridHover,
+            onGridExit: onGridExit,
             gridCursor: gridCursor,
             onGridSize: onGridSize,
           ),
@@ -417,6 +441,7 @@ class _InteractiveGridArea extends StatelessWidget {
   const _InteractiveGridArea({
     required this.roll,
     this.onTapDown,
+    this.onTapUp,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
@@ -425,12 +450,17 @@ class _InteractiveGridArea extends StatelessWidget {
     this.onEraseUpdate,
     this.onEraseEnd,
     this.onGridHover,
+    this.onGridExit,
     this.gridCursor = MouseCursor.defer,
     this.onGridSize,
   });
 
   final PianoRollVm roll;
   final void Function(TapDownDetails details)? onTapDown;
+
+  /// A click that ended without travelling. Separate from [onTapDown] because
+  /// only the release tells a click apart from the start of a drag.
+  final void Function(TapUpDetails details)? onTapUp;
   final void Function(DragStartDetails details)? onPanStart;
   final void Function(DragUpdateDetails details)? onPanUpdate;
   final void Function(DragEndDetails details)? onPanEnd;
@@ -439,6 +469,10 @@ class _InteractiveGridArea extends StatelessWidget {
   final ValueChanged<Offset>? onEraseUpdate;
   final VoidCallback? onEraseEnd;
   final ValueChanged<Offset>? onGridHover;
+
+  /// The pointer leaving the canvas. A paste needs to know it no longer has a
+  /// position to land on.
+  final VoidCallback? onGridExit;
   final MouseCursor gridCursor;
   final ValueChanged<Size>? onGridSize;
 
@@ -463,6 +497,7 @@ class _InteractiveGridArea extends StatelessWidget {
           onHover: onGridHover == null
               ? null
               : (PointerHoverEvent event) => onGridHover!(event.localPosition),
+          onExit: onGridExit == null ? null : (_) => onGridExit!(),
           child: Listener(
             // The right-button sweep. A raw pointer path, so it never enters the
             // gesture arena and never has to win a fight with the drag
@@ -493,6 +528,7 @@ class _InteractiveGridArea extends StatelessWidget {
               // past the note — so a resize became a draw.
               dragStartBehavior: DragStartBehavior.down,
               onTapDown: onTapDown,
+              onTapUp: onTapUp,
               onPanStart: onPanStart,
               onPanUpdate: onPanUpdate,
               onPanEnd: onPanEnd,

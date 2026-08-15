@@ -622,10 +622,9 @@ class EngineClient
     return plugins;
   }
 
-  /// The first usable plug-in for "add an instrument": the bundled stock
-  /// instruments (vendor `OneBeat`) are preferred, falling back to any usable
-  /// plug-in. The stock piano always works, whereas a third-party plug-in can
-  /// refuse to load, so the bundled set is the reliable default channel.
+  /// The first usable plug-in for an explicit "add an instrument" action.
+  /// Bundled stock instruments are preferred, falling back to any usable
+  /// plug-in.
   PluginListing? firstUsablePlugin() {
     final PluginScanStatus status = readPluginScanStatus();
     if (status.pluginCount <= 0) return null;

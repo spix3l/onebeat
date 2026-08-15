@@ -74,6 +74,106 @@ void main() {
     expect(roll.notes.map((SequenceNote n) => n.lengthTicks), <int>[960, 960]);
   });
 
+  test('copy then paste puts the phrase back where it was taken from', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..addNoteAt(960, 60, length: 240)
+      ..addNoteAt(1200, 64, length: 240);
+    roll.selectAll();
+
+    roll.copySelection();
+    roll.deleteSelection();
+    expect(roll.notes, isEmpty);
+
+    roll.pasteClipboard();
+
+    expect(
+      roll.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[960, 1200],
+      reason: 'the phrase keeps its shape and its place',
+    );
+    expect(roll.notes.map((SequenceNote n) => n.key).toSet(), <int>{60, 64});
+    expect(
+      roll.selection.length,
+      2,
+      reason: 'the paste is what the next gesture acts on',
+    );
+  });
+
+  test('a paste can be dropped at another tick, keeping its shape', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..addNoteAt(960, 60, length: 240)
+      ..addNoteAt(1200, 64, length: 240);
+    roll
+      ..selectAll()
+      ..copySelection()
+      ..deleteSelection();
+
+    roll.pasteClipboard(atTick: 0);
+
+    expect(
+      roll.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[0, 240],
+      reason: 'the gap between the two voices survives the move',
+    );
+  });
+
+  test('a paste is one undo step however many notes it lands', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..addNoteAt(0, 60, length: 240)
+      ..addNoteAt(240, 62, length: 240)
+      ..addNoteAt(480, 64, length: 240)
+      ..selectAll()
+      ..copySelection();
+    final int beginsBefore = harness.client.gestureBegins;
+
+    roll.pasteClipboard(atTick: 1920);
+
+    expect(harness.client.gestureBegins, beginsBefore + 1);
+    expect(harness.client.gestureCommits, harness.client.gestureBegins);
+  });
+
+  test('cut takes the notes away and keeps them for the paste', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..addNoteAt(480, 67, length: 240)
+      ..selectAll()
+      ..cutSelection();
+
+    expect(roll.notes, isEmpty);
+    expect(roll.hasClipboard, isTrue);
+
+    roll.pasteClipboard();
+    expect(roll.notes.single.key, 67);
+    expect(roll.notes.single.startTicks, 480);
+  });
+
+  test('duplicate lands the copy one selection-length later', () {
+    final EditorHarness harness = EditorHarness();
+    final PianoRollStore roll = harness.pianoRoll..load('inst_a');
+    roll
+      ..setGrid(const GridChoice('1/4', ticksPerQuarter))
+      ..addNoteAt(0, 60, length: 960)
+      ..selectAll()
+      ..duplicateSelection();
+
+    expect(
+      roll.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[0, 960],
+    );
+    expect(
+      roll.selection.single.startTicks,
+      960,
+      reason: 'the copy is selected, so ⌘B again walks it along',
+    );
+  });
+
   test('the viewport is remembered per instrument for the session', () {
     final EditorHarness harness = EditorHarness();
     final PianoRollStore roll = harness.pianoRoll..load('inst_a');

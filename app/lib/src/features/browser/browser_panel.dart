@@ -62,6 +62,7 @@ class BrowserPatternVm extends BrowserNodeVm {
     required super.id,
     required super.name,
     required this.color,
+    super.dragData,
     this.badge,
     this.expanded = true,
     this.children = const <BrowserNodeVm>[],
@@ -241,6 +242,7 @@ class _ObBrowserPanelState extends State<ObBrowserPanel> {
           badge: node.badge,
           expanded: nameMatches || children.isNotEmpty,
           children: nameMatches ? node.children : children,
+          dragData: node.dragData,
         );
       case BrowserSampleVm():
         return node;

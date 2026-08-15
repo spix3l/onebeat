@@ -37,30 +37,30 @@ class _FakeEngineClient implements EngineClient {
 
   @override
   EngineSnapshot readSnapshot() => EngineSnapshot(
-        playing: isPlaying,
-        loopEnabled: isLooping,
-        loopStartBeats: 0,
-        loopEndBeats: 4,
-        positionFrames: 0,
-        positionBeats: 4.5,
-        positionSeconds: 2.25,
-        hostTimeNanos: 1000000,
-        tempoBpm: bpm,
-        bar: bar,
-        beat: beat,
-        tick: tick,
-        sampleRate: 48000,
-        blockFrames: 128,
-        activeVoices: 2,
-        peakLeft: 0.55,
-        peakRight: 0.48,
-        rmsLeft: 0.4,
-        rmsRight: 0.4,
-        cpuLoad: 0.04,
-        xrunCount: 0,
-        latencyFramesRoundTrip: 256,
-        scheduleEventCount: 0,
-      );
+    playing: isPlaying,
+    loopEnabled: isLooping,
+    loopStartBeats: 0,
+    loopEndBeats: 4,
+    positionFrames: 0,
+    positionBeats: 4.5,
+    positionSeconds: 2.25,
+    hostTimeNanos: 1000000,
+    tempoBpm: bpm,
+    bar: bar,
+    beat: beat,
+    tick: tick,
+    sampleRate: 48000,
+    blockFrames: 128,
+    activeVoices: 2,
+    peakLeft: 0.55,
+    peakRight: 0.48,
+    rmsLeft: 0.4,
+    rmsRight: 0.4,
+    cpuLoad: 0.04,
+    xrunCount: 0,
+    latencyFramesRoundTrip: 256,
+    scheduleEventCount: 0,
+  );
 
   @override
   List<EngineEvent> pollEvents() => const <EngineEvent>[];
@@ -102,18 +102,29 @@ class _FakeEngineClient implements EngineClient {
 
   @override
   RackPattern readRackPattern() => const RackPattern(
-        id: 'pattern',
-        name: 'Pattern 1',
-        lengthTicks: 3840,
-        baseGridTicks: 240,
-        swing: 0,
-      );
+    id: 'pattern',
+    name: 'Pattern 1',
+    lengthTicks: 3840,
+    baseGridTicks: 240,
+    swing: 0,
+  );
 
   @override
   List<RackRow> readRackRows() => const <RackRow>[];
 
   @override
-  List<PatternSummary> readPatterns() => const <PatternSummary>[];
+  List<PatternSummary> readPatterns() => const <PatternSummary>[
+    PatternSummary(
+      id: 'pat_a',
+      name: 'Main Groove',
+      color: '#EF6F91',
+      lengthTicks: 3840,
+      swing: 0,
+      usageCount: 1,
+      noteCount: 0,
+      isCurrent: true,
+    ),
+  ];
 
   @override
   List<ArrangementLane> readLanes() => const <ArrangementLane>[];
@@ -206,6 +217,28 @@ void main() {
     await tester.tap(find.byType(ObTransportButton).at(1));
     await tester.pump();
     expect(client.redoCount, 1);
+  });
+
+  testWidgets('Current Project is shown only on Playlist', (
+    WidgetTester tester,
+  ) async {
+    final _FakeEngineClient client = _FakeEngineClient();
+
+    await pumpForTest(
+      tester,
+      ShellBinding(client: client),
+      size: const Size(1600, 1000),
+    );
+    await tester.pump();
+
+    expect(find.text('Current Project'), findsNothing);
+    await tester.tap(find.text('PLAYLIST'));
+    await tester.pump();
+    expect(find.text('Current Project'), findsOneWidget);
+
+    await tester.tap(find.text('CHANNELS'));
+    await tester.pump();
+    expect(find.text('Current Project'), findsNothing);
   });
 
   testWidgets('rail selection switches active index', (

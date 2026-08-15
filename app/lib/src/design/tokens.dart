@@ -262,6 +262,19 @@ class ColorTokens {
     return noteFill.withValues(alpha: 0.45 + 0.55 * clamped);
   }
 
+  /// An unlit step cell, on the darker of the two beat bands.
+  ///
+  /// The rack shades its rest cells in blocks of four and the block alternates,
+  /// the way FL Studio's does. It is the single cheapest thing on the surface:
+  /// the group gaps tell you *that* there are beats, and the banding tells you
+  /// *which one you are on* — you drop a hit on the and-of-three by reading the
+  /// band rather than by counting cells across a bar.
+  Color get stepRest => surfaceSunken;
+
+  /// An unlit step cell on the lifted band — beats 1 and 3 of every bar, so the
+  /// downbeat opens on the brighter shade.
+  Color get stepRestLifted => surfaceRaised;
+
   /// The two stops of a lit step cell's fill, top then bottom.
   ///
   /// The design fills accented controls with a gradient rather than a flat
@@ -500,6 +513,7 @@ class SizeTokens {
   /// span 153px — so a bar is a hair over 38.
   double get playlistLaneHeight => 50;
   double get playlistClipHeight => 44;
+  double get playlistResizeHandleWidth => 10;
   double get playlistPxPerBar => 38.3;
   double get playlistRulerHeight => 20;
   double get playlistHeaderHeight => 32;
@@ -553,7 +567,11 @@ class SizeTokens {
   /// Transport buttons are square wells in the design, not text buttons — the
   /// play control is the one accented thing in the bar.
   double get transportButtonSize => 32;
-  double get transportGlyphSize => 13;
+
+  /// The glyph inside that well. 15 rather than 13: the arrows carry an arc and
+  /// a head, and two more pixels is the difference between reading them and
+  /// recognising them by position.
+  double get transportGlyphSize => 15;
 
   /// Badges and tags.
   double get tagWidth => 36;
@@ -1201,6 +1219,23 @@ class OneBeatTokens {
   /// The dark theme — the only one that ships in v0.1. Values are PRD §8.1.1.
   /// A light theme (FR-UX-04) is a second factory here and nothing else.
   factory OneBeatTokens.dark() => _dark;
+
+  /// The same tokens with a different size scale, for a subtree that has to
+  /// resize itself to what it was given.
+  ///
+  /// Republishing the theme is how one measurement reaches every widget in that
+  /// subtree at once — the alternative is passing a size down through each
+  /// layer and hoping the hit-test layer got the same number as the painter.
+  OneBeatTokens withSize(SizeTokens value) => OneBeatTokens(
+    brightness: brightness,
+    color: color,
+    type: type,
+    spacing: spacing,
+    radius: radius,
+    border: border,
+    size: value,
+    motion: motion,
+  );
 
   static const Color _textPrimaryDark = Color(0xFFE8E9E4); // Pen `text`
 

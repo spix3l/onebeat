@@ -56,6 +56,10 @@ class _PianoRollBindingState extends State<PianoRollBinding>
   /// What the pointer is currently over, expressed as a cursor.
   MouseCursor _gridCursor = MouseCursor.defer;
 
+  /// The tick under the pointer, or null when the pointer is off the canvas.
+  /// A paste reads it; see [_pasteTick].
+  int? _hoverTick;
+
   /// The measured canvas. Paging, anchored zoom and the "how far can I scroll
   /// down" floor all need it, and none of them can be answered from the vm.
   Size _gridSize = Size.zero;
@@ -156,9 +160,22 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     return channelColors[index % channelColors.length];
   }
 
-  bool get _snapOff =>
+  /// Whether the snap is suspended for the gesture in flight.
+  ///
+  /// Control only. ⌥ used to do this too, but ⌥ is the lasso modifier — see
+  /// [_isLasso] — and a key cannot both start a marquee and mean "ignore the
+  /// grid" for the drag it just prevented.
+  bool get _snapOff => HardwareKeyboard.instance.isControlPressed;
+
+  /// Whether a drag beginning now is a rubber-band selection.
+  ///
+  /// ⌥ or ⌘, whatever tool is up. Switching to the select tool to lasso a few
+  /// notes and switching back is the round trip a modifier exists to remove —
+  /// and with the pencil up, ⌥-dragging used to *draw*, which is the opposite
+  /// of what a selection modifier should do.
+  bool get _isLasso =>
       HardwareKeyboard.instance.isAltPressed ||
-      HardwareKeyboard.instance.isControlPressed;
+      HardwareKeyboard.instance.isMetaPressed;
 
   int _maybeSnap(int tick) => _snapOff ? tick : _store.snapDown(tick);
 
@@ -334,13 +351,33 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     final int key = view.noteAt(details.localPosition.dy);
     final SequenceNote? hit = _store.noteAt(tick, key);
 
+    // A lasso that never moved far enough to become a drag. It still means
+    // "select", so it must not fall through to the pencil and draw.
+    if (_isLasso) {
+      if (hit != null) {
+        _store.selectOnly(hit);
+      } else {
+        _store.clearSelection();
+      }
+      return;
+    }
+
     if (hit != null) {
       if (HardwareKeyboard.instance.isShiftPressed) {
         _store.toggleSelection(hit);
       } else if (_store.tool == PrTool.eraser) {
         _store.deleteNote(hit);
       } else {
-        _store.selectOnly(hit);
+        // A note already in the selection keeps the whole selection: this fires
+        // on *press*, before the arena has decided whether the gesture is a
+        // click or the start of a drag, and narrowing here would leave a block
+        // move dragging one note out of the block. A press that rests for the
+        // tap deadline before moving — the normal way to grab a phrase — is
+        // exactly the path that used to lose it. [_onTapUp] narrows instead,
+        // once the gesture is known to have been a click.
+        if (!_store.selection.contains(hit)) {
+          _store.selectOnly(hit);
+        }
         _store.audition(key);
       }
       return;
@@ -351,6 +388,28 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       _store.audition(key);
     } else {
       _store.clearSelection();
+    }
+  }
+
+  /// A click that never became a drag, on a note inside a multi-selection.
+  ///
+  /// Only here can the roll know the difference between "you are picking this
+  /// one note out" and "you are about to move the block" — the press looks
+  /// identical either way, and the gesture arena rejects the tap the moment the
+  /// pointer travels, so a drag never reaches this.
+  void _onTapUp(TapUpDetails details, PrViewport view) {
+    if (_isLasso ||
+        HardwareKeyboard.instance.isShiftPressed ||
+        _store.tool == PrTool.eraser ||
+        _store.selection.length < 2) {
+      return;
+    }
+    final SequenceNote? hit = _store.noteAt(
+      view.tickAt(details.localPosition.dx),
+      view.noteAt(details.localPosition.dy),
+    );
+    if (hit != null && _store.selection.contains(hit)) {
+      _store.selectOnly(hit);
     }
   }
 
@@ -383,12 +442,25 @@ class _PianoRollBindingState extends State<PianoRollBinding>
   }
 
   void _onGridHover(Offset local, PrViewport view) {
+    // No setState: this feeds the *next* paste, not the current frame.
+    _hoverTick = view.tickAt(local.dx);
     final MouseCursor next = _cursorAt(local, view);
     // Only when it changes: a hover fires per pixel, and a setState per pixel
     // would rebuild the roll for a cursor that already looks right.
     if (next == _gridCursor) return;
     setState(() => _gridCursor = next);
   }
+
+  void _onGridExit() => _hoverTick = null;
+
+  /// Where a paste lands: under the pointer if it is over the canvas, otherwise
+  /// the next free slot after the last note.
+  ///
+  /// The pointer is the only thing on screen that says *where you are working*
+  /// — a paste that ignored it and went back to where the copy was taken from
+  /// made ⌘C ⌘V useless for moving a phrase anywhere.
+  int get _pasteTick =>
+      _hoverTick == null ? _store.nextFreeTick : _maybeSnap(_hoverTick!);
 
   // ----- Erasing ------------------------------------------------------------
 
@@ -447,10 +519,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
     _dragOriginTick = tick;
     _dragOriginKey = key;
 
-    // ⌘-drag is a lasso whatever tool is up. Switching to the select tool to
-    // rubber-band a few notes and switching back is the kind of round trip a
-    // modifier exists to remove.
-    if (HardwareKeyboard.instance.isMetaPressed) {
+    if (_isLasso) {
       _store.beginMarquee(tick, key);
       return;
     }
@@ -561,10 +630,12 @@ class _PianoRollBindingState extends State<PianoRollBinding>
 
   /// Applies a lane gesture at [local] to the stem under the pointer.
   ///
-  /// The lane edits *one* note. Where several notes start on the same tick
-  /// their stems coincide exactly, and there is no axis left in the lane to
-  /// tell them apart — so the selection breaks the tie, and with nothing
-  /// selected an ambiguous grab does nothing rather than flattening the chord.
+  /// Where several notes start on the same tick their stems coincide exactly,
+  /// and the lane has no axis left to tell them apart. The selection breaks the
+  /// tie: with some of the chord selected only those voices move, and with none
+  /// of it selected the whole stack moves together — which is what a single
+  /// visible stem looks like it should do. Refusing to act on an ambiguous grab
+  /// read as the lane being broken for chords.
   void _applyVelocity(Offset local, double height, PrViewport view, double gutter) {
     if (PrLaneKind.fromLabel(_selectedVelocityLane) != PrLaneKind.velocity) {
       return;
@@ -586,11 +657,13 @@ class _PianoRollBindingState extends State<PianoRollBinding>
       return;
     }
 
-    // A chord. Only the selected voices move, and only those.
-    for (final SequenceNote note in hits) {
-      if (_store.selection.contains(note)) {
-        _store.setNoteVelocity(note, velocity);
-      }
+    // A chord. The selected voices if any of them are selected, otherwise the
+    // whole stack.
+    final List<SequenceNote> selected = hits
+        .where(_store.selection.contains)
+        .toList();
+    for (final SequenceNote note in selected.isEmpty ? hits : selected) {
+      _store.setNoteVelocity(note, velocity);
     }
   }
 
@@ -749,6 +822,16 @@ class _PianoRollBindingState extends State<PianoRollBinding>
             const _SelectAllIntent(),
         const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
             const _DuplicateIntent(),
+        // ⌘B is FL's duplicate: the selection again, one selection-length
+        // later. ⌘D is kept as the alias the rest of the app already used.
+        const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
+            const _DuplicateIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true):
+            const _CopyIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true):
+            const _CutIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true):
+            const _PasteIntent(),
         const SingleActivator(LogicalKeyboardKey.keyQ): const _QuantiseIntent(),
       },
       handlers: const <String, VoidCallback>{},
@@ -847,6 +930,24 @@ class _PianoRollBindingState extends State<PianoRollBinding>
             return null;
           },
         ),
+        _CopyIntent: CallbackAction<_CopyIntent>(
+          onInvoke: (_) {
+            _store.copySelection();
+            return null;
+          },
+        ),
+        _CutIntent: CallbackAction<_CutIntent>(
+          onInvoke: (_) {
+            _store.cutSelection();
+            return null;
+          },
+        ),
+        _PasteIntent: CallbackAction<_PasteIntent>(
+          onInvoke: (_) {
+            _store.pasteClipboard(atTick: _pasteTick);
+            return null;
+          },
+        ),
         _QuantiseIntent: CallbackAction<_QuantiseIntent>(
           onInvoke: (_) {
             _store.quantiseSelection();
@@ -869,6 +970,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onBack: widget.onBackToPlaylist,
           onKeyPress: (int key) => _store.audition(key),
           onTapDown: (TapDownDetails d) => _onTapDown(d, view),
+          onTapUp: (TapUpDetails d) => _onTapUp(d, view),
           onPanStart: (DragStartDetails d) => _onPanStart(d, view),
           onPanUpdate: (DragUpdateDetails d) => _onPanUpdate(d, view),
           onPanEnd: (_) => _store.endDrag(),
@@ -877,6 +979,7 @@ class _PianoRollBindingState extends State<PianoRollBinding>
           onEraseUpdate: (Offset local) => _onEraseUpdate(local, view),
           onEraseEnd: _onEraseEnd,
           onGridHover: (Offset local) => _onGridHover(local, view),
+          onGridExit: _onGridExit,
           gridCursor: _gridCursor,
           onPointerSignal: (PointerSignalEvent e) =>
               _onPointerSignal(e, view, gutter),
@@ -954,6 +1057,18 @@ class _SelectAllIntent extends Intent {
 
 class _DuplicateIntent extends Intent {
   const _DuplicateIntent();
+}
+
+class _CopyIntent extends Intent {
+  const _CopyIntent();
+}
+
+class _CutIntent extends Intent {
+  const _CutIntent();
+}
+
+class _PasteIntent extends Intent {
+  const _PasteIntent();
 }
 
 class _QuantiseIntent extends Intent {

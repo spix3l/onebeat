@@ -8,13 +8,18 @@
 // is exactly the kind of thing that makes an arrangement feel untrustworthy.
 import 'package:flutter/widgets.dart';
 
+import '../../ui_kit/dropdown.dart';
+
 import '../../design/tokens.dart';
+import 'playlist_store.dart';
 
 /// `PLAYLIST` on the left, the project's own line on the right.
 class PlaylistHeader extends StatelessWidget {
   const PlaylistHeader({
     required this.title,
     required this.right,
+    this.snap = '1 bar',
+    this.onSnapChanged,
     super.key,
   });
 
@@ -22,6 +27,8 @@ class PlaylistHeader extends StatelessWidget {
 
   /// `Untitled.onebeat · 124 BPM · 4/4`.
   final String right;
+  final String snap;
+  final ValueChanged<String>? onSnapChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +46,21 @@ class PlaylistHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          ObDropdown(
+            label: 'Snap',
+            value: snap,
+            items: const <String>[
+              '4 bars',
+              '1 bar',
+              '1/4',
+              '1/8',
+              '1/16',
+              'Off',
+            ],
+            width: tokens.size.dropdownWidth,
+            onSelected: onSnapChanged,
+          ),
+          SizedBox(width: tokens.spacing.sm),
           Text(right, maxLines: 1, style: tokens.type.numericSmall),
         ],
       ),
@@ -49,11 +71,13 @@ class PlaylistHeader extends StatelessWidget {
 class PlaylistRuler extends StatelessWidget {
   const PlaylistRuler({
     required this.pxPerBar,
+    this.scrollTicks = 0,
     this.labelEvery,
     super.key,
   });
 
   final double pxPerBar;
+  final double scrollTicks;
 
   /// How often a bar is numbered; defaults to the token the mockup uses.
   final int? labelEvery;
@@ -66,6 +90,7 @@ class PlaylistRuler extends StatelessWidget {
       child: CustomPaint(
         painter: PlaylistRulerPainter(
           pxPerBar: pxPerBar,
+          scrollTicks: scrollTicks,
           labelEvery: labelEvery ?? tokens.size.playlistBarLabelEvery,
           line: tokens.color.line,
           lineWidth: tokens.border.hairline,
@@ -80,6 +105,7 @@ class PlaylistRuler extends StatelessWidget {
 class PlaylistRulerPainter extends CustomPainter {
   PlaylistRulerPainter({
     required this.pxPerBar,
+    this.scrollTicks = 0,
     required this.labelEvery,
     required this.line,
     required this.lineWidth,
@@ -87,6 +113,7 @@ class PlaylistRulerPainter extends CustomPainter {
   });
 
   final double pxPerBar;
+  final double scrollTicks;
   final int labelEvery;
   final Color line;
   final double lineWidth;
@@ -100,9 +127,11 @@ class PlaylistRulerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final int bars = (size.width / pxPerBar).ceil();
-    for (int bar = 0; bar <= bars; bar += labelEvery) {
-      final double x = bar * pxPerBar;
+    final double scrollBars = scrollTicks / ticksPerBar;
+    final int firstBar = (scrollBars / labelEvery).floor() * labelEvery;
+    final int bars = (size.width / pxPerBar).ceil() + scrollBars.ceil();
+    for (int bar = firstBar; bar <= bars; bar += labelEvery) {
+      final double x = (bar - scrollBars) * pxPerBar;
       _text
         ..text = TextSpan(text: '${bar + 1}', style: style)
         ..layout();
@@ -121,6 +150,7 @@ class PlaylistRulerPainter extends CustomPainter {
   @override
   bool shouldRepaint(PlaylistRulerPainter oldDelegate) =>
       oldDelegate.pxPerBar != pxPerBar ||
+      oldDelegate.scrollTicks != scrollTicks ||
       oldDelegate.labelEvery != labelEvery ||
       oldDelegate.line != line;
 }

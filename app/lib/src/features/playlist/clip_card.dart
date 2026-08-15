@@ -5,9 +5,24 @@
 // room, and everything around it stays grey so it can be.
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+
+@immutable
+class ClipPreviewNoteVm {
+  const ClipPreviewNoteVm({
+    required this.x,
+    required this.width,
+    required this.y,
+  });
+
+  /// Normalised position in the pattern preview.
+  final double x;
+  final double width;
+  final double y;
+}
 
 @immutable
 class ClipVm {
@@ -22,6 +37,8 @@ class ClipVm {
     this.selected = false,
     this.isAudio = false,
     this.waveform = const <double>[],
+    this.instrumentName = '',
+    this.previewNotes = const <ClipPreviewNoteVm>[],
   });
 
   final int id;
@@ -45,25 +62,37 @@ class ClipVm {
   final bool selected;
   final bool isAudio;
   final List<double> waveform;
+  final String instrumentName;
+  final List<ClipPreviewNoteVm> previewNotes;
 }
 
 class ObClipCard extends StatefulWidget {
   const ObClipCard({
     required this.vm,
     this.onTap,
+    this.onDoubleTap,
     this.onPanStart,
     this.onPanUpdate,
     this.onPanEnd,
     this.onPanCancel,
+    this.onResizeStart,
+    this.onResizeUpdate,
+    this.onResizeEnd,
+    this.onResizeCancel,
     super.key,
   });
 
   final ClipVm vm;
   final VoidCallback? onTap;
+  final VoidCallback? onDoubleTap;
   final GestureDragStartCallback? onPanStart;
   final GestureDragUpdateCallback? onPanUpdate;
   final GestureDragEndCallback? onPanEnd;
   final VoidCallback? onPanCancel;
+  final GestureDragStartCallback? onResizeStart;
+  final GestureDragUpdateCallback? onResizeUpdate;
+  final GestureDragEndCallback? onResizeEnd;
+  final VoidCallback? onResizeCancel;
 
   @override
   State<ObClipCard> createState() => _ObClipCardState();
@@ -71,29 +100,110 @@ class ObClipCard extends StatefulWidget {
 
 class _ObClipCardState extends State<ObClipCard> {
   bool _hover = false;
+  bool _resizeEdgeHover = false;
+  bool _resizing = false;
+
+  bool _isResizeEdge(Offset local) {
+    final double width = context.size?.width ?? 0;
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final double handle = tokens.size.playlistResizeHandleWidth;
+    final double edgeWidth = math.min(handle, width / 3);
+    final bool inCardEdge = local.dx >= width - edgeWidth && local.dx <= width;
+    // Some Flutter render paths report the pointer in the positioned canvas
+    // space rather than the card's local space. Keep a small, separated band
+    // for that coordinate space so the card centre never becomes a resize hit.
+    final bool positionedEdge = local.dx >= width + handle;
+    return widget.onResizeStart != null &&
+        width > 0 &&
+        (inCardEdge || positionedEdge);
+  }
+
+  void _onPanStart(DragStartDetails details) {
+    final RenderBox? box = context.findRenderObject() as RenderBox?;
+    final Offset cardLocal =
+        box == null
+            ? details.localPosition
+            : box.globalToLocal(details.globalPosition);
+    _resizing = _isResizeEdge(cardLocal);
+    if (_resizing) {
+      widget.onResizeStart?.call(details);
+    } else {
+      widget.onPanStart?.call(details);
+    }
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    if (_resizing) {
+      widget.onResizeUpdate?.call(details);
+    } else {
+      widget.onPanUpdate?.call(details);
+    }
+  }
+
+  void _onPanEnd(DragEndDetails details) {
+    if (_resizing) {
+      widget.onResizeEnd?.call(details);
+    } else {
+      widget.onPanEnd?.call(details);
+    }
+    _resizing = false;
+  }
+
+  void _onPanCancel() {
+    if (_resizing) {
+      widget.onResizeCancel?.call();
+    } else {
+      widget.onPanCancel?.call();
+    }
+    _resizing = false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
-    final bool enabled = widget.onTap != null || widget.onPanStart != null;
+    final bool enabled =
+        widget.onTap != null ||
+        widget.onDoubleTap != null ||
+        widget.onPanStart != null;
 
     return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: enabled ? (_) => setState(() => _hover = true) : null,
-      onExit: enabled ? (_) => setState(() => _hover = false) : null,
+      cursor:
+          enabled
+              ? (_resizeEdgeHover
+                  ? SystemMouseCursors.resizeLeftRight
+                  : SystemMouseCursors.click)
+              : MouseCursor.defer,
+      onEnter:
+          enabled
+              ? (PointerEnterEvent event) => setState(() {
+                _hover = true;
+                _resizeEdgeHover = _isResizeEdge(event.localPosition);
+              })
+              : null,
+      onHover:
+          enabled
+              ? (PointerHoverEvent event) => setState(() {
+                _resizeEdgeHover = _isResizeEdge(event.localPosition);
+              })
+              : null,
+      onExit:
+          enabled
+              ? (_) => setState(() {
+                _hover = false;
+                _resizeEdgeHover = false;
+              })
+              : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
-        onPanStart: widget.onPanStart,
-        onPanUpdate: widget.onPanUpdate,
-        onPanEnd: widget.onPanEnd,
-        onPanCancel: widget.onPanCancel,
+        onDoubleTap: widget.onDoubleTap,
+        onPanStart: enabled ? _onPanStart : null,
+        onPanUpdate: enabled ? _onPanUpdate : null,
+        onPanEnd: enabled ? _onPanEnd : null,
+        onPanCancel: enabled ? _onPanCancel : null,
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: tokens.spacing.sm,
-            vertical: tokens.spacing.xs,
-          ),
+          padding: EdgeInsets.zero,
           decoration: BoxDecoration(
             // Keep the saturated identity colour, but let the arrangement
             // grid show through the clip body.
@@ -102,9 +212,10 @@ class _ObClipCardState extends State<ObClipCard> {
             border: Border.all(
               // Selection brightens the edge rather than the fill: the fill is
               // the clip's identity and must not change when you click it.
-              color: widget.vm.selected
-                  ? color.clipSelectedOutline
-                  : (_hover ? color.textPrimary : color.none),
+              color:
+                  widget.vm.selected
+                      ? color.clipSelectedOutline
+                      : (_hover ? color.textPrimary : color.none),
               width: tokens.border.emphasis,
             ),
           ),
@@ -118,30 +229,92 @@ class _ObClipCardState extends State<ObClipCard> {
                     color: color.clipInkMuted,
                   ),
                 ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    widget.vm.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.type.clipName,
+              if (!widget.vm.isAudio && widget.vm.previewNotes.isNotEmpty)
+                CustomPaint(
+                  painter: PatternPreviewPainter(
+                    notes: widget.vm.previewNotes,
+                    color: color.clipInkMuted,
                   ),
-                  Text(
-                    widget.vm.duration,
-                    maxLines: 1,
-                    overflow: TextOverflow.clip,
-                    style: tokens.type.clipDuration,
-                  ),
-                ],
+                ),
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: tokens.spacing.sm,
+                  vertical: tokens.spacing.xs,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      widget.vm.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.type.clipName,
+                    ),
+                    Text(
+                      widget.vm.isAudio || widget.vm.instrumentName.isEmpty
+                          ? widget.vm.duration
+                          : '${widget.vm.instrumentName} · ${widget.vm.duration}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.type.clipDuration,
+                    ),
+                  ],
+                ),
               ),
+              if (widget.onResizeStart != null)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: tokens.size.playlistResizeHandleWidth,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: widget.onResizeStart,
+                    onPanUpdate: widget.onResizeUpdate,
+                    onPanEnd: widget.onResizeEnd,
+                    onPanCancel: widget.onResizeCancel,
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Draws a compact piano-roll-like note preview over a pattern clip. It is
+/// deliberately a silhouette rather than a second editable roll: the clip
+/// remains a placement, while the small note shapes answer "what instrument
+/// did I play here?" at a glance.
+class PatternPreviewPainter extends CustomPainter {
+  PatternPreviewPainter({required this.notes, required this.color});
+
+  final List<ClipPreviewNoteVm> notes;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (notes.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final Paint paint = Paint()..color = color.withValues(alpha: 0.62);
+    for (final ClipPreviewNoteVm note in notes) {
+      final double left = (note.x.clamp(0.0, 1.0)) * size.width;
+      final double width = math.max(1.0, note.width * size.width);
+      final double top = (1.0 - note.y.clamp(0.0, 1.0)) * size.height;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, top, width, math.max(1.0, size.height * 0.08)),
+          Radius.circular(size.height * 0.04),
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(PatternPreviewPainter oldDelegate) =>
+      oldDelegate.color != color || !identical(oldDelegate.notes, notes);
 }
 
 /// Draws a compact mirrored peak envelope over an audio clip. The samples are
@@ -156,16 +329,18 @@ class AudioWaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (samples.isEmpty || size.width <= 0 || size.height <= 0) return;
-    final Paint paint = Paint()
-      ..color = color
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = math.max(1.0, size.width / samples.length * 0.62);
+    final Paint paint =
+        Paint()
+          ..color = color
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = math.max(1.0, size.width / samples.length * 0.62);
     final double middle = size.height / 2;
     final double halfHeight = size.height * 0.44;
     for (int index = 0; index < samples.length; index++) {
-      final double x = samples.length == 1
-          ? size.width / 2
-          : index * size.width / (samples.length - 1);
+      final double x =
+          samples.length == 1
+              ? size.width / 2
+              : index * size.width / (samples.length - 1);
       final double half = halfHeight * samples[index].clamp(0.0, 1.0);
       canvas.drawLine(
         Offset(x, middle - half),

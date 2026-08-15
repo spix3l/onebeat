@@ -6,6 +6,7 @@ import '../../ui_kit/button.dart';
 import '../../ui_kit/toggle_chip.dart';
 import 'playlist_canvas.dart';
 import 'playlist_screen_vm.dart';
+import 'playlist_store.dart';
 import 'timeline_ruler.dart';
 
 class PlaylistScreen extends StatelessWidget {
@@ -13,12 +14,24 @@ class PlaylistScreen extends StatelessWidget {
     required this.vm,
     this.canvasKey,
     this.onClipTap,
+    this.onClipDoubleTap,
     this.onClipPanStart,
     this.onClipPanUpdate,
     this.onClipPanEnd,
     this.onClipPanCancel,
+    this.onClipResizeStart,
+    this.onClipResizeUpdate,
+    this.onClipResizeEnd,
+    this.onClipResizeCancel,
+    this.onBackgroundPanStart,
+    this.onBackgroundPanUpdate,
+    this.onBackgroundPanEnd,
+    this.onBackgroundPanCancel,
     this.onBackgroundTap,
     this.onDrop,
+    this.onScroll,
+    this.onPanZoom,
+    this.onSnapChanged,
     this.onStartChanged,
     this.onLengthChanged,
     this.onOffsetChanged,
@@ -32,12 +45,25 @@ class PlaylistScreen extends StatelessWidget {
   final PlaylistScreenVm vm;
   final Key? canvasKey;
   final ValueChanged<int>? onClipTap;
+  final ValueChanged<int>? onClipDoubleTap;
   final void Function(int clipId, DragStartDetails details)? onClipPanStart;
   final void Function(int clipId, DragUpdateDetails details)? onClipPanUpdate;
   final void Function(int clipId, DragEndDetails details)? onClipPanEnd;
   final ValueChanged<int>? onClipPanCancel;
+  final void Function(int clipId, DragStartDetails details)? onClipResizeStart;
+  final void Function(int clipId, DragUpdateDetails details)?
+  onClipResizeUpdate;
+  final void Function(int clipId, DragEndDetails details)? onClipResizeEnd;
+  final ValueChanged<int>? onClipResizeCancel;
+  final GestureDragStartCallback? onBackgroundPanStart;
+  final GestureDragUpdateCallback? onBackgroundPanUpdate;
+  final GestureDragEndCallback? onBackgroundPanEnd;
+  final VoidCallback? onBackgroundPanCancel;
   final void Function(double bar, int lane)? onBackgroundTap;
   final void Function(Object data, double bar, int lane)? onDrop;
+  final ValueChanged<Offset>? onScroll;
+  final ValueChanged<Offset>? onPanZoom;
+  final ValueChanged<String>? onSnapChanged;
   final ValueChanged<int>? onStartChanged;
   final ValueChanged<int>? onLengthChanged;
   final ValueChanged<int>? onOffsetChanged;
@@ -62,39 +88,46 @@ class PlaylistScreen extends StatelessWidget {
                 PlaylistHeader(
                   title: vm.canvas.headerTitle,
                   right: vm.canvas.headerRight,
+                  snap:
+                      vm.canvas.snapTicks == 0
+                          ? 'Off'
+                          : _snapLabel(vm.canvas.snapTicks),
+                  onSnapChanged: onSnapChanged,
                 ),
                 Container(
                   height: tokens.border.hairline,
                   color: tokens.color.line,
                 ),
-                PlaylistRuler(pxPerBar: vm.canvas.pxPerBar),
+                PlaylistRuler(
+                  pxPerBar: vm.canvas.pxPerBar,
+                  scrollTicks: vm.canvas.scrollTicks,
+                ),
                 Container(
                   height: tokens.border.hairline,
                   color: tokens.color.line,
                 ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: SizedBox(
-                        width: (vm.canvas.pxPerBar * 64).clamp(1200.0, 10000.0),
-                        height: ((vm.canvas.laneCount + 8) *
-                                tokens.size.playlistLaneHeight)
-                            .clamp(600.0, 4000.0),
-                        child: PlaylistCanvas(
-                          key: canvasKey,
-                          vm: vm.canvas,
-                          onClipTap: onClipTap,
-                          onClipPanStart: onClipPanStart,
-                          onClipPanUpdate: onClipPanUpdate,
-                          onClipPanEnd: onClipPanEnd,
-                          onClipPanCancel: onClipPanCancel,
-                          onBackgroundTap: onBackgroundTap,
-                          onDrop: onDrop,
-                        ),
-                      ),
-                    ),
+                  child: PlaylistCanvas(
+                    key: canvasKey,
+                    vm: vm.canvas,
+                    onClipTap: onClipTap,
+                    onClipDoubleTap: onClipDoubleTap,
+                    onClipPanStart: onClipPanStart,
+                    onClipPanUpdate: onClipPanUpdate,
+                    onClipPanEnd: onClipPanEnd,
+                    onClipPanCancel: onClipPanCancel,
+                    onClipResizeStart: onClipResizeStart,
+                    onClipResizeUpdate: onClipResizeUpdate,
+                    onClipResizeEnd: onClipResizeEnd,
+                    onClipResizeCancel: onClipResizeCancel,
+                    onBackgroundPanStart: onBackgroundPanStart,
+                    onBackgroundPanUpdate: onBackgroundPanUpdate,
+                    onBackgroundPanEnd: onBackgroundPanEnd,
+                    onBackgroundPanCancel: onBackgroundPanCancel,
+                    onBackgroundTap: onBackgroundTap,
+                    onDrop: onDrop,
+                    onScroll: onScroll,
+                    onPanZoom: onPanZoom,
                   ),
                 ),
               ],
@@ -114,6 +147,15 @@ class PlaylistScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+String _snapLabel(int ticks) {
+  if (ticks == ticksPerBar * 4) return '4 bars';
+  if (ticks == ticksPerBar) return '1 bar';
+  if (ticks == ticksPerQuarter) return '1/4';
+  if (ticks == ticksPerQuarter ~/ 2) return '1/8';
+  if (ticks == ticksPerQuarter ~/ 4) return '1/16';
+  return 'Custom';
 }
 
 class _PlaylistInspectorPanel extends StatelessWidget {
@@ -154,23 +196,24 @@ class _PlaylistInspectorPanel extends StatelessWidget {
         ),
       ),
       child: SingleChildScrollView(
-        child: vm.isEmpty
-            ? const _EmptyInspectorContent()
-            : (vm.isMulti
-                ? _MultiInspectorContent(
-                    count: vm.selectedCount,
-                    onMakeUnique: onMakeUnique,
-                  )
-                : _SingleClipInspectorContent(
-                    vm: vm,
-                    onStartChanged: onStartChanged,
-                    onLengthChanged: onLengthChanged,
-                    onOffsetChanged: onOffsetChanged,
-                    onLoopToggle: onLoopToggle,
-                    onMuteToggle: onMuteToggle,
-                    onTransposeChanged: onTransposeChanged,
-                    onMakeUnique: onMakeUnique,
-                  )),
+        child:
+            vm.isEmpty
+                ? const _EmptyInspectorContent()
+                : (vm.isMulti
+                    ? _MultiInspectorContent(
+                      count: vm.selectedCount,
+                      onMakeUnique: onMakeUnique,
+                    )
+                    : _SingleClipInspectorContent(
+                      vm: vm,
+                      onStartChanged: onStartChanged,
+                      onLengthChanged: onLengthChanged,
+                      onOffsetChanged: onOffsetChanged,
+                      onLoopToggle: onLoopToggle,
+                      onMuteToggle: onMuteToggle,
+                      onTransposeChanged: onTransposeChanged,
+                      onMakeUnique: onMakeUnique,
+                    )),
       ),
     );
   }
@@ -197,10 +240,7 @@ class _EmptyInspectorContent extends StatelessWidget {
 }
 
 class _MultiInspectorContent extends StatelessWidget {
-  const _MultiInspectorContent({
-    required this.count,
-    this.onMakeUnique,
-  });
+  const _MultiInspectorContent({required this.count, this.onMakeUnique});
 
   final int count;
   final VoidCallback? onMakeUnique;
@@ -284,46 +324,72 @@ class _SingleClipInspectorContent extends StatelessWidget {
         _InspectorStepperRow(
           label: 'Start',
           value: '${vm.startBar} bar',
-          onMinus: onStartChanged == null ? null : () => onStartChanged!(vm.startBar - 1),
-          onPlus: onStartChanged == null ? null : () => onStartChanged!(vm.startBar + 1),
+          onMinus:
+              onStartChanged == null
+                  ? null
+                  : () => onStartChanged!(vm.startBar - 1),
+          onPlus:
+              onStartChanged == null
+                  ? null
+                  : () => onStartChanged!(vm.startBar + 1),
         ),
         SizedBox(height: tokens.spacing.sm),
         _InspectorStepperRow(
           label: 'Length',
           value: '${vm.lengthBars} bar',
-          onMinus: onLengthChanged == null ? null : () => onLengthChanged!(vm.lengthBars - 1),
-          onPlus: onLengthChanged == null ? null : () => onLengthChanged!(vm.lengthBars + 1),
+          onMinus:
+              onLengthChanged == null
+                  ? null
+                  : () => onLengthChanged!(vm.lengthBars - 1),
+          onPlus:
+              onLengthChanged == null
+                  ? null
+                  : () => onLengthChanged!(vm.lengthBars + 1),
         ),
         SizedBox(height: tokens.spacing.sm),
         _InspectorStepperRow(
           label: 'Offset',
           value: '${vm.offsetBeats} beat',
-          onMinus: onOffsetChanged == null ? null : () => onOffsetChanged!(vm.offsetBeats - 1),
-          onPlus: onOffsetChanged == null ? null : () => onOffsetChanged!(vm.offsetBeats + 1),
+          onMinus:
+              onOffsetChanged == null
+                  ? null
+                  : () => onOffsetChanged!(vm.offsetBeats - 1),
+          onPlus:
+              onOffsetChanged == null
+                  ? null
+                  : () => onOffsetChanged!(vm.offsetBeats + 1),
         ),
         const _InspectorDivider(),
         Row(
           children: <Widget>[
             Expanded(child: Text('Loop', style: tokens.type.label)),
             GestureDetector(
-              onTap: onLoopToggle == null ? null : () => onLoopToggle!(!vm.loop),
+              onTap:
+                  onLoopToggle == null ? null : () => onLoopToggle!(!vm.loop),
               child: Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: tokens.spacing.xs,
                   vertical: tokens.spacing.xxs,
                 ),
                 decoration: BoxDecoration(
-                  color: vm.loop ? tokens.color.accentWash : tokens.color.surfaceWell,
+                  color:
+                      vm.loop
+                          ? tokens.color.accentWash
+                          : tokens.color.surfaceWell,
                   borderRadius: BorderRadius.all(tokens.radius.sm),
                   border: Border.all(
-                    color: vm.loop ? tokens.color.accent : tokens.color.lineStrong,
+                    color:
+                        vm.loop ? tokens.color.accent : tokens.color.lineStrong,
                     width: tokens.border.hairline,
                   ),
                 ),
                 child: Text(
                   vm.loop ? 'LOOP' : 'HOLD',
                   style: tokens.type.tag.copyWith(
-                    color: vm.loop ? tokens.color.accentBright : tokens.color.textMuted,
+                    color:
+                        vm.loop
+                            ? tokens.color.accentBright
+                            : tokens.color.textMuted,
                   ),
                 ),
               ),
@@ -346,8 +412,14 @@ class _SingleClipInspectorContent extends StatelessWidget {
           _InspectorStepperRow(
             label: 'Transpose',
             value: '${vm.transpose > 0 ? "+" : ""}${vm.transpose} st',
-            onMinus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose - 1),
-            onPlus: onTransposeChanged == null ? null : () => onTransposeChanged!(vm.transpose + 1),
+            onMinus:
+                onTransposeChanged == null
+                    ? null
+                    : () => onTransposeChanged!(vm.transpose - 1),
+            onPlus:
+                onTransposeChanged == null
+                    ? null
+                    : () => onTransposeChanged!(vm.transpose + 1),
           ),
           SizedBox(height: tokens.spacing.xs),
           Text(

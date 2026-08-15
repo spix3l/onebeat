@@ -485,6 +485,175 @@ void main() {
     );
   });
 
+  testWidgets('⌘A, ⌘C, ⌘V and ⌘B are wired to the roll', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..addNoteAt(0, 60, length: 480)
+      ..addNoteAt(480, 64, length: 480)
+      // The select tool, so the focusing tap below is not also a pencil stroke.
+      ..setTool(PrTool.select)
+      ..clearSelection();
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    // The canvas has to hold focus for a shortcut to reach it.
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(keys.right + 600, keys.top + 300));
+    await tester.pump();
+
+    Future<void> press(LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+    }
+
+    await press(LogicalKeyboardKey.keyA);
+    expect(store.selection.length, 2, reason: '⌘A takes the lot');
+
+    await press(LogicalKeyboardKey.keyC);
+    expect(store.hasClipboard, isTrue);
+
+    store.deleteSelection();
+    expect(store.notes, isEmpty);
+
+    await press(LogicalKeyboardKey.keyV);
+    expect(store.notes.length, 2, reason: '⌘V drops the phrase back');
+
+    final int afterPaste = store.notes.length;
+    await press(LogicalKeyboardKey.keyB);
+    expect(
+      store.notes.length,
+      afterPaste + 2,
+      reason: '⌘B duplicates what the paste selected',
+    );
+  });
+
+  testWidgets('⌘V lands the phrase under the pointer', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+      ..setTool(PrTool.select)
+      ..addNoteAt(0, 84, length: 240)
+      ..addNoteAt(240, 84, length: 240)
+      ..selectAll()
+      ..copySelection()
+      ..deleteSelection();
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(keys.right + 300, keys.top + 300));
+    await tester.pump();
+
+    // 0.08 px per tick, so 200px into the canvas is tick 2500 — which the 1/16
+    // grid takes down to 2400.
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(() => mouse.removePointer());
+    await mouse.moveTo(Offset(keys.right + 200, keys.top + 40));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+
+    expect(
+      store.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[2400, 2640],
+      reason: 'the phrase starts where the pointer is and keeps its shape',
+    );
+  });
+
+  testWidgets('⌘V with the pointer off the canvas appends after the last note', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+      ..setTool(PrTool.select)
+      ..addNoteAt(0, 84, length: 500)
+      ..selectAll()
+      ..copySelection();
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    // Focused by a touch tap, so no mouse ever hovers the canvas.
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(keys.right + 300, keys.top + 300));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+
+    expect(
+      store.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[0, 720],
+      reason: 'the note ends at 500, so the next free 1/16 slot is 720',
+    );
+  });
+
+  testWidgets('⌥-drag lassos rather than drawing', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store.addNoteAt(0, 84, length: 480);
+    store.clearSelection();
+    final int notesBefore = store.notes.length;
+    expect(store.tool, PrTool.pencil);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    // Starting on empty canvas above the note and sweeping down across it.
+    final Offset start = Offset(keys.right + 4, keys.top + 4);
+
+    await simulateKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.dragFrom(start, const Offset(180, 40));
+    await tester.pump();
+    await simulateKeyUpEvent(LogicalKeyboardKey.altLeft);
+
+    expect(
+      store.notes.length,
+      notesBefore,
+      reason: '⌥ is the lasso modifier; it must never draw',
+    );
+    expect(store.selection, isNotEmpty, reason: 'and it selected what it swept');
+  });
+
   testWidgets('a plain drag with the draw tool still draws', (
     WidgetTester tester,
   ) async {
@@ -542,7 +711,7 @@ void main() {
     expect(store.topKey, isNot(keyBefore), reason: 'and it did scroll');
   });
 
-  testWidgets('a chord only moves the voices that are selected', (
+  testWidgets('the selection picks which voices of a chord the lane moves', (
     WidgetTester tester,
   ) async {
     final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
@@ -564,16 +733,21 @@ void main() {
     final Rect lane = tester.getRect(find.byType(PrVelocityLane));
     final Offset onStem = Offset(lane.left + 62, lane.top + 20);
 
-    // Nothing selected: an ambiguous grab must not flatten the chord.
-    final List<int> before =
-        store.notes.map((SequenceNote n) => n.velocity).toList();
+    // Nothing selected: the visible stem is the whole stack, so the whole
+    // stack follows it. Refusing to act read as the lane being broken.
     await tester.tapAt(onStem);
     await tester.pump();
-    expect(
-      store.notes.map((SequenceNote n) => n.velocity),
-      before,
-      reason: 'an ambiguous stem changes nothing until you say which note',
-    );
+    final Set<int> moved =
+        store.notes.map((SequenceNote n) => n.velocity).toSet();
+    expect(moved.length, 1, reason: 'all three voices landed on one value');
+    expect(moved.single, isNot(12900));
+
+    // Restore the chord, then select one voice: only that one follows.
+    for (final SequenceNote note in store.notes.toList()) {
+      store.setNoteVelocity(note, 12900);
+    }
+    store.clearSelection();
+    await tester.pump();
 
     // Select one voice, and only that one follows the lane.
     final SequenceNote target =
@@ -796,5 +970,70 @@ void main() {
     await tester.pump();
 
     expect(store.notes.single.endTicks, 1920);
+  });
+
+  testWidgets('a selection of notes drags as one block', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..setGrid(GridChoice.all[3]) // 1/16 = 240 ticks
+      ..addNoteAt(0, 84, length: 240)
+      ..addNoteAt(240, 83, length: 240)
+      ..addNoteAt(480, 82, length: 240)
+      ..selectAll();
+    expect(store.selection.length, 3);
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    // Press on one of the three and hold past the tap deadline before moving.
+    // A press that rests before it drags is the normal way to grab a block, and
+    // it is exactly the path where the press used to collapse the selection.
+    final TestGesture drag = await tester.startGesture(
+      Offset(keys.right + 4, keys.top + 7),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await drag.moveBy(const Offset(80, 0));
+    await tester.pump();
+    await drag.up();
+    await tester.pump();
+
+    expect(
+      store.notes.map((SequenceNote n) => n.startTicks).toList()..sort(),
+      <int>[960, 1200, 1440],
+      reason: 'every selected note moved by the same 960 ticks',
+    );
+    expect(store.selection.length, 3, reason: 'and the block stays selected');
+  });
+
+  testWidgets('clicking one note of a selection narrows to it', (
+    WidgetTester tester,
+  ) async {
+    final _FakePianoRollEngineClient client = _FakePianoRollEngineClient();
+    final PianoRollStore store = PianoRollStore(client)..load('inst_keys');
+    store
+      ..addNoteAt(0, 84, length: 240)
+      ..addNoteAt(240, 83, length: 240)
+      ..selectAll();
+
+    await pumpForTest(
+      tester,
+      PianoRollBinding(client: client, store: store),
+      size: const Size(1600, 900),
+    );
+    await tester.pump();
+
+    final Rect keys = tester.getRect(find.byType(PrKeyColumn));
+    await tester.tapAt(Offset(keys.right + 4, keys.top + 7));
+    await tester.pump();
+
+    expect(store.selection.single.key, 84, reason: 'a click that never dragged');
   });
 }

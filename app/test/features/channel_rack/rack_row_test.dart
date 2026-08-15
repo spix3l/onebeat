@@ -28,17 +28,19 @@ const RackToolbarVm _toolbar = RackToolbarVm(
   steps: 16,
 );
 
-/// The border colour of step [index] as rendered — the one part of the cell
-/// that carries three different meanings (playing, lit, at rest).
-Color? _cellBorder(WidgetTester tester, int index) {
+BoxDecoration _cellDecoration(WidgetTester tester, int index) {
   final Finder cells = find.descendant(
     of: find.byType(ObStepGrid),
     matching: find.byType(Container),
   );
   final Container cell = tester.widget(cells.at(index));
-  final BoxDecoration decoration = cell.decoration! as BoxDecoration;
-  return (decoration.border! as Border).top.color;
+  return cell.decoration! as BoxDecoration;
 }
+
+/// The border colour of step [index] as rendered — the one part of the cell
+/// that carries three different meanings (playing, lit, at rest).
+Color? _cellBorder(WidgetTester tester, int index) =>
+    (_cellDecoration(tester, index).border! as Border).top.color;
 
 void main() {
   setUpAll(loadAppFonts);
@@ -274,4 +276,53 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('rest cells band by beat, every four steps', (
+    WidgetTester tester,
+  ) async {
+    final OneBeatTokens tokens = OneBeatTokens.dark();
+    // Sixteen steps, one lit: the banding is a property of the empty ones.
+    final RackRowVm row = RackRowVm(
+      name: 'Kick',
+      type: 'Sampler',
+      color: tokens.color.channelColors[0],
+      vol: 0.8,
+      pan: 0.5,
+      route: 'Master',
+      steps: <StepVm>[
+        for (int i = 0; i < 16; i++)
+          i == 9 ? const StepVm(on: true, velocity: 1) : const StepVm.off(),
+      ],
+    );
+
+    await pumpUi(
+      tester,
+      ObRackRow(vm: row),
+      size: const Size(1200, 200),
+    );
+
+    // Beats 1 and 3 lifted, 2 and 4 recessed — a bar you can count without
+    // counting.
+    for (int step = 0; step < 16; step++) {
+      if (step == 9) continue;
+      expect(
+        _cellDecoration(tester, step).color,
+        (step ~/ 4).isEven
+            ? tokens.color.stepRestLifted
+            : tokens.color.stepRest,
+        reason: 'step ${step + 1} sits on the wrong band',
+      );
+    }
+    expect(
+      tokens.color.stepRestLifted,
+      isNot(tokens.color.stepRest),
+      reason: 'a band you cannot see is not a band',
+    );
+
+    // A lit cell is the accent gradient whatever band it lands on.
+    final BoxDecoration lit = _cellDecoration(tester, 9);
+    expect(lit.color, isNull);
+    expect(lit.gradient, isNotNull);
+  });
+
 }

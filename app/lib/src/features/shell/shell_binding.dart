@@ -23,6 +23,7 @@ import '../export/export_binding.dart';
 import '../mixer/mixer_binding.dart';
 import '../piano_roll/piano_roll_binding.dart';
 import '../playlist/playlist_binding.dart';
+import '../playlist/playlist_store.dart';
 import '../preferences/preferences_binding.dart';
 import 'rail_glyphs.dart';
 import 'shell_screen.dart';
@@ -68,10 +69,10 @@ class _ShellBindingState extends State<ShellBinding>
   final Map<String, bool> _browserExpanded = <String, bool>{};
   String? _samplePackMessage;
   AudioFileDrop? _audioFileDrop;
+  PlaylistInsertItem? _lastPlaylistItem;
   int _framesSinceBrowserRefresh = 0;
   int _builtinsGeneration = -1;
   List<PluginListing> _builtins = const <PluginListing>[];
-  bool _demoSeeded = false;
 
   // The channel rack is the composition home; the arrangement is secondary.
   // Piano roll is not a rail destination — it is opened from the rack or
@@ -117,31 +118,6 @@ class _ShellBindingState extends State<ShellBinding>
     }
     _rootFocus.dispose();
     super.dispose();
-  }
-
-  /// Adds one default channel (the bundled stock instrument) to an empty
-  /// project, so the rack never opens blank (FR-UX-14). It does not seed notes
-  /// or start playback — the project opens silent and ready.
-  void _maybeSeedDemo() {
-    if (_demoSeeded) return;
-    final EngineClient client = _controller.client;
-    if (client.readInstruments().isNotEmpty) {
-      _demoSeeded = true;
-      return;
-    }
-    final PluginScanStatus status = client.readPluginScanStatus();
-    if (status.isScanning || status.pluginCount <= 0) return;
-    _demoSeeded = true;
-
-    final PluginListing? piano = client.firstUsablePlugin();
-    if (piano == null) return;
-    try {
-      client.addPluginByPath(piano.path, piano.id);
-    } catch (_) {
-      // Hosting failed (missing helper, incompatible plug-in). Leave the rack
-      // empty rather than crashing the shell.
-    }
-    _browserNodes = _buildBrowserNodes();
   }
 
   List<PluginListing> _readBuiltins() {
@@ -256,10 +232,15 @@ class _ShellBindingState extends State<ShellBinding>
           color: _resolveColor(p.color, 0),
           badge: p.usageCount > 0 ? '${p.usageCount}×' : 'piano roll',
           expanded: _browserExpanded['pattern:${p.id}'] ?? false,
+          dragData: PlaylistInsertItem(id: 'pattern:${p.id}', patternId: p.id),
         ),
       );
     }
-    if (project.isNotEmpty) {
+    // Patterns are arrangement sources, so keep this section scoped to the
+    // Playlist. The rack and piano roll already expose the current pattern in
+    // their own selectors; repeating it in the browser made the browser look
+    // like a project tree on every workspace.
+    if (_activeRailIndex == 1 && project.isNotEmpty) {
       nodes.add(
         BrowserFolderVm(
           id: 'current-project',
@@ -374,23 +355,33 @@ class _ShellBindingState extends State<ShellBinding>
 
   void _onBrowserTap(String id) {
     final BrowserNodeVm? node = _findBrowserNode(id);
-    if (node is BrowserSampleVm && node.previewPath != null) {
-      try {
-        _controller.previewSample(node.previewPath!);
-      } catch (_) {
-        // A preview failure must not interrupt browser navigation or dragging.
+    if (node is BrowserSampleVm) {
+      if (node.dragData case final SampleAsset asset) {
+        _lastPlaylistItem = PlaylistInsertItem(
+          id: asset.id,
+          audioPath: asset.path,
+        );
       }
+      if (node.previewPath != null) {
+        try {
+          _controller.previewSample(node.previewPath!);
+        } catch (_) {
+          // A preview failure must not interrupt browser navigation or dragging.
+        }
+      }
+      setState(() {});
       return;
     }
     if (id.startsWith('pattern:')) {
-      _controller.client.selectPattern(id.substring('pattern:'.length));
+      final String patternId = id.substring('pattern:'.length);
+      _controller.client.selectPattern(patternId);
+      _lastPlaylistItem = PlaylistInsertItem(id: id, patternId: patternId);
       setState(() {});
       _browserNodes = _buildBrowserNodes();
     }
   }
 
   void _onControllerChanged() {
-    _maybeSeedDemo();
     if (++_framesSinceBrowserRefresh >= 20) {
       _framesSinceBrowserRefresh = 0;
       _browserNodes = _buildBrowserNodes();
@@ -587,6 +578,7 @@ class _ShellBindingState extends State<ShellBinding>
                   onOpenPattern: () => _openPianoRoll(),
                   onClosePianoRoll: _closePianoRoll,
                   externalAudioDrop: _audioFileDrop,
+                  lastPlaylistItem: _lastPlaylistItem,
                 ),
                 onRailSelect: _onRailSelect,
                 onMenuTap: _onMenuTap,
@@ -633,6 +625,7 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.onOpenPattern,
     required this.onClosePianoRoll,
     this.externalAudioDrop,
+    this.lastPlaylistItem,
   });
 
   final int activeRailIndex;
@@ -642,6 +635,7 @@ class _WorkspaceSlot extends StatelessWidget {
   final VoidCallback onOpenPattern;
   final VoidCallback onClosePianoRoll;
   final AudioFileDrop? externalAudioDrop;
+  final PlaylistInsertItem? lastPlaylistItem;
 
   @override
   Widget build(BuildContext context) {
@@ -661,6 +655,7 @@ class _WorkspaceSlot extends StatelessWidget {
           onOpenPattern();
         },
         externalAudioDrop: externalAudioDrop,
+        lastClickedItem: lastPlaylistItem,
       ),
       2 => MixerBinding(
         client: coreController.client,

@@ -4,6 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../ui_kit/button.dart';
+import '../../ui_kit/empty_state.dart';
+import '../../ui_kit/kit_glyphs.dart';
+import '../../ui_kit/prose.dart';
 import 'channel_inspector.dart';
 import 'channel_rack_screen_vm.dart';
 import 'rack_row.dart';
@@ -20,7 +24,6 @@ class ChannelRackScreen extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     this.onAddChannel,
-    this.onDoubleTap,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
     this.onAddInstrument,
@@ -56,7 +59,6 @@ class ChannelRackScreen extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
-  final VoidCallback? onDoubleTap;
   final void Function(int rowIndex, TapDownDetails details)?
   onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
@@ -115,46 +117,52 @@ class ChannelRackScreen extends StatelessWidget {
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
                 final OneBeatTokens currentTokens = OneBeatTheme.of(context);
-                final double contentWidth = _rackContentWidth(
-                  currentTokens,
-                  vm.stepCount,
+                final double chrome = _rackChromeWidth(currentTokens);
+                // Republished for the grid below, so the number strip, the
+                // cells, their painter and their hit-test all read one size.
+                final OneBeatTokens rackTokens = currentTokens.withSize(
+                  fitRackSteps(
+                    currentTokens.size,
+                    vm.stepCount,
+                    constraints.maxWidth - chrome,
+                  ),
                 );
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: math.max(constraints.maxWidth, contentWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        ObRackHeader(stepCount: vm.stepCount),
-                        Expanded(
-                          child: _RackRowsScrollArea(
-                            rows: vm.rows,
-                            playingStep: vm.playingStep,
-                            playingTick: vm.playingTick,
-                            footerLead: vm.footerLead,
-                            footerAction: vm.footerAction,
-                            footerTrail: vm.footerTrail,
-                            footerShortcut: vm.footerShortcut,
-                            onSelectRow: onSelectRow,
-                            onTogglePower: onTogglePower,
-                            onStepTap: onStepTap,
-                            onVolChanged: onVolChanged,
-                            onPanChanged: onPanChanged,
-                            onRouteTap: onRouteTap,
-                            onAddChannel: onAddChannel,
-                            onDoubleTap: onDoubleTap,
-                            onRowSecondaryTapDown: onRowSecondaryTapDown,
-                            onDropInstrument: onDropInstrument,
-                            onAddInstrument: onAddInstrument,
-                            onReorderRow: onReorderRow,
-                            onPointerDownStep: onPointerDownStep,
-                            onPointerMoveStep: onPointerMoveStep,
-                            onPointerUpStep: onPointerUpStep,
-                            onPointerCancelStep: onPointerCancelStep,
+                final double contentWidth =
+                    chrome + rackGridWidth(rackTokens.size, vm.stepCount);
+                return OneBeatTheme(
+                  tokens: rackTokens,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: math.max(constraints.maxWidth, contentWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          ObRackHeader(stepCount: vm.stepCount),
+                          Expanded(
+                            child: _RackRowsScrollArea(
+                              rows: vm.rows,
+                              playingStep: vm.playingStep,
+                              playingTick: vm.playingTick,
+                              onSelectRow: onSelectRow,
+                              onTogglePower: onTogglePower,
+                              onStepTap: onStepTap,
+                              onVolChanged: onVolChanged,
+                              onPanChanged: onPanChanged,
+                              onRouteTap: onRouteTap,
+                              onAddChannel: onAddChannel,
+                              onRowSecondaryTapDown: onRowSecondaryTapDown,
+                              onDropInstrument: onDropInstrument,
+                              onAddInstrument: onAddInstrument,
+                              onReorderRow: onReorderRow,
+                              onPointerDownStep: onPointerDownStep,
+                              onPointerMoveStep: onPointerMoveStep,
+                              onPointerUpStep: onPointerUpStep,
+                              onPointerCancelStep: onPointerCancelStep,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -179,15 +187,13 @@ class ChannelRackScreen extends StatelessWidget {
   }
 }
 
-double _rackContentWidth(OneBeatTokens tokens, int stepCount) {
+/// Everything in a lane that is not the step grid: the power well and identity
+/// block on the left, the knobs and routing chip on the right.
+///
+/// Fixed, whatever the step count — which is what makes it the budget the grid
+/// has to fit inside.
+double _rackChromeWidth(OneBeatTokens tokens) {
   final SizeTokens size = tokens.size;
-  double gridWidth = 0;
-  for (int index = 0; index < stepCount; index++) {
-    if (index > 0) {
-      gridWidth += index % 4 == 0 ? size.rackStepGroupGap : size.rackStepGap;
-    }
-    gridWidth += size.rackStepCell;
-  }
   return tokens.spacing.md +
       size.rackSelectedEdgeWidth +
       size.rackPowerSize +
@@ -195,7 +201,6 @@ double _rackContentWidth(OneBeatTokens tokens, int stepCount) {
       size.rackColorChipSize +
       tokens.spacing.md +
       size.rackNameWidth +
-      gridWidth +
       tokens.spacing.md +
       size.knobSmall +
       tokens.spacing.sm +
@@ -203,6 +208,61 @@ double _rackContentWidth(OneBeatTokens tokens, int stepCount) {
       tokens.spacing.sm +
       size.rackRouteChipWidth +
       tokens.spacing.md;
+}
+
+/// The smallest step cell the rack will draw.
+///
+/// Below this a cell stops being a target you can hit and starts being a
+/// texture, and scrolling is the better answer.
+const double _minRackStepCell = 16;
+
+/// Step sizes that fit [stepCount] cells into [available], never larger than
+/// the design's own.
+///
+/// A 32-step pattern at the full 30px pitch is wider than most windows, and the
+/// horizontal scroll that answered it hid half the bar — you cannot write a
+/// rhythm you have to scroll to see. So the grid gives up pitch before it gives
+/// up being whole, down to [_minRackStepCell]; past that the scroll returns.
+SizeTokens fitRackSteps(SizeTokens base, int stepCount, double available) {
+  if (stepCount <= 0 || available <= 0) return base;
+  if (rackGridWidth(base, stepCount) <= available) return base;
+  // Walk down a pixel at a time and take the first size that fits. A whole
+  // number of pixels per cell is what keeps the cells crisp and the gaps even;
+  // solving for a fractional cell and rounding afterwards does neither.
+  for (double cell = base.rackStepCell - 1; cell >= _minRackStepCell; cell--) {
+    final SizeTokens candidate = _RackStepSizes(base, cell);
+    if (rackGridWidth(candidate, stepCount) <= available) return candidate;
+  }
+  return _RackStepSizes(base, _minRackStepCell);
+}
+
+/// [SizeTokens] with the step grid rescaled — the gaps follow the cell, so the
+/// beat grouping stays legible at every size.
+class _RackStepSizes extends SizeTokens {
+  const _RackStepSizes(this._base, this._cell);
+
+  final SizeTokens _base;
+  final double _cell;
+
+  double get _scale => _cell / _base.rackStepCell;
+
+  @override
+  double get rackStepCell => _cell;
+
+  @override
+  double get rackStepGap {
+    final double scaled = (_base.rackStepGap * _scale).floorToDouble();
+    return scaled < 2 ? 2 : scaled;
+  }
+
+  @override
+  double get rackStepGroupGap {
+    final double scaled = (_base.rackStepGroupGap * _scale).floorToDouble();
+    // Always visibly wider than the plain gap: the group break is the only
+    // thing telling you where the beat is.
+    final double floor = rackStepGap + 2;
+    return scaled < floor ? floor : scaled;
+  }
 }
 
 class _ChannelRackHeader extends StatelessWidget {
@@ -401,10 +461,6 @@ class _RackRowsScrollArea extends StatelessWidget {
     required this.rows,
     required this.playingStep,
     required this.playingTick,
-    required this.footerLead,
-    required this.footerAction,
-    required this.footerTrail,
-    required this.footerShortcut,
     this.onSelectRow,
     this.onTogglePower,
     this.onStepTap,
@@ -412,7 +468,6 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     this.onAddChannel,
-    this.onDoubleTap,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
     this.onAddInstrument,
@@ -426,10 +481,6 @@ class _RackRowsScrollArea extends StatelessWidget {
   final List<RackRowVm> rows;
   final int? playingStep;
   final int? playingTick;
-  final String footerLead;
-  final String footerAction;
-  final String footerTrail;
-  final String footerShortcut;
   final ValueChanged<int>? onSelectRow;
   final ValueChanged<int>? onTogglePower;
   final void Function(int rowIndex, int stepIndex)? onStepTap;
@@ -437,7 +488,6 @@ class _RackRowsScrollArea extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final VoidCallback? onAddChannel;
-  final VoidCallback? onDoubleTap;
   final void Function(int rowIndex, TapDownDetails details)?
   onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
@@ -449,6 +499,16 @@ class _RackRowsScrollArea extends StatelessWidget {
   onPointerMoveStep;
   final VoidCallback? onPointerUpStep;
   final VoidCallback? onPointerCancelStep;
+
+  static const ObEmptyStateVm _emptyVm = ObEmptyStateVm(
+    icon: ObKitGlyphKind.note,
+    heading: 'Add your first instrument',
+    body: <ObProseRun>[
+      ObProseRun(
+        'Drop a sample from the browser, or add an empty channel to start building Pattern 1.',
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -465,12 +525,28 @@ class _RackRowsScrollArea extends StatelessWidget {
         List<Object?> candidates,
         List<Object?> rejected,
       ) {
+        if (rows.isEmpty) {
+          return Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(tokens.spacing.lg),
+              child: ObEmptyState(
+                vm: _emptyVm,
+                actions: <Widget>[
+                  ObButton(
+                    label: 'Add channel',
+                    icon: ObKitGlyphKind.plus,
+                    tone: ObButtonTone.primary,
+                    onTap: onAddChannel,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // The rows own the scroll. The footer stays attached to the bottom
-            // of the rack, matching the reference instead of travelling away
-            // after the last channel.
             // A reorderable list rather than a plain Column: the lanes are the
             // channel order, and the order is data the user edits. This list
             // adds no drag handles of its own — the name block opts in via
@@ -503,18 +579,6 @@ class _RackRowsScrollArea extends StatelessWidget {
                       onPointerUpStep: onPointerUpStep,
                       onPointerCancelStep: onPointerCancelStep,
                     ),
-              ),
-            ),
-            SizedBox(height: tokens.spacing.md),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
-              child: ObRackFooter(
-                lead: footerLead,
-                action: footerAction,
-                trail: footerTrail,
-                shortcut: footerShortcut,
-                onAddChannel: onAddChannel,
-                onDoubleTap: onDoubleTap,
               ),
             ),
           ],

@@ -292,6 +292,9 @@ class ObStepGrid extends StatelessWidget {
         _StepCell(
           step: steps[i],
           playing: playingStep == i,
+          // The band turns over every group, so a bar reads light-dark-light-
+          // dark and the downbeat is always the lifted one.
+          lifted: (i ~/ groupSize).isEven,
           // A binding that paints from pointer events must not also run the
           // ordinary tap toggle, or one click would add and remove the step.
           onTap: painting || onStepTap == null
@@ -361,7 +364,7 @@ class RackPianoPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return SizedBox(
-      width: _rackGridWidth(tokens.size, stepCount),
+      width: rackGridWidth(tokens.size, stepCount),
       height: tokens.size.rackStepCell,
       child: CustomPaint(
         painter: _RackPianoPreviewPainter(
@@ -377,9 +380,9 @@ class RackPianoPreview extends StatelessWidget {
   }
 }
 
-/// The width of the step grid for [count] steps, so the preview and the grid it
-/// replaces occupy identical space.
-double _rackGridWidth(SizeTokens size, int count) {
+/// The width of the step grid for [count] steps, so the preview, the number
+/// strip above it and the grid itself all occupy identical space.
+double rackGridWidth(SizeTokens size, int count) {
   double width = 0;
   for (int i = 0; i < count; i++) {
     if (i > 0) {
@@ -466,10 +469,20 @@ class _RackPianoPreviewPainter extends CustomPainter {
 }
 
 class _StepCell extends StatelessWidget {
-  const _StepCell({required this.step, required this.playing, this.onTap});
+  const _StepCell({
+    required this.step,
+    required this.playing,
+    required this.lifted,
+    this.onTap,
+  });
 
   final StepVm step;
   final bool playing;
+
+  /// Which of the two beat bands this cell sits on. Only an unlit cell shows
+  /// it — a lit one is already the loudest thing in the lane.
+  final bool lifted;
+
   final VoidCallback? onTap;
 
   @override
@@ -487,7 +500,9 @@ class _StepCell extends StatelessWidget {
           width: side,
           height: side,
           decoration: BoxDecoration(
-            color: step.on ? null : color.surfaceDeep,
+            color: step.on
+                ? null
+                : (lifted ? color.stepRestLifted : color.stepRest),
             gradient:
                 step.on
                     ? LinearGradient(
@@ -496,7 +511,12 @@ class _StepCell extends StatelessWidget {
                       colors: color.stepGradient(step.velocity),
                     )
                     : null,
-            borderRadius: BorderRadius.all(tokens.radius.lg),
+            // The corner follows the cell. r8 on the design's 30px square is a
+            // rounded square; the same 8 on a shrunk cell is a circle, and a
+            // grid of circles stops reading as a row of steps.
+            borderRadius: BorderRadius.circular(
+              math.min(tokens.radius.lg.x, side * 0.27),
+            ),
             border: Border.all(
               // The playing column outlines every cell in it, lit or not —
               // that is what makes it read as a column rather than as a

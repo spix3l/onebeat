@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/pattern_store.dart';
 import '../../engine/engine_client.dart';
+import 'playlist_selection.dart';
 
 enum ClipDragKind { none, move, resizeEnd, offset, marquee }
 
@@ -30,6 +31,21 @@ class GridChoice {
 const int ticksPerQuarter = GridChoice.ticksPerQuarter;
 const int ticksPerBar = GridChoice.ticksPerBar;
 
+@immutable
+class PlaylistInsertItem {
+  const PlaylistInsertItem({
+    required this.id,
+    this.patternId = '',
+    this.audioPath = '',
+  });
+
+  final String id;
+  final String patternId;
+  final String audioPath;
+
+  bool get isAudio => audioPath.isNotEmpty;
+}
+
 typedef ArrangementStore = PlaylistStore;
 typedef ArrangementClipDragKind = ClipDragKind;
 
@@ -47,12 +63,15 @@ class PlaylistStore extends ChangeNotifier {
   final Set<String> selectedClipIds = <String>{};
   String selectedLaneId = '';
   String selectedPatternId = '';
+  PlaylistInsertItem? lastClickedItem;
 
   GridChoice snap = const GridChoice('1 bar', ticksPerBar);
   double horizontalZoom = 1.0;
   double scrollTicks = 0.0;
+  double scrollLanes = 0.0;
 
   ClipDragKind dragKind = ClipDragKind.none;
+  PlaylistMarquee? marquee;
   bool _gestureOpen = false;
   int _dragDelta = 0;
   String _dragLaneId = '';
@@ -79,11 +98,12 @@ class PlaylistStore extends ChangeNotifier {
     }
 
     if (selectedPatternId.isEmpty && patterns.isNotEmpty) {
-      final PatternSummary? current =
-          patterns.cast<PatternSummary?>().firstWhere(
-                (PatternSummary? p) => p?.isCurrent ?? false,
-                orElse: () => patterns.first,
-              );
+      final PatternSummary? current = patterns
+          .cast<PatternSummary?>()
+          .firstWhere(
+            (PatternSummary? p) => p?.isCurrent ?? false,
+            orElse: () => patterns.first,
+          );
       selectedPatternId = current?.id ?? '';
     }
 
@@ -141,9 +161,18 @@ class PlaylistStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void panTo(double ticks) {
+  void panTo(double ticks, [double? lanes]) {
     scrollTicks = ticks < 0 ? 0 : ticks;
+    if (lanes != null) scrollLanes = lanes < 0 ? 0 : lanes;
     notifyListeners();
+  }
+
+  /// Pans the viewport without imposing a content boundary. The playlist is an
+  /// arrangement surface, not a document with a meaningful last page: a wheel
+  /// gesture may reveal a future bar or a future lane before anything exists
+  /// there.
+  void panBy({double deltaTicks = 0, double deltaLanes = 0}) {
+    panTo(scrollTicks + deltaTicks, scrollLanes + deltaLanes);
   }
 
   // ----- selection ----------------------------------------------------------
@@ -249,16 +278,74 @@ class PlaylistStore extends ChangeNotifier {
 
   // ----- clips --------------------------------------------------------------
 
-  void placeCurrentPattern(String laneId, int startTicks) {
-    PatternSummary? pattern;
-    if (selectedPatternId.isNotEmpty) {
-      pattern = patterns.cast<PatternSummary?>().firstWhere(
-            (PatternSummary? p) => p?.id == selectedPatternId,
-            orElse: () => null,
-          );
+  void setLastClickedItem(PlaylistInsertItem item) {
+    lastClickedItem = item;
+    notifyListeners();
+  }
+
+  /// Places an explicit browser item at a playlist location. Patterns and
+  /// audio files use the same drop target; only the engine command differs.
+  void placeItem(PlaylistInsertItem item, String laneId, int startTicks) {
+    if (!item.isAudio) {
+      if (item.patternId.isNotEmpty) {
+        selectedPatternId = item.patternId;
+        try {
+          _client.selectPattern(item.patternId);
+        } catch (_) {
+          // A presentation fake may not expose pattern selection.
+        }
+      }
+      placeCurrentPattern(laneId, startTicks);
+      return;
     }
-    pattern ??= patterns.isNotEmpty ? patterns.first : null;
+    final int start = snapTick(startTicks);
+    try {
+      _client.addAudioClip(laneId, item.audioPath, start);
+    } catch (_) {
+      return;
+    }
+    refresh();
+    final ArrangementClip? added = clips.cast<ArrangementClip?>().firstWhere(
+      (ArrangementClip? clip) =>
+          clip?.isAudio == true &&
+          clip?.laneId == laneId &&
+          clip?.startTicks == start,
+      orElse: () => null,
+    );
+    if (added != null) selectClip(added.id);
+  }
+
+  /// Places the last item chosen in the browser when empty playlist space is
+  /// clicked. Drag-and-drop uses [placeItem] directly so it does not change the
+  /// browser's click selection as a side effect.
+  void placeLastClickedItem(String laneId, int startTicks) {
+    final PlaylistInsertItem? item = lastClickedItem;
+    if (item == null) {
+      placeCurrentPattern(laneId, startTicks);
+      return;
+    }
+    placeItem(item, laneId, startTicks);
+  }
+
+  void placeCurrentPattern(String laneId, int startTicks) {
+    // Read the current flag at insertion time. The browser can change the
+    // selected pattern without rebuilding this binding's store, and the next
+    // empty-slot click must use that last browser choice rather than whatever
+    // pattern a previously selected clip happened to reference.
+    final List<PatternSummary> available = _client.readPatterns();
+    PatternSummary? pattern = available.cast<PatternSummary?>().firstWhere(
+      (PatternSummary? candidate) => candidate?.isCurrent ?? false,
+      orElse: () => null,
+    );
+    if (pattern == null && selectedPatternId.isNotEmpty) {
+      pattern = available.cast<PatternSummary?>().firstWhere(
+        (PatternSummary? candidate) => candidate?.id == selectedPatternId,
+        orElse: () => null,
+      );
+    }
+    pattern ??= available.isNotEmpty ? available.first : null;
     if (pattern == null) return;
+    selectedPatternId = pattern.id;
 
     final int start = snapTick(startTicks);
     _client.addClip(
@@ -340,6 +427,48 @@ class PlaylistStore extends ChangeNotifier {
     refresh();
   }
 
+  // ----- selection marquee --------------------------------------------------
+
+  void beginMarquee(int tick, int lane) {
+    dragKind = ClipDragKind.marquee;
+    marquee = PlaylistMarquee(tick, lane, tick, lane);
+    notifyListeners();
+  }
+
+  void updateMarquee(int tick, int lane) {
+    final PlaylistMarquee? current = marquee;
+    if (dragKind != ClipDragKind.marquee || current == null) return;
+    marquee = PlaylistMarquee(current.startTick, current.startLane, tick, lane);
+    final Map<String, int> laneIndexes = <String, int>{
+      for (int index = 0; index < lanes.length; index++) lanes[index].id: index,
+    };
+    selectedClipIds
+      ..clear()
+      ..addAll(
+        clips
+            .where(
+              (ArrangementClip clip) =>
+                  marquee!.contains(clip, laneIndexes[clip.laneId] ?? 0),
+            )
+            .map((ArrangementClip clip) => clip.id),
+      );
+    notifyListeners();
+  }
+
+  void endMarquee() {
+    if (dragKind != ClipDragKind.marquee) return;
+    dragKind = ClipDragKind.none;
+    marquee = null;
+    notifyListeners();
+  }
+
+  void cancelMarquee() {
+    if (dragKind != ClipDragKind.marquee) return;
+    dragKind = ClipDragKind.none;
+    marquee = null;
+    notifyListeners();
+  }
+
   // ----- drags --------------------------------------------------------------
 
   void beginClipDrag(ClipDragKind kind, {String name = 'Move clip'}) {
@@ -360,11 +489,7 @@ class PlaylistStore extends ChangeNotifier {
       final ArrangementClip? clip = clipById(id);
       if (clip == null) continue;
       final int start = clip.startTicks + step;
-      _client.moveClip(
-        id,
-        laneId: laneId,
-        startTicks: start < 0 ? 0 : start,
-      );
+      _client.moveClip(id, laneId: laneId, startTicks: start < 0 ? 0 : start);
     }
     _dragDelta = deltaTicks;
     _dragLaneId = laneId;
@@ -389,6 +514,7 @@ class PlaylistStore extends ChangeNotifier {
   void endClipDrag() {
     if (dragKind == ClipDragKind.none) return;
     dragKind = ClipDragKind.none;
+    marquee = null;
     if (_gestureOpen) {
       _client.commitGesture();
       _gestureOpen = false;
@@ -401,6 +527,7 @@ class PlaylistStore extends ChangeNotifier {
   void cancelClipDrag() {
     if (dragKind == ClipDragKind.none) return;
     dragKind = ClipDragKind.none;
+    marquee = null;
     if (_gestureOpen) {
       _client.abortGesture();
       _gestureOpen = false;

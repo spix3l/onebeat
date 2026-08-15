@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/design/tokens.dart';
 import 'package:onebeat/src/features/browser/browser_panel.dart';
+import 'package:onebeat/src/features/playlist/playlist_store.dart';
 import 'package:onebeat/src/ui_kit/search_field.dart';
 
 import '../../support/ui_harness.dart';
@@ -252,6 +253,36 @@ void main() {
     expect(find.text('Drums'), findsOneWidget);
     await tester.tap(find.text('Add packs'));
     expect(addFolderClicked, isTrue);
+  });
+
+  testWidgets('pattern rows with a payload can be dragged', (
+    WidgetTester tester,
+  ) async {
+    const PlaylistInsertItem item = PlaylistInsertItem(
+      id: 'pattern:main',
+      patternId: 'main',
+    );
+    await pumpUi(
+      tester,
+      const ObBrowserPanel(
+        vm: ObBrowserPanelVm(
+          nodes: <BrowserNodeVm>[
+            BrowserPatternVm(
+              id: 'main',
+              name: 'Main',
+              color: Color(0xfff05a47),
+              dragData: item,
+            ),
+          ],
+        ),
+      ),
+      size: _panel,
+    );
+
+    final Draggable<Object> draggable = tester.widget(
+      find.byType(Draggable<Object>),
+    );
+    expect(draggable.data, same(item));
   });
 
   testWidgets('sample rows carry a waveform mark', (WidgetTester tester) async {
