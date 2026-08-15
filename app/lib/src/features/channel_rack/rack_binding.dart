@@ -84,7 +84,6 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   String? _deletePatternId;
   String? _renameInstrumentId;
   String? _renamePatternId;
-  final Set<String> _soloedInstrumentIds = <String>{};
 
   @override
   void initState() {
@@ -291,7 +290,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         panText: _panText(selectedId, selectedInst),
         route: 'M1 · Music',
         muted: selectedInst?.muted ?? false,
-        soloed: _soloedInstrumentIds.contains(selectedId),
+        soloed: _store.instrumentFor(selectedId)?.soloed ?? false,
         // The row itself can open a sample's built-in editor, but the
         // inspector's hosted-plugin action is reserved for real plug-ins.
         hostsPlugin:
@@ -524,13 +523,10 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   /// with mixer-track audio gates (v0.4); until then this is UI state so the
   /// channel rack and mixer can draw the choice without faking audio.
   void _toggleSolo(String instrumentId) {
-    setState(() {
-      if (_soloedInstrumentIds.contains(instrumentId)) {
-        _soloedInstrumentIds.remove(instrumentId);
-      } else {
-        _soloedInstrumentIds.add(instrumentId);
-      }
-    });
+    final ProjectInstrument? instrument = _store.instrumentFor(instrumentId);
+    if (instrument == null) return;
+    widget.client.setInstrumentSoloed(instrumentId, soloed: !instrument.soloed);
+    _store.refresh();
   }
 
   void _onAddInstrument(Object data) {
@@ -635,7 +631,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final bool hostsPlugin = inst != null && inst.pluginId.isNotEmpty;
     final bool isSample = inst?.pluginId == _kSamplePluginId;
 
-    final bool soloed = _soloedInstrumentIds.contains(instrumentId);
+    final bool soloed = _store.instrumentFor(instrumentId)?.soloed ?? false;
 
     // The channel rows, with their actions in the same order. The flat index
     // the menu reports is this list, then the step fills, then delete.

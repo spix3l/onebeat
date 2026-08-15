@@ -18,6 +18,7 @@ class PluginBinding extends StatefulWidget {
     required this.onClose,
     this.pluginName = 'Synth',
     this.trackName = 'Soft Keys',
+    this.sampleName,
     this.isBypassed = false,
     this.parameters = const <HostedParameter>[],
     this.onDragUpdate,
@@ -28,6 +29,7 @@ class PluginBinding extends StatefulWidget {
   final String trackId;
   final String pluginName;
   final String trackName;
+  final String? sampleName;
   final bool isBypassed;
   final List<HostedParameter> parameters;
   final ValueChanged<Offset>? onDragUpdate;
@@ -40,6 +42,8 @@ class PluginBinding extends StatefulWidget {
 class _PluginBindingState extends State<PluginBinding> {
   late bool _bypassed;
   late List<HostedParameter> _parameters;
+  bool _samplerReverse = false;
+  final Map<String, double> _stockFallbackValues = <String, double>{};
 
   @override
   void initState() {
@@ -60,15 +64,15 @@ class _PluginBindingState extends State<PluginBinding> {
         for (final HostedParameter parameter in _parameters)
           parameter.id == paramId
               ? HostedParameter(
-                  id: parameter.id,
-                  name: parameter.name,
-                  module: parameter.module,
-                  display: parameter.display,
-                  value: value,
-                  minimum: parameter.minimum,
-                  maximum: parameter.maximum,
-                  defaultValue: parameter.defaultValue,
-                )
+                id: parameter.id,
+                name: parameter.name,
+                module: parameter.module,
+                display: parameter.display,
+                value: value,
+                minimum: parameter.minimum,
+                maximum: parameter.maximum,
+                defaultValue: parameter.defaultValue,
+              )
               : parameter,
       ];
     });
@@ -87,6 +91,8 @@ class _PluginBindingState extends State<PluginBinding> {
   }
 
   double _stockValue(String label, double fallback) {
+    final double? local = _stockFallbackValues[label];
+    if (local != null) return local;
     final HostedParameter? parameter = _stockParameter(label);
     if (parameter == null) return fallback;
     final double span = parameter.maximum - parameter.minimum;
@@ -95,7 +101,10 @@ class _PluginBindingState extends State<PluginBinding> {
 
   void _onStockChanged(String label, double value) {
     final HostedParameter? parameter = _stockParameter(label);
-    if (parameter == null) return;
+    if (parameter == null) {
+      setState(() => _stockFallbackValues[label] = value);
+      return;
+    }
     final double next = parameter.minimum + value.clamp(0.0, 1.0) * (parameter.maximum - parameter.minimum);
     _onParamChanged(parameter.id, next);
   }
@@ -319,32 +328,32 @@ class _PluginBindingState extends State<PluginBinding> {
       );
     } else if (lower.contains('sampler')) {
       editorContent = SamplerStockEditor(
+        sampleName: widget.sampleName,
         pitch: _stockValue('pitch', 0.5),
         startOffset: _stockValue('start', 0.0),
+        attack: _stockValue('attack', 0.0),
+        decay: _stockValue('decay', 0.25),
+        sustain: _stockValue('sustain', 1.0),
+        release: _stockValue('release', 0.25),
+        reverse: _samplerReverse,
         onPitchChanged: (double value) => _onStockChanged('pitch', value),
         onStartOffsetChanged: (double value) => _onStockChanged('start', value),
+        onAttackChanged: (double value) => _onStockChanged('attack', value),
+        onDecayChanged: (double value) => _onStockChanged('decay', value),
+        onSustainChanged: (double value) => _onStockChanged('sustain', value),
+        onReleaseChanged: (double value) => _onStockChanged('release', value),
+        onReverseToggle: () => setState(() => _samplerReverse = !_samplerReverse),
       );
     } else {
-      editorContent = GenericParamEditor(
-        parameters: _parameters,
-        onParameterChanged: _onParamChanged,
-      );
+      editorContent = GenericParamEditor(parameters: _parameters, onParameterChanged: _onParamChanged);
     }
 
     final ObFloatingWindowVm windowVm = ObFloatingWindowVm(
       title: widget.pluginName,
       subtitle: '${widget.trackName} · ${_bypassed ? "BYPASSED" : "ACTIVE"}',
       actions: <ObWindowAction>[
-        ObWindowAction(
-          icon: ObKitGlyphKind.waveform,
-          onTap: _onToggleBypass,
-          tooltip: _bypassed ? 'Engage' : 'Bypass',
-        ),
-        ObWindowAction(
-          icon: ObKitGlyphKind.close,
-          onTap: widget.onClose,
-          tooltip: 'Close window',
-        ),
+        ObWindowAction(icon: ObKitGlyphKind.waveform, onTap: _onToggleBypass, tooltip: _bypassed ? 'Engage' : 'Bypass'),
+        ObWindowAction(icon: ObKitGlyphKind.close, onTap: widget.onClose, tooltip: 'Close window'),
       ],
     );
 

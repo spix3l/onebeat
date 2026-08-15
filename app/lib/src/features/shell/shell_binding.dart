@@ -100,11 +100,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     super.initState();
     _controller =
         widget.controller ??
-        core.EngineController(
-          client: widget.client,
-          vsync: this,
-          motion: OneBeatTokens.dark().motion,
-        );
+        core.EngineController(client: widget.client, vsync: this, motion: OneBeatTokens.dark().motion);
     _controller.addListener(_onControllerChanged);
     // The controller's client, not the widget's: when a test supplies its own
     // controller those can differ, and the project must be the one the rest of
@@ -115,16 +111,11 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     FocusPolicy.registerShell(_rootFocus);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      stdout.writeln(
-        'onebeat: shell usable in ${startupStopwatch.elapsedMilliseconds} ms',
-      );
+      stdout.writeln('onebeat: shell usable in ${startupStopwatch.elapsedMilliseconds} ms');
     });
 
     _browserNodes = _buildBrowserNodes();
-    _samplePackPlatform.setDropHandler(
-      onFolders: _onFoldersDropped,
-      onAudioFiles: _onAudioFilesDropped,
-    );
+    _samplePackPlatform.setDropHandler(onFolders: _onFoldersDropped, onAudioFiles: _onAudioFilesDropped);
     unawaited(_restoreBrowserExpansion());
     unawaited(_restoreSamplePacks());
   }
@@ -199,8 +190,9 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     if (!mounted) return false;
     if (pack == null) {
       setState(
-        () => _samplePackMessage =
-            'That folder has no supported audio files. Add a folder containing at least one WAV file.',
+        () =>
+            _samplePackMessage =
+                'That folder has no supported audio files. Add a folder containing at least one WAV file.',
       );
       return false;
     }
@@ -217,9 +209,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       _browserNodes = _buildBrowserNodes();
     });
     if (persist) {
-      await _samplePackPlatform.saveFolders(
-        _samplePacks.map((SamplePack item) => item.path),
-      );
+      await _samplePackPlatform.saveFolders(_samplePacks.map((SamplePack item) => item.path));
     }
     return true;
   }
@@ -363,11 +353,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       return;
     }
     _browserNodes = _buildBrowserNodes();
-    unawaited(
-      _samplePackPlatform.saveBrowserExpansion(
-        Map<String, bool>.of(_browserExpanded),
-      ),
-    );
+    unawaited(_samplePackPlatform.saveBrowserExpansion(Map<String, bool>.of(_browserExpanded)));
     if (mounted) setState(() {});
   }
 
@@ -389,10 +375,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     final BrowserNodeVm? node = _findBrowserNode(id);
     if (node is BrowserSampleVm) {
       if (node.dragData case final SampleAsset asset) {
-        _lastPlaylistItem = PlaylistInsertItem(
-          id: asset.id,
-          audioPath: asset.path,
-        );
+        _lastPlaylistItem = PlaylistInsertItem(id: asset.id, audioPath: asset.path);
       }
       if (node.previewPath != null) {
         try {
@@ -680,17 +663,15 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     final ObStatusBarVm statusVm = ObStatusBarVm(
       tone: _project.message.isNotEmpty || snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
       primary: snapshot.playing ? 'Playing' : _project.name,
-      details: snapshot.playing
-          ? <String>[
-              projectDetail,
-              leftDetail,
-              '${cpuPercent.toStringAsFixed(0)}% CPU',
-              '${snapshot.activeVoices} voices',
-            ]
-          : <String>[
-              projectDetail,
-              if (_project.message.isNotEmpty) _project.message else 'Press ⌘S to save',
-            ],
+      details:
+          snapshot.playing
+              ? <String>[
+                projectDetail,
+                leftDetail,
+                '${cpuPercent.toStringAsFixed(0)}% CPU',
+                '${snapshot.activeVoices} voices',
+              ]
+              : <String>[projectDetail, if (_project.message.isNotEmpty) _project.message else 'Press ⌘S to save'],
       rightHint: snapshot.playing ? '⌘K Search actions' : '⌘S save · ⌘K actions',
     );
 
@@ -700,17 +681,18 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       rail: railVm,
       status: statusVm,
       browserWidth: _browserWidth,
-      browser: (_activeRailIndex == 0 || _activeRailIndex == 1)
-          ? ObBrowserPanelVm(
-              nodes: _browserNodes,
-              title: 'Browser',
-              emptyHeading: 'No instruments yet.',
-              emptyButtonLabel: 'Add packs',
-              searchQuery: _browserSearchQuery,
-              scrollOffset: _browserScrollOffset,
-              message: _samplePackMessage,
-            )
-          : null,
+      browser:
+          (_activeRailIndex == 0 || _activeRailIndex == 1)
+              ? ObBrowserPanelVm(
+                nodes: _browserNodes,
+                title: 'Browser',
+                emptyHeading: 'No instruments yet.',
+                emptyButtonLabel: 'Add packs',
+                searchQuery: _browserSearchQuery,
+                scrollOffset: _browserScrollOffset,
+                message: _samplePackMessage,
+              )
+              : null,
     );
   }
 
@@ -873,29 +855,56 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
                     client: widget.client,
                     trackId: _openPluginTrackId ?? '',
                     pluginName: plugin.name,
-                    trackName: _openPluginTrackId?.isNotEmpty == true
-                        ? (_controller.client
-                              .readInstruments()
-                              .firstWhere(
-                                (ProjectInstrument item) => item.id == _openPluginTrackId,
-                                orElse: () => const ProjectInstrument(
-                                  id: '',
-                                  name: 'Instrument',
-                                  color: '',
-                                  order: 0,
-                                  pluginId: '',
-                                  pluginName: '',
-                                  pluginVendor: '',
-                                  pluginPath: '',
-                                  muted: false,
-                                  selected: false,
-                                  affectedPatterns: 0,
-                                  affectedClips: 0,
-                                  affectedNotes: 0,
-                                ),
-                              )
-                              .name)
-                        : 'Instrument',
+                    sampleName:
+                        plugin.pluginId == _samplePluginId
+                            ? _controller.client
+                                .readInstruments()
+                                .firstWhere(
+                                  (ProjectInstrument item) => item.id == (_openPluginTrackId ?? ''),
+                                  orElse:
+                                      () => const ProjectInstrument(
+                                        id: '',
+                                        name: '808_Kick_Punchy.wav',
+                                        color: '',
+                                        order: 0,
+                                        pluginId: '',
+                                        pluginName: '',
+                                        pluginVendor: '',
+                                        pluginPath: '',
+                                        muted: false,
+                                        selected: false,
+                                        affectedPatterns: 0,
+                                        affectedClips: 0,
+                                        affectedNotes: 0,
+                                      ),
+                                )
+                                .name
+                            : null,
+                    trackName:
+                        _openPluginTrackId?.isNotEmpty == true
+                            ? (_controller.client
+                                .readInstruments()
+                                .firstWhere(
+                                  (ProjectInstrument item) => item.id == _openPluginTrackId,
+                                  orElse:
+                                      () => const ProjectInstrument(
+                                        id: '',
+                                        name: 'Instrument',
+                                        color: '',
+                                        order: 0,
+                                        pluginId: '',
+                                        pluginName: '',
+                                        pluginVendor: '',
+                                        pluginPath: '',
+                                        muted: false,
+                                        selected: false,
+                                        affectedPatterns: 0,
+                                        affectedClips: 0,
+                                        affectedNotes: 0,
+                                      ),
+                                )
+                                .name)
+                            : 'Instrument',
                     parameters: _openPluginParameters,
                     onDragUpdate: _movePlugin,
                     onClose: _closePlugin,
@@ -955,10 +964,7 @@ class _WorkspaceSlot extends StatelessWidget {
         externalAudioDrop: externalAudioDrop,
         lastClickedItem: lastPlaylistItem,
       ),
-      2 => MixerBinding(
-        client: coreController.client,
-        controller: coreController,
-      ),
+      2 => MixerBinding(client: coreController.client, controller: coreController),
       _pianoRollIndex => PianoRollBinding(
         client: coreController.client,
         controller: coreController,
@@ -1010,10 +1016,7 @@ class _PlatformMenuHost extends StatelessWidget {
               members: <PlatformMenuItem>[
                 PlatformMenuItem(
                   label: 'Settings…',
-                  shortcut: const SingleActivator(
-                    LogicalKeyboardKey.comma,
-                    meta: true,
-                  ),
+                  shortcut: const SingleActivator(LogicalKeyboardKey.comma, meta: true),
                   onSelected: onOpenPreferences,
                 ),
               ],
@@ -1027,16 +1030,10 @@ class _PlatformMenuHost extends StatelessWidget {
             // ⌘N remains the pattern-creation shortcut in the editor scope.
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
-                PlatformMenuItem(
-                  label: 'New Project',
-                  onSelected: onNewProject,
-                ),
+                PlatformMenuItem(label: 'New Project', onSelected: onNewProject),
                 PlatformMenuItem(
                   label: 'Open…',
-                  shortcut: const SingleActivator(
-                    LogicalKeyboardKey.keyO,
-                    meta: true,
-                  ),
+                  shortcut: const SingleActivator(LogicalKeyboardKey.keyO, meta: true),
                   onSelected: onOpenProject,
                 ),
               ],
@@ -1045,36 +1042,22 @@ class _PlatformMenuHost extends StatelessWidget {
               members: <PlatformMenuItem>[
                 PlatformMenuItem(
                   label: project.hasFile ? 'Save' : 'Save…',
-                  shortcut: const SingleActivator(
-                    LogicalKeyboardKey.keyS,
-                    meta: true,
-                  ),
+                  shortcut: const SingleActivator(LogicalKeyboardKey.keyS, meta: true),
                   onSelected: onSaveProject,
                 ),
                 PlatformMenuItem(
                   label: 'Save as…',
-                  shortcut: const SingleActivator(
-                    LogicalKeyboardKey.keyS,
-                    meta: true,
-                    shift: true,
-                  ),
+                  shortcut: const SingleActivator(LogicalKeyboardKey.keyS, meta: true, shift: true),
                   onSelected: onSaveProjectAs,
                 ),
-                PlatformMenuItem(
-                  label: 'Rename project…',
-                  onSelected: onRenameProject,
-                ),
+                PlatformMenuItem(label: 'Rename project…', onSelected: onRenameProject),
               ],
             ),
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
                 PlatformMenuItem(
                   label: 'Export audio…',
-                  shortcut: const SingleActivator(
-                    LogicalKeyboardKey.keyE,
-                    meta: true,
-                    shift: true,
-                  ),
+                  shortcut: const SingleActivator(LogicalKeyboardKey.keyE, meta: true, shift: true),
                   onSelected: onOpenExport,
                 ),
               ],
@@ -1085,24 +1068,19 @@ class _PlatformMenuHost extends StatelessWidget {
           label: 'Edit',
           menus: <PlatformMenuItem>[
             PlatformMenuItem(
-              label: controller.client.canUndoProject && controller.client.undoProjectName.isNotEmpty
-                  ? 'Undo ${controller.client.undoProjectName}'
-                  : 'Undo',
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.keyZ,
-                meta: true,
-              ),
+              label:
+                  controller.client.canUndoProject && controller.client.undoProjectName.isNotEmpty
+                      ? 'Undo ${controller.client.undoProjectName}'
+                      : 'Undo',
+              shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true),
               onSelected: controller.client.canUndoProject ? controller.undoProject : null,
             ),
             PlatformMenuItem(
-              label: controller.client.canRedoProject && controller.client.redoProjectName.isNotEmpty
-                  ? 'Redo ${controller.client.redoProjectName}'
-                  : 'Redo',
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.keyZ,
-                meta: true,
-                shift: true,
-              ),
+              label:
+                  controller.client.canRedoProject && controller.client.redoProjectName.isNotEmpty
+                      ? 'Redo ${controller.client.redoProjectName}'
+                      : 'Redo',
+              shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true),
               onSelected: controller.client.canRedoProject ? controller.redoProject : null,
             ),
           ],
@@ -1112,18 +1090,9 @@ class _PlatformMenuHost extends StatelessWidget {
           menus: <PlatformMenuItem>[
             PlatformMenuItemGroup(
               members: <PlatformMenuItem>[
-                PlatformMenuItem(
-                  label: 'Channels',
-                  onSelected: () => onSelectRail(0),
-                ),
-                PlatformMenuItem(
-                  label: 'Playlist',
-                  onSelected: () => onSelectRail(1),
-                ),
-                PlatformMenuItem(
-                  label: 'Mixer',
-                  onSelected: () => onSelectRail(2),
-                ),
+                PlatformMenuItem(label: 'Channels', onSelected: () => onSelectRail(0)),
+                PlatformMenuItem(label: 'Playlist', onSelected: () => onSelectRail(1)),
+                PlatformMenuItem(label: 'Mixer', onSelected: () => onSelectRail(2)),
               ],
             ),
           ],
@@ -1138,11 +1107,7 @@ class _PlatformMenuHost extends StatelessWidget {
 /// the shell. Replacing PlatformMenuBar during a mouse-down menu interaction
 /// makes AppKit dismiss the currently open menu.
 class _StablePlatformMenuBar extends StatefulWidget {
-  const _StablePlatformMenuBar({
-    required this.menuVersion,
-    required this.menus,
-    required this.child,
-  });
+  const _StablePlatformMenuBar({required this.menuVersion, required this.menus, required this.child});
 
   final String menuVersion;
   final List<PlatformMenuItem> menus;
@@ -1166,10 +1131,7 @@ class _StablePlatformMenuBarState extends State<_StablePlatformMenuBar> {
   Widget _buildPlatformMenuBar(List<PlatformMenuItem> menus) {
     return PlatformMenuBar(
       menus: menus,
-      child: ValueListenableBuilder<Widget>(
-        valueListenable: _child,
-        builder: (_, Widget child, _) => child,
-      ),
+      child: ValueListenableBuilder<Widget>(valueListenable: _child, builder: (_, Widget child, _) => child),
     );
   }
 

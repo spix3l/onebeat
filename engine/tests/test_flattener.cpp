@@ -37,6 +37,7 @@ using onebeat::model::InstrumentId;
 using onebeat::model::Note;
 using onebeat::model::NoteSequence;
 using onebeat::model::PatternId;
+using onebeat::model::Pattern;
 using onebeat::model::PatternSource;
 using onebeat::model::PluginFormat;
 using onebeat::model::PluginRef;
@@ -363,6 +364,19 @@ TEST_SUITE("unit") {
       scene.project.updateInstrument(scene.instrument, ChangeField::Muted,
                                      [](Instrument& value) { value.muted = true; });
       CHECK(run(scene.project).schedule->eventCount() == 0);
+    }
+
+    SUBCASE("a soloed instrument silences the other instruments") {
+      const InstrumentId other = scene.project.createInstrument("Other", claps("other"));
+      scene.project.updatePattern(scene.pattern, ChangeField::Notes,
+                                  [other](Pattern& pattern) {
+                                    pattern.sequences[other].insert(note(0, 72));
+                                  });
+      scene.project.updateInstrument(other, ChangeField::Muted,
+                                     [](Instrument& value) { value.soloed = true; });
+      const FlattenResult result = run(scene.project);
+      CHECK(ticksOfOnsets(*result.schedule) == std::vector<int64_t>{0});
+      CHECK(eventsOf(*result.schedule)[0].note == 72);
     }
   }
 

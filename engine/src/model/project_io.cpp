@@ -373,6 +373,7 @@ json::Value writeInstrument(const Instrument& instrument,
   out.emplace("color", json::Value::string(instrument.color));
   out.emplace("order", json::Value::integer(instrument.order));
   out.emplace("muted", json::Value::boolean(instrument.muted));
+  if (instrument.soloed) out.emplace("soloed", json::Value::boolean(true));
   out.emplace("gain", json::Value::real(instrument.gain));
   out.emplace("pan", json::Value::real(instrument.pan));
   out.emplace("plugin", json::Value::object(std::move(plugin)));
@@ -769,6 +770,7 @@ class Loader {
       instrument.order = static_cast<int32_t>(takeInt(*fields, "order", fallback_order));
       ++fallback_order;
       instrument.muted = takeBool(*fields, "muted");
+      instrument.soloed = takeBool(*fields, "soloed");
       instrument.gain = takeFloat(*fields, "gain", 1.0F);
       instrument.pan = takeFloat(*fields, "pan", 0.0F);
 

@@ -189,6 +189,14 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   std::vector<ResolvedAudio> audio_starts;
   std::vector<std::pair<Ticks, Ticks>> occurrences;
   Ticks end_ticks = 0;
+  bool any_instrument_solo = false;
+  for (const auto& [id, instrument] : project.instruments()) {
+    (void)id;
+    if (instrument.soloed) {
+      any_instrument_solo = true;
+      break;
+    }
+  }
 
   for (const ArrangementLaneId lane_id : audibleLanes(project)) {
     for (const ClipId clip_id : project.clipsOnLane(lane_id)) {
@@ -207,7 +215,8 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
         ++result.clips_flattened;
         for (const auto& [instrument_id, sequence] : pattern->sequences) {
           const Instrument* instrument = project.findInstrument(instrument_id);
-          if (instrument == nullptr || instrument->muted) continue;
+          if (instrument == nullptr || instrument->muted ||
+              (any_instrument_solo && !instrument->soloed)) continue;
           const auto index = result.instrument_index.find(instrument_id);
           if (index == result.instrument_index.end()) continue;
 

@@ -79,6 +79,7 @@ struct Instrument {
   NoteDefaults note_defaults;
   std::vector<OutputRoute> routing;
   bool muted = false;
+  bool soloed = false;
   // Channel gain (linear 0..2) and pan (-1..1), the channel rack's VOL/PAN
   // knobs. Applied to the hosted voice while this instrument is selected; the
   // per-track mixer (v0.4) replaces these with mixer-track gain/pan.

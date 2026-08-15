@@ -343,6 +343,9 @@ class Engine final : public audio_io::RenderCallback {
   bool pending_all_notes_off_ = false;
 
   std::atomic<uint64_t> xruns_{0};
+  // A schedule can be replaced while voices from the old schedule still ring.
+  // The audio thread consumes this at the next block.
+  std::atomic<bool> schedule_replaced_{false};
   std::atomic<bool> running_{false};
   std::atomic<bool> housekeeping_active_{false};
   // Replacing a schedule while playing must reconcile voices from the old

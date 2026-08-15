@@ -427,6 +427,9 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
+  if (schedule_replaced_.exchange(false, std::memory_order_acq_rel)) {
+    block_events.push(plugin::PluginEvent::allNotesOff(0));
+  }
 
   const AudioBufferView& output = context.output;
   output.clear();
@@ -934,6 +937,7 @@ void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
   // Publishing a schedule is independent from voice resets. Adding a second
   // audio clip must not cut off clips that are already playing.
   schedule_.publish(std::move(schedule));
+  schedule_replaced_.store(true, std::memory_order_release);
   ob_event event{};
   event.type = OB_EVT_SCHEDULE_PUBLISHED;
   event.i64_a = static_cast<int64_t>(generation);

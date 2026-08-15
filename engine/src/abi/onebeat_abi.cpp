@@ -1434,6 +1434,7 @@ ob_status ob_engine_instrument_at(ob_engine* engine, int32_t index, ob_instrumen
   out_info->struct_size = sizeof(*out_info);
   out_info->order = instrument->order;
   if (instrument->muted) out_info->flags |= 1U;
+  if (instrument->soloed) out_info->flags |= 4U;
   if (engine->selected_instrument.has_value() && *engine->selected_instrument == instrument->id) {
     out_info->flags |= 2U;
   }
@@ -1541,6 +1542,21 @@ ob_status ob_engine_instrument_set_muted(ob_engine* engine, const char* utf8_ins
                           [muted](onebeat::model::Instrument& value) { value.muted = muted != 0; },
                           muted != 0 ? "Mute instrument" : "Unmute instrument"),
                       "The instrument does not exist.");
+}
+
+ob_status ob_engine_instrument_set_soloed(ob_engine* engine, const char* utf8_instrument_id,
+                                          int32_t soloed) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument ID is invalid.");
+  const bool value = soloed != 0;
+  return executeModel(
+      *engine,
+      onebeat::model::editInstrument(
+          engine->project, *id, onebeat::model::ChangeField::Soloed,
+          [value](onebeat::model::Instrument& instrument) { instrument.soloed = value; },
+          value ? "Solo instrument" : "Unsolo instrument"),
+      "The instrument does not exist.");
 }
 
 ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instrument_id,
@@ -2261,14 +2277,13 @@ ob_status ob_engine_pattern_preview_start(ob_engine* engine, const char* utf8_pa
   return OB_OK;
 }
 
-ob_status ob_engine_pattern_preview_channel_start(ob_engine* engine,
-                                                  const char* utf8_pattern_id,
+ob_status ob_engine_pattern_preview_channel_start(ob_engine* engine, const char* utf8_pattern_id,
                                                   const char* utf8_instrument_id) {
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "engine must not be null.");
   const auto pattern = patternId(utf8_pattern_id);
   const auto instrument = instrumentId(utf8_instrument_id);
-  if (!pattern || engine->project.findPattern(*pattern) == nullptr ||
-      !instrument || engine->project.findInstrument(*instrument) == nullptr) {
+  if (!pattern || engine->project.findPattern(*pattern) == nullptr || !instrument ||
+      engine->project.findInstrument(*instrument) == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "The pattern or instrument does not exist.");
   }
   engine->current_pattern = *pattern;

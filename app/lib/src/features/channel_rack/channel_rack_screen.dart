@@ -630,13 +630,6 @@ class _RackRowItem extends StatelessWidget {
                       ? null
                       : () {
                         onSelectRow!(index);
-                        // Samples have a built-in editor rather than a
-                        // hosted instance, so opening them on the row tap
-                        // avoids making every ordinary sample click wait
-                        // for a double-tap timeout.
-                        if (row.hostsPlugin && row.type.toLowerCase().contains('sampler')) {
-                          onRowDoubleTap?.call(index);
-                        }
                       },
               // Only hosted plug-in lanes use a double-tap recognizer.
               onDoubleTap:

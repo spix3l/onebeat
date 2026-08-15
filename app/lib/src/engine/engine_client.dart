@@ -668,6 +668,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
           pluginVendor: _readFixedUtf8(value.plugin_vendor, 128),
           pluginPath: _readFixedUtf8(value.plugin_path, 512),
           muted: (value.flags & 1) != 0,
+          soloed: (value.flags & 4) != 0,
           selected: (value.flags & 2) != 0,
           affectedPatterns: value.affected_pattern_count,
           affectedClips: value.affected_clip_count,
@@ -700,6 +701,11 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   void setInstrumentMuted(String id, {required bool muted}) => _withNativeString(
     id,
     (Pointer<Char> native) => _bindings.ob_engine_instrument_set_muted(_engine, native, muted ? 1 : 0),
+  );
+
+  void setInstrumentSoloed(String id, {required bool soloed}) => _withNativeString(
+    id,
+    (Pointer<Char> native) => _bindings.ob_engine_instrument_set_soloed(_engine, native, soloed ? 1 : 0),
   );
 
   void replaceInstrument(String id, PluginListing plugin) {
@@ -850,7 +856,7 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
       return List<SequenceNote>.generate(written, (int index) {
         final ob_note note = buffer[index];
         return SequenceNote(startTicks: note.start, lengthTicks: note.length, key: note.key, velocity: note.velocity);
-      }, growable: false);
+      }, growable: false,);
     } finally {
       calloc.free(native);
     }
@@ -1484,6 +1490,7 @@ class ProjectInstrument {
     required this.pluginVendor,
     required this.pluginPath,
     required this.muted,
+    this.soloed = false,
     required this.selected,
     required this.affectedPatterns,
     required this.affectedClips,
@@ -1501,6 +1508,7 @@ class ProjectInstrument {
   final String pluginVendor;
   final String pluginPath;
   final bool muted;
+  final bool soloed;
   final bool selected;
   final int affectedPatterns;
   final int affectedClips;

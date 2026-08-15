@@ -462,7 +462,7 @@ OB_API ob_status ob_engine_session_load(ob_engine* engine, const char* utf8_path
 typedef struct ob_instrument_info {
   uint32_t struct_size;
   int32_t order;
-  uint32_t flags; /* bit 0: muted; bit 1: selected */
+  uint32_t flags; /* bit 0: muted; bit 1: selected; bit 2: soloed */
   uint32_t affected_pattern_count;
   uint32_t affected_clip_count;
   uint32_t affected_note_count;
@@ -487,7 +487,9 @@ OB_API ob_status ob_engine_instrument_rename(ob_engine* engine, const char* utf8
 OB_API ob_status ob_engine_instrument_recolor(ob_engine* engine, const char* utf8_instrument_id,
                                               const char* utf8_color);
 OB_API ob_status ob_engine_instrument_set_muted(ob_engine* engine, const char* utf8_instrument_id,
-                                                int32_t muted);
+                                                 int32_t muted);
+OB_API ob_status ob_engine_instrument_set_soloed(ob_engine* engine, const char* utf8_instrument_id,
+                                                  int32_t soloed);
 OB_API ob_status ob_engine_instrument_reorder(ob_engine* engine, const char* utf8_instrument_id,
                                               int32_t order);
 OB_API ob_status ob_engine_instrument_replace(ob_engine* engine, const char* utf8_instrument_id,
