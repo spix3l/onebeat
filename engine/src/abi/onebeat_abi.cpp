@@ -156,6 +156,10 @@ struct ob_engine {
   // keyed by instrument ID lets a missing or reordered lane receive the same
   // opaque bytes without coupling persistence to a dense channel index.
   std::map<onebeat::model::InstrumentId, std::vector<uint8_t>> pending_project_state;
+  // The effective length each pattern had at the last publish, so a clip that
+  // fitted the pattern can follow it when the notes in it grow or shrink what
+  // it plays. See fitClipsToPatterns.
+  std::map<onebeat::model::PatternId, onebeat::model::Ticks> pattern_lengths;
 };
 
 namespace {
@@ -211,44 +215,44 @@ const onebeat::model::Pattern* currentPattern(const ob_engine& handle) {
   return handle.current_pattern ? handle.project.findPattern(*handle.current_pattern) : nullptr;
 }
 
-/* Grows the current pattern so that everything drawn in it can sound.
+/* Keeps a pattern's placements the same size as the pattern itself plays.
  *
- * The flattener wraps a looping clip modulo the *pattern* length and drops what
- * falls past it, so a note past the end was accepted by the editor, stored,
- * drawn, swept over by the playhead, and never played. Nothing in the roll
- * bounded a note by the pattern length, so drawing past it was a normal thing
- * to do.
+ * The flattener wraps a looping clip modulo the pattern's *effective* length —
+ * the declared length stretched to whole bars when the notes need more room
+ * (model/entities.h) — so drawing past the end lengthens what the pattern plays
+ * and deleting that note lets it shrink back to the length the user set. The
+ * declared length is never re-derived, which is what makes the Steps control
+ * mean something.
  *
- * Grow only, and to a whole bar, so a length the user chose (the rack's 16/32/
- * 64-step control, ob_engine_rack_set_length) is never quietly reduced. Clips
- * follow the same rule that control uses: a placement still exactly as long as
- * the pattern is one that fits it, and is carried along; a placement the user
- * has resized is a deliberate window and is left alone.
+ * A clip still exactly as long as the pattern was is a placement that fits it,
+ * and follows in both directions; a placement the user has resized is a
+ * deliberate window and is left alone. Without this the pattern is long enough
+ * and the note past the end still never reaches the schedule.
  *
  * Outside the command bus on purpose. This is a consequence of an edit rather
- * than an edit, and recording it would make undoing one note take two undos.
- */
-void growPatternToFit(ob_engine& handle) {
-  const onebeat::model::Pattern* pattern = currentPattern(handle);
-  if (pattern == nullptr) return;
-  const onebeat::model::PatternId pattern_id = pattern->id;
-  const onebeat::model::Ticks old_length = pattern->length;
-  const onebeat::model::Ticks length = onebeat::model::patternLoopLength(*pattern);
-  if (length <= old_length) return;
-
+ * than an edit, and recording it would make undoing one note take two undos. */
+void fitClipsToPatterns(ob_engine& handle) {
   /* Collected before mutating: updating a clip emits a change event, and a
    * subscriber must not observe a half-walked map. */
-  std::vector<onebeat::model::ClipId> fitting;
-  for (const auto& [clip_id, clip] : handle.project.clips()) {
-    const onebeat::model::PatternSource* source = clip.pattern();
-    if (source == nullptr || source->pattern != pattern_id) continue;
-    if (clip.length == old_length) fitting.push_back(clip_id);
-  }
+  std::vector<std::pair<onebeat::model::ClipId, onebeat::model::Ticks>> resized;
+  std::map<onebeat::model::PatternId, onebeat::model::Ticks> lengths;
 
-  handle.project.updatePattern(
-      pattern_id, onebeat::model::ChangeField::Length,
-      [length](onebeat::model::Pattern& target) { target.length = length; });
-  for (const onebeat::model::ClipId clip_id : fitting) {
+  for (const auto& [pattern_id, pattern] : handle.project.patterns()) {
+    const onebeat::model::Ticks length = onebeat::model::patternEffectiveLength(pattern);
+    lengths.emplace(pattern_id, length);
+    const auto previous = handle.pattern_lengths.find(pattern_id);
+    /* A pattern seen for the first time — a load, a paste — has no previous
+     * length, so its clips are whatever the file said they were. */
+    if (previous == handle.pattern_lengths.end() || previous->second == length) continue;
+    for (const auto& [clip_id, clip] : handle.project.clips()) {
+      const onebeat::model::PatternSource* source = clip.pattern();
+      if (source == nullptr || source->pattern != pattern_id) continue;
+      if (clip.length == previous->second) resized.emplace_back(clip_id, length);
+    }
+  }
+  handle.pattern_lengths = std::move(lengths);
+
+  for (const auto& [clip_id, length] : resized) {
     handle.project.updateClip(clip_id, onebeat::model::ChangeField::Length,
                               [length](onebeat::model::Clip& target) { target.length = length; });
   }
@@ -450,9 +454,10 @@ void refreshInstanceView(ob_engine& handle) {
 }
 
 void publishModel(ob_engine& handle) {
-  /* Before the flatten, so the schedule is built from the grown pattern rather
-   * than from the one that was too short to hold the edit just made. */
-  growPatternToFit(handle);
+  /* Before the flatten, so the schedule is built from placements that match
+   * what the pattern now plays rather than from ones that were too short to
+   * hold the edit just made. */
+  fitClipsToPatterns(handle);
   onebeat::model::FlattenResult flattened;
   if (handle.pattern_preview && handle.current_pattern.has_value()) {
     onebeat::model::Project preview;
@@ -465,7 +470,7 @@ void publishModel(ob_engine& handle) {
         if (source == nullptr || source->pattern != *handle.current_pattern) continue;
         onebeat::model::Clip clip = source_clip;
         clip.start = 0;
-        clip.length = pattern->length;
+        clip.length = onebeat::model::patternEffectiveLength(*pattern);
         tables.clips.emplace(clip_id, std::move(clip));
         break;
       }
@@ -521,9 +526,9 @@ void publishModel(ob_engine& handle) {
   double loop_end_beats = 4.0;
   const onebeat::model::Pattern* pattern = currentPattern(handle);
   if (pattern != nullptr) {
-    loop_end_beats =
-        std::max(loop_end_beats, static_cast<double>(pattern->length) /
-                                     static_cast<double>(onebeat::model::TicksPerQuarter));
+    loop_end_beats = std::max(
+        loop_end_beats, static_cast<double>(onebeat::model::patternEffectiveLength(*pattern)) /
+                            static_cast<double>(onebeat::model::TicksPerQuarter));
   }
   for (const auto& [clip_id, clip] : handle.project.clips()) {
     (void)clip_id;
@@ -1835,7 +1840,7 @@ ob_status ob_engine_rack_pattern(ob_engine* engine, ob_rack_pattern_info* out_in
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
-  out_info->length_ticks = pattern->length;
+  out_info->length_ticks = onebeat::model::patternEffectiveLength(*pattern);
   out_info->base_grid_ticks = onebeat::model::TicksPerQuarter / 4;
   out_info->swing = pattern->swing;
   copyText(out_info->id, sizeof(out_info->id), pattern->id.str().c_str());
@@ -1862,7 +1867,9 @@ ob_status ob_engine_rack_row_at(ob_engine* engine, int32_t index, ob_rack_row_in
   out_info->struct_size = sizeof(*out_info);
   out_info->grid_ticks = rackGrid(*engine, instrument->id);
   out_info->step_count = static_cast<int32_t>(std::min<int64_t>(
-      OB_RACK_MAX_STEPS, (pattern->length + out_info->grid_ticks - 1) / out_info->grid_ticks));
+      OB_RACK_MAX_STEPS,
+      (onebeat::model::patternEffectiveLength(*pattern) + out_info->grid_ticks - 1) /
+          out_info->grid_ticks));
   copyText(out_info->instrument_id, sizeof(out_info->instrument_id), instrument->id.str().c_str());
 
   const auto sequence = pattern->sequences.find(instrument->id);
@@ -1910,13 +1917,23 @@ ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) 
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
   const onebeat::model::Ticks length =
       static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
-  const onebeat::model::Ticks old_length = pattern->length;
+  /* Placements are the size the pattern *plays*, not the size it declares, so
+   * that is what "this clip still fits the pattern" is measured against. A
+   * pattern held open by a note past its declared end keeps its clips where
+   * they are until that note goes. */
+  const onebeat::model::Ticks old_length = onebeat::model::patternEffectiveLength(*pattern);
+  /* What the pattern will play once the declared length is `length`: a note
+   * past the new end still holds it open, and the clips follow that rather than
+   * a length the pattern is not going to honour. */
+  const onebeat::model::Ticks new_length = onebeat::model::patternContentEnd(*pattern) <= length
+                                               ? length
+                                               : onebeat::model::patternLoopLength(*pattern);
   for (const auto& [clip_id, clip] : engine->project.clips()) {
     if (const auto* src = clip.pattern()) {
       if (src->pattern == pattern->id && clip.length == old_length) {
         (void)engine->commands.execute(onebeat::model::editClip(
             engine->project, clip_id, onebeat::model::ChangeField::Length,
-            [length](onebeat::model::Clip& c) { c.length = length; }, "Resize clip"));
+            [new_length](onebeat::model::Clip& c) { c.length = new_length; }, "Resize clip"));
       }
     }
   }
@@ -1953,7 +1970,8 @@ ob_status ob_engine_rack_toggle_step(ob_engine* engine, const char* utf8_instrum
     return fail(OB_ERR_INVALID_ARGUMENT, "The rack row does not exist.");
   }
   const onebeat::model::Ticks grid = rackGrid(*engine, *id);
-  if (static_cast<onebeat::model::Ticks>(step_index) * grid >= pattern->length) {
+  if (static_cast<onebeat::model::Ticks>(step_index) * grid >=
+      onebeat::model::patternEffectiveLength(*pattern)) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Rack step is outside the pattern.");
   }
   return executeModel(*engine,
@@ -1974,7 +1992,8 @@ ob_status ob_engine_rack_set_step_velocity(ob_engine* engine, const char* utf8_i
     return fail(OB_ERR_INVALID_ARGUMENT, "The rack row does not exist.");
   }
   const onebeat::model::Ticks grid = rackGrid(*engine, *id);
-  if (static_cast<onebeat::model::Ticks>(step_index) * grid >= pattern->length) {
+  if (static_cast<onebeat::model::Ticks>(step_index) * grid >=
+      onebeat::model::patternEffectiveLength(*pattern)) {
     return fail(OB_ERR_INVALID_ARGUMENT, "Rack step is outside the pattern.");
   }
   const auto sequence = pattern->sequences.find(*id);
@@ -2231,7 +2250,7 @@ ob_status ob_engine_pattern_at(ob_engine* engine, int32_t index, ob_pattern_info
   out_info->flags = (engine->current_pattern.has_value() && *engine->current_pattern == pattern.id)
                         ? OB_PATTERN_FLAG_CURRENT
                         : 0U;
-  out_info->length_ticks = pattern.length;
+  out_info->length_ticks = onebeat::model::patternEffectiveLength(pattern);
   out_info->swing = pattern.swing;
   out_info->usage_count = static_cast<uint32_t>(engine->project.patternUsageCount(pattern.id));
   out_info->note_count = static_cast<uint32_t>(patternNoteCount(pattern));
@@ -2587,7 +2606,7 @@ ob_status ob_engine_clip_at(ob_engine* engine, int32_t index, ob_clip_info* out_
   copyText(out_info->pattern_id, sizeof(out_info->pattern_id), source->pattern.str().c_str());
   const onebeat::model::Pattern* pattern = engine->project.findPattern(source->pattern);
   if (pattern != nullptr) {
-    out_info->pattern_length_ticks = pattern->length;
+    out_info->pattern_length_ticks = onebeat::model::patternEffectiveLength(*pattern);
     out_info->note_count = static_cast<uint32_t>(patternNoteCount(*pattern));
     out_info->usage_count = static_cast<uint32_t>(engine->project.patternUsageCount(pattern->id));
     copyText(out_info->name, sizeof(out_info->name), pattern->name.c_str());
@@ -2893,6 +2912,7 @@ ob_status ob_engine_project_new(ob_engine* engine) {
     engine->project_path.clear();
     engine->residue = onebeat::model::Residue{};
     engine->pending_project_state.clear();
+    engine->pattern_lengths.clear();
     engine->hosted.clear();
     engine->has_instance = false;
     engine->instance_missing = false;
@@ -2969,6 +2989,7 @@ ob_status ob_engine_project_open(ob_engine* engine, const char* utf8_path) {
     }
     onebeat::model::Residue residue;
     engine->pending_project_state.clear();
+    engine->pattern_lengths.clear();
     onebeat::model::LoadOptions load_options;
     load_options.state_sink = [engine](onebeat::model::InstrumentId id,
                                        const std::vector<std::byte>& bytes) {

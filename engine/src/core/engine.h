@@ -263,6 +263,10 @@ class Engine final : public audio_io::RenderCallback {
                      plugin::PluginInstance& instrument,
                      bool preview_voice = false) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
+  // Compares `schedule` against the one published before it and requests a
+  // click-safe reset on every channel whose events differ, so a voice from the
+  // replaced schedule cannot hang while untouched channels keep sounding.
+  void releaseChannelsWhoseEventsChanged(const Schedule& schedule);
   // The plug-in hosted on `channel`, or null for a channel that plays its own
   // built-in sampler or is out of range.
   plugin::PluginInstance* hostedAt(int channel) const noexcept;
@@ -343,16 +347,16 @@ class Engine final : public audio_io::RenderCallback {
   bool pending_all_notes_off_ = false;
 
   std::atomic<uint64_t> xruns_{0};
-  // A schedule can be replaced while voices from the old schedule still ring.
-  // The audio thread consumes this at the next block.
-  std::atomic<bool> schedule_replaced_{false};
   std::atomic<bool> running_{false};
   std::atomic<bool> housekeeping_active_{false};
   // Replacing a schedule while playing must reconcile voices from the old
-  // arrangement. The audio thread consumes this flag at the next block and
-  // releases those voices before rendering the new schedule.
-  // Schedule publication itself is intentionally not a global voice reset:
-  // adding a second clip must leave already-playing clips uninterrupted.
+  // arrangement — but only on the channels whose events actually changed.
+  // Publishing is therefore not a global voice reset: editing a drum lane must
+  // leave the melody that is already sounding on another channel alone. The
+  // per-channel fingerprints of the last published schedule are what makes the
+  // difference visible; see publishSchedule.
+  std::array<uint64_t, MaxRackChannels> published_channel_hash_{};
+  bool has_published_schedule_ = false;
 
   std::thread housekeeping_;
   std::mutex work_mutex_;

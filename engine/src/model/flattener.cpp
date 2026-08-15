@@ -207,7 +207,9 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
       if (const PatternSource* source = clip->pattern()) {
         const Pattern* pattern = project.findPattern(source->pattern);
         if (pattern == nullptr) continue;
-        const Ticks pattern_length = pattern->length > 0          ? pattern->length
+        // The effective length, not the declared one: a note drawn past the end
+        // of the pattern must sound rather than be dropped here (entities.h).
+        const Ticks pattern_length = pattern->length > 0          ? patternEffectiveLength(*pattern)
                                      : pattern->sequences.empty() ? 0
                                                                   : 1;
         if (pattern_length <= 0) continue;
@@ -216,7 +218,8 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
         for (const auto& [instrument_id, sequence] : pattern->sequences) {
           const Instrument* instrument = project.findInstrument(instrument_id);
           if (instrument == nullptr || instrument->muted ||
-              (any_instrument_solo && !instrument->soloed)) continue;
+              (any_instrument_solo && !instrument->soloed))
+            continue;
           const auto index = result.instrument_index.find(instrument_id);
           if (index == result.instrument_index.end()) continue;
 

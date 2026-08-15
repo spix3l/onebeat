@@ -36,8 +36,8 @@ using onebeat::model::Instrument;
 using onebeat::model::InstrumentId;
 using onebeat::model::Note;
 using onebeat::model::NoteSequence;
-using onebeat::model::PatternId;
 using onebeat::model::Pattern;
+using onebeat::model::PatternId;
 using onebeat::model::PatternSource;
 using onebeat::model::PluginFormat;
 using onebeat::model::PluginRef;
@@ -254,17 +254,30 @@ TEST_SUITE("unit") {
       CHECK(notesAreBalanced(*result.schedule));
     }
 
-    SUBCASE("a note is cut at the loop boundary rather than sounding across it") {
+    SUBCASE("a note that runs past the declared end holds the pattern open") {
       Scene held;
       held.addNotes({note(2880, 60, 1920)});  // runs a beat past the pattern's end
       held.place(0, TicksPerBarFourFour * 2, true);
       const FlattenResult result = run(held.project);
 
-      CHECK(ticksOfOnsets(*result.schedule) == std::vector<int64_t>{2880, 6720});
+      // The pattern declares one bar and the note needs two, so two bars is
+      // what it plays (patternEffectiveLength): the note sounds whole rather
+      // than being chopped at a boundary the user never drew a line at. The
+      // clip is exactly that long, so there is no second iteration to wrap to.
+      CHECK(ticksOfOnsets(*result.schedule) == std::vector<int64_t>{2880});
       const std::vector<ScheduleEvent> events = eventsOf(*result.schedule);
-      // First occurrence ends at the pattern boundary, where the next
-      // iteration re-triggers it.
-      CHECK(events[1].frame == TicksPerBarFourFour * FramesPerTick);
+      REQUIRE(events.size() == 2);
+      CHECK(events[1].frame == 4800 * FramesPerTick);
+      CHECK(notesAreBalanced(*result.schedule));
+    }
+
+    SUBCASE("the loop turnaround follows the length the pattern plays") {
+      Scene held;
+      held.addNotes({note(2880, 60, 1920)});
+      held.place(0, TicksPerBarFourFour * 4, true);  // two iterations of two bars
+      const FlattenResult result = run(held.project);
+
+      CHECK(ticksOfOnsets(*result.schedule) == std::vector<int64_t>{2880, 10560});
       CHECK(notesAreBalanced(*result.schedule));
     }
   }
@@ -368,10 +381,9 @@ TEST_SUITE("unit") {
 
     SUBCASE("a soloed instrument silences the other instruments") {
       const InstrumentId other = scene.project.createInstrument("Other", claps("other"));
-      scene.project.updatePattern(scene.pattern, ChangeField::Notes,
-                                  [other](Pattern& pattern) {
-                                    pattern.sequences[other].insert(note(0, 72));
-                                  });
+      scene.project.updatePattern(scene.pattern, ChangeField::Notes, [other](Pattern& pattern) {
+        pattern.sequences[other].insert(note(0, 72));
+      });
       scene.project.updateInstrument(other, ChangeField::Muted,
                                      [](Instrument& value) { value.soloed = true; });
       const FlattenResult result = run(scene.project);

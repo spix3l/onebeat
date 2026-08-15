@@ -611,16 +611,34 @@ TEST_SUITE("abi") {
     REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
     CHECK(clip.length_ticks == 4 * Bar);
 
-    // Deleting the note back out does not shrink it again: a length is a thing
-    // the user can set, and re-deriving it downwards would undo that setting
-    // every time a bar was cleared.
+    // Deleting the note back out shrinks it again, down to the length the user
+    // set and no further. The pattern is only ever held open by what is in it:
+    // a size nobody chose must not be left stranded on the Steps control, which
+    // is what made a stray note turn a 64-step pattern into an 80-step one for
+    // no reason the user could see or undo.
     ob_note notes[4]{};
     int32_t note_count = 0;
     REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 4, &note_count) == OB_OK);
     REQUIRE(note_count == 1);
     REQUIRE(ob_engine_notes_remove(engine, instrument.id, notes, 1) == OB_OK);
     REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
-    CHECK(pattern.length_ticks == 4 * Bar);
+    CHECK(pattern.length_ticks == started_at);
+    REQUIRE(ob_engine_clip_at(engine, 0, &clip) == OB_OK);
+    CHECK(clip.length_ticks == started_at);
+
+    // A length the user set is a floor, not a target: clearing the pattern
+    // leaves the 32 steps they asked for rather than collapsing to one bar.
+    REQUIRE_MESSAGE(ob_engine_rack_set_length(engine, 32) == OB_OK, ob_last_error_message());
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 2 * Bar);
+    REQUIRE(ob_engine_note_add(engine, instrument.id, 5 * Bar, 960, 60, 9000) == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 6 * Bar);
+    REQUIRE(ob_engine_notes_read(engine, instrument.id, notes, 4, &note_count) == OB_OK);
+    REQUIRE(note_count == 1);
+    REQUIRE(ob_engine_notes_remove(engine, instrument.id, notes, 1) == OB_OK);
+    REQUIRE(ob_engine_pattern_at(engine, 0, &pattern) == OB_OK);
+    CHECK(pattern.length_ticks == 2 * Bar);
 
     ob_engine_destroy(engine);
   }
@@ -742,6 +760,71 @@ TEST_SUITE("abi") {
     CHECK(std::string(missing.name) == "OneBeat Test Synth");
     REQUIRE(ob_engine_session_save(engine, session.c_str()) == OB_OK);
     CHECK(fs::file_size(session) == state_hash_before);
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
+  }
+
+  // A song is its plug-ins as much as its notes. If the settings on a lane do
+  // not survive ⌘S and ⌘O, the project reopens as a different piece of music.
+  TEST_CASE("A plug-in's settings survive saving and reopening the project") {
+    namespace fs = std::filesystem;
+    REQUIRE(::setenv("OB_PLUGIN_HOST", OB_TEST_HELPER, 1) == 0);
+    const fs::path scratch =
+        fs::path("/tmp/onebeat-tests") / ("project-state-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    config.log_directory = "/tmp/onebeat-tests/project-state";
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    const std::string plugin = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE_MESSAGE(
+        ob_engine_instance_add(engine, plugin.c_str(), "dev.onebeat.test.synth") == OB_OK,
+        ob_last_error_message());
+    ob_instance_info instance{};
+    REQUIRE(ob_engine_instance_at(engine, 0, &instance) == OB_OK);
+    ob_param_info param{};
+    REQUIRE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK);
+    const uint32_t param_id = param.param_id;
+    const double edited = param.default_value == doctest::Approx(0.375) ? 0.75 : 0.375;
+
+    // Parameter edits reach the plug-in through the audio thread, as they do
+    // when the user turns the knob.
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+    ob_command set{};
+    set.type = OB_CMD_PLUGIN_PARAM_VALUE;
+    set.i64_a = static_cast<int64_t>(param_id);
+    set.f64_a = edited;
+    REQUIRE(ob_engine_post_command(engine, &set) == OB_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    REQUIRE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK);
+    REQUIRE(param.value == doctest::Approx(edited));
+
+    const fs::path bundle = scratch / "Stateful.obt";
+    REQUIRE_MESSAGE(ob_engine_project_save(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    ob_instrument_info lane{};
+    REQUIRE(ob_engine_instrument_at(engine, 0, &lane) == OB_OK);
+    CHECK(fs::exists(bundle / "state" / (std::string(lane.id) + ".bin")));
+
+    // Reopening rebuilds the lane, re-hosts the plug-in and hands it back the
+    // chunk it wrote — not the factory defaults.
+    REQUIRE(ob_engine_project_new(engine) == OB_OK);
+    REQUIRE_MESSAGE(ob_engine_project_open(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    REQUIRE(ob_engine_instrument_at(engine, 0, &lane) == OB_OK);
+    REQUIRE(ob_engine_instrument_select(engine, lane.id) == OB_OK);
+    REQUIRE(ob_engine_instance_at(engine, 0, &instance) == OB_OK);
+    REQUIRE_MESSAGE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK,
+                    ob_last_error_message());
+    CHECK(param.value == doctest::Approx(edited));
+
     ob_engine_destroy(engine);
     fs::remove_all(scratch);
   }

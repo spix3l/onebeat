@@ -208,6 +208,31 @@ TEST_SUITE("engine") {
     CHECK(restored == doctest::Approx(0.77));
   }
 
+  // Lowkey shipped without the state extension, so the host had nothing to put
+  // in the project's `state/` sidecar: every bass lane came back on its factory
+  // defaults, and a saved song reopened as a different song.
+  TEST_CASE("The shipped stock bass saves and restores its settings") {
+    ClapRig rig(OB_STOCK_LOWKEY, "dev.onebeat.stock.lowkey");
+    CHECK(std::string(rig.plugin->name().text()) == "Lowkey");
+    CHECK(rig.plugin->notePortCount(PortDirection::Input) == 1);
+
+    CHECK(rig.render({PluginEvent::noteOn(0, 40, 0.85)}) > 0.005F);
+
+    rig.render({PluginEvent::paramValue(0, 100, 0.77), PluginEvent::paramValue(0, 101, 0.62)});
+    MemoryStateWriter saved;
+    REQUIRE(rig.plugin->saveState(saved));
+    CHECK(saved.bytes().size() > 2 * sizeof(double));
+
+    rig.render({PluginEvent::paramValue(0, 100, 0.15)});
+    MemoryStateReader reader(saved.bytes());
+    REQUIRE(rig.plugin->loadState(reader));
+    double restored = 0.0;
+    REQUIRE(rig.plugin->paramValue(100, restored));
+    CHECK(restored == doctest::Approx(0.77));
+    REQUIRE(rig.plugin->paramValue(101, restored));
+    CHECK(restored == doctest::Approx(0.62));
+  }
+
   TEST_CASE("The CLAP adapter maps identity, ports, parameters and latency") {
     ClapRig rig;
     CHECK(std::string(rig.plugin->name().text()) == "OneBeat Test Synth");

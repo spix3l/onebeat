@@ -166,10 +166,56 @@ bool noteInfo(const clap_plugin_t*, uint32_t index, bool input, clap_note_port_i
 }
 const clap_plugin_note_ports_t NotePorts{noteCount, noteInfo};
 
+// Without this extension the host has nothing to write into the project's
+// `state/` sidecar, and every setting the user made on this lane comes back as
+// the factory default the next time the project is opened. Same layout as the
+// guitar's, under its own magic: the two share a DSP core but not a chunk.
+struct SavedStateHeader {
+  uint32_t magic = 0x4f424c4bU;  // 'OBLK'
+  uint32_t version = 1;
+};
+
+bool stateSave(const clap_plugin_t* p, const clap_ostream_t* stream) {
+  if (stream == nullptr) return false;
+  SavedStateHeader header{};
+  if (stream->write(stream, &header, sizeof(header)) != static_cast<int64_t>(sizeof(header))) {
+    return false;
+  }
+  const auto& bass = self(p);
+  for (const auto& spec : ParameterSpecs) {
+    const double value = bass.engine.parameter(spec.id);
+    if (stream->write(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool stateLoad(const clap_plugin_t* p, const clap_istream_t* stream) {
+  if (stream == nullptr) return false;
+  SavedStateHeader header{};
+  if (stream->read(stream, &header, sizeof(header)) != static_cast<int64_t>(sizeof(header)) ||
+      header.magic != 0x4f424c4bU) {
+    return false;
+  }
+  auto& bass = self(p);
+  for (const auto& spec : ParameterSpecs) {
+    double value = 0.0;
+    if (stream->read(stream, &value, sizeof(value)) != static_cast<int64_t>(sizeof(value))) {
+      return false;
+    }
+    bass.engine.setParameter(spec.id, value);
+  }
+  return true;
+}
+
+const clap_plugin_state_t State{stateSave, stateLoad};
+
 const void* extension(const clap_plugin_t*, const char* id) {
   if (std::strcmp(id, CLAP_EXT_PARAMS) == 0) return &Params;
   if (std::strcmp(id, CLAP_EXT_AUDIO_PORTS) == 0) return &AudioPorts;
   if (std::strcmp(id, CLAP_EXT_NOTE_PORTS) == 0) return &NotePorts;
+  if (std::strcmp(id, CLAP_EXT_STATE) == 0) return &State;
   return nullptr;
 }
 const char* Features[]{CLAP_PLUGIN_FEATURE_INSTRUMENT, CLAP_PLUGIN_FEATURE_SYNTHESIZER, "bass",

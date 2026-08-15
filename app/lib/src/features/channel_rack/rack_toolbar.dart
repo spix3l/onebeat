@@ -38,6 +38,15 @@ class RackToolbarVm {
   /// at the ABI, so the control offers exactly these.
   static const List<int> stepOptions = <int>[16, 32, 64];
 
+  /// What the dropdown lists: the settable lengths, plus the current one when a
+  /// note running past the end is holding the pattern open at a size that is
+  /// not on the ladder. Leaving that value out of the list made the count look
+  /// like it had changed to a number the control did not believe in.
+  List<String> get stepItems => <String>[
+    for (final int option in stepOptions) '$option',
+    if (!stepOptions.contains(steps)) '$steps',
+  ];
+
   final List<String> channelTypes;
   final List<String> groups;
   final List<String>? snaps;
@@ -104,9 +113,7 @@ class ObRackToolbar extends StatelessWidget {
           ObDropdown(
             label: 'Steps',
             value: '${vm.steps}',
-            items: <String>[
-              for (final int option in RackToolbarVm.stepOptions) '$option',
-            ],
+            items: vm.stepItems,
             width: tokens.size.rackSnapFieldWidth,
             onSelected: onSteps == null
                 ? null

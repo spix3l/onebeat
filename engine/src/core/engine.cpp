@@ -427,9 +427,6 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
 
   plugin::EventList block_events = command_events_.list();
   drainCommands(block_events);
-  if (schedule_replaced_.exchange(false, std::memory_order_acq_rel)) {
-    block_events.push(plugin::PluginEvent::allNotesOff(0));
-  }
 
   const AudioBufferView& output = context.output;
   output.clear();
@@ -931,13 +928,58 @@ bool Engine::pushEvent(const ob_event& event) noexcept {
 // Worker side
 // --------------------------------------------------------------------------
 
+// One 64-bit fingerprint per channel over the events addressed to it, compared
+// against the schedule published before this one. Frames are part of the
+// fingerprint, so a tempo change — which moves every event — reads as a change
+// on every channel, which is what it is.
+void Engine::releaseChannelsWhoseEventsChanged(const Schedule& schedule) {
+  std::array<uint64_t, MaxRackChannels> hash{};
+  for (auto& value : hash) value = 0xcbf29ce484222325ULL;  // FNV-1a offset basis
+
+  const int32_t count = schedule.eventCount();
+  const ScheduleEvent* events = schedule.events();
+  for (int32_t index = 0; index < count; ++index) {
+    const ScheduleEvent& event = events[index];
+    if (event.instrument >= static_cast<InstrumentId>(MaxRackChannels)) continue;
+    uint64_t& value = hash[static_cast<size_t>(event.instrument)];
+    const auto mix = [&value](uint64_t word) {
+      value = (value ^ word) * 0x100000001b3ULL;  // FNV-1a prime
+    };
+    mix(static_cast<uint64_t>(event.frame));
+    mix((static_cast<uint64_t>(event.type) << 16U) |
+        static_cast<uint64_t>(static_cast<uint16_t>(event.note)));
+    uint32_t bits = 0;
+    std::memcpy(&bits, &event.value, sizeof(bits));
+    mix((static_cast<uint64_t>(bits) << 32U) | event.reserved);
+  }
+
+  // The first schedule of a session replaces nothing, so it orphans nothing.
+  if (has_published_schedule_) {
+    for (size_t channel = 0; channel < hash.size(); ++channel) {
+      if (hash[channel] != published_channel_hash_[channel]) {
+        requestChannelReset(static_cast<int>(channel));
+      }
+    }
+  }
+  published_channel_hash_ = hash;
+  has_published_schedule_ = true;
+}
+
 void Engine::publishSchedule(std::unique_ptr<Schedule> schedule) {
   const uint64_t generation = schedule->generation();
   const int32_t count = schedule->eventCount();
   // Publishing a schedule is independent from voice resets. Adding a second
-  // audio clip must not cut off clips that are already playing.
+  // audio clip must not cut off clips that are already playing — and neither
+  // must painting a step on one channel silence the melody sounding on
+  // another, which is what a blanket all-notes-off on every publish did.
+  //
+  // A voice can only be orphaned by an edit that changed *its own* channel's
+  // events, so that is the only channel released. The comparison is one linear
+  // pass over the new schedule against the fingerprints of the last one: an
+  // edit to a 64-lane arrangement resets the lane that was edited and leaves
+  // the other 63 ringing.
+  releaseChannelsWhoseEventsChanged(*schedule);
   schedule_.publish(std::move(schedule));
-  schedule_replaced_.store(true, std::memory_order_release);
   ob_event event{};
   event.type = OB_EVT_SCHEDULE_PUBLISHED;
   event.i64_a = static_cast<int64_t>(generation);

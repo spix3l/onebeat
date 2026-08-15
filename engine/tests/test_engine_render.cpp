@@ -435,6 +435,61 @@ TEST_SUITE("engine") {
     CHECK(after_move.peak() < 0.05F);
   }
 
+  // Editing a step in the channel rack republishes the whole schedule. That
+  // used to release every voice in the rack, so painting a drum lane silenced
+  // the melody a hosted plug-in was in the middle of playing. Only the channels
+  // whose events actually changed may be released.
+  TEST_CASE("Republishing a schedule leaves untouched channels sounding") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    std::vector<onebeat::core::Engine::ChannelDesc> rack(2);
+    // Channel 0 is the lane being edited and is silent, so everything measured
+    // below is channel 1 — the lane nobody touched.
+    rack[0].muted = true;
+    engine->setChannels(rack);
+    engine->applyPendingWorkForTests();
+
+    auto sample = std::make_unique<onebeat::core::SampleData>();
+    sample->channels = 1;
+    sample->sample_rate = 48000.0;
+    sample->frames = 48000;
+    sample->name = "sustained";
+    sample->samples.assign(48000, 0.5F);
+    engine->channelSampler(1).setSample(std::move(sample));
+    engine->channelSampler(1).collectRetiredSamples(false);
+
+    // The note on channel 1 is identical in every schedule below; only the
+    // events on channel 0 — the lane being edited — differ.
+    const auto hold = [](onebeat::core::ScheduleBuilder& builder, onebeat::core::InstrumentId id) {
+      builder.addNote(id, onebeat::core::Sampler::RootNote, 1.0F, 0, 48000);
+    };
+
+    onebeat::core::ScheduleBuilder first;
+    hold(first, 1);
+    hold(first, 0);
+    engine->publishSchedule(first.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    CHECK(renderOffline(*engine, 4096, 128).peak() > 0.20F);
+
+    // The edit: another step on channel 0, and nothing at all on channel 1.
+    onebeat::core::ScheduleBuilder edited;
+    hold(edited, 1);
+    hold(edited, 0);
+    edited.addNote(0, onebeat::core::Sampler::RootNote, 1.0F, 24000, 12000);
+    engine->publishSchedule(edited.setLengthFrames(48000).build(48000.0, 2));
+    renderOffline(*engine, 512, 128);
+    CHECK(renderOffline(*engine, 2048, 128).peak() > 0.20F);
+
+    // And the guarantee the blanket release existed for: a voice whose own
+    // channel was edited out from under it does not hang.
+    onebeat::core::ScheduleBuilder without;
+    hold(without, 0);
+    engine->publishSchedule(without.setLengthFrames(48000).build(48000.0, 3));
+    renderOffline(*engine, 512, 128);
+    CHECK(renderOffline(*engine, 2048, 128).peak() < 0.05F);
+  }
+
   TEST_CASE("A channel's notes do not sound on any other channel") {
     auto engine = makeOfflineEngine();
     REQUIRE(engine != nullptr);

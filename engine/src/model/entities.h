@@ -244,6 +244,21 @@ inline Ticks patternLoopLength(const Pattern& pattern) {
   return bars * TicksPerBarFourFour;
 }
 
+// How long the pattern actually plays for: the length the user set, stretched
+// to whole bars whenever the notes in it need more room.
+//
+// `Pattern::length` is the *declared* length — what the rack's Steps control
+// writes and what the file stores — and it is never re-derived from the notes.
+// Drawing past the end therefore lengthens the pattern (the note sounds instead
+// of being silently dropped by the flattener), and deleting that note lets it
+// come back down to the declared length rather than stranding the pattern at a
+// size the user never chose and could not set back.
+inline Ticks patternEffectiveLength(const Pattern& pattern) {
+  const Ticks declared = pattern.length > 0 ? pattern.length : TicksPerBarFourFour;
+  const Ticks content = patternContentEnd(pattern);
+  return content <= declared ? declared : patternLoopLength(pattern);
+}
+
 struct TimeSignature {
   int32_t numerator = 4;
   int32_t denominator = 4;
