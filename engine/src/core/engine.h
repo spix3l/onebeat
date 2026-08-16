@@ -354,6 +354,11 @@ class Engine final : public audio_io::RenderCallback {
   bool metronome_enabled_ = false;
 
   std::atomic<uint64_t> xruns_{0};
+  // Bumped on entry to and exit from process(): odd means a block is in flight.
+  // How the housekeeping thread tells whether *anything* is rendering, which is
+  // not the same question as whether the device is running (see
+  // housekeepingLoop, and core/audio_export.h's offline render).
+  std::atomic<uint64_t> render_seq_{0};
   std::atomic<bool> running_{false};
   std::atomic<bool> housekeeping_active_{false};
   // Replacing a schedule while playing must reconcile voices from the old

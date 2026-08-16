@@ -412,6 +412,12 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   // `[main-thread]` one trips. The offline driver calls process() from an
   // ordinary thread and gets the same discipline for free.
   plugin::ThreadCheck::enterAudioThread();
+  // Odd while a block is in flight, even between blocks — a seqlock counter,
+  // read by the housekeeping thread to tell whether anything is rendering. The
+  // device's `running_` flag cannot answer that: an offline render (the
+  // exporter, the test driver) calls process() with the device stopped, and
+  // reclaiming a retired schedule under one of those is a use-after-free.
+  render_seq_.fetch_add(1, std::memory_order_acq_rel);
   const uint64_t started_ns = rt::monotonicNanos();
 
   // Exactly one epoch tick per block on every publisher the audio thread reads:
@@ -477,6 +483,7 @@ void Engine::process(const ProcessContext& context) noexcept OB_NONBLOCKING {
   const uint64_t render_nanos = rt::monotonicNanos() - started_ns;
   ++callback_count_;
   publishSnapshot(context, render_nanos);
+  render_seq_.fetch_add(1, std::memory_order_acq_rel);
   // Released rather than left set, so the offline driver's caller — an ordinary
   // thread that will go on to make main-thread calls — is not stuck holding the
   // audio role and tripping the opposite assertion.
@@ -1204,6 +1211,8 @@ void Engine::applyPendingWorkForTests() {
 
 void Engine::housekeepingLoop() {
   char formatted[256];
+  // The render counter as of the previous pass; see the collection step below.
+  uint64_t last_render_seq = 0;
   while (housekeeping_active_.load(std::memory_order_acquire)) {
     std::vector<std::string> pending;
     std::vector<ChannelDesc> channels;
@@ -1231,7 +1240,22 @@ void Engine::housekeepingLoop() {
     }
 
     // Free everything the audio thread provably cannot reach any more.
-    const bool rt_running = running_.load(std::memory_order_acquire);
+    //
+    // "Nothing is rendering" is two samples of the render counter that agree
+    // and are even: no block was in flight at either sample, and none ran in
+    // between. A block starting after that can only reach the *current*
+    // schedule — publish swaps the pointer before it retires the old one — so
+    // this is the whole safety argument for freeing without waiting for epochs.
+    //
+    // The device flag alone was not enough, and that is not a theoretical
+    // point: an offline render drives process() with the device stopped, so
+    // `running_` said false while a render was reading a schedule the collector
+    // was busy destroying (caught by TSan in the publish stress test).
+    const uint64_t render_seq = render_seq_.load(std::memory_order_acquire);
+    const bool quiet = !running_.load(std::memory_order_acquire) && render_seq == last_render_seq &&
+                       (render_seq % 2) == 0;
+    last_render_seq = render_seq;
+    const bool rt_running = !quiet;
     schedule_.collect(rt_running);
     for (auto& channel : channels_) {
       channel->instrument.sampler().collectRetiredSamples(rt_running);
