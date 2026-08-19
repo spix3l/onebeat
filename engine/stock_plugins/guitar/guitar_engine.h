@@ -90,6 +90,8 @@ class GuitarEngine {
   void setParameter(uint32_t id, double value) noexcept;
 
   void noteOn(int note_id, int channel, int key, double velocity) noexcept;
+  // Whether a voice is currently holding `key` — see PianoEngine::keySounding.
+  [[nodiscard]] bool keySounding(int key) const noexcept;
   void noteOff(int note_id, int channel, int key, bool choke) noexcept;
   void render(float** outputs, uint32_t channel_count, uint32_t offset,
               uint32_t frame_count) noexcept;
@@ -142,6 +144,10 @@ class GuitarEngine {
     double frequency = 196.0;
     double velocity = 0.0;
     double release_time = 0.0;
+    // Seconds this voice has actually been rendered for. Zero means it was
+    // claimed since the last sample went out, which is what makes it ineligible
+    // for stealing — see noteOn.
+    double age = 0.0;
     EnvStage stage = EnvStage::Off;
     size_t excitation_counter = 0;
     size_t excitation_length = 0;

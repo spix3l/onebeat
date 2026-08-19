@@ -199,6 +199,13 @@ bool SynthEngine::voiceMatches(const Voice& voice, int note_id, int channel, int
   return true;
 }
 
+bool SynthEngine::keySounding(int key) const noexcept {
+  for (const Voice& voice : voices_) {
+    if (voice.active && !voice.released && voice.key == key) return true;
+  }
+  return false;
+}
+
 void SynthEngine::noteOn(int note_id, int channel, int key, double velocity) noexcept {
   if (velocity <= 0.0) {
     noteOff(note_id, channel, key, false);
@@ -211,10 +218,30 @@ void SynthEngine::noteOn(int note_id, int channel, int key, double velocity) noe
       selected = &voice;
       break;
     }
-    if (selected == nullptr || voice.released || voice.envelope < selected->envelope) {
-      selected = &voice;
+  }
+  // Stealing, when every voice is busy: the quietest voice, preferring one that
+  // has already been released. A voice that has not been rendered yet is never
+  // a candidate — a chord is several note-ons at the same frame, applied before
+  // a sample is rendered, and a voice claimed at that frame is quieter than
+  // anything sounding. Without the `age` guard each note of a chord steals the
+  // voice the previous one just took and only the last note-on survives, which
+  // the ear hears as the top of every chord and nothing beneath it.
+  if (selected == nullptr) {
+    for (Voice& voice : voices_) {
+      if (voice.age <= 0.0) continue;
+      if (selected == nullptr) {
+        selected = &voice;
+        continue;
+      }
+      if (voice.released != selected->released) {
+        if (voice.released) selected = &voice;
+        continue;
+      }
+      if (voice.envelope < selected->envelope) selected = &voice;
     }
   }
+  // Every voice belongs to the chord starting right now: drop this note rather
+  // than cut one of its neighbours to make room.
   if (selected == nullptr) return;
 
   selected->active = true;

@@ -82,6 +82,12 @@ add_executable(onebeat_tests
   test_plugin_scan.cpp
   test_plugin_quarantine.cpp
   test_stress_publish.cpp
+  # The stock instruments' DSP cores, compiled straight in: their voice
+  # allocators are unit-testable and the CLAP bundles are not.
+  ../stock_plugins/piano/piano_engine.cpp
+  ../stock_plugins/synth/synth_engine.cpp
+  ../stock_plugins/guitar/guitar_engine.cpp
+  test_stock_voices.cpp
 )
 target_link_libraries(onebeat_tests PRIVATE onebeat_abi onebeat_core onebeat_testing onebeat_doctest)
 target_include_directories(onebeat_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)

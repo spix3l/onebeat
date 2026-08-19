@@ -393,6 +393,41 @@ struct PatternMetaTraits {
 // Notes
 // --------------------------------------------------------------------------
 
+// A pattern clip that is exactly as long as its pattern stays exactly as long
+// as its pattern.
+//
+// Drawing past the end of a pattern lengthens the pattern rather than dropping
+// the note (see `patternEffectiveLength`), but the flattener resolves every
+// occurrence against `Clip::length`: a clip that does not follow swallows each
+// note past its own right edge, which is stored, drawn, and silent. Following
+// here rather than in the flattener keeps the arrangement honest — the clip the
+// user sees is the clip that sounds.
+//
+// Only clips that *matched* the old length follow. One the user resized by hand
+// is an arrangement decision and is left where they put it.
+//
+// Returns what each clip it moved was before, so undo restores those exact
+// lengths. Re-deriving them on the way back is not the same thing: a clip that
+// already sat at the grown length for its own reasons would be dragged down
+// with the ones that followed, and the round trip would not be the identity.
+std::vector<std::pair<ClipId, Ticks>> followPatternLength(Project& project, PatternId pattern,
+                                                          Ticks before) {
+  std::vector<std::pair<ClipId, Ticks>> moved;
+  const Pattern* live = project.findPattern(pattern);
+  if (live == nullptr) return moved;
+  const Ticks after = patternEffectiveLength(*live);
+  if (after == before || after <= 0) return moved;
+  for (const ClipId id : project.clipsUsingPattern(pattern)) {
+    const Clip* clip = project.findClip(id);
+    if (clip == nullptr || clip->length != before) continue;
+    if (project.updateClip(id, ChangeField::Length,
+                           [after](Clip& value) { value.length = after; })) {
+      moved.emplace_back(id, before);
+    }
+  }
+  return moved;
+}
+
 class NoteCommand : public Command {
  public:
   NoteCommand(PatternId pattern, InstrumentId instrument, std::vector<Note> removed,
@@ -404,8 +439,24 @@ class NoteCommand : public Command {
         name_(std::move(name)),
         coalescable_(coalescable) {}
 
-  bool apply(Project& project) override { return edit(project, removed_, added_); }
-  bool revert(Project& project) override { return edit(project, added_, removed_); }
+  bool apply(Project& project) override {
+    const Pattern* pattern = project.findPattern(pattern_);
+    if (pattern == nullptr) return false;
+    const Ticks before = patternEffectiveLength(*pattern);
+    if (!editSequence(project, removed_, added_)) return false;
+    resized_ = followPatternLength(project, pattern_, before);
+    return true;
+  }
+
+  bool revert(Project& project) override {
+    if (!editSequence(project, added_, removed_)) return false;
+    for (const auto& [id, length] : resized_) {
+      project.updateClip(id, ChangeField::Length, [length](Clip& clip) { clip.length = length; });
+    }
+    resized_.clear();
+    return true;
+  }
+
   std::string name() const override { return name_; }
 
   bool coalesceWith(const Command& next) override {
@@ -417,6 +468,15 @@ class NoteCommand : public Command {
     // A -> B followed by B -> C becomes A -> C. The second command has already
     // applied; only history is folded, exactly like EditCommand above.
     added_ = other->added_;
+    // The clips the second edit moved fold in too, but never over an entry this
+    // command already holds: the length recorded first is the one from before
+    // the whole coalesced run, which is what reverting has to restore.
+    for (const auto& entry : other->resized_) {
+      const bool known = std::any_of(
+          resized_.begin(), resized_.end(),
+          [&entry](const std::pair<ClipId, Ticks>& held) { return held.first == entry.first; });
+      if (!known) resized_.push_back(entry);
+    }
     return true;
   }
 
@@ -425,7 +485,8 @@ class NoteCommand : public Command {
   // move is expressed as both, which is why dragging notes does not have to
   // snapshot the project. Removal counts are indexed so a 10k-note selection
   // stays O(n log n), rather than erasing 10k vector elements one at a time.
-  bool edit(Project& project, const std::vector<Note>& take, const std::vector<Note>& give) {
+  bool editSequence(Project& project, const std::vector<Note>& take,
+                    const std::vector<Note>& give) {
     const Pattern* pattern = project.findPattern(pattern_);
     if (pattern == nullptr || project.findInstrument(instrument_) == nullptr) return false;
 
@@ -480,6 +541,9 @@ class NoteCommand : public Command {
   std::vector<Note> added_;
   std::string name_;
   bool coalescable_ = false;
+  // The clips this edit dragged along with the pattern, and the length each one
+  // had before it did.
+  std::vector<std::pair<ClipId, Ticks>> resized_;
 };
 
 class TransportCommand : public Command {

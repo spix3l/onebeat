@@ -613,19 +613,45 @@ TEST_SUITE("stress") {
 }
 
 TEST_SUITE("unit") {
-  TEST_CASE("REPRO: notes drawn past the clip length never sound") {
+  TEST_CASE("A clip that fits its pattern follows the pattern as notes grow it") {
+    // The piano-roll regression: a clip is placed while the pattern is one bar
+    // long, the user keeps drawing out to bar four, and every note past the
+    // clip's right edge is stored, drawn and silent because the flattener
+    // resolves occurrences against `Clip::length`.
     Scene scene;
-    // Pattern declared one bar; the user draws out to bar 4 in the piano roll.
-    scene.addNotes({note(0, 60), note(TicksPerBarFourFour * 2, 62),
-                    note(TicksPerBarFourFour * 3, 64)});
-    // The clip was placed when the pattern was still one bar long.
-    scene.place(0, TicksPerBarFourFour, false);
+    onebeat::model::CommandBus bus{scene.project};
+    REQUIRE(
+        bus.execute(onebeat::model::insertNotes(scene.pattern, scene.instrument, {note(0, 60)})));
+    const ClipId clip = scene.place(0, TicksPerBarFourFour, false);
 
-    const FlattenResult result = run(scene.project);
-    MESSAGE("effective pattern length = "
-            << onebeat::model::patternEffectiveLength(*scene.project.findPattern(scene.pattern)));
-    MESSAGE("onsets = " << ticksOfOnsets(*result.schedule).size());
-    CHECK(ticksOfOnsets(*result.schedule) ==
+    REQUIRE(bus.execute(onebeat::model::insertNotes(
+        scene.pattern, scene.instrument,
+        {note(TicksPerBarFourFour * 2, 62), note(TicksPerBarFourFour * 3, 64)})));
+
+    CHECK(scene.project.findClip(clip)->length == TicksPerBarFourFour * 4);
+    const FlattenResult grown = run(scene.project);
+    CHECK(ticksOfOnsets(*grown.schedule) ==
           std::vector<int64_t>{0, TicksPerBarFourFour * 2, TicksPerBarFourFour * 3});
+    CHECK(notesAreBalanced(*grown.schedule));
+
+    // Undo takes the clip back with the notes rather than stranding it at a
+    // size the user never chose.
+    REQUIRE(bus.undo());
+    CHECK(scene.project.findClip(clip)->length == TicksPerBarFourFour);
+    CHECK(ticksOfOnsets(*run(scene.project, 2).schedule) == std::vector<int64_t>{0});
+  }
+
+  TEST_CASE("A clip the user resized by hand does not follow the pattern") {
+    Scene scene;
+    onebeat::model::CommandBus bus{scene.project};
+    REQUIRE(
+        bus.execute(onebeat::model::insertNotes(scene.pattern, scene.instrument, {note(0, 60)})));
+    // Two bars: longer than the pattern, so this is an arrangement decision.
+    const ClipId clip = scene.place(0, TicksPerBarFourFour * 2, false);
+
+    REQUIRE(bus.execute(onebeat::model::insertNotes(scene.pattern, scene.instrument,
+                                                    {note(TicksPerBarFourFour * 3, 64)})));
+
+    CHECK(scene.project.findClip(clip)->length == TicksPerBarFourFour * 2);
   }
 }

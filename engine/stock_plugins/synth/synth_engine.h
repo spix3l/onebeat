@@ -90,6 +90,8 @@ class SynthEngine {
   void selectPreset(double normalized) noexcept;
 
   void noteOn(int note_id, int channel, int key, double velocity) noexcept;
+  // Whether a voice is currently holding `key` — see PianoEngine::keySounding.
+  [[nodiscard]] bool keySounding(int key) const noexcept;
   void noteOff(int note_id, int channel, int key, bool choke) noexcept;
   void render(float** outputs, uint32_t channel_count, uint32_t offset,
               uint32_t frame_count) noexcept;

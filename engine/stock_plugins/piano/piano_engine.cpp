@@ -121,6 +121,13 @@ void PianoEngine::setParameter(uint32_t id, double value) noexcept {
   }
 }
 
+bool PianoEngine::keySounding(int key) const noexcept {
+  for (const Voice& voice : voices_) {
+    if (voice.active && !voice.released && voice.key == key) return true;
+  }
+  return false;
+}
+
 void PianoEngine::noteOn(int note_id, int channel, int key, double velocity) noexcept {
   Voice* selected = nullptr;
   for (Voice& voice : voices_) {
@@ -128,10 +135,36 @@ void PianoEngine::noteOn(int note_id, int channel, int key, double velocity) noe
       selected = &voice;
       break;
     }
-    if (selected == nullptr || voice.envelope < selected->envelope) {
-      selected = &voice;
+  }
+  // Every voice is busy, so this note has to steal one. The candidate is the
+  // quietest voice, preferring one the player has already let go of.
+  //
+  // A voice that has not been rendered yet is never a candidate, and that is
+  // the whole point of `age`. A chord arrives as several note-ons at the *same
+  // frame*, all applied before a single sample is rendered, and a voice started
+  // at that frame sits at the bottom of the envelope — quieter than anything
+  // actually sounding. Stealing on envelope alone therefore makes each note of
+  // the chord take the voice the note before it just claimed, and only the last
+  // note-on at that frame survives. The flattener emits same-frame note-ons in
+  // ascending key order, so what a player hears is the top of every chord and
+  // nothing under it, from the moment the voices fill up.
+  if (selected == nullptr) {
+    for (Voice& voice : voices_) {
+      if (voice.age <= 0.0) continue;
+      if (selected == nullptr) {
+        selected = &voice;
+        continue;
+      }
+      if (voice.released != selected->released) {
+        if (voice.released) selected = &voice;
+        continue;
+      }
+      if (voice.envelope < selected->envelope) selected = &voice;
     }
   }
+  // Every voice belongs to the chord being started right now. Dropping this
+  // note is the honest outcome: cutting one of its neighbours to make room
+  // would trade one missing note for another.
   if (selected == nullptr) {
     return;
   }

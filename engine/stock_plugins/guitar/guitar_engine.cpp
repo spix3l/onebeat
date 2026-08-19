@@ -178,6 +178,7 @@ void GuitarEngine::initReverbTuning() noexcept {
 void GuitarEngine::reset() noexcept {
   for (auto& voice : voices_) {
     voice.active = false;
+    voice.age = 0.0;
     voice.stage = EnvStage::Off;
     voice.delay_line.clear();
     voice.delay_line_secondary.clear();
@@ -219,32 +220,60 @@ bool GuitarEngine::voiceMatches(const Voice& voice, int note_id, int channel, in
   return voice.channel == channel && voice.key == key;
 }
 
+bool GuitarEngine::keySounding(int key) const noexcept {
+  for (const Voice& voice : voices_) {
+    if (voice.active && !voice.released && voice.key == key) return true;
+  }
+  return false;
+}
+
 void GuitarEngine::noteOn(int note_id, int channel, int key, double velocity) noexcept {
   if (velocity <= 0.0) {
     noteOff(note_id, channel, key, false);
     return;
   }
 
-  // Find voice: prefer inactive, else oldest / lowest amplitude
-  size_t target_idx = 0;
-  bool found_inactive = false;
+  // Find voice: prefer inactive, else the one furthest into its release, else
+  // the oldest still being held.
+  //
+  // A voice that has not been rendered yet is never stolen. A chord is several
+  // note-ons at the same frame, all applied before a sample goes out, so every
+  // voice it claims still has `age == 0`. The previous version fell through to
+  // index 0 whenever nothing had been released, which put every note of a
+  // held chord on the same voice and left only the last note-on sounding —
+  // the top of the chord and nothing under it.
+  size_t target_idx = VoiceCount;
   for (size_t i = 0; i < VoiceCount; ++i) {
     if (!voices_[i].active) {
       target_idx = i;
-      found_inactive = true;
       break;
     }
   }
 
-  if (!found_inactive) {
-    // Steal released voice first, or voice with highest release_time
+  if (target_idx == VoiceCount) {
     double max_release = -1.0;
     for (size_t i = 0; i < VoiceCount; ++i) {
-      if (voices_[i].released && voices_[i].release_time > max_release) {
+      if (voices_[i].age > 0.0 && voices_[i].released && voices_[i].release_time > max_release) {
         max_release = voices_[i].release_time;
         target_idx = i;
       }
     }
+  }
+
+  if (target_idx == VoiceCount) {
+    double max_age = 0.0;
+    for (size_t i = 0; i < VoiceCount; ++i) {
+      if (voices_[i].age > max_age) {
+        max_age = voices_[i].age;
+        target_idx = i;
+      }
+    }
+  }
+
+  // Every voice belongs to the chord starting right now: drop this note rather
+  // than cut one of its neighbours to make room.
+  if (target_idx == VoiceCount) {
+    return;
   }
 
   Voice& v = voices_[target_idx];
@@ -261,6 +290,7 @@ void GuitarEngine::noteOn(int note_id, int channel, int key, double velocity) no
   const double dyn_param = parameter(ParamDynamics);
   v.velocity = std::clamp(std::pow(velocity, 1.5 - dyn_param * 0.8), 0.01, 1.0);
   v.release_time = 0.0;
+  v.age = 0.0;
   v.stage = EnvStage::Excitation;
 
   // Excitation length in samples based on pitch & attack
@@ -329,6 +359,7 @@ void GuitarEngine::render(float** outputs, uint32_t channel_count, uint32_t offs
 
     for (auto& v : voices_) {
       if (!v.active) continue;
+      v.age += 1.0 / sample_rate_;
 
       const double delay_len = (sample_rate_ / std::max(20.0, v.frequency)) - 0.5;
       const double pick_comb_delay =
