@@ -73,6 +73,8 @@ class PlaylistStore extends ChangeNotifier {
   bool _gestureOpen = false;
   int _dragDelta = 0;
   String _dragLaneId = '';
+  int? _dragLaneDelta;
+  final Map<String, int> _dragLaneIndexes = <String, int>{};
 
   static const double _basePixelsPerTick = 0.012;
   double get pixelsPerTick => _basePixelsPerTick * horizontalZoom;
@@ -168,8 +170,18 @@ class PlaylistStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void zoomHorizontally(double factor) {
-    horizontalZoom = (horizontalZoom * factor).clamp(0.1, 20.0);
+  /// Changes timeline scale while keeping [anchorTick] at the same pixel
+  /// offset from the left edge. Toolbar and keyboard zoom pass the viewport
+  /// centre; gestures can continue using the simple left-edge form.
+  void zoomHorizontally(double factor, {double? anchorTick}) {
+    final double before = horizontalZoom;
+    final double after = (before * factor).clamp(0.1, 20.0);
+    if (after == before) return;
+    if (anchorTick != null) {
+      scrollTicks = anchorTick - (anchorTick - scrollTicks) * before / after;
+      if (scrollTicks < 0) scrollTicks = 0;
+    }
+    horizontalZoom = after;
     notifyListeners();
   }
 
@@ -580,23 +592,53 @@ class PlaylistStore extends ChangeNotifier {
     dragKind = kind;
     _dragDelta = 0;
     _dragLaneId = '';
+    _dragLaneDelta = null;
+    _dragLaneIndexes
+      ..clear()
+      ..addEntries(
+        selectedClipIds.map((String id) {
+          final ArrangementClip? clip = clipById(id);
+          return MapEntry<String, int>(id, clip == null ? 0 : _laneIndex(clip.laneId));
+        }),
+      );
     _client.beginGesture(name);
     _gestureOpen = true;
     notifyListeners();
   }
 
-  void updateClipMove(int deltaTicks, {String laneId = ''}) {
+  /// Moves the selection by one shared time delta and, when supplied, one
+  /// shared lane delta. The lane delta is measured from the start of the drag,
+  /// so clips that began on different lanes keep that relationship instead of
+  /// all being dropped onto the dragged clip's destination lane.
+  void updateClipMove(int deltaTicks, {String laneId = '', int? laneDelta}) {
     if (dragKind != ClipDragKind.move) return;
-    if (deltaTicks == _dragDelta && laneId == _dragLaneId) return;
+    if (deltaTicks == _dragDelta && laneId == _dragLaneId && laneDelta == _dragLaneDelta) return;
+
+    if (laneDelta != null) {
+      final int highestTarget = _dragLaneIndexes.values.fold<int>(0, (int highest, int start) {
+        return start + laneDelta > highest ? start + laneDelta : highest;
+      });
+      while (lanes.length <= highestTarget) {
+        addLane('Track ${lanes.length + 1}');
+      }
+    }
+
     final int step = deltaTicks - _dragDelta;
     for (final String id in selectedClipIds) {
       final ArrangementClip? clip = clipById(id);
       if (clip == null) continue;
+      String targetLane = laneId;
+      if (laneDelta != null) {
+        final int initialLane = _dragLaneIndexes[id] ?? _laneIndex(clip.laneId);
+        final int targetIndex = (initialLane + laneDelta).clamp(0, lanes.length - 1);
+        targetLane = lanes[targetIndex].id;
+      }
       final int start = clip.startTicks + step;
-      _client.moveClip(id, laneId: laneId, startTicks: start < 0 ? 0 : start);
+      _client.moveClip(id, laneId: targetLane, startTicks: start < 0 ? 0 : start);
     }
     _dragDelta = deltaTicks;
     _dragLaneId = laneId;
+    _dragLaneDelta = laneDelta;
     refresh();
   }
 
@@ -631,6 +673,8 @@ class PlaylistStore extends ChangeNotifier {
     }
     _dragDelta = 0;
     _dragLaneId = '';
+    _dragLaneDelta = null;
+    _dragLaneIndexes.clear();
     refresh();
   }
 
@@ -644,6 +688,10 @@ class PlaylistStore extends ChangeNotifier {
     }
     _dragDelta = 0;
     _dragLaneId = '';
+    _dragLaneDelta = null;
+    _dragLaneIndexes.clear();
     refresh();
   }
+
+  int _laneIndex(String laneId) => lanes.indexWhere((ArrangementLane lane) => lane.id == laneId).clamp(0, lanes.length - 1);
 }

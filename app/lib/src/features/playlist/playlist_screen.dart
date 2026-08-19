@@ -37,6 +37,8 @@ class PlaylistScreen extends StatelessWidget {
     this.onPanZoom,
     this.onSeekBar,
     this.onSnapChanged,
+    this.onZoomIn,
+    this.onZoomOut,
     this.onStartChanged,
     this.onLengthChanged,
     this.onOffsetChanged,
@@ -78,6 +80,8 @@ class PlaylistScreen extends StatelessWidget {
   final ValueChanged<Offset>? onPanZoom;
   final ValueChanged<double>? onSeekBar;
   final ValueChanged<String>? onSnapChanged;
+  final VoidCallback? onZoomIn;
+  final VoidCallback? onZoomOut;
   final ValueChanged<int>? onStartChanged;
   final ValueChanged<int>? onLengthChanged;
   final ValueChanged<int>? onOffsetChanged;
@@ -113,6 +117,8 @@ class PlaylistScreen extends StatelessWidget {
                   right: vm.canvas.headerRight,
                   snap: vm.canvas.snapTicks == 0 ? 'Off' : _snapLabel(vm.canvas.snapTicks),
                   onSnapChanged: onSnapChanged,
+                  onZoomIn: onZoomIn,
+                  onZoomOut: onZoomOut,
                 ),
                 Container(height: tokens.border.hairline, color: tokens.color.line),
                 Row(
@@ -180,22 +186,23 @@ class PlaylistScreen extends StatelessWidget {
               ],
             ),
           ),
-          _PlaylistInspectorPanel(
-            vm: vm.inspector,
-            onStartChanged: onStartChanged,
-            onLengthChanged: onLengthChanged,
-            onOffsetChanged: onOffsetChanged,
-            onLoopToggle: onLoopToggle,
-            onMuteToggle: onMuteToggle,
-            onTransposeChanged: onTransposeChanged,
-            onMakeUnique: onMakeUnique,
-            onSplitByChannel: onSplitByChannel,
-            onStretchModeChanged: onStretchModeChanged,
-            onReverseToggle: onReverseToggle,
-            onSourceBpmChanged: onSourceBpmChanged,
-            onFitToTempo: onFitToTempo,
-            onSplitAtPlayhead: onSplitAtPlayhead,
-          ),
+          if (!vm.inspector.isEmpty)
+            _PlaylistInspectorPanel(
+              vm: vm.inspector,
+              onStartChanged: onStartChanged,
+              onLengthChanged: onLengthChanged,
+              onOffsetChanged: onOffsetChanged,
+              onLoopToggle: onLoopToggle,
+              onMuteToggle: onMuteToggle,
+              onTransposeChanged: onTransposeChanged,
+              onMakeUnique: onMakeUnique,
+              onSplitByChannel: onSplitByChannel,
+              onStretchModeChanged: onStretchModeChanged,
+              onReverseToggle: onReverseToggle,
+              onSourceBpmChanged: onSourceBpmChanged,
+              onFitToTempo: onFitToTempo,
+              onSplitAtPlayhead: onSplitAtPlayhead,
+            ),
         ],
       ),
     );

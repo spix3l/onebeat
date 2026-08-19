@@ -99,6 +99,27 @@ void main() {
     expect((decoration.border! as Border).top.color, OneBeatTokens.dark().color.clipSelectedOutline);
   });
 
+  testWidgets('playlist zoom controls report zoom in and out actions', (WidgetTester tester) async {
+    int zoomIns = 0;
+    int zoomOuts = 0;
+    await pumpUi(
+      tester,
+      PlaylistHeader(
+        title: 'Playlist',
+        right: '120 BPM · 4/4',
+        onZoomIn: () => zoomIns++,
+        onZoomOut: () => zoomOuts++,
+      ),
+      size: const Size(900, 60),
+    );
+
+    await tester.tap(find.byKey(const Key('playlist-zoom-out')));
+    await tester.tap(find.byKey(const Key('playlist-zoom-in')));
+
+    expect(zoomOuts, 1);
+    expect(zoomIns, 1);
+  });
+
   testWidgets('the ruler reports seek positions including horizontal scroll', (WidgetTester tester) async {
     final List<double> seeks = <double>[];
     await pumpUi(

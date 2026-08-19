@@ -8,6 +8,21 @@ import 'package:onebeat/src/engine/engine_client.dart';
 import '../../support/app_harness.dart';
 
 void main() {
+  test('timeline zoom can move in and out around the viewport centre', () {
+    final EditorHarness harness = EditorHarness()..seedArrangement();
+    final PlaylistStore store = harness.arrangement;
+
+    store.zoomHorizontally(2.0, anchorTick: 3840);
+
+    expect(store.horizontalZoom, 2.0);
+    expect(store.scrollTicks, 1920.0);
+
+    store.zoomHorizontally(0.5, anchorTick: 3840);
+
+    expect(store.horizontalZoom, 1.0);
+    expect(store.scrollTicks, 0.0);
+  });
+
   test('moving a clip between lanes changes only the lane', () {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final ArrangementStore store = harness.arrangement;
@@ -27,6 +42,36 @@ void main() {
     expect(moved.transpose, clip.transpose);
     expect(harness.client.gestureBegins, 1);
     expect(harness.client.gestureCommits, 1);
+  });
+
+  test('moving multiple clips preserves their relative lanes', () {
+    final EditorHarness harness = EditorHarness();
+    harness.client
+      ..createLane('Second')
+      ..createLane('Third');
+    final String laneB = harness.client.lanes.values.firstWhere((value) => value.name == 'Second').id;
+    final String laneC = harness.client.lanes.values.firstWhere((value) => value.name == 'Third').id;
+    harness.client
+      ..addClip('lane_a', startTicks: 0, lengthTicks: 3840)
+      ..addClip(laneB, startTicks: 0, lengthTicks: 3840)
+      ..addClip(laneC, startTicks: 0, lengthTicks: 3840);
+    harness.arrangement.refresh();
+
+    final Map<String, String> clipsByStartingLane = <String, String>{
+      for (final ArrangementClip clip in harness.arrangement.clips) clip.laneId: clip.id,
+    };
+    final PlaylistStore store = harness.arrangement;
+    store
+      ..selectClips(clipsByStartingLane.values)
+      ..beginClipDrag(ClipDragKind.move)
+      ..updateClipMove(0, laneDelta: 1)
+      ..endClipDrag();
+
+    expect(store.clipById(clipsByStartingLane['lane_a']!)!.laneId, laneB);
+    expect(store.clipById(clipsByStartingLane[laneB]!)!.laneId, laneC);
+    final String lastLane = store.lanes.last.id;
+    expect(store.clipById(clipsByStartingLane[laneC]!)!.laneId, lastLane);
+    expect(store.clips, hasLength(3));
   });
 
   test('clip windowing and transforms round-trip through the store', () {

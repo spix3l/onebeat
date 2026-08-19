@@ -9,13 +9,22 @@
 import 'package:flutter/widgets.dart';
 
 import '../../ui_kit/dropdown.dart';
+import '../../ui_kit/tooltip.dart';
 
 import '../../design/tokens.dart';
 import 'playlist_store.dart';
 
 /// `PLAYLIST` on the left, the project's own line on the right.
 class PlaylistHeader extends StatelessWidget {
-  const PlaylistHeader({required this.title, required this.right, this.snap = '1 bar', this.onSnapChanged, super.key});
+  const PlaylistHeader({
+    required this.title,
+    required this.right,
+    this.snap = '1 bar',
+    this.onSnapChanged,
+    this.onZoomIn,
+    this.onZoomOut,
+    super.key,
+  });
 
   final String title;
 
@@ -23,6 +32,8 @@ class PlaylistHeader extends StatelessWidget {
   final String right;
   final String snap;
   final ValueChanged<String>? onSnapChanged;
+  final VoidCallback? onZoomIn;
+  final VoidCallback? onZoomOut;
 
   @override
   Widget build(BuildContext context) {
@@ -42,12 +53,94 @@ class PlaylistHeader extends StatelessWidget {
             width: tokens.size.dropdownWidth,
             onSelected: onSnapChanged,
           ),
-          SizedBox(width: tokens.spacing.sm),
+          if (onZoomIn != null || onZoomOut != null) ...<Widget>[
+            SizedBox(width: tokens.spacing.sm),
+            ObTooltip(
+              message: 'Zoom out',
+              shortcut: '⌘−',
+              child: _PlaylistZoomButton(
+                key: const Key('playlist-zoom-out'),
+                zoomIn: false,
+                onTap: onZoomOut,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.xs),
+            ObTooltip(
+              message: 'Zoom in',
+              shortcut: '⌘+',
+              child: _PlaylistZoomButton(
+                key: const Key('playlist-zoom-in'),
+                zoomIn: true,
+                onTap: onZoomIn,
+              ),
+            ),
+            SizedBox(width: tokens.spacing.sm),
+          ],
           Text(right, maxLines: 1, style: tokens.type.numericSmall),
         ],
       ),
     );
   }
+}
+
+class _PlaylistZoomButton extends StatelessWidget {
+  const _PlaylistZoomButton({required this.zoomIn, this.onTap, super.key});
+
+  final bool zoomIn;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final ColorTokens color = tokens.color;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+        child: Container(
+          width: tokens.size.microFieldHeight,
+          height: tokens.size.microFieldHeight,
+          decoration: BoxDecoration(
+            color: color.surfaceWell,
+            borderRadius: tokens.radius.controlBorder,
+            border: Border.all(color: color.lineStrong, width: tokens.border.hairline),
+          ),
+          child: CustomPaint(
+            painter: _PlaylistZoomPainter(
+              plus: zoomIn,
+              color: color.textSecondary,
+              stroke: tokens.border.glyph,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlaylistZoomPainter extends CustomPainter {
+  _PlaylistZoomPainter({required this.plus, required this.color, required this.stroke});
+
+  final bool plus;
+  final Color color;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    canvas.drawLine(Offset(size.width * 0.3, size.height * 0.5), Offset(size.width * 0.7, size.height * 0.5), line);
+    if (plus) {
+      canvas.drawLine(Offset(size.width * 0.5, size.height * 0.3), Offset(size.width * 0.5, size.height * 0.7), line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PlaylistZoomPainter oldDelegate) => oldDelegate.plus != plus || oldDelegate.color != color;
 }
 
 class PlaylistRuler extends StatelessWidget {

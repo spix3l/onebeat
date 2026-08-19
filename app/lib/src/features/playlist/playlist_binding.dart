@@ -550,7 +550,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       1 << 20,
     );
     _ensureLane(laneIndex);
-    _store.updateClipMove(deltaTicks, laneId: _store.lanes[laneIndex].id);
+    _store.updateClipMove(deltaTicks, laneDelta: laneIndex - _dragStartLane);
   }
 
   void _onClipPanEnd(int hashId, DragEndDetails details) {
@@ -656,6 +656,19 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
   /// which is the only cut position the user can hear before they take it.
   int _playheadTicks() => (_controller.snapshot.positionBeats * ticksPerQuarter).round();
 
+  /// The timeline point under the middle of the visible canvas. Toolbar and
+  /// keyboard zoom use this anchor so the arrangement does not jump sideways
+  /// while its scale changes.
+  double get _playlistCentreTick {
+    final RenderBox? canvas = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    final double visibleTicks = canvas == null || !canvas.hasSize
+        ? ticksPerBar * 4.0
+        : canvas.size.width / _store.pixelsPerTick;
+    return _store.scrollTicks + visibleTicks / 2;
+  }
+
+  void _zoomPlaylist(double factor) => _store.zoomHorizontally(factor, anchorTick: _playlistCentreTick);
+
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
@@ -670,6 +683,10 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
         SingleActivator(LogicalKeyboardKey.keyB, meta: true): _DuplicateIntent(),
         SingleActivator(LogicalKeyboardKey.keyD, meta: true): _DuplicateIntent(),
         SingleActivator(LogicalKeyboardKey.keyA, meta: true): _SelectAllIntent(),
+        SingleActivator(LogicalKeyboardKey.equal, meta: true): _ZoomIntent(1.25),
+        SingleActivator(LogicalKeyboardKey.add, meta: true): _ZoomIntent(1.25),
+        SingleActivator(LogicalKeyboardKey.minus, meta: true): _ZoomIntent(0.8),
+        SingleActivator(LogicalKeyboardKey.numpadSubtract, meta: true): _ZoomIntent(0.8),
         SingleActivator(LogicalKeyboardKey.escape): CancelIntent(),
       },
       handlers: const <String, VoidCallback>{},
@@ -699,6 +716,12 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
         _SelectAllIntent: CallbackAction<_SelectAllIntent>(
           onInvoke: (_) {
             _store.selectClips(_store.clips.map((ArrangementClip c) => c.id));
+            return null;
+          },
+        ),
+        _ZoomIntent: CallbackAction<_ZoomIntent>(
+          onInvoke: (_ZoomIntent intent) {
+            _zoomPlaylist(intent.factor);
             return null;
           },
         ),
@@ -732,6 +755,8 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           onPanZoom: _onPlaylistPanZoom,
           onSeekBar: _onPlaylistSeek,
           onSnapChanged: _onSnapChanged,
+          onZoomIn: () => _zoomPlaylist(1.25),
+          onZoomOut: () => _zoomPlaylist(0.8),
           onStartChanged: (int bar) {
             final ArrangementClip? clip = _store.selectedClip;
             if (clip != null) {
@@ -835,4 +860,10 @@ class _DuplicateIntent extends Intent {
 
 class _SelectAllIntent extends Intent {
   const _SelectAllIntent();
+}
+
+class _ZoomIntent extends Intent {
+  const _ZoomIntent(this.factor);
+
+  final double factor;
 }

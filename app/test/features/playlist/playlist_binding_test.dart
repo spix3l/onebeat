@@ -61,6 +61,17 @@ void main() {
     store = PlaylistStore(fakeClient)..load();
   });
 
+  testWidgets('hides the clip inspector when nothing is selected', (
+    WidgetTester tester,
+  ) async {
+    await pumpForTest(
+      tester,
+      PlaylistBinding(client: fakeClient, store: store),
+    );
+
+    expect(find.text('Select a clip to window, loop or transpose it.'), findsNothing);
+  });
+
   testWidgets('places a pattern clip on empty background tap', (
     WidgetTester tester,
   ) async {
