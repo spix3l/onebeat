@@ -68,7 +68,7 @@ class ObMenuBar extends StatelessWidget {
   }
 }
 
-/// The app dot and `OneBeat` wordmark.
+/// The app dot and `ONEBEAT` wordmark.
 class _WordMark extends StatelessWidget {
   const _WordMark({required this.tokens});
 
@@ -87,7 +87,7 @@ class _WordMark extends StatelessWidget {
           ),
         ),
         SizedBox(width: tokens.spacing.xs),
-        Text('OneBeat', style: tokens.type.wordmark),
+        Text('ONEBEAT', style: tokens.type.wordmark),
       ],
     );
   }

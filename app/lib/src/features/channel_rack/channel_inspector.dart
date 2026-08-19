@@ -44,6 +44,7 @@ class ChannelInspectorVm {
     required this.panText,
     this.fx = const <FxVm>[],
     required this.route,
+    this.routeOptions = const <String>[],
     this.muted = false,
     this.soloed = false,
     this.hostsPlugin = false,
@@ -81,8 +82,12 @@ class ChannelInspectorVm {
 
   final List<FxVm> fx;
 
-  /// `M1 · Music`: the destination, by name.
+  /// The destination, by name.
   final String route;
+
+  /// Available mixer destinations. Empty keeps the inspector's route chip for
+  /// callers that only want to open the mixer.
+  final List<String> routeOptions;
 
   final bool muted;
   final bool soloed;
@@ -106,6 +111,7 @@ class ObChannelInspector extends StatelessWidget {
     this.onFxTap,
     this.onAddFx,
     this.onRouteTap,
+    this.onRouteSelected,
     this.onKeyPress,
     this.onGrid,
     super.key,
@@ -126,6 +132,9 @@ class ObChannelInspector extends StatelessWidget {
   final ValueChanged<int>? onFxTap;
   final VoidCallback? onAddFx;
   final VoidCallback? onRouteTap;
+
+  /// Assigns the selected channel to a mixer destination by its display name.
+  final ValueChanged<String>? onRouteSelected;
 
   /// Fired with a MIDI note number when a key is pressed.
   final ValueChanged<int>? onKeyPress;
@@ -211,7 +220,16 @@ class ObChannelInspector extends StatelessWidget {
               SizedBox(width: tokens.spacing.xl),
               _RouteArrow(color: color.textMuted, stroke: tokens.border.glyph),
               SizedBox(width: tokens.spacing.sm),
-              ObFxChip(label: vm.route, dotColor: color.none, mono: true, onTap: onRouteTap),
+              if (vm.routeOptions.isNotEmpty && onRouteSelected != null)
+                ObDropdown(
+                  label: 'Route',
+                  value: vm.route,
+                  items: vm.routeOptions,
+                  width: tokens.size.inspectorGridFieldWidth,
+                  onSelected: onRouteSelected,
+                )
+              else
+                ObFxChip(label: vm.route, dotColor: color.none, mono: true, onTap: onRouteTap),
             ],
           );
 

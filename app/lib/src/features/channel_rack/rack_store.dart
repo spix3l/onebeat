@@ -30,6 +30,11 @@ class RackStore extends ChangeNotifier {
   final Map<String, List<SequenceNote>> notesByInstrument = <String, List<SequenceNote>>{};
 
   String? selectedInstrumentId;
+
+  /// Shift-click selection for rack bulk actions. [selectedInstrumentId] remains
+  /// the inspector subject; this set is the complete selection.
+  final Set<String> selectedInstrumentIds = <String>{};
+
   String? selectedVelocityInstrument;
   bool showAll = true;
 
@@ -90,12 +95,12 @@ class RackStore extends ChangeNotifier {
     // Selection is a UI action, not a default derived from the engine's
     // current instrument. Keeping it null until a lane is clicked prevents the
     // inspector from occupying the rack before the user has selected anything.
-    if (selectedInstrumentId != null &&
-        !instruments.any(
-          (ProjectInstrument inst) => inst.id == selectedInstrumentId,
-        )) {
+    final Set<String> liveIds = instruments.map((ProjectInstrument inst) => inst.id).toSet();
+    selectedInstrumentIds.removeWhere((String id) => !liveIds.contains(id));
+    if (selectedInstrumentId != null && !liveIds.contains(selectedInstrumentId)) {
       selectedInstrumentId = null;
     }
+    if (selectedInstrumentId != null) selectedInstrumentIds.add(selectedInstrumentId!);
 
     notifyListeners();
   }
@@ -131,12 +136,28 @@ class RackStore extends ChangeNotifier {
     refresh();
   }
 
-  void selectInstrument(String instrumentId) {
-    if (selectedInstrumentId == instrumentId) return;
-    selectedInstrumentId = instrumentId;
-    selectedVelocityInstrument = instrumentId;
+  void selectInstrument(String instrumentId, {bool additive = false}) {
+    if (additive) {
+      if (selectedInstrumentIds.contains(instrumentId)) {
+        selectedInstrumentIds.remove(instrumentId);
+        if (selectedInstrumentId == instrumentId) {
+          selectedInstrumentId = selectedInstrumentIds.isEmpty ? null : selectedInstrumentIds.last;
+        }
+      } else {
+        selectedInstrumentIds.add(instrumentId);
+        selectedInstrumentId = instrumentId;
+      }
+    } else {
+      selectedInstrumentIds
+        ..clear()
+        ..add(instrumentId);
+      selectedInstrumentId = instrumentId;
+    }
+    selectedVelocityInstrument = selectedInstrumentId;
     notifyListeners();
   }
+
+  bool isInstrumentSelected(String instrumentId) => selectedInstrumentIds.contains(instrumentId);
 
   void toggleStep(String instrumentId, int step) {
     _client.toggleRackStep(instrumentId, step);

@@ -51,6 +51,7 @@ class ChannelRackScreen extends StatelessWidget {
     this.onInspectorFxTap,
     this.onInspectorAddFx,
     this.onInspectorRouteTap,
+    this.onInspectorRouteSelected,
     this.onInspectorKeyPress,
     this.onInspectorGrid,
     this.onPointerDownStep,
@@ -100,6 +101,7 @@ class ChannelRackScreen extends StatelessWidget {
   final ValueChanged<int>? onInspectorFxTap;
   final VoidCallback? onInspectorAddFx;
   final VoidCallback? onInspectorRouteTap;
+  final ValueChanged<String>? onInspectorRouteSelected;
   final ValueChanged<int>? onInspectorKeyPress;
 
   /// Sets the selected channel's step divisor.
@@ -210,6 +212,7 @@ class ChannelRackScreen extends StatelessWidget {
               onFxTap: onInspectorFxTap,
               onAddFx: onInspectorAddFx,
               onRouteTap: onInspectorRouteTap,
+              onRouteSelected: onInspectorRouteSelected,
               onKeyPress: onInspectorKeyPress,
               onGrid: onInspectorGrid,
             ),

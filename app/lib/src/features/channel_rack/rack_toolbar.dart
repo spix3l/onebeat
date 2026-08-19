@@ -21,6 +21,7 @@ class RackToolbarVm {
     required this.group,
     required this.snap,
     required this.steps,
+    this.autoLength = false,
     this.channelTypes = const <String>['Sampler', 'Synth', 'Audio clip'],
     this.groups = const <String>['All', 'Drums', 'Music'],
     this.snaps,
@@ -37,6 +38,7 @@ class RackToolbarVm {
   /// caption: this used to be a formatted string next to a grid that was always
   /// 16 wide, which read as a setting but was only ever a label.
   final int steps;
+  final bool autoLength;
 
   /// Common lengths in the 1–512-step range accepted by the ABI. The current
   /// value is appended by [stepItems] when it is an arbitrary length.
@@ -47,8 +49,9 @@ class RackToolbarVm {
   /// not on the ladder. Leaving that value out of the list made the count look
   /// like it had changed to a number the control did not believe in.
   List<String> get stepItems => <String>[
+    'Auto',
     for (final int option in stepOptions) '$option',
-    if (!stepOptions.contains(steps)) '$steps',
+    if (!autoLength && !stepOptions.contains(steps)) '$steps',
   ];
 
   final List<String> channelTypes;
@@ -145,13 +148,17 @@ class ObRackToolbar extends StatelessWidget {
               SizedBox(width: tokens.spacing.md),
               ObDropdown(
                 label: 'Steps',
-                value: '${vm.steps}',
+                value: vm.autoLength ? 'Auto' : '${vm.steps}',
                 items: vm.stepItems,
                 width: tokens.size.rackSnapFieldWidth,
                 onSelected:
                     onSteps == null
                         ? null
                         : (String value) {
+                          if (value == 'Auto') {
+                            onSteps!(0);
+                            return;
+                          }
                           final int? parsed = int.tryParse(value);
                           if (parsed != null) onSteps!(parsed);
                         },

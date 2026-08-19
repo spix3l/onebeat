@@ -24,6 +24,9 @@ dev_dependencies:
 flutter:
   uses-material-design: false
 
+  assets:
+    - assets/branding/onebeat_logo.png
+
   # Bundled with their SIL OFL licences in third_party/fonts/ (OB-1-03 §1).
   # Both are variable fonts; weights are selected through the type tokens.
   fonts:

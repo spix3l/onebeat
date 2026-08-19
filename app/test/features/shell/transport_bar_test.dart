@@ -20,7 +20,6 @@ void main() {
         key: Key('transportBar'),
         vm: ObTransportBarVm(
           title: 'ONEBEAT',
-          subtitle: 'v0.3 SEQUENCES',
           playing: true,
           looping: false,
           bpmText: demoBpm,
@@ -50,7 +49,6 @@ void main() {
       ObTransportBar(
         vm: const ObTransportBarVm(
           title: 'ONEBEAT',
-          subtitle: 'v0.3 SEQUENCES',
           playing: false,
           looping: false,
           bpmText: demoBpm,

@@ -18,7 +18,7 @@ import 'readouts.dart';
 class ObTransportBarVm {
   const ObTransportBarVm({
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     required this.playing,
     required this.looping,
     this.metronome = false,
@@ -33,7 +33,7 @@ class ObTransportBarVm {
 
   /// Title block lines: `ONEBEAT` caps over the `v0.3 SEQUENCES` micro line.
   final String title;
-  final String subtitle;
+  final String? subtitle;
 
   /// Play renders accent-active when true.
   final bool playing;
@@ -92,7 +92,9 @@ class ObTransportBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
         color: tokens.color.surfaceSunken,
-        border: Border(bottom: BorderSide(color: tokens.color.lineStrong, width: tokens.border.hairline)),
+        border: Border(
+          bottom: BorderSide(color: tokens.color.lineStrong, width: tokens.border.hairline),
+        ),
       ),
       child: Row(
         children: <Widget>[
@@ -138,27 +140,41 @@ class _TitleBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        Container(
-          width: tokens.size.appTileSize,
-          height: tokens.size.appTileSize,
-          decoration: BoxDecoration(color: tokens.color.accent, borderRadius: tokens.radius.controlBorder),
-          alignment: Alignment.center,
-          child: Container(
-            width: tokens.spacing.sm,
-            height: tokens.spacing.sm,
-            decoration: BoxDecoration(color: tokens.color.surfaceSunken, shape: BoxShape.circle),
-          ),
-        ),
+        ObAppBrandMark(tokens: tokens),
         SizedBox(width: tokens.spacing.sm),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(vm.title, style: tokens.type.brandCaps),
-            Text(vm.subtitle, style: tokens.type.microCaps),
+            if (vm.subtitle != null) Text(vm.subtitle!, style: tokens.type.microCaps),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// The compact OneBeat mark used by the transport title block.
+class ObAppBrandMark extends StatelessWidget {
+  const ObAppBrandMark({required this.tokens, super.key});
+
+  final OneBeatTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'OneBeat',
+      image: true,
+      child: Container(
+        width: tokens.size.appTileSize,
+        height: tokens.size.appTileSize,
+        decoration: BoxDecoration(
+          color: tokens.color.accent,
+          borderRadius: tokens.radius.controlBorder,
+          image: const DecorationImage(image: AssetImage('assets/branding/onebeat_logo.png'), fit: BoxFit.cover),
+        ),
+      ),
     );
   }
 }
@@ -274,7 +290,9 @@ class _MeterSliver extends StatelessWidget {
       decoration: BoxDecoration(color: tokens.color.meterTrack, borderRadius: tokens.radius.meterBorder),
       child: ClipRRect(
         borderRadius: tokens.radius.meterBorder,
-        child: CustomPaint(painter: _MeterSliverPainter(level: level.clamp(0.0, 1.0), color: tokens.color)),
+        child: CustomPaint(
+          painter: _MeterSliverPainter(level: level.clamp(0.0, 1.0), color: tokens.color),
+        ),
       ),
     );
   }

@@ -19,7 +19,6 @@ void main() {
     const ShellScreenVm vm = ShellScreenVm(
       transport: ObTransportBarVm(
         title: 'ONEBEAT',
-        subtitle: 'v0.3 SEQUENCES',
         playing: false,
         looping: false,
         bpmText: '124.00',

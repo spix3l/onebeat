@@ -629,7 +629,6 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
 
     final ObTransportBarVm transportVm = ObTransportBarVm(
       title: 'ONEBEAT',
-      subtitle: 'v0.3 SEQUENCES',
       playing: snapshot.playing,
       looping: snapshot.loopEnabled,
       metronome: _controller.metronomeEnabled,

@@ -82,11 +82,20 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
     return instruments[_selectedTrackIndex].routeId;
   }
 
-  String _trackName(String trackId) {
+  MixerTrackInfo? _trackById(String trackId) {
     for (final MixerTrackInfo track in _tracks) {
-      if (track.id == trackId) return track.name;
+      if (track.id == trackId) return track;
     }
-    return 'Master';
+    return null;
+  }
+
+  String _trackName(String trackId) => _trackById(trackId)?.name ?? 'Master';
+
+  String _instrumentRoute(ProjectInstrument instrument) {
+    final String name = instrument.routeName.trim();
+    if (name.isNotEmpty) return '→ $name';
+    if (instrument.routeId.isNotEmpty) return '→ ${_trackName(instrument.routeId)}';
+    return '→ Unrouted';
   }
 
   EffectRackVm _buildRackVm() {
@@ -223,7 +232,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
           return MixerStripVm(
             name: inst.name,
             color: color,
-            route: '→ Master',
+            route: _instrumentRoute(inst),
             level: trackLevel,
             fader: fader,
             muted: muted,
@@ -249,26 +258,39 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
       isMaster: true,
     );
 
-    // Selected track for routing panel
+    // Selected track for routing panel. Every row is derived from the model:
+    // the panel must not claim that every instrument feeds the selected strip,
+    // or that every strip feeds Master, when the project has a real graph.
     final String selectedName = (_selectedTrackIndex >= 0 && _selectedTrackIndex < instruments.length)
         ? instruments[_selectedTrackIndex].name
         : 'Master';
+    final String selectedTrackId = _selectedTrackId(instruments);
+    final MixerTrackInfo? selectedTrack = _trackById(selectedTrackId);
+    final List<ProjectInstrument> routedInto = instruments
+        .where((ProjectInstrument instrument) =>
+            selectedTrackId.isEmpty ? instrument.routeId.isEmpty : instrument.routeId == selectedTrackId)
+        .toList(growable: false);
+    final MixerTrackInfo? outputTrack =
+        selectedTrack == null || selectedTrack.outputId.isEmpty ? null : _trackById(selectedTrack.outputId);
 
     final RoutingPanelVm routingVm = RoutingPanelVm(
       trackName: selectedName,
       feeds: <FeedVm>[
-        for (int i = 0; i < instruments.length.clamp(0, 4); i++)
+        for (int i = 0; i < routedInto.length && i < 4; i++)
           FeedVm(
-            name: instruments[i].name,
-            color: _resolveColor(i, instruments[i].color),
-            routeText: 'out 1 → $selectedName',
+            name: routedInto[i].name,
+            color: _resolveColor(
+              instruments.indexWhere((ProjectInstrument instrument) => instrument.id == routedInto[i].id),
+              routedInto[i].color,
+            ),
+            routeText: 'out 1 → ${selectedTrack?.name ?? selectedName}',
           ),
       ],
       feedsInto: <FeedVm>[
         FeedVm(
-          name: 'Master',
-          color: channelColors[7],
-          routeText: '→ output',
+          name: outputTrack?.name ?? (selectedTrack == null ? 'Unrouted' : 'Master'),
+          color: outputTrack == null ? channelColors[7] : _resolveColor(0, outputTrack.name),
+          routeText: outputTrack == null ? '→ output' : '→ ${outputTrack.name}',
         ),
       ],
       sends: const <SendVm>[

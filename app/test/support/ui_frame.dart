@@ -36,7 +36,6 @@ ObMenuBarVm demoMenuBar({int? activeIndex}) => ObMenuBarVm(
 /// The transport bar as the mockups set it: stopped, 124 BPM, 4/4.
 const ObTransportBarVm demoTransportBar = ObTransportBarVm(
   title: 'ONEBEAT',
-  subtitle: 'v0.3 SEQUENCES',
   playing: false,
   looping: false,
   bpmText: '124.00',

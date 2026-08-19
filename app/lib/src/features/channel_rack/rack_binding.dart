@@ -303,6 +303,41 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     return inspector ? name : '→ $name';
   }
 
+  List<MixerTrackInfo> _readMixerTracks() {
+    try {
+      return widget.client.readMixerTracks();
+    } catch (_) {
+      // Some lightweight rack clients do not expose the mixer seam.
+      return const <MixerTrackInfo>[];
+    }
+  }
+
+  List<String> _routeOptions(ProjectInstrument? instrument) {
+    final List<String> names = <String>[
+      for (final MixerTrackInfo track in _readMixerTracks())
+        if (!track.isMaster) track.name,
+    ];
+    final String current = instrument?.routeName.trim() ?? '';
+    if (current.isNotEmpty && !names.contains(current)) names.add(current);
+    return names;
+  }
+
+  void _onInspectorRouteSelected(String routeName) {
+    final String? instrumentId = _store.selectedInstrumentId;
+    if (instrumentId == null || routeName.isEmpty || routeName == 'Unrouted') return;
+    final MixerTrackInfo? track = _readMixerTracks().cast<MixerTrackInfo?>().firstWhere(
+      (MixerTrackInfo? value) => value?.name == routeName,
+      orElse: () => null,
+    );
+    if (track == null) return;
+    try {
+      widget.client.setInstrumentRoute(instrumentId, track.id);
+      _store.refresh();
+    } catch (_) {
+      // The route command is unavailable on presentation-only test clients.
+    }
+  }
+
   Color _resolveInstrumentColor(int index, String? colorStr) {
     if (colorStr != null && colorStr.isNotEmpty) {
       final int parsed = int.tryParse(colorStr.replaceFirst('#', ''), radix: 16) ?? 0;
@@ -364,7 +399,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           pan: _pans[row.instrumentId] ?? (inst != null ? ((inst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
           route: _routeLabel(inst, inspector: false),
           powered: !(inst?.muted ?? false),
-          selected: _store.selectedInstrumentId == row.instrumentId,
+          selected: _store.isInstrumentSelected(row.instrumentId),
           previewNotes: _previewNotesFor(row), // Sample lanes open the built-in sampler; hosted lanes open their
           // plug-in editor. Empty lanes remain non-openable.
           hostsPlugin: inst != null && inst.pluginId.isNotEmpty,
@@ -379,6 +414,12 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       final int instIndex = _store.instruments.indexWhere((ProjectInstrument inst) => inst.id == selectedId);
       final Color inspColor = _resolveInstrumentColor(instIndex >= 0 ? instIndex : 0, selectedInst?.color);
 
+      final List<String> routeOptions = _routeOptions(selectedInst);
+      final String inspectorRoute =
+          routeOptions.isEmpty && (selectedInst?.routeName.trim().isEmpty ?? true)
+              ? _routeLabel(selectedInst, inspector: true)
+              : (selectedInst?.routeName.trim().isEmpty ?? true ? 'Select route' : selectedInst!.routeName);
+
       inspectorVm = ChannelInspectorVm(
         name: selectedInst?.name ?? selectedId,
         subtitle:
@@ -388,7 +429,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         volText: _volText(selectedId, selectedInst),
         pan: _pans[selectedId] ?? (selectedInst != null ? ((selectedInst.pan.clamp(-1.0, 1.0) + 1.0) / 2.0) : 0.5),
         panText: _panText(selectedId, selectedInst),
-        route: _routeLabel(selectedInst, inspector: true),
+        route: inspectorRoute,
+        routeOptions: routeOptions,
         muted: selectedInst?.muted ?? false,
         soloed: _store.instrumentFor(selectedId)?.soloed ?? false,
         // The row itself can open a sample's built-in editor, but the
@@ -413,6 +455,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       group: _store.showAll ? 'All' : 'Used',
       snap: '1/16',
       steps: stepCount,
+      autoLength: pattern?.autoLength ?? false,
       groups: const <String>['All', 'Used'],
       swing: pattern?.swing ?? 0.0,
       velocity: selectedStep?.active == true ? selectedStep!.velocity : null,
@@ -524,7 +567,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (rowIndex >= 0 && rowIndex < visible.length) {
       final String instrumentId = visible[rowIndex].instrumentId;
       widget.client.selectInstrument(instrumentId);
-      _store.selectInstrument(instrumentId);
+      _store.selectInstrument(instrumentId, additive: HardwareKeyboard.instance.isShiftPressed);
     }
   }
 
@@ -725,7 +768,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   void _onRowSecondaryTapDown(int rowIndex, TapDownDetails details) {
     final List<RackRow> visible = _store.visibleRows;
     if (rowIndex < 0 || rowIndex >= visible.length) return;
-    _showContextMenu(visible[rowIndex].instrumentId, details.globalPosition);
+    final String instrumentId = visible[rowIndex].instrumentId;
+    _showContextMenu(instrumentId, details.globalPosition);
   }
 
   void _onPatternSecondaryTapDown(String patternId, TapDownDetails details) {
@@ -874,6 +918,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     // lane no width and the rack no column.
     final String gridLabel = _gridLabel(_store.rowFor(instrumentId)?.gridTicks ?? 240);
     final bool hasSequence = _store.rowFor(instrumentId)?.hasSequence ?? false;
+    final bool multiSelection = _store.selectedInstrumentIds.length > 1;
 
     // The channel rows, with their actions in the same order. The flat index
     // the menu reports is this list, then the step fills, then delete.
@@ -886,6 +931,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         ),
       const ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
       const ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+      const ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
       // Moving a riff to another pattern: cut here, switch pattern, paste. The
       // rows name the pattern they act on so the reference semantics are on
       // screen rather than in the manual.
@@ -900,16 +946,22 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         checked: soloed,
         tone: soloed ? ObMenuRowTone.active : ObMenuRowTone.normal,
       ),
+      if (multiSelection) const ObMenuRowVm(label: 'Mute selected', icon: ObKitGlyphKind.check),
+      if (multiSelection)
+        const ObMenuRowVm(label: 'Delete selected', icon: ObKitGlyphKind.trash, tone: ObMenuRowTone.danger),
     ];
     final List<void Function()> actions = <void Function()>[
       () => widget.onOpenPianoRoll?.call(instrumentId),
       if (hostsPlugin) () => _openPluginFromMenu(instrumentId),
       () => _beginRename(instrumentId),
       () => _duplicateInstrument(instrumentId),
+      () => _recolorInstrument(instrumentId),
       if (hasSequence) () => _copyNotes(instrumentId),
       if (hasSequence) () => _cutNotes(instrumentId),
       if (_store.canPaste) () => _pasteNotes(instrumentId),
       () => _toggleSolo(instrumentId),
+      if (multiSelection) () => _toggleSelectedMute(),
+      if (multiSelection) () => _deleteSelectedInstruments(),
     ];
 
     // The divisors, then — only for a lane that has something to clear — the
@@ -1077,6 +1129,60 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _store.refresh();
   }
 
+  void _deleteSelectedInstruments() {
+    final List<String> ids = _store.selectedInstrumentIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    try {
+      for (final String id in ids) {
+        widget.client.deleteInstrument(id);
+      }
+    } catch (_) {
+      return;
+    }
+    _store.refresh();
+  }
+
+  void _toggleSelectedMute() {
+    final List<ProjectInstrument> selected = <ProjectInstrument>[
+      for (final String id in _store.selectedInstrumentIds)
+        if (_store.instrumentFor(id) != null) _store.instrumentFor(id)!,
+    ];
+    if (selected.isEmpty) return;
+    final bool mute = selected.any((ProjectInstrument instrument) => !instrument.muted);
+    for (final ProjectInstrument instrument in selected) {
+      try {
+        widget.client.setInstrumentMuted(instrument.id, muted: mute);
+      } catch (_) {
+        return;
+      }
+    }
+    _store.refresh();
+  }
+
+  String _nextInstrumentColor(String current) {
+    const List<String> palette = <String>[
+      '#EF6F91',
+      '#4FAFF5',
+      '#9FC65C',
+      '#F5A623',
+      '#9B8CFF',
+      '#55C2A5',
+    ];
+    final int index = palette.indexOf(current.toUpperCase());
+    return palette[(index + 1) % palette.length];
+  }
+
+  void _recolorInstrument(String instrumentId) {
+    final ProjectInstrument? instrument = _store.instrumentFor(instrumentId);
+    if (instrument == null) return;
+    try {
+      widget.client.recolorInstrument(instrumentId, _nextInstrumentColor(instrument.color));
+    } catch (_) {
+      return;
+    }
+    _store.refresh();
+  }
+
   void _hideContextMenu() {
     _contextMenuEntry?.remove();
     _contextMenuEntry = null;
@@ -1159,6 +1265,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
               onInspectorOpenPlugin: _onInspectorOpenPlugin,
               onInspectorOpenSampler: _onInspectorOpenSampler,
               onInspectorRouteTap: widget.onOpenMixer,
+              onInspectorRouteSelected: _onInspectorRouteSelected,
               onGroup: _onShowFilter,
               onInspectorGrid: _onInspectorGrid,
               onDismissSharedPatternNotice: _patternStore.dismissNotice,
