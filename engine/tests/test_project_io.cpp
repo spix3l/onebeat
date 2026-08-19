@@ -435,6 +435,125 @@ TEST_SUITE("unit") {
   // Round trip
   // ------------------------------------------------------------------------
 
+  TEST_CASE("An effect chain and a clip's edit parameters survive a round trip") {
+    Project project(onebeat::model::IdGenerator::deterministic(11));
+    const auto lane = project.createLane("Lane");
+    const MixerTrackId master = project.masterTrack();
+
+    // A chain of two, the second bypassed and carrying one non-default value.
+    onebeat::model::EffectSlot reverb;
+    reverb.id = project.mintId<onebeat::model::EntityKind::Effect>();
+    reverb.plugin.format = onebeat::model::PluginFormat::Builtin;
+    reverb.plugin.id = "dev.onebeat.fx.reverb";
+    reverb.plugin.name = "OneBeat Reverb";
+    onebeat::model::EffectSlot delay = reverb;
+    delay.id = project.mintId<onebeat::model::EntityKind::Effect>();
+    delay.plugin.id = "dev.onebeat.fx.delay";
+    delay.plugin.name = "OneBeat Delay";
+    delay.bypassed = true;
+    delay.params.emplace(3U, 0.75F);
+    project.updateMixerTrack(master, onebeat::model::ChangeField::Effects,
+                             [&](onebeat::model::MixerTrack& track) {
+                               track.effects.push_back(reverb);
+                               track.effects.push_back(delay);
+                             });
+
+    // A trimmed, reversed, pitch-preserving clip with a known source tempo.
+    onebeat::model::AudioSource audio;
+    audio.path = "loops/break.wav";
+    audio.destination = master;
+    audio.source_offset = 480;
+    audio.source_length = 1920;
+    audio.reversed = true;
+    audio.stretch_mode = onebeat::model::StretchMode::Stretch;
+    audio.source_bpm = 174.0;
+    const auto clip = project.createClip(lane, audio, 0, 3840);
+
+    // A curve on the second insert, which is the reference that has two ends.
+    onebeat::model::AutomationSource curve;
+    curve.target_kind = onebeat::model::AutomationSource::TargetKind::Effect;
+    curve.mixer_track = master;
+    curve.effect = delay.id;
+    curve.parameter = 3;
+    curve.points.push_back(onebeat::model::AutomationPoint{0, 0.25F});
+    project.createClip(lane, curve, 0, 3840);
+
+    const std::string text = writeProjectJson(project, Residue{});
+    Project reloaded;
+    Residue residue;
+    const LoadReport report = loadProjectJson(text, reloaded, residue);
+    REQUIRE(report.ok);
+
+    const onebeat::model::MixerTrack* track = reloaded.findMixerTrack(master);
+    REQUIRE(track != nullptr);
+    REQUIRE(track->effects.size() == 2);
+    // Chain order is array order, and it is the signal path — a set would lose
+    // the one thing about a chain that matters.
+    CHECK(track->effects[0].plugin.id == "dev.onebeat.fx.reverb");
+    CHECK(track->effects[1].plugin.id == "dev.onebeat.fx.delay");
+    CHECK(track->effects[0].id == reverb.id);
+    CHECK(track->effects[1].id == delay.id);
+    CHECK(track->effects[1].bypassed);
+    // Sparse: the reverb touched nothing, so it stores nothing.
+    CHECK(track->effects[0].params.empty());
+    REQUIRE(track->effects[1].params.count(3U) == 1);
+    CHECK(track->effects[1].params.at(3U) == doctest::Approx(0.75F));
+
+    const onebeat::model::AudioSource* loaded = reloaded.findClip(clip)->audio();
+    REQUIRE(loaded != nullptr);
+    CHECK(loaded->source_offset == 480);
+    CHECK(loaded->source_length == 1920);
+    CHECK(loaded->reversed);
+    CHECK(loaded->stretch_mode == onebeat::model::StretchMode::Stretch);
+    CHECK(loaded->source_bpm == doctest::Approx(174.0));
+
+    // The curve still resolves to a slot that is really in the chain.
+    CHECK(reloaded.effectImpact(master, delay.id).clips.size() == 1);
+
+    // And saving what was loaded reproduces the file exactly.
+    CHECK(writeProjectJson(reloaded, residue) == text);
+  }
+
+  TEST_CASE("A curve whose effect is gone is dropped, with a reason") {
+    Project project(onebeat::model::IdGenerator::deterministic(12));
+    const auto lane = project.createLane("Lane");
+    const MixerTrackId master = project.masterTrack();
+
+    onebeat::model::EffectSlot slot;
+    slot.id = project.mintId<onebeat::model::EntityKind::Effect>();
+    slot.plugin.format = onebeat::model::PluginFormat::Builtin;
+    slot.plugin.id = "dev.onebeat.fx.reverb";
+    project.updateMixerTrack(
+        master, onebeat::model::ChangeField::Effects,
+        [&](onebeat::model::MixerTrack& track) { track.effects.push_back(slot); });
+
+    onebeat::model::AutomationSource curve;
+    curve.target_kind = onebeat::model::AutomationSource::TargetKind::Effect;
+    curve.mixer_track = master;
+    curve.effect = slot.id;
+    curve.parameter = 3;
+    curve.points.push_back(onebeat::model::AutomationPoint{0, 0.5F});
+    project.createClip(lane, curve, 0, 3840);
+
+    std::string text = writeProjectJson(project, Residue{});
+    // Hand-edit the chain away, which is what a file from a build that dropped
+    // the effect — or a careless merge — looks like.
+    const size_t at = text.find("\"chain\": [");
+    REQUIRE(at != std::string::npos);
+    const size_t end = text.find(']', at);
+    REQUIRE(end != std::string::npos);
+    text = text.substr(0, at) + "\"chain\": [" + text.substr(end);
+
+    Project reloaded;
+    Residue residue;
+    const LoadReport report = loadProjectJson(text, reloaded, residue);
+    // Dropped rather than kept as a dangling reference, and said out loud
+    // (FR-UX-12): which clip, what is missing, what happened.
+    CHECK(reloaded.clips().empty());
+    CHECK_FALSE(report.issues.empty());
+    CHECK(contains(report.describe(), "effect"));
+  }
+
   TEST_CASE("Load then save is byte-identical, and the model comes back whole") {
     Fixture fixture;
     const std::string first = writeProjectJson(fixture.project, Residue{});

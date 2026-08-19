@@ -99,10 +99,31 @@ std::vector<Violation> checkReferentialIntegrity(const Project& project) {
         fail(describe(EntityKind::Clip, clip_id.raw()) + " plays into missing " +
              describe(EntityKind::MixerTrack, audio->destination.raw()));
       }
+      if (audio->source_offset < 0 || audio->source_length < 0) {
+        fail(describe(EntityKind::Clip, clip_id.raw()) + " has a negative source window");
+      }
+      // A stretched clip with no source to stretch has no ratio, and the
+      // flattener would divide by it.
+      if (audio->stretch_mode != StretchMode::Off && audio->source_length <= 0 &&
+          clip.length <= 0) {
+        fail(describe(EntityKind::Clip, clip_id.raw()) + " is stretched with no length to stretch");
+      }
     } else if (const AutomationSource* automation = clip.automation()) {
-      const bool resolves = automation->target_kind == AutomationSource::TargetKind::Instrument
-                                ? project.findInstrument(automation->instrument) != nullptr
-                                : project.findMixerTrack(automation->mixer_track) != nullptr;
+      bool resolves = false;
+      switch (automation->target_kind) {
+        case AutomationSource::TargetKind::Instrument:
+          resolves = project.findInstrument(automation->instrument) != nullptr;
+          break;
+        case AutomationSource::TargetKind::MixerTrack:
+          resolves = project.findMixerTrack(automation->mixer_track) != nullptr;
+          break;
+        case AutomationSource::TargetKind::Effect: {
+          // Both ends must resolve: the track, and the slot still in its chain.
+          const MixerTrack* track = project.findMixerTrack(automation->mixer_track);
+          resolves = track != nullptr && track->findEffect(automation->effect) != nullptr;
+          break;
+        }
+      }
       if (!resolves) {
         fail(describe(EntityKind::Clip, clip_id.raw()) + " automates a missing target");
       }
@@ -112,6 +133,18 @@ std::vector<Violation> checkReferentialIntegrity(const Project& project) {
   // --- mixer: exactly one Master, and no routing cycles --------------------
   size_t masters = 0;
   for (const auto& [track_id, track] : project.mixerTracks()) {
+    // Chain slots: every one identified, and no two alike. A duplicate would
+    // make `findEffect` — and therefore every automation curve pointing at
+    // either slot — resolve to whichever came first.
+    std::set<EffectId> effect_ids;
+    for (const EffectSlot& slot : track.effects) {
+      if (!slot.id.valid()) {
+        fail(describe(EntityKind::MixerTrack, track_id.raw()) + " has an unidentified effect slot");
+      } else if (!effect_ids.insert(slot.id).second) {
+        fail(describe(EntityKind::MixerTrack, track_id.raw()) + " has two slots sharing " +
+             describe(EntityKind::Effect, slot.id.raw()));
+      }
+    }
     if (!track.output.has_value()) {
       ++masters;
       continue;

@@ -13,6 +13,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <new>
@@ -29,6 +30,7 @@
 #include "model/flattener.h"
 #include "model/note_edit.h"
 #include "model/project_io.h"
+#include "plugin/builtin/effects/effect_factory.h"
 #include "plugin/scan/plugin_library.h"
 #include "plugin/scan/subprocess_probe.h"
 
@@ -104,6 +106,15 @@ struct ob_engine {
   // between publishes so a transport-only update rebuilds the same rack even
   // when the schedule itself did not become dirty.
   std::map<onebeat::model::ClipId, onebeat::core::InstrumentId> audio_channel_indices;
+  /* The dense index each mixer insert is addressed by, from the last flatten.
+   * The schedule's EffectParam events and the engine's mixer must agree on it,
+   * so both are built from this one map (model/flattener.h). */
+  std::map<std::pair<onebeat::model::MixerTrackId, onebeat::model::EffectId>, int32_t>
+      effect_indices;
+  /* How long each source file is, in seconds, keyed by path. Cached because
+   * the clip inspector asks on every repaint and the answer costs a decode;
+   * seconds rather than ticks because the tempo may change under it. */
+  std::map<std::string, double> source_durations;
   std::string undo_name_cache;
   std::string redo_name_cache;
   // Where the project last came from or went to. Kept so that a save can carry
@@ -301,6 +312,102 @@ void fitClipsToPatterns(ob_engine& handle) {
   }
 }
 
+/* The dense index of a mixer track: its position in `project.mixerTracks()`,
+ * which is ULID order, which is the order syncMixer builds the graph in. -1
+ * when the track is not in the project, which routes the caller to the master. */
+int32_t mixerIndexOf(const ob_engine& handle, onebeat::model::MixerTrackId id) {
+  int32_t index = 0;
+  for (const auto& [other, track] : handle.project.mixerTracks()) {
+    (void)track;
+    if (other == id) return index;
+    ++index;
+  }
+  return -1;
+}
+
+/* An audio clip's playback geometry, in frames.
+ *
+ * Ticks are musical time and the engine has none, so the conversion happens
+ * here — the same one-way door the flattener puts between the model and the
+ * schedule, for the same reason. */
+onebeat::core::ClipPlayback resolveClipPlayback(const ob_engine& handle,
+                                                const onebeat::model::Clip& clip,
+                                                const onebeat::model::AudioSource& audio) {
+  const onebeat::core::TimeMap time_map(handle.engine->config().sample_rate,
+                                        handle.project.transport().tempo);
+  const auto toFrames = [&time_map](onebeat::model::Ticks ticks) {
+    return time_map.beatsToFrames(static_cast<double>(ticks) /
+                                  static_cast<double>(onebeat::model::TicksPerQuarter));
+  };
+
+  onebeat::core::ClipPlayback playback;
+  playback.enabled = true;
+  playback.start_frame = toFrames(audio.source_offset);
+  /* 0 keeps its meaning all the way down: the sampler reads to the end of the
+   * file, which is the only place that knows where that is. */
+  playback.length_frames = audio.source_length > 0 ? toFrames(audio.source_length) : 0;
+  playback.reversed = audio.reversed;
+  playback.rate = onebeat::model::audioStretchRatio(audio, clip.length);
+  playback.pitch_preserving = audio.stretch_mode == onebeat::model::StretchMode::Stretch;
+  return playback;
+}
+
+/* Hands the engine the mixer the model describes.
+ *
+ * Same ordering argument as syncChannels: the schedule addresses inserts by the
+ * dense index the flattener assigns walking `project.mixerTracks()` then each
+ * chain in array order, so walking them the same way here *is* the index. */
+void syncMixer(ob_engine& handle) {
+  std::vector<onebeat::core::Engine::MixerTrackDesc> tracks;
+  tracks.reserve(handle.project.mixerTracks().size());
+
+  bool any_solo = false;
+  for (const auto& [id, track] : handle.project.mixerTracks()) {
+    (void)id;
+    if (track.soloed) {
+      any_solo = true;
+      break;
+    }
+  }
+
+  for (const auto& [id, track] : handle.project.mixerTracks()) {
+    onebeat::core::Engine::MixerTrackDesc desc;
+    desc.track_id = id.str();
+    desc.output_id = track.output.has_value() ? track.output->str() : std::string();
+    desc.gain = track.gain;
+    desc.pan = track.pan;
+    /* Track solo is an audio gate, like an instrument's: the model keeps the
+     * flag and non-soloed tracks are gated only while something is soloed. */
+    desc.muted = track.muted || (any_solo && !track.soloed);
+    for (const onebeat::model::EffectSlot& slot : track.effects) {
+      onebeat::core::Engine::MixerEffectDesc effect;
+      effect.effect_id = slot.id.str();
+      effect.plugin_id = slot.plugin.id;
+      const auto index = handle.effect_indices.find(std::make_pair(id, slot.id));
+      effect.automation_index = index == handle.effect_indices.end() ? -1 : index->second;
+      desc.effects.push_back(std::move(effect));
+    }
+    tracks.push_back(std::move(desc));
+  }
+  handle.engine->setMixerTracks(std::move(tracks));
+
+  /* Base parameter values reach the effects the same way a knob move does —
+   * through the engine's insert-parameter queue — rather than by being baked
+   * into the graph. That keeps a value change from rebuilding a chain, which is
+   * what would otherwise cut every tail on the track. */
+  for (const auto& [id, track] : handle.project.mixerTracks()) {
+    for (const onebeat::model::EffectSlot& slot : track.effects) {
+      const auto index = handle.effect_indices.find(std::make_pair(id, slot.id));
+      if (index == handle.effect_indices.end()) continue;
+      handle.engine->setEffectParam(index->second, onebeat::plugin::builtin::EffectParamBypass,
+                                    slot.bypassed ? 1.0 : 0.0);
+      for (const auto& [param, value] : slot.params) {
+        handle.engine->setEffectParam(index->second, param, static_cast<double>(value));
+      }
+    }
+  }
+}
+
 /* Hands the engine the rack the model describes.
  *
  * The order here is not a choice: the schedule addresses instruments by the
@@ -332,6 +439,12 @@ void syncChannels(ob_engine& handle) {
     // event-level mute in the model and gate non-solo channels only while at
     // least one instrument is soloed.
     desc.muted = instrument.muted || (any_instrument_solo && !instrument.soloed);
+    /* Port 0 is the main output; multi-out instruments (FR-PLG-12) will need a
+     * channel per port, which is why routing is a list and this reads the
+     * first entry rather than assuming there is only one. */
+    if (!instrument.routing.empty()) {
+      desc.mixer_track = mixerIndexOf(handle, instrument.routing.front().track);
+    }
     channels.push_back(std::move(desc));
     if (handle.selected_instrument.has_value() && *handle.selected_instrument == id) {
       handle.engine->setAuditionChannel(index);
@@ -351,6 +464,10 @@ void syncChannels(ob_engine& handle) {
     desc.gain = audio->gain;
     desc.muted = clip->muted;
     desc.one_shot = true;
+    desc.clip = resolveClipPlayback(handle, *clip, *audio);
+    /* An audio clip routes to a mixer track directly — it has no instrument to
+     * inherit routing from (D-M7). */
+    desc.mixer_track = mixerIndexOf(handle, audio->destination);
     if (channel_index != static_cast<onebeat::core::InstrumentId>(channels.size())) {
       // This should only be possible after a malformed model/map mismatch; do
       // not silently route a song to the wrong sampler if it ever happens.
@@ -550,7 +667,12 @@ void publishModel(ob_engine& handle) {
   }
   if (flattened.schedule != nullptr) {
     handle.audio_channel_indices = std::move(flattened.audio_channel_index);
+    handle.effect_indices = std::move(flattened.effect_index);
   }
+  /* Before the channels: a channel names the dense index of the track it feeds,
+   * and that index only means anything once the mixer defining it is on its
+   * way. */
+  syncMixer(handle);
   /* Every model edit that can change what a channel sounds like — adding an
    * instrument, loading a sample, gain, pan, mute, reordering — reaches the
    * engine through here, for the same reason the schedule does. */
@@ -743,6 +865,82 @@ std::optional<onebeat::model::ArrangementLaneId> laneId(const char* text) {
 std::optional<onebeat::model::ClipId> clipId(const char* text) {
   if (text == nullptr || text[0] == '\0') return std::nullopt;
   return onebeat::model::ClipId::parse(text);
+}
+
+std::optional<onebeat::model::MixerTrackId> mixerTrackId(const char* text) {
+  if (text == nullptr || text[0] == '\0') return std::nullopt;
+  return onebeat::model::MixerTrackId::parse(text);
+}
+
+std::optional<onebeat::model::EffectId> effectId(const char* text) {
+  if (text == nullptr || text[0] == '\0') return std::nullopt;
+  return onebeat::model::EffectId::parse(text);
+}
+
+/* Both ends of an insert reference, resolved together — a slot is only findable
+ * through the track that owns it, so every insert call needs the same pair. */
+struct ResolvedEffect {
+  onebeat::model::MixerTrackId track;
+  onebeat::model::EffectId effect;
+  const onebeat::model::EffectSlot* slot = nullptr;
+  int32_t index = -1;
+};
+
+std::optional<ResolvedEffect> resolveEffect(const ob_engine& handle, const char* utf8_track_id,
+                                            const char* utf8_effect_id) {
+  const auto track_id = mixerTrackId(utf8_track_id);
+  const auto slot_id = effectId(utf8_effect_id);
+  if (!track_id || !slot_id) return std::nullopt;
+  const onebeat::model::MixerTrack* track = handle.project.findMixerTrack(*track_id);
+  if (track == nullptr) return std::nullopt;
+  for (size_t i = 0; i < track->effects.size(); ++i) {
+    if (track->effects[i].id != *slot_id) continue;
+    return ResolvedEffect{*track_id, *slot_id, &track->effects[i], static_cast<int32_t>(i)};
+  }
+  return std::nullopt;
+}
+
+/* How long the file behind a clip is, at the project's current tempo. 0 when it
+ * cannot be read, which every caller treats as "unknown" rather than "empty". */
+int64_t audioSourceDurationTicks(ob_engine& handle, const std::string& path) {
+  if (path.empty()) return 0;
+  auto cached = handle.source_durations.find(path);
+  if (cached == handle.source_durations.end()) {
+    std::string error;
+    const std::unique_ptr<onebeat::core::SampleData> sample =
+        onebeat::core::loadAudioFile(path, error);
+    const double seconds = sample != nullptr && sample->sample_rate > 0.0 && sample->frames > 0
+                               ? static_cast<double>(sample->frames) / sample->sample_rate
+                               : 0.0;
+    cached = handle.source_durations.emplace(path, seconds).first;
+  }
+  if (cached->second <= 0.0) return 0;
+  const double beats = cached->second * handle.project.transport().tempo / 60.0;
+  return std::max<int64_t>(1, std::llround(beats * onebeat::model::TicksPerQuarter));
+}
+
+/* How many parameters an insert exposes. Read off a fresh instance: the table
+ * is static metadata, and the model stores only the values the user changed. */
+uint32_t effectParamCount(const onebeat::model::EffectSlot& slot) {
+  auto probe = onebeat::plugin::builtin::createBuiltinEffect(slot.plugin.id.c_str(), nullptr);
+  return probe == nullptr ? 0U : probe->paramCount();
+}
+
+/* The value the project holds for a parameter, or the plug-in's default when
+ * the user has never touched it — which is the whole point of the map being
+ * sparse (see EffectSlot::params). */
+double effectParamValue(const onebeat::model::EffectSlot& slot,
+                        const onebeat::plugin::ParamInfo& info) {
+  const auto found = slot.params.find(info.id);
+  return found == slot.params.end() ? info.default_value : static_cast<double>(found->second);
+}
+
+/* The clip's audio source, or null when the clip is not an audio clip. */
+const onebeat::model::AudioSource* audioSourceOf(const ob_engine& handle,
+                                                 const char* utf8_clip_id) {
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* clip = id ? handle.project.findClip(*id) : nullptr;
+  return clip == nullptr ? nullptr : clip->audio();
 }
 
 const onebeat::model::NoteSequence* sequenceFor(const ob_engine& handle,
@@ -3016,6 +3214,447 @@ ob_status ob_engine_clip_resize(ob_engine* engine, const char* utf8_clip_id, int
           [length_ticks](onebeat::model::Clip& clip) { clip.length = length_ticks; },
           "Resize clip"),
       "The clip could not be resized.");
+}
+
+/* ------------------------------------------------------------------------ */
+/* Audio clip editing (ABI 1.18)                                            */
+/* ------------------------------------------------------------------------ */
+
+ob_status ob_engine_audio_clip_info(ob_engine* engine, const char* utf8_clip_id,
+                                    ob_audio_clip_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* clip = id ? engine->project.findClip(*id) : nullptr;
+  const onebeat::model::AudioSource* audio = clip == nullptr ? nullptr : clip->audio();
+  if (audio == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->stretch_mode = static_cast<int32_t>(audio->stretch_mode);
+  out_info->source_offset_ticks = audio->source_offset;
+  out_info->source_length_ticks = audio->source_length;
+  out_info->source_duration_ticks = audioSourceDurationTicks(*engine, audio->path);
+  out_info->source_bpm = audio->source_bpm;
+  out_info->gain = static_cast<double>(audio->gain);
+  out_info->reversed = audio->reversed ? 1 : 0;
+  return OB_OK;
+}
+
+ob_status ob_engine_audio_clip_set_window(ob_engine* engine, const char* utf8_clip_id,
+                                          int64_t source_offset_ticks,
+                                          int64_t source_length_ticks) {
+  if (engine == nullptr || source_offset_ticks < 0 || source_length_ticks < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip's source window must not be negative.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || audioSourceOf(*engine, utf8_clip_id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+  }
+  return executeModel(*engine,
+                      onebeat::model::setAudioClipWindow(engine->project, *id, source_offset_ticks,
+                                                         source_length_ticks),
+                      "The clip could not be trimmed.");
+}
+
+ob_status ob_engine_audio_clip_set_stretch_mode(ob_engine* engine, const char* utf8_clip_id,
+                                                int32_t stretch_mode) {
+  if (engine == nullptr || stretch_mode < OB_STRETCH_OFF || stretch_mode > OB_STRETCH_STRETCH) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "That is not a stretch mode.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* clip = id ? engine->project.findClip(*id) : nullptr;
+  const onebeat::model::AudioSource* audio = clip == nullptr ? nullptr : clip->audio();
+  if (audio == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+
+  const auto mode = static_cast<onebeat::model::StretchMode>(stretch_mode);
+  if (mode == onebeat::model::StretchMode::Off || audio->source_length > 0) {
+    return executeModel(*engine,
+                        onebeat::model::setAudioClipStretchMode(engine->project, *id, mode),
+                        "The clip's stretch mode could not be changed.");
+  }
+
+  /* Turning stretching on needs a real source window: the ratio is the clip's
+   * length over it, and "to the end of the file" is not a number. Pin it in the
+   * *same* edit as the mode — two clip edits built from one starting state each
+   * carry a whole copy of the clip, so the second would undo the first. */
+  const int64_t duration = audioSourceDurationTicks(*engine, audio->path);
+  const int64_t span = onebeat::model::audioSourceSpan(*audio, clip->length, duration);
+  return executeModel(*engine,
+                      onebeat::model::editClip(
+                          engine->project, *id, onebeat::model::ChangeField::Source,
+                          [mode, span](onebeat::model::Clip& live) {
+                            auto* live_audio =
+                                std::get_if<onebeat::model::AudioSource>(&live.source);
+                            if (live_audio == nullptr) return;
+                            live_audio->stretch_mode = mode;
+                            live_audio->source_length = span;
+                          },
+                          "Set clip stretch"),
+                      "The clip's stretch mode could not be changed.");
+}
+
+ob_status ob_engine_audio_clip_set_source_bpm(ob_engine* engine, const char* utf8_clip_id,
+                                              double bpm) {
+  if (engine == nullptr || bpm < 0.0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A source tempo must not be negative.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || audioSourceOf(*engine, utf8_clip_id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+  }
+  return executeModel(*engine, onebeat::model::setAudioClipSourceBpm(engine->project, *id, bpm),
+                      "The clip's source tempo could not be set.");
+}
+
+ob_status ob_engine_audio_clip_set_reversed(ob_engine* engine, const char* utf8_clip_id,
+                                            int32_t reversed) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  const auto id = clipId(utf8_clip_id);
+  if (!id || audioSourceOf(*engine, utf8_clip_id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+  }
+  return executeModel(*engine,
+                      onebeat::model::setAudioClipReversed(engine->project, *id, reversed != 0),
+                      "The clip could not be reversed.");
+}
+
+ob_status ob_engine_audio_clip_set_gain(ob_engine* engine, const char* utf8_clip_id, double gain) {
+  if (engine == nullptr || gain < 0.0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip gain must not be negative.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || audioSourceOf(*engine, utf8_clip_id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+  }
+  return executeModel(
+      *engine, onebeat::model::setAudioClipGain(engine->project, *id, static_cast<float>(gain)),
+      "The clip's gain could not be set.");
+}
+
+ob_status ob_engine_audio_clip_resize(ob_engine* engine, const char* utf8_clip_id,
+                                      int64_t length_ticks) {
+  if (engine == nullptr || length_ticks <= 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "A clip length must be positive.");
+  }
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::resizeAudioClip(engine->project, *id, length_ticks),
+                      "The clip could not be resized.");
+}
+
+ob_status ob_engine_clip_split(ob_engine* engine, const char* utf8_clip_id, int64_t at_ticks) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  const auto id = clipId(utf8_clip_id);
+  if (!id || engine->project.findClip(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  }
+  return executeModel(*engine, onebeat::model::splitClip(engine->project, *id, at_ticks),
+                      "A clip can only be cut somewhere inside itself.");
+}
+
+ob_status ob_engine_audio_clip_fit_to_tempo(ob_engine* engine, const char* utf8_clip_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The clip does not exist.");
+  const auto id = clipId(utf8_clip_id);
+  const onebeat::model::Clip* clip = id ? engine->project.findClip(*id) : nullptr;
+  const onebeat::model::AudioSource* audio = clip == nullptr ? nullptr : clip->audio();
+  if (audio == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "That clip is not an audio clip.");
+  const int64_t duration = audioSourceDurationTicks(*engine, audio->path);
+  return executeModel(*engine,
+                      onebeat::model::fitAudioClipToTempo(
+                          engine->project, *id, engine->project.transport().tempo, duration),
+                      "That clip has no source tempo to fit; set one first.");
+}
+
+/* ------------------------------------------------------------------------ */
+/* Mixer tracks (ABI 1.18)                                                  */
+/* ------------------------------------------------------------------------ */
+
+int32_t ob_engine_mixer_track_count(ob_engine* engine) {
+  if (engine == nullptr) return 0;
+  return static_cast<int32_t>(engine->project.mixerTracks().size());
+}
+
+ob_status ob_engine_mixer_track_at(ob_engine* engine, int32_t index,
+                                   ob_mixer_track_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Mixer track index is out of range.");
+  }
+  const auto& tracks = engine->project.mixerTracks();
+  if (static_cast<size_t>(index) >= tracks.size()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Mixer track index is out of range.");
+  }
+  auto entry = tracks.begin();
+  std::advance(entry, index);
+  const onebeat::model::MixerTrack& track = entry->second;
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  if (track.muted) out_info->flags |= OB_MIXER_FLAG_MUTED;
+  if (track.soloed) out_info->flags |= OB_MIXER_FLAG_SOLOED;
+  if (!track.output.has_value()) out_info->flags |= OB_MIXER_FLAG_MASTER;
+  out_info->gain = static_cast<double>(track.gain);
+  out_info->pan = static_cast<double>(track.pan);
+  out_info->effect_count = static_cast<uint32_t>(track.effects.size());
+  copyText(out_info->id, sizeof(out_info->id), entry->first.str().c_str());
+  if (track.output.has_value()) {
+    copyText(out_info->output_id, sizeof(out_info->output_id), track.output->str().c_str());
+  }
+  copyText(out_info->name, sizeof(out_info->name), track.name.c_str());
+  return OB_OK;
+}
+
+namespace {
+
+/* Every level setter is the same three steps, and the only thing that varies is
+ * which field the mutator touches. Sharing them keeps the change field — and
+ * therefore the coalescing behaviour a fader drag depends on — in one place. */
+ob_status editTrack(ob_engine* engine, const char* utf8_track_id, onebeat::model::ChangeField field,
+                    const std::function<void(onebeat::model::MixerTrack&)>& mutator,
+                    const char* name, const char* failure) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
+  const auto id = mixerTrackId(utf8_track_id);
+  if (!id || engine->project.findMixerTrack(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
+  }
+  return executeModel(
+      *engine, onebeat::model::editMixerTrack(engine->project, *id, field, mutator, name), failure);
+}
+
+}  // namespace
+
+ob_status ob_engine_mixer_track_set_gain(ob_engine* engine, const char* utf8_track_id,
+                                         double gain) {
+  if (gain < 0.0) return fail(OB_ERR_INVALID_ARGUMENT, "A gain must not be negative.");
+  const auto value = static_cast<float>(gain);
+  return editTrack(
+      engine, utf8_track_id, onebeat::model::ChangeField::Gain,
+      [value](onebeat::model::MixerTrack& track) { track.gain = value; }, "Set track level",
+      "The track level could not be set.");
+}
+
+ob_status ob_engine_mixer_track_set_pan(ob_engine* engine, const char* utf8_track_id, double pan) {
+  const auto value = static_cast<float>(pan);
+  return editTrack(
+      engine, utf8_track_id, onebeat::model::ChangeField::Pan,
+      [value](onebeat::model::MixerTrack& track) { track.pan = value; }, "Set track pan",
+      "The track pan could not be set.");
+}
+
+ob_status ob_engine_mixer_track_set_muted(ob_engine* engine, const char* utf8_track_id,
+                                          int32_t muted) {
+  const bool value = muted != 0;
+  return editTrack(
+      engine, utf8_track_id, onebeat::model::ChangeField::Muted,
+      [value](onebeat::model::MixerTrack& track) { track.muted = value; },
+      value ? "Mute track" : "Unmute track", "The track could not be muted.");
+}
+
+ob_status ob_engine_mixer_track_set_soloed(ob_engine* engine, const char* utf8_track_id,
+                                           int32_t soloed) {
+  const bool value = soloed != 0;
+  return editTrack(
+      engine, utf8_track_id, onebeat::model::ChangeField::Soloed,
+      [value](onebeat::model::MixerTrack& track) { track.soloed = value; },
+      value ? "Solo track" : "Unsolo track", "The track could not be soloed.");
+}
+
+/* ------------------------------------------------------------------------ */
+/* Mixer inserts (ABI 1.18)                                                 */
+/* ------------------------------------------------------------------------ */
+
+int32_t ob_engine_builtin_effect_count(ob_engine* engine) {
+  if (engine == nullptr) return 0;
+  return static_cast<int32_t>(onebeat::plugin::builtin::builtinEffectCount());
+}
+
+ob_status ob_engine_builtin_effect_at(ob_engine* engine, int32_t index,
+                                      ob_effect_descriptor* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0 ||
+      static_cast<size_t>(index) >= onebeat::plugin::builtin::builtinEffectCount()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect index is out of range.");
+  }
+  const onebeat::plugin::builtin::EffectDescriptor& entry =
+      onebeat::plugin::builtin::builtinEffects()[index];
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  copyText(out_info->id, sizeof(out_info->id), entry.id);
+  copyText(out_info->name, sizeof(out_info->name), entry.name);
+  copyText(out_info->summary, sizeof(out_info->summary), entry.summary);
+  return OB_OK;
+}
+
+int32_t ob_engine_mixer_effect_count(ob_engine* engine, const char* utf8_track_id) {
+  if (engine == nullptr) return 0;
+  const auto id = mixerTrackId(utf8_track_id);
+  const onebeat::model::MixerTrack* track = id ? engine->project.findMixerTrack(*id) : nullptr;
+  return track == nullptr ? 0 : static_cast<int32_t>(track->effects.size());
+}
+
+ob_status ob_engine_mixer_effect_at(ob_engine* engine, const char* utf8_track_id, int32_t index,
+                                    ob_effect_info* out_info) {
+  if (engine == nullptr || out_info == nullptr || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect index is out of range.");
+  }
+  const auto id = mixerTrackId(utf8_track_id);
+  const onebeat::model::MixerTrack* track = id ? engine->project.findMixerTrack(*id) : nullptr;
+  if (track == nullptr || static_cast<size_t>(index) >= track->effects.size()) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect index is out of range.");
+  }
+  const onebeat::model::EffectSlot& slot = track->effects[static_cast<size_t>(index)];
+  const onebeat::plugin::builtin::EffectDescriptor* descriptor =
+      onebeat::plugin::builtin::findBuiltinEffect(slot.plugin.id.c_str());
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->index = index;
+  if (slot.bypassed) out_info->flags |= OB_EFFECT_FLAG_BYPASSED;
+  if (descriptor == nullptr) out_info->flags |= OB_EFFECT_FLAG_MISSING;
+  out_info->param_count = effectParamCount(slot);
+  copyText(out_info->id, sizeof(out_info->id), slot.id.str().c_str());
+  copyText(out_info->plugin_id, sizeof(out_info->plugin_id), slot.plugin.id.c_str());
+  /* The plug-in's own name where this build has it, and the name the project
+   * recorded where it does not — so a missing effect still says what it was. */
+  copyText(out_info->name, sizeof(out_info->name),
+           descriptor != nullptr ? descriptor->name : slot.plugin.name.c_str());
+  return OB_OK;
+}
+
+ob_status ob_engine_mixer_effect_add(ob_engine* engine, const char* utf8_track_id,
+                                     const char* utf8_plugin_id, int32_t index) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
+  const auto id = mixerTrackId(utf8_track_id);
+  if (!id || engine->project.findMixerTrack(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The mixer track does not exist.");
+  }
+  const onebeat::plugin::builtin::EffectDescriptor* descriptor =
+      onebeat::plugin::builtin::findBuiltinEffect(utf8_plugin_id);
+  if (descriptor == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "There is no such effect.");
+
+  onebeat::model::PluginRef plugin;
+  plugin.format = onebeat::model::PluginFormat::Builtin;
+  plugin.id = descriptor->id;
+  plugin.name = descriptor->name;
+  plugin.vendor = "OneBeat";
+  const size_t at = index < 0 ? SIZE_MAX : static_cast<size_t>(index);
+  return executeModel(*engine, onebeat::model::addEffect(engine->project, *id, plugin, at),
+                      "The effect could not be added.");
+}
+
+int32_t ob_engine_mixer_effect_impact(ob_engine* engine, const char* utf8_track_id,
+                                      const char* utf8_effect_id) {
+  if (engine == nullptr) return 0;
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return 0;
+  return static_cast<int32_t>(
+      engine->project.effectImpact(resolved->track, resolved->effect).clips.size());
+}
+
+ob_status ob_engine_mixer_effect_remove(ob_engine* engine, const char* utf8_track_id,
+                                        const char* utf8_effect_id) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  return executeModel(
+      *engine, onebeat::model::removeEffect(engine->project, resolved->track, resolved->effect),
+      "The effect could not be removed.");
+}
+
+ob_status ob_engine_mixer_effect_move(ob_engine* engine, const char* utf8_track_id,
+                                      const char* utf8_effect_id, int32_t index) {
+  if (engine == nullptr || index < 0) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect index is out of range.");
+  }
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  return executeModel(*engine,
+                      onebeat::model::moveEffect(engine->project, resolved->track, resolved->effect,
+                                                 static_cast<size_t>(index)),
+                      "The effect could not be moved.");
+}
+
+ob_status ob_engine_mixer_effect_set_bypassed(ob_engine* engine, const char* utf8_track_id,
+                                              const char* utf8_effect_id, int32_t bypassed) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  return executeModel(*engine,
+                      onebeat::model::setEffectBypassed(engine->project, resolved->track,
+                                                        resolved->effect, bypassed != 0),
+                      "The effect could not be bypassed.");
+}
+
+ob_status ob_engine_mixer_effect_param_at(ob_engine* engine, const char* utf8_track_id,
+                                          const char* utf8_effect_id, uint32_t index,
+                                          ob_param_info* out_info) {
+  if (engine == nullptr || out_info == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect parameter index is out of range.");
+  }
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+
+  /* Read the parameter table off a fresh, unconfigured instance. Metadata is
+   * static and configure() is where an effect allocates, so this costs nothing
+   * and keeps the UI off the published audio graph entirely. */
+  auto probe =
+      onebeat::plugin::builtin::createBuiltinEffect(resolved->slot->plugin.id.c_str(), nullptr);
+  onebeat::plugin::ParamInfo info;
+  if (probe == nullptr || !probe->paramInfo(index, info)) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Effect parameter index is out of range.");
+  }
+
+  std::memset(out_info, 0, sizeof(*out_info));
+  out_info->struct_size = sizeof(*out_info);
+  out_info->param_id = info.id;
+  out_info->flags = info.flags;
+  out_info->min_value = info.min_value;
+  out_info->max_value = info.max_value;
+  out_info->default_value = info.default_value;
+  out_info->value = effectParamValue(*resolved->slot, info);
+  copyText(out_info->name, sizeof(out_info->name), info.name.text());
+  copyText(out_info->module, sizeof(out_info->module), info.module.text());
+  if (!probe->paramValueToText(info.id, out_info->value, out_info->display,
+                               sizeof(out_info->display))) {
+    std::snprintf(out_info->display, sizeof(out_info->display), "%.3f", out_info->value);
+  }
+  return OB_OK;
+}
+
+ob_status ob_engine_mixer_effect_param_value(ob_engine* engine, const char* utf8_track_id,
+                                             const char* utf8_effect_id, uint32_t param_id,
+                                             double* out_value) {
+  if (engine == nullptr || out_value == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  }
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+
+  auto probe =
+      onebeat::plugin::builtin::createBuiltinEffect(resolved->slot->plugin.id.c_str(), nullptr);
+  if (probe == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "That effect is not available.");
+  for (uint32_t i = 0; i < probe->paramCount(); ++i) {
+    onebeat::plugin::ParamInfo info;
+    if (!probe->paramInfo(i, info) || info.id != param_id) continue;
+    *out_value = effectParamValue(*resolved->slot, info);
+    return OB_OK;
+  }
+  return fail(OB_ERR_INVALID_ARGUMENT, "That effect has no such parameter.");
+}
+
+ob_status ob_engine_mixer_effect_set_param(ob_engine* engine, const char* utf8_track_id,
+                                           const char* utf8_effect_id, uint32_t param_id,
+                                           double value) {
+  if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
+  if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
+  return executeModel(
+      *engine,
+      onebeat::model::setEffectParam(engine->project, resolved->track, resolved->effect, param_id,
+                                     static_cast<float>(value)),
+      "The effect parameter could not be set.");
 }
 
 ob_status ob_engine_clip_duplicate(ob_engine* engine, const char* utf8_clip_id,

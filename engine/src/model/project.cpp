@@ -178,9 +178,21 @@ ClipId Project::createClip(ArrangementLaneId lane, const ClipSource& source, Tic
   } else if (const auto* audio_source = std::get_if<AudioSource>(&source)) {
     if (mixer_tracks_.find(audio_source->destination) == mixer_tracks_.end()) return ClipId{};
   } else if (const auto* automation = std::get_if<AutomationSource>(&source)) {
-    const bool resolves = automation->target_kind == AutomationSource::TargetKind::Instrument
-                              ? instruments_.find(automation->instrument) != instruments_.end()
-                              : mixer_tracks_.find(automation->mixer_track) != mixer_tracks_.end();
+    bool resolves = false;
+    switch (automation->target_kind) {
+      case AutomationSource::TargetKind::Instrument:
+        resolves = instruments_.find(automation->instrument) != instruments_.end();
+        break;
+      case AutomationSource::TargetKind::MixerTrack:
+        resolves = mixer_tracks_.find(automation->mixer_track) != mixer_tracks_.end();
+        break;
+      case AutomationSource::TargetKind::Effect: {
+        const auto track = mixer_tracks_.find(automation->mixer_track);
+        resolves =
+            track != mixer_tracks_.end() && track->second.findEffect(automation->effect) != nullptr;
+        break;
+      }
+    }
     if (!resolves) return ClipId{};
   }
 
@@ -263,11 +275,27 @@ MixerTrackImpact Project::mixerTrackImpact(MixerTrackId id) const {
     const AudioSource* audio = clip.audio();
     const AutomationSource* automation = clip.automation();
     const bool audio_hits = audio != nullptr && audio->destination == id;
+    // Both target kinds that name a track: its own parameters, and the
+    // parameters of anything in its chain. Deleting the track takes the chain
+    // with it, so both curves lose their target.
     const bool automation_hits =
         automation != nullptr &&
-        automation->target_kind == AutomationSource::TargetKind::MixerTrack &&
+        (automation->target_kind == AutomationSource::TargetKind::MixerTrack ||
+         automation->target_kind == AutomationSource::TargetKind::Effect) &&
         automation->mixer_track == id;
     if (audio_hits || automation_hits) impact.clips.push_back(clip_id);
+  }
+  return impact;
+}
+
+EffectImpact Project::effectImpact(MixerTrackId track, EffectId effect) const {
+  EffectImpact impact;
+  for (const auto& [clip_id, clip] : clips_) {
+    const AutomationSource* automation = clip.automation();
+    if (automation == nullptr) continue;
+    if (automation->target_kind != AutomationSource::TargetKind::Effect) continue;
+    if (automation->mixer_track != track || automation->effect != effect) continue;
+    impact.clips.push_back(clip_id);
   }
   return impact;
 }

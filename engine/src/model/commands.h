@@ -9,6 +9,7 @@
 // of these, or a transaction over several of them.
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -96,6 +97,62 @@ CommandPtr removeNotes(PatternId pattern, InstrumentId instrument, std::vector<N
 // `after` must be the same size and correspond element-wise.
 CommandPtr replaceNotes(PatternId pattern, InstrumentId instrument, std::vector<Note> before,
                         std::vector<Note> after);
+
+// ----- audio clips --------------------------------------------------------
+//
+// The window is in *source* time and the clip's length is in timeline time;
+// `AudioSource`'s comment is the normative account of how the two meet. What
+// these add over `editClip` is that each is one user gesture with one name in
+// the undo menu, and that the derived arithmetic lives in exactly one place.
+
+// Trim. `source_length` of 0 keeps its "to the end of the file" meaning.
+CommandPtr setAudioClipWindow(const Project& project, ClipId id, Ticks source_offset,
+                              Ticks source_length);
+CommandPtr setAudioClipStretchMode(const Project& project, ClipId id, StretchMode mode);
+CommandPtr setAudioClipSourceBpm(const Project& project, ClipId id, double bpm);
+CommandPtr setAudioClipReversed(const Project& project, ClipId id, bool reversed);
+CommandPtr setAudioClipGain(const Project& project, ClipId id, float gain);
+
+// Resize with the clip's own stretch rule applied: a clip that is not stretched
+// re-trims (its window follows the new length), and one that is stretches (its
+// window is untouched and the ratio moves). One entry point so that the two
+// cannot drift apart, which is the whole reason `stretch_ratio` is derived.
+CommandPtr resizeAudioClip(const Project& project, ClipId id, Ticks length);
+
+// Cut at an absolute tick. Returns null when `at` is not strictly inside the
+// clip — a cut on an edge is a no-op, not an error, and must not enter history.
+// The left half keeps the original clip's ID; the right half is a new clip
+// whose source window starts where the left half's ends, so cutting audio does
+// not re-trigger the sample from its beginning.
+CommandPtr splitClip(Project& project, ClipId id, Ticks at);
+
+// Resize so the material plays at `project_bpm`, and switch the clip to
+// pitch-preserving stretch. Null when the clip has no source tempo to fit —
+// guessing one silently is how a project ends up subtly out of time.
+CommandPtr fitAudioClipToTempo(const Project& project, ClipId id, double project_bpm,
+                               Ticks source_duration = 0);
+
+// ----- mixer effects ------------------------------------------------------
+// The chain is a field of the track, so all of these are track edits. They are
+// named individually because "Add Reverb" and "Bypass Reverb" are different
+// entries in the undo menu, and because removing a slot has a cascade that a
+// generic edit would not know to perform.
+
+// Inserts at `index`, clamping to the end of the chain. Mints the slot's ID up
+// front so apply → undo → redo lands the same one and any automation written
+// against it in the meantime still resolves.
+CommandPtr addEffect(Project& project, MixerTrackId track, const PluginRef& plugin,
+                     size_t index = SIZE_MAX);
+// Composite: drops the slot *and* every automation clip driving it, as one
+// undo entry (see Project::effectImpact).
+CommandPtr removeEffect(Project& project, MixerTrackId track, EffectId effect);
+CommandPtr moveEffect(const Project& project, MixerTrackId track, EffectId effect, size_t index);
+CommandPtr setEffectBypassed(const Project& project, MixerTrackId track, EffectId effect,
+                             bool bypassed);
+// Coalesces per (track, effect, parameter), so one knob drag is one entry and
+// two knobs are two.
+CommandPtr setEffectParam(const Project& project, MixerTrackId track, EffectId effect,
+                          plugin::ParamId parameter, float value);
 
 // ----- project-level state ------------------------------------------------
 CommandPtr setTransport(const Project& project, const TransportState& transport);

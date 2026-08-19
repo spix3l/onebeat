@@ -54,6 +54,14 @@ struct MixerTrackImpact {
   std::vector<ClipId> clips;              // audio/automation clips targeting it
 };
 
+// What pulling one insert out of a chain destroys. Small, but it has to be
+// asked before the removal rather than discovered after it: an automation clip
+// whose effect has gone is a dangling reference, and the invariant checker is
+// right to abort on one.
+struct EffectImpact {
+  std::vector<ClipId> clips;  // automation clips driving this slot's parameters
+};
+
 struct Preferences {
   // D-M2: a new instrument gets its own mixer track, named after it, so a
   // beginner can EQ their kick without first learning a routing system. Users
@@ -112,6 +120,7 @@ class Project {
   PatternImpact patternImpact(PatternId id) const;
   LaneImpact laneImpact(ArrangementLaneId id) const;
   MixerTrackImpact mixerTrackImpact(MixerTrackId id) const;
+  EffectImpact effectImpact(MixerTrackId track, EffectId effect) const;
 
   // ----- delete ------------------------------------------------------------
   // Each of these cascades exactly as far as referential integrity requires and

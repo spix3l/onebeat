@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -158,6 +159,15 @@ std::string takeString(json::Object& object, std::string_view key,
   return text == nullptr ? fallback : *text;
 }
 
+// Reads a string without consuming it. For sub-objects whose whole parent has
+// already left the residue, where `take`'s bookkeeping buys nothing.
+std::string stringAt(const json::Value& value, std::string_view key) {
+  const json::Value* found = value.find(key);
+  if (found == nullptr) return {};
+  const std::string* text = found->asString();
+  return text == nullptr ? std::string{} : *text;
+}
+
 int64_t takeInt(json::Object& object, std::string_view key, int64_t fallback = 0) {
   const json::Value value = take(object, key);
   return value.isNumber() ? value.asInt(fallback) : fallback;
@@ -226,6 +236,27 @@ std::string_view pluginFormatText(PluginFormat format) {
       break;
   }
   return "";
+}
+
+// Spelled out in the file rather than stored as the enumerator's number, for
+// the same reason the plug-in format is: a number in a project file is a
+// promise never to reorder the enum, and a word costs nothing to keep.
+std::string_view stretchModeText(StretchMode mode) {
+  switch (mode) {
+    case StretchMode::Off:
+      return "off";
+    case StretchMode::Resample:
+      return "resample";
+    case StretchMode::Stretch:
+      return "stretch";
+  }
+  return "off";
+}
+
+StretchMode stretchModeFrom(std::string_view text) {
+  if (text == "resample") return StretchMode::Resample;
+  if (text == "stretch") return StretchMode::Stretch;
+  return StretchMode::Off;
 }
 
 PluginFormat pluginFormatFrom(std::string_view text) {
@@ -446,17 +477,35 @@ json::Value writeClipSource(const Clip& clip) {
     out.emplace("type", json::Value::string("audio"));
     out.emplace("path", json::Value::string(source->path));
     out.emplace("source_offset", json::Value::integer(source->source_offset));
+    out.emplace("source_length", json::Value::integer(source->source_length));
     out.emplace("gain", json::Value::real(source->gain));
     out.emplace("reversed", json::Value::boolean(source->reversed));
+    out.emplace("stretch_mode",
+                json::Value::string(std::string(stretchModeText(source->stretch_mode))));
+    out.emplace("source_bpm", json::Value::real(source->source_bpm));
     out.emplace("destination_id", json::Value::string(source->destination.str()));
     return json::Value::object(std::move(out));
   }
   const AutomationSource* source = clip.automation();
   out.emplace("type", json::Value::string("automation"));
-  const bool to_instrument = source->target_kind == AutomationSource::TargetKind::Instrument;
-  out.emplace("target_kind", json::Value::string(to_instrument ? "instrument" : "mixer_track"));
-  out.emplace("target_id", json::Value::string(to_instrument ? source->instrument.str()
-                                                             : source->mixer_track.str()));
+  switch (source->target_kind) {
+    case AutomationSource::TargetKind::Instrument:
+      out.emplace("target_kind", json::Value::string("instrument"));
+      out.emplace("target_id", json::Value::string(source->instrument.str()));
+      break;
+    case AutomationSource::TargetKind::MixerTrack:
+      out.emplace("target_kind", json::Value::string("mixer_track"));
+      out.emplace("target_id", json::Value::string(source->mixer_track.str()));
+      break;
+    case AutomationSource::TargetKind::Effect:
+      // Two references, because a slot is only reachable through its track.
+      // `target_id` stays the track so that a reader which does not know this
+      // kind still sees a resolvable entity rather than a dangling one.
+      out.emplace("target_kind", json::Value::string("effect"));
+      out.emplace("target_id", json::Value::string(source->mixer_track.str()));
+      out.emplace("effect_id", json::Value::string(source->effect.str()));
+      break;
+  }
   out.emplace("parameter", json::Value::integer(source->parameter));
   json::Array points;
   points.reserve(source->points.size());
@@ -496,7 +545,31 @@ json::Value writeMixerTrack(const MixerTrack& track) {
   out.emplace("soloed", json::Value::boolean(track.soloed));
   out.emplace("output_id", track.output.has_value() ? json::Value::string(track.output->str())
                                                     : json::Value::null());
-  out.emplace("chain", json::Value::array({}));  // Stage 4
+  json::Array chain;
+  chain.reserve(track.effects.size());
+  for (const EffectSlot& slot : track.effects) {
+    json::Object entry;
+    entry.emplace("id", json::Value::string(slot.id.str()));
+    entry.emplace("bypassed", json::Value::boolean(slot.bypassed));
+    json::Object plugin;
+    const std::string_view format = pluginFormatText(slot.plugin.format);
+    if (!format.empty()) plugin.emplace("format", json::Value::string(std::string(format)));
+    plugin.emplace("id", json::Value::string(slot.plugin.id));
+    plugin.emplace("name", json::Value::string(slot.plugin.name));
+    plugin.emplace("vendor", json::Value::string(slot.plugin.vendor));
+    plugin.emplace("path_hint", json::Value::string(slot.plugin.path_hint));
+    entry.emplace("plugin", json::Value::object(std::move(plugin)));
+    // An object keyed by decimal ParamId, not an array: the map is sparse, and
+    // an array would have to invent a value for every parameter the user never
+    // touched (see EffectSlot::params).
+    json::Object params;
+    for (const auto& [param, value] : slot.params) {
+      params.emplace(std::to_string(param), json::Value::real(value));
+    }
+    entry.emplace("params", json::Value::object(std::move(params)));
+    chain.push_back(json::Value::object(std::move(entry)));
+  }
+  out.emplace("chain", json::Value::array(std::move(chain)));
   out.emplace("sends", json::Value::array({}));  // Stage 4
   return json::Value::object(std::move(out));
 }
@@ -746,12 +819,51 @@ class Loader {
       // is resolved once every track has been read.
       const std::string output = takeString(*fields, "output_id");
       if (!output.empty()) pending_track_output_.emplace(*id, output);
-      // Stage 4 owns these; consuming them keeps two empty arrays out of the
-      // residue and out of every diff.
-      if (const json::Value* chain = entry.find("chain");
-          chain != nullptr && chain->isArray() && chain->asArray()->empty()) {
-        take(*fields, "chain");
+      // Taken whole and read const: the entire array leaves the residue with
+      // this call, so there is nothing left for a per-key `take` to protect.
+      const json::Value chain_value = take(*fields, "chain");
+      if (const json::Array* chain = chain_value.asArray(); chain != nullptr) {
+        for (const json::Value& slot_value : *chain) {
+          if (slot_value.asObject() == nullptr) continue;
+          const std::string slot_key = stringAt(slot_value, "id");
+          const std::optional<EffectId> slot_id = EffectId::parse(slot_key);
+          if (!slot_id) {
+            // No identity means no automation target and no stable position in
+            // an undo history; there is nothing useful to load it as.
+            note("Kept, not understood: effect '" + slot_key + "' on '" + track.name + "'.");
+            continue;
+          }
+          EffectSlot slot;
+          slot.id = *slot_id;
+          const json::Value* bypassed = slot_value.find("bypassed");
+          slot.bypassed = bypassed != nullptr && bypassed->isBool() && bypassed->asBool();
+          if (const json::Value* plugin = slot_value.find("plugin"); plugin != nullptr) {
+            slot.plugin.format = pluginFormatFrom(stringAt(*plugin, "format"));
+            slot.plugin.id = stringAt(*plugin, "id");
+            slot.plugin.name = stringAt(*plugin, "name");
+            slot.plugin.vendor = stringAt(*plugin, "vendor");
+            slot.plugin.path_hint = stringAt(*plugin, "path_hint");
+          }
+          if (const json::Value* params = slot_value.find("params"); params != nullptr) {
+            if (const json::Object* param_map = params->asObject(); param_map != nullptr) {
+              for (const auto& [param_key, param_value] : *param_map) {
+                if (!param_value.isNumber()) continue;
+                // Keys are decimal ParamIds. A key that is not one belongs to a
+                // writer we do not know, and guessing would make it parameter
+                // zero — which is a real parameter on most plug-ins.
+                char* end = nullptr;
+                const unsigned long parsed = std::strtoul(param_key.c_str(), &end, 10);
+                if (param_key.empty() || end == nullptr || *end != '\0') continue;
+                slot.params.emplace(static_cast<plugin::ParamId>(parsed),
+                                    static_cast<float>(param_value.asDouble()));
+              }
+            }
+          }
+          track.effects.push_back(std::move(slot));
+        }
       }
+      // Stage 4 owns sends; consuming an empty array keeps it out of the
+      // residue and out of every diff.
       if (const json::Value* sends = entry.find("sends");
           sends != nullptr && sends->isArray() && sends->asArray()->empty()) {
         take(*fields, "sends");
@@ -1072,8 +1184,13 @@ class Loader {
         AudioSource audio;
         audio.path = takeString(*source, "path");
         audio.source_offset = takeInt(*source, "source_offset");
+        // Absent in files written before clip editing landed, and 0 is exactly
+        // what those clips meant: the whole file from the offset onwards.
+        audio.source_length = takeInt(*source, "source_length");
         audio.gain = takeFloat(*source, "gain", 1.0F);
         audio.reversed = takeBool(*source, "reversed");
+        audio.stretch_mode = stretchModeFrom(takeString(*source, "stretch_mode", "off"));
+        audio.source_bpm = takeDouble(*source, "source_bpm");
         const std::string destination = takeString(*source, "destination_id");
         const std::optional<MixerTrackId> track =
             reference<EntityKind::MixerTrack>(destination, "Clip '" + key + "'", "destination");
@@ -1090,8 +1207,10 @@ class Loader {
         const std::string target = takeString(*source, "target_id");
         automation.parameter =
             static_cast<plugin::ParamId>(takeInt(*source, "parameter", plugin::InvalidParamId));
-        if (target_kind == "mixer_track") {
-          automation.target_kind = AutomationSource::TargetKind::MixerTrack;
+        if (target_kind == "mixer_track" || target_kind == "effect") {
+          automation.target_kind = target_kind == "effect"
+                                       ? AutomationSource::TargetKind::Effect
+                                       : AutomationSource::TargetKind::MixerTrack;
           const std::optional<MixerTrackId> track =
               reference<EntityKind::MixerTrack>(target, "Clip '" + key + "'", "target");
           if (!track) {
@@ -1099,6 +1218,19 @@ class Loader {
           } else {
             automation.mixer_track = *track;
             pending_clip_track_.emplace(*id, *track);
+          }
+          if (usable && automation.target_kind == AutomationSource::TargetKind::Effect) {
+            const std::string effect_text = takeString(*source, "effect_id");
+            const std::optional<EffectId> effect = EffectId::parse(effect_text);
+            if (!effect) {
+              error("Clip '" + key + "' automates an effect it does not name — dropped.");
+              usable = false;
+            } else {
+              automation.effect = *effect;
+              // Resolved against the track's chain once the mixer is read: an
+              // ID that parses is not yet an ID that points at a live slot.
+              pending_clip_effect_.emplace(*id, *effect);
+            }
           }
         } else {
           const std::optional<InstrumentId> instrument =
@@ -1257,6 +1389,17 @@ class Loader {
     }
   }
 
+  // An effect reference is only good if the slot survived into the chain we
+  // actually read — a project hand-edited to delete an insert leaves curves
+  // behind, and those curves have nothing to drive.
+  bool effectIsLoaded(ClipId clip, EffectId effect) const {
+    const auto track = pending_clip_track_.find(clip);
+    if (track == pending_clip_track_.end()) return false;
+    const auto entry = tables_.mixer_tracks.find(track->second);
+    if (entry == tables_.mixer_tracks.end()) return false;
+    return entry->second.findEffect(effect) != nullptr;
+  }
+
   void dropDanglingClips() {
     for (auto clip = tables_.clips.begin(); clip != tables_.clips.end();) {
       std::string reason;
@@ -1274,6 +1417,10 @@ class Loader {
                  track != pending_clip_track_.end() &&
                  tables_.mixer_tracks.count(track->second) == 0) {
         reason = "the mixer track it targets is not in this project";
+      } else if (const auto effect = pending_clip_effect_.find(clip->first);
+                 effect != pending_clip_effect_.end() &&
+                 !effectIsLoaded(clip->first, effect->second)) {
+        reason = "the effect it automates is no longer in that track's chain";
       }
       if (reason.empty()) {
         ++clip;
@@ -1344,6 +1491,7 @@ class Loader {
   std::map<ClipId, PatternId> pending_clip_pattern_;
   std::map<ClipId, InstrumentId> pending_clip_instrument_;
   std::map<ClipId, MixerTrackId> pending_clip_track_;
+  std::map<ClipId, EffectId> pending_clip_effect_;
 };
 
 }  // namespace

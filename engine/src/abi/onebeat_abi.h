@@ -41,7 +41,7 @@ extern "C" {
 /* ------------------------------------------------------------------------- */
 
 #define OB_ABI_VERSION_MAJOR 1
-#define OB_ABI_VERSION_MINOR 17
+#define OB_ABI_VERSION_MINOR 18
 #define OB_ABI_VERSION_PATCH 0
 
 /* Packed as (major << 16) | (minor << 8) | patch. */
@@ -809,6 +809,157 @@ OB_API ob_status ob_engine_clip_set_window_start(ob_engine* engine, const char* 
                                                  int64_t window_start_ticks);
 OB_API ob_status ob_engine_clip_set_transpose(ob_engine* engine, const char* utf8_clip_id,
                                               int32_t semitones);
+
+/* Audio clip editing (added in ABI 1.18)                                     */
+
+#define OB_STRETCH_OFF 0      /* the clip is a window; resizing trims */
+#define OB_STRETCH_RESAMPLE 1 /* speed moves the pitch */
+#define OB_STRETCH_STRETCH 2  /* pitch-preserving, via the WSOLA stretcher */
+
+typedef struct ob_audio_clip_info {
+  uint32_t struct_size;
+  int32_t stretch_mode;        /* OB_STRETCH_* */
+  int64_t source_offset_ticks; /* trim-in, in *source* time */
+  /* Trim-out as a duration from the offset. 0 means "to the end of the file",
+   * which is the state a freshly dropped sample is in. */
+  int64_t source_length_ticks;
+  /* The whole file's duration at the current tempo, so the editor can draw how
+   * much room a trim has left without decoding the file again. 0 when unknown. */
+  int64_t source_duration_ticks;
+  double source_bpm; /* 0 when unknown; only "fit to tempo" reads it */
+  double gain;
+  int32_t reversed;
+  int32_t reserved_;
+} ob_audio_clip_info;
+
+/* Fails with OB_STATUS_INVALID_ARGUMENT when the clip is not an audio clip. */
+OB_API ob_status ob_engine_audio_clip_info(ob_engine* engine, const char* utf8_clip_id,
+                                           ob_audio_clip_info* out_info);
+/* Trim. Both values are in source time; `source_length_ticks` of 0 keeps its
+ * "to the end of the file" meaning. */
+OB_API ob_status ob_engine_audio_clip_set_window(ob_engine* engine, const char* utf8_clip_id,
+                                                 int64_t source_offset_ticks,
+                                                 int64_t source_length_ticks);
+OB_API ob_status ob_engine_audio_clip_set_stretch_mode(ob_engine* engine, const char* utf8_clip_id,
+                                                       int32_t stretch_mode);
+OB_API ob_status ob_engine_audio_clip_set_source_bpm(ob_engine* engine, const char* utf8_clip_id,
+                                                     double bpm);
+OB_API ob_status ob_engine_audio_clip_set_reversed(ob_engine* engine, const char* utf8_clip_id,
+                                                   int32_t reversed);
+OB_API ob_status ob_engine_audio_clip_set_gain(ob_engine* engine, const char* utf8_clip_id,
+                                               double gain);
+/* Resize with the clip's own stretch rule applied: a clip that is not stretched
+ * re-trims, and one that is stretches. The single entry point for dragging a
+ * clip's right edge, so the two behaviours cannot drift apart. */
+OB_API ob_status ob_engine_audio_clip_resize(ob_engine* engine, const char* utf8_clip_id,
+                                             int64_t length_ticks);
+/* Cuts at an absolute tick. The left half keeps this clip's ID; the right half
+ * is a new clip that resumes where the left one stopped rather than restarting
+ * the file. One undo entry. OB_STATUS_INVALID_ARGUMENT when the tick is not
+ * strictly inside the clip — cutting on an edge is not an edit. Works on
+ * pattern and automation clips too. */
+OB_API ob_status ob_engine_clip_split(ob_engine* engine, const char* utf8_clip_id,
+                                      int64_t at_ticks);
+/* Resizes the clip so its material plays at the project tempo, and switches it
+ * to pitch-preserving stretch. OB_STATUS_INVALID_ARGUMENT when the clip has no
+ * source tempo to fit — set one with ob_engine_audio_clip_set_source_bpm first,
+ * because guessing silently is how a project ends up subtly out of time. */
+OB_API ob_status ob_engine_audio_clip_fit_to_tempo(ob_engine* engine, const char* utf8_clip_id);
+
+/* Mixer tracks (added in ABI 1.18, EPIC-4)                                   */
+
+#define OB_MIXER_FLAG_MUTED 0x1u
+#define OB_MIXER_FLAG_SOLOED 0x2u
+/* This is the master: it feeds the device and has no output of its own. */
+#define OB_MIXER_FLAG_MASTER 0x4u
+
+typedef struct ob_mixer_track_info {
+  uint32_t struct_size;
+  uint32_t flags; /* OB_MIXER_FLAG_* */
+  double gain;    /* linear, 0..2 */
+  double pan;     /* -1..1 */
+  uint32_t effect_count;
+  uint32_t reserved_;
+  char id[32];
+  char output_id[32]; /* empty for the master */
+  char name[128];
+} ob_mixer_track_info;
+
+/* Enumerated in creation order, which is the order the engine's mixer graph is
+ * built in — so an index here is the index the meters and the graph agree on. */
+OB_API int32_t ob_engine_mixer_track_count(ob_engine* engine);
+OB_API ob_status ob_engine_mixer_track_at(ob_engine* engine, int32_t index,
+                                          ob_mixer_track_info* out_info);
+OB_API ob_status ob_engine_mixer_track_set_gain(ob_engine* engine, const char* utf8_track_id,
+                                                double gain);
+OB_API ob_status ob_engine_mixer_track_set_pan(ob_engine* engine, const char* utf8_track_id,
+                                               double pan);
+OB_API ob_status ob_engine_mixer_track_set_muted(ob_engine* engine, const char* utf8_track_id,
+                                                 int32_t muted);
+OB_API ob_status ob_engine_mixer_track_set_soloed(ob_engine* engine, const char* utf8_track_id,
+                                                  int32_t soloed);
+
+/* Mixer inserts (added in ABI 1.18, EPIC-4)                                  */
+
+typedef struct ob_effect_descriptor {
+  uint32_t struct_size;
+  uint32_t reserved_;
+  char id[128];
+  char name[128];
+  char summary[256];
+} ob_effect_descriptor;
+
+/* The effects this build ships, for the insert picker. */
+OB_API int32_t ob_engine_builtin_effect_count(ob_engine* engine);
+OB_API ob_status ob_engine_builtin_effect_at(ob_engine* engine, int32_t index,
+                                             ob_effect_descriptor* out_info);
+
+typedef struct ob_effect_info {
+  uint32_t struct_size;
+  uint32_t flags; /* OB_EFFECT_FLAG_* */
+  int32_t index;  /* position in the chain */
+  uint32_t param_count;
+  char id[32];         /* the slot's own EffectId — what automation targets */
+  char plugin_id[128]; /* which effect is in the slot */
+  char name[128];
+} ob_effect_info;
+
+#define OB_EFFECT_FLAG_BYPASSED 0x1u
+/* The slot names a plug-in this build does not have. It stays in the chain and
+ * in the file, and it is silent (FR-PLG-10). */
+#define OB_EFFECT_FLAG_MISSING 0x2u
+
+OB_API int32_t ob_engine_mixer_effect_count(ob_engine* engine, const char* utf8_track_id);
+OB_API ob_status ob_engine_mixer_effect_at(ob_engine* engine, const char* utf8_track_id,
+                                           int32_t index, ob_effect_info* out_info);
+/* Appends when `index` is negative. */
+OB_API ob_status ob_engine_mixer_effect_add(ob_engine* engine, const char* utf8_track_id,
+                                            const char* utf8_plugin_id, int32_t index);
+/* Removes the insert *and* every automation clip driving it, as one undo entry.
+ * Ask ob_engine_mixer_effect_impact first if the count should be shown. */
+OB_API ob_status ob_engine_mixer_effect_remove(ob_engine* engine, const char* utf8_track_id,
+                                               const char* utf8_effect_id);
+/* How many automation clips would die with this insert. */
+OB_API int32_t ob_engine_mixer_effect_impact(ob_engine* engine, const char* utf8_track_id,
+                                             const char* utf8_effect_id);
+OB_API ob_status ob_engine_mixer_effect_move(ob_engine* engine, const char* utf8_track_id,
+                                             const char* utf8_effect_id, int32_t index);
+OB_API ob_status ob_engine_mixer_effect_set_bypassed(ob_engine* engine, const char* utf8_track_id,
+                                                     const char* utf8_effect_id, int32_t bypassed);
+
+/* Insert parameters. The same `ob_param_info` the hosted-plug-in editor uses,
+ * so the generic editor renders an effect with no new drawing code. */
+OB_API ob_status ob_engine_mixer_effect_param_at(ob_engine* engine, const char* utf8_track_id,
+                                                 const char* utf8_effect_id, uint32_t index,
+                                                 ob_param_info* out_info);
+OB_API ob_status ob_engine_mixer_effect_param_value(ob_engine* engine, const char* utf8_track_id,
+                                                    const char* utf8_effect_id, uint32_t param_id,
+                                                    double* out_value);
+/* Coalesces per (track, insert, parameter) while the bus's window is open, so
+ * one knob drag is one undo entry and two knobs are two. */
+OB_API ob_status ob_engine_mixer_effect_set_param(ob_engine* engine, const char* utf8_track_id,
+                                                  const char* utf8_effect_id, uint32_t param_id,
+                                                  double value);
 
 /* FR-SEQ-04. Clones the pattern once, repoints exactly the given clips at the
  * clone, and leaves every other reference alone — all as one undo entry, so

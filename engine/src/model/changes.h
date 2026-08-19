@@ -46,6 +46,12 @@ enum class ChangeField : uint8_t {
   Output,
   Transport,
   Meta,
+  // The shape of a mixer track's chain: a slot added, removed, reordered or
+  // bypassed. Separate from EffectParam so that a knob drag cannot coalesce
+  // with a reorder — they are the same entity and the same field would make
+  // one undo entry out of two unrelated gestures.
+  Effects,
+  EffectParam,
 };
 
 struct ChangeEvent {

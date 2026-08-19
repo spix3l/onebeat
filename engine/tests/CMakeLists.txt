@@ -64,12 +64,15 @@ add_executable(onebeat_tests
   test_schedule.cpp
   test_rt_primitives.cpp
   test_sampler.cpp
+  test_clip_audio.cpp
+  test_mixer_effects.cpp
   test_audio_export.cpp
   test_transport.cpp
   test_engine_render.cpp
   test_abi.cpp
   test_model.cpp
   test_model_commands.cpp
+  test_clip_commands.cpp
   test_note_edit.cpp
   test_flattener.cpp
   test_project_io.cpp

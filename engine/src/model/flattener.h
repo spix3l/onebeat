@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "core/schedule.h"
 #include "model/changes.h"
@@ -42,6 +43,16 @@ struct FlattenResult {
   // channels immediately after the instrument channels. The ABI uses this map
   // to build the matching channel rack before publishing the schedule.
   std::map<ClipId, core::InstrumentId> audio_channel_index;
+  // Mixer inserts get a dense index too, in an address space of their own —
+  // effects are not on the rack and never sound by themselves, so sharing the
+  // channel numbering would make an automation event for insert 3 look like a
+  // parameter change on channel 3. Assigned in (track, chain position) order,
+  // which makes it a pure function of the model exactly as the others are.
+  //
+  // The caller uses this map twice: it is what the schedule's EffectParam
+  // events are addressed to, and it is what the engine's mixer is told each
+  // insert's index is. Both must agree, so both read it from here.
+  std::map<std::pair<MixerTrackId, EffectId>, int32_t> effect_index;
 
   int64_t length_frames = 0;
   size_t event_count = 0;

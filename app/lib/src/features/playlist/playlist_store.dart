@@ -432,8 +432,71 @@ class PlaylistStore extends ChangeNotifier {
     refresh();
   }
 
+  /// Resize, applying the clip's own rule for what its right edge means.
+  ///
+  /// A pattern clip's length is just a length. An audio clip's is a length
+  /// *and* a decision: an unstretched clip re-trims and a stretched one
+  /// stretches, and the engine owns that branch so the two can never drift
+  /// apart. Sending an audio clip through the plain resize would silently pick
+  /// the trimming half of it forever.
   void resizeClip(String clipId, int lengthTicks) {
-    _client.resizeClip(clipId, lengthTicks < 1 ? 1 : lengthTicks);
+    final int length = lengthTicks < 1 ? 1 : lengthTicks;
+    final ArrangementClip? clip = clipById(clipId);
+    if (clip != null && clip.isAudio) {
+      _client.resizeAudioClip(clipId, length);
+    } else {
+      _client.resizeClip(clipId, length);
+    }
+    refresh();
+  }
+
+  // ----- audio clip editing -------------------------------------------------
+
+  /// The selected audio clip's edit parameters, or null when the selection is
+  /// not one audio clip.
+  AudioClipEdit? get selectedAudioEdit {
+    final ArrangementClip? clip = selectedClip;
+    if (clip == null || !clip.isAudio) return null;
+    return _client.readAudioClip(clip.id);
+  }
+
+  /// Cuts at an absolute tick. The left half keeps the clip's ID and stays
+  /// selected; the right half is new, and selecting it instead would move the
+  /// selection out from under the user's cursor.
+  void splitClipAt(String clipId, int atTicks) {
+    _client.splitClip(clipId, atTicks);
+    refresh();
+  }
+
+  void setClipStretchMode(String clipId, StretchMode mode) {
+    _client.setAudioClipStretchMode(clipId, mode);
+    refresh();
+  }
+
+  void setClipSourceBpm(String clipId, double bpm) {
+    _client.setAudioClipSourceBpm(clipId, bpm);
+    refresh();
+  }
+
+  void setClipReversed(String clipId, {required bool reversed}) {
+    _client.setAudioClipReversed(clipId, reversed: reversed);
+    refresh();
+  }
+
+  void setClipSourceWindow(String clipId, {required int offsetTicks, required int lengthTicks}) {
+    _client.setAudioClipWindow(
+      clipId,
+      sourceOffsetTicks: offsetTicks < 0 ? 0 : offsetTicks,
+      sourceLengthTicks: lengthTicks < 0 ? 0 : lengthTicks,
+    );
+    refresh();
+  }
+
+  /// Resizes the clip so its material plays at the project tempo. Does nothing
+  /// when the clip has no source tempo recorded — the engine refuses rather
+  /// than guessing, and a guess here is how a project ends up out of time.
+  void fitClipToTempo(String clipId) {
+    _client.fitAudioClipToTempo(clipId);
     refresh();
   }
 
@@ -539,7 +602,16 @@ class PlaylistStore extends ChangeNotifier {
 
   void updateClipResize(String clipId, int lengthTicks) {
     if (dragKind != ClipDragKind.resizeEnd) return;
-    _client.resizeClip(clipId, lengthTicks < 1 ? 1 : lengthTicks);
+    // Same branch as `resizeClip`: dragging the edge and typing a length must
+    // mean the same thing, or a stretched clip stretches one way and trims the
+    // other.
+    final int length = lengthTicks < 1 ? 1 : lengthTicks;
+    final ArrangementClip? clip = clipById(clipId);
+    if (clip != null && clip.isAudio) {
+      _client.resizeAudioClip(clipId, length);
+    } else {
+      _client.resizeClip(clipId, length);
+    }
     refresh();
   }
 

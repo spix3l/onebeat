@@ -122,7 +122,9 @@ endif()
 add_library(onebeat_core STATIC
   src/core/engine.cpp
   src/core/schedule.cpp
+  src/core/mixer_graph.cpp
   src/core/sampler.cpp
+  src/core/time_stretch.cpp
   src/core/wav_loader.cpp
   src/core/audio_export.cpp
   src/core/diagnostics.cpp
@@ -143,6 +145,12 @@ add_library(onebeat_core STATIC
   src/plugin/sandbox/sandboxed_plugin_proxy.cpp
   src/plugin/sandbox/runtime_host.cpp
   src/plugin/builtin/sampler_plugin.cpp
+  src/plugin/builtin/effects/effect_plugin.cpp
+  src/plugin/builtin/effects/effect_factory.cpp
+  src/plugin/builtin/effects/reverb_plugin.cpp
+  src/plugin/builtin/effects/delay_plugin.cpp
+  src/plugin/builtin/effects/halftime_plugin.cpp
+  src/plugin/builtin/effects/reverse_plugin.cpp
   src/plugin/scan/descriptor.cpp
   src/plugin/scan/plugin_cache.cpp
   src/plugin/scan/plugin_library.cpp

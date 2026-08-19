@@ -379,6 +379,41 @@ TEST_SUITE("engine") {
     std::filesystem::remove(path, ignored);
   }
 
+  TEST_CASE("An empty project's audio clip waits for its sample instead of the fallback tone") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+
+    const std::string path = "/tmp/onebeat-empty-project-song.wav";
+    onebeat::testing::RenderResult source;
+    source.left.assign(48000, 0.25F);
+    source.right.assign(48000, 0.25F);
+    REQUIRE(onebeat::testing::writeWav(source, path));
+
+    onebeat::core::Engine::ChannelDesc audio;
+    audio.sample_path = path;
+    audio.one_shot = true;
+    audio.clip.enabled = true;
+
+    // Do not apply the pending channel work yet. This is the ordering used by
+    // the real model publish: decoding is queued, while the schedule is ready
+    // immediately. Channel 0 is the empty project's audition/fallback slot.
+    engine->setChannels(std::vector<onebeat::core::Engine::ChannelDesc>{audio});
+    onebeat::core::ScheduleBuilder schedule;
+    schedule.addAudioStart(0, 0);
+    engine->publishSchedule(schedule.setLengthFrames(48000).build(48000.0, 1));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    // The start is deferred, not rendered through the fallback sampler. If the
+    // worker wins the race it may already be the real 0.25 sample; either way,
+    // the built-in fallback is much louder and must never be what this event
+    // starts.
+    CHECK(renderOffline(*engine, 128, 128).peak() <= 0.27F);
+
+    std::error_code ignored;
+    engine.reset();
+    std::filesystem::remove(path, ignored);
+  }
+
   TEST_CASE("Two audio clips play in parallel on independent channels") {
     auto engine = makeOfflineEngine();
     REQUIRE(engine != nullptr);

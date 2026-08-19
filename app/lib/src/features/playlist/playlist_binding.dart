@@ -333,13 +333,16 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       final ArrangementClip? clip = _store.selectedClip;
       if (clip != null) {
         final int laneIndex = laneOrderMap[clip.laneId] ?? 0;
+        // Only for audio clips: the read is a call across the boundary, and a
+        // pattern clip has no answer to give.
+        final AudioClipEdit? audio = clip.isAudio ? _store.selectedAudioEdit : null;
         inspectorVm = ClipInspectorVm(
           selectedCount: 1,
           clipId: clip.id,
           name: clip.name,
           color: _resolveColor(laneIndex, clip.color),
           usageText: clip.isAudio
-              ? 'Audio file · full source duration'
+              ? _audioUsageText(clip, audio)
               : (clip.isShared ? 'Pattern used in ${clip.usageCount} clips' : 'Pattern used once'),
           isShared: !clip.isAudio && clip.isShared,
           isAudio: clip.isAudio,
@@ -349,6 +352,10 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           loop: clip.loop,
           muted: clip.muted,
           transpose: clip.transpose,
+          stretchMode: audio?.stretchMode ?? StretchMode.off,
+          reversed: audio?.reversed ?? false,
+          sourceBpm: audio?.sourceBpm ?? 0,
+          canFitToTempo: audio?.canFitToTempo ?? false,
         );
       }
     }
@@ -629,6 +636,26 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     _store.placeLastClickedItem(targetLane.id, startTicks);
   }
 
+  /// The line under an audio clip's name. It says what the clip is *made of* —
+  /// which slice of which file, and what its right edge will do — because that
+  /// is the thing a trimmed or stretched clip no longer shows on its face.
+  String _audioUsageText(ArrangementClip clip, AudioClipEdit? audio) {
+    if (audio == null) return 'Audio file';
+    final String mode = switch (audio.stretchMode) {
+      StretchMode.off => 'trimmed',
+      StretchMode.resample => 'sped',
+      StretchMode.stretch => 'stretched',
+    };
+    final int span = audio.spanTicks(clip.lengthTicks);
+    final String beats = (span / ticksPerQuarter).toStringAsFixed(1);
+    final String reversed = audio.reversed ? ' · reversed' : '';
+    return 'Audio · $beats beats of source · $mode$reversed';
+  }
+
+  /// Where the transport is, in ticks. The cut position for "cut at playhead",
+  /// which is the only cut position the user can hear before they take it.
+  int _playheadTicks() => (_controller.snapshot.positionBeats * ticksPerQuarter).round();
+
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
@@ -747,6 +774,29 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
           onSplitByChannel: () {
             final ArrangementClip? clip = _store.selectedClip;
             if (clip != null) _store.splitClipByChannel(clip.id);
+          },
+          onStretchModeChanged: (StretchMode mode) {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip != null) _store.setClipStretchMode(clip.id, mode);
+          },
+          onReverseToggle: (bool reversed) {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip != null) _store.setClipReversed(clip.id, reversed: reversed);
+          },
+          onSourceBpmChanged: (double bpm) {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip != null) _store.setClipSourceBpm(clip.id, bpm.clamp(20.0, 400.0));
+          },
+          onFitToTempo: () {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip != null) _store.fitClipToTempo(clip.id);
+          },
+          onSplitAtPlayhead: () {
+            final ArrangementClip? clip = _store.selectedClip;
+            if (clip == null) return;
+            // The playhead is where the user is listening, which is the only
+            // cut position they can hear before they make it.
+            _store.splitClipAt(clip.id, _playheadTicks());
           },
           onLaneMute: (String laneId) {
             final ArrangementLane? lane = _store.lanes.cast<ArrangementLane?>().firstWhere(

@@ -16,6 +16,7 @@
 //   - `Instrument` is project-global and lives in no pattern, lane or track.
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -87,9 +88,30 @@ struct Instrument {
   float pan = 0.0F;
 };
 
-// Stage 4 owns the behaviour (chains, gain law, sends, solo semantics). What
-// exists here is what routing needs to be real from day one: an ID space, a
-// name, and an output that is another track or, for exactly one track, nothing.
+// One insert in a mixer track's effect chain.
+//
+// The plugin is named the same way an instrument's is — by `PluginRef`, format
+// and all — so a hosted CLAP effect drops into a slot with no model change; the
+// stock four simply carry `PluginFormat::Builtin`. What a slot adds over a bare
+// `PluginRef` is an identity and a bypass, and both exist for the same reason:
+// automation. A curve is written against `EffectId`, so dragging the reverb up
+// the chain moves its automation with it, and bypass is a slot property rather
+// than a plugin parameter so that every effect has one whether or not its
+// author thought to provide it.
+struct EffectSlot {
+  EffectId id;
+  PluginRef plugin;
+  bool bypassed = false;
+  // Base parameter values, keyed by the plugin's own stable `ParamId`. Sparse:
+  // a parameter the user has never touched is absent and the plugin's default
+  // stands, which is what keeps a project file from pinning every default the
+  // day a plugin ships a better one.
+  std::map<plugin::ParamId, float> params;
+};
+
+// Stage 4's behaviour, less the sends. A track is a signal path: things render
+// into it, its chain processes what arrived, and the result goes to `output` —
+// another track, or nothing at all for the one track that is Master.
 struct MixerTrack {
   MixerTrackId id;
   std::string name;
@@ -98,6 +120,18 @@ struct MixerTrack {
   float pan = 0.0F;
   bool muted = false;  // an *audio* gate, not the lane's event gate (D-M4)
   bool soloed = false;
+  // Chain order is array order, and here that is correct rather than lazy: a
+  // chain *is* a sequence, unlike lanes and instruments whose display order is
+  // a field because their identity must survive reordering. Slots keep their
+  // `EffectId` across a move, which is what automation needs (see EffectSlot).
+  std::vector<EffectSlot> effects;
+
+  const EffectSlot* findEffect(EffectId effect) const {
+    for (const EffectSlot& slot : effects) {
+      if (slot.id == effect) return &slot;
+    }
+    return nullptr;
+  }
 };
 
 // --------------------------------------------------------------------------
@@ -162,13 +196,53 @@ struct PatternSource {
   PatternId pattern;
 };
 
-// Stage 9 owns editing. `path` is bundle-relative once consolidated (FR-PRJ-05).
+// How a clip reconciles the length the user dragged with the length of the
+// audio underneath it.
+enum class StretchMode : uint8_t {
+  // The source plays at its own rate and the clip is a window onto it: dragging
+  // the right edge trims, and dragging it past the end buys silence, not more
+  // audio. The honest default, and what a one-shot wants.
+  Off = 0,
+  // Playback rate follows the clip. Pitch moves with it — the turntable, and
+  // the sound most people actually mean by "speed it up".
+  Resample = 1,
+  // Duration follows the clip and pitch does not, via the overlap-add stretcher
+  // in core/time_stretch.h. What "fit to tempo" wants for anything melodic.
+  Stretch = 2,
+};
+
+// `path` is bundle-relative once consolidated (FR-PRJ-05).
+//
+// The edit parameters split cleanly in two, and keeping the split visible is
+// what stops the two from fighting:
+//
+//   - `source_offset` / `source_length` are a window **in source time**. They
+//     say which part of the file this clip is made of, and they do not change
+//     when the tempo does.
+//   - `Clip::length` is a duration **on the timeline**, and `stretch_mode` is
+//     the rule that maps one onto the other.
+//
+// The stretch *ratio* is deliberately not a field: it is `Clip::length` over
+// `source_length`, derived by `audioStretchRatio` below. Storing it as well
+// would be a second source of truth that a resize has to remember to update,
+// and the first time it is forgotten a clip plays at a rate that matches
+// nothing on screen.
 struct AudioSource {
   std::string path;
+  // Trim-in: where in the file this clip starts. Source time, not timeline time.
   Ticks source_offset = 0;
+  // Trim-out, as a duration from `source_offset`. 0 means "to the end of the
+  // file" — the state a freshly dropped sample is in, before anything knows how
+  // long the file is.
+  Ticks source_length = 0;
   float gain = 1.0F;
   bool reversed = false;
   MixerTrackId destination;  // routes to a track directly — no instrument (D-M7)
+  StretchMode stretch_mode = StretchMode::Off;
+  // The tempo the material was recorded at, 0 when unknown. Only "fit to tempo"
+  // reads it, and it is stored rather than re-detected so that a user who
+  // corrects a bad guess corrects it once.
+  double source_bpm = 0.0;
 };
 
 // One point on an automation curve: a value at a position, clip-relative.
@@ -182,10 +256,14 @@ struct AutomationPoint {
 
 // Stage 4 owns curves. The target is an entity plus a parameter, by ID.
 struct AutomationSource {
-  enum class TargetKind : uint8_t { Instrument, MixerTrack };
+  enum class TargetKind : uint8_t { Instrument, MixerTrack, Effect };
   TargetKind target_kind = TargetKind::Instrument;
   InstrumentId instrument;   // valid when target_kind == Instrument
-  MixerTrackId mixer_track;  // valid when target_kind == MixerTrack
+  MixerTrackId mixer_track;  // valid when target_kind == MixerTrack or Effect
+  // Valid when target_kind == Effect. The track is still named above because a
+  // chain slot is only findable through the track that owns it — an effect is
+  // not a project-global entity and deliberately has no map of its own.
+  EffectId effect;
   plugin::ParamId parameter = plugin::InvalidParamId;
   std::vector<AutomationPoint> points;
 };
@@ -222,6 +300,50 @@ struct Clip {
   const AudioSource* audio() const { return std::get_if<AudioSource>(&source); }
   const AutomationSource* automation() const { return std::get_if<AutomationSource>(&source); }
 };
+
+// --------------------------------------------------------------------------
+// Derived audio-clip geometry
+// --------------------------------------------------------------------------
+//
+// One place computes these, and everything — the flattener, the ABI, the
+// waveform painter — asks here. The alternative is three implementations of the
+// same arithmetic that agree until one of them is fixed.
+
+// How much source the clip consumes, in source time. `source_length` of 0 means
+// "to the end of the file", which only the caller holding the file's duration
+// can resolve, so it passes that in; 0 for an unknown duration falls back to the
+// clip's own length, which is what a freshly dropped sample is.
+inline Ticks audioSourceSpan(const AudioSource& source, Ticks clip_length,
+                             Ticks source_duration = 0) {
+  if (source.source_length > 0) return source.source_length;
+  if (source_duration > source.source_offset) return source_duration - source.source_offset;
+  return clip_length;
+}
+
+// Source frames consumed per timeline frame. 1.0 whenever stretching is off, so
+// a clip nobody has stretched is bit-identical to the file.
+inline double audioStretchRatio(const AudioSource& source, Ticks clip_length,
+                                Ticks source_duration = 0) {
+  if (source.stretch_mode == StretchMode::Off) return 1.0;
+  const Ticks span = audioSourceSpan(source, clip_length, source_duration);
+  if (span <= 0 || clip_length <= 0) return 1.0;
+  return static_cast<double>(span) / static_cast<double>(clip_length);
+}
+
+// The timeline length that plays `source` at its recorded tempo against a
+// project running at `project_bpm` — the whole of "fit to tempo".
+//
+// Returns 0 when the answer is unknowable (no source tempo, no material), and
+// the caller leaves the clip alone rather than resizing it to a guess.
+inline Ticks audioLengthAtTempo(const AudioSource& source, Ticks clip_length, double project_bpm,
+                                Ticks source_duration = 0) {
+  if (source.source_bpm <= 0.0 || project_bpm <= 0.0) return 0;
+  const Ticks span = audioSourceSpan(source, clip_length, source_duration);
+  if (span <= 0) return 0;
+  const double scaled = static_cast<double>(span) * (source.source_bpm / project_bpm);
+  const Ticks result = static_cast<Ticks>(std::llround(scaled));
+  return result > 0 ? result : 1;
+}
 
 // --------------------------------------------------------------------------
 // Project-level, non-entity state

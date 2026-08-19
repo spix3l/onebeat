@@ -141,6 +141,24 @@ class _FakeEngineClient implements EngineClient {
   @override
   List<ProjectInstrument> readInstruments() => const <ProjectInstrument>[];
 
+  // ----- mixer --------------------------------------------------------------
+  // Stubbed rather than left to noSuchMethod: the mixer binding calls these
+  // while building, and a null from noSuchMethod fails as a type error rather
+  // than as an empty mixer.
+
+  @override
+  List<MixerTrackInfo> readMixerTracks() => const <MixerTrackInfo>[];
+
+  @override
+  List<EffectDescriptor> readBuiltinEffects() => const <EffectDescriptor>[];
+
+  @override
+  List<EffectInfo> readMixerEffects(String trackId) => const <EffectInfo>[];
+
+  @override
+  List<HostedParameter> readMixerEffectParams(String trackId, String effectId) =>
+      const <HostedParameter>[];
+
   // ----- project files ------------------------------------------------------
 
   String projectPathValue = '';

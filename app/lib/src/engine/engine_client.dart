@@ -257,6 +257,72 @@ abstract interface class ArrangementClient implements EditGestureClient {
   void setClipLoop(String clipId, {required bool loop});
   void setClipWindowStart(String clipId, int windowStartTicks);
   void setClipTranspose(String clipId, int semitones);
+
+  /// Cuts at an absolute tick. The left half keeps [clipId]; the right half is
+  /// a new clip that resumes where the left stopped rather than restarting its
+  /// source. Throws when the tick is not strictly inside the clip.
+  void splitClip(String clipId, int atTicks);
+
+  // --- audio clip editing (ABI 1.18) ---
+  AudioClipEdit readAudioClip(String clipId);
+  void setAudioClipWindow(String clipId, {required int sourceOffsetTicks, required int sourceLengthTicks});
+  void setAudioClipStretchMode(String clipId, StretchMode mode);
+  void setAudioClipSourceBpm(String clipId, double bpm);
+  void setAudioClipReversed(String clipId, {required bool reversed});
+  void setAudioClipGain(String clipId, double gain);
+
+  /// Resize with the clip's own stretch rule applied: an unstretched clip
+  /// re-trims, a stretched one stretches. The one entry point for dragging an
+  /// audio clip's right edge.
+  void resizeAudioClip(String clipId, int lengthTicks);
+
+  /// Fits the clip to the project tempo and switches it to pitch-preserving
+  /// stretch. Throws when the clip has no source tempo to fit.
+  void fitAudioClipToTempo(String clipId);
+}
+
+/// How an audio clip reconciles the length the user dragged with the length of
+/// the audio underneath it. Mirrors the engine's `OB_STRETCH_*`.
+enum StretchMode {
+  /// The clip is a window onto its source: resizing trims, and dragging past
+  /// the end buys silence rather than more audio.
+  off,
+
+  /// Playback rate follows the clip, so the pitch moves with it.
+  resample,
+
+  /// Duration follows the clip and the pitch does not.
+  stretch;
+
+  static StretchMode fromIndex(int value) =>
+      value >= 0 && value < StretchMode.values.length ? StretchMode.values[value] : StretchMode.off;
+}
+
+/// The mixer seam: tracks, their levels, and the inserts on them (EPIC-4).
+abstract interface class MixerClient {
+  List<MixerTrackInfo> readMixerTracks();
+  void setMixerTrackGain(String trackId, double gain);
+  void setMixerTrackPan(String trackId, double pan);
+  void setMixerTrackMuted(String trackId, {required bool muted});
+  void setMixerTrackSoloed(String trackId, {required bool soloed});
+
+  /// The effects this build ships, for the insert picker.
+  List<EffectDescriptor> readBuiltinEffects();
+
+  List<EffectInfo> readMixerEffects(String trackId);
+
+  /// Appends when [index] is null.
+  void addMixerEffect(String trackId, String pluginId, {int? index});
+
+  /// How many automation clips would be deleted along with this insert. Ask
+  /// before removing, so the confirmation can state the damage.
+  int mixerEffectImpact(String trackId, String effectId);
+  void removeMixerEffect(String trackId, String effectId);
+  void moveMixerEffect(String trackId, String effectId, int index);
+  void setMixerEffectBypassed(String trackId, String effectId, {required bool bypassed});
+
+  List<HostedParameter> readMixerEffectParams(String trackId, String effectId);
+  void setMixerEffectParam(String trackId, String effectId, int paramId, double value);
 }
 
 /// The project file seam (OB-3-05 §4): where the project lives, what it is
@@ -335,7 +401,15 @@ abstract interface class ExportClient {
   void cancelExport();
 }
 
-class EngineClient implements RackClient, NoteClient, PatternClient, ArrangementClient, ProjectFileClient, ExportClient {
+class EngineClient
+    implements
+        RackClient,
+        NoteClient,
+        PatternClient,
+        ArrangementClient,
+        MixerClient,
+        ProjectFileClient,
+        ExportClient {
   EngineClient._(this._bindings, this._engine)
     : _snapshot = calloc<ob_snapshot>(),
       _command = calloc<ob_command>(),
@@ -349,6 +423,11 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
       _patternInfo = calloc<ob_pattern_info>(),
       _laneInfo = calloc<ob_lane_info>(),
       _clipInfo = calloc<ob_clip_info>(),
+      _audioClipInfo = calloc<ob_audio_clip_info>(),
+      _mixerTrackInfo = calloc<ob_mixer_track_info>(),
+      _effectInfo = calloc<ob_effect_info>(),
+      _effectDescriptor = calloc<ob_effect_descriptor>(),
+      _doubleOut = calloc<Double>(),
       _noteCount = calloc<Int32>(),
       _paramInfo = calloc<ob_param_info>(),
       _exportStatus = calloc<ob_export_status>();
@@ -396,6 +475,11 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
   final Pointer<ob_pattern_info> _patternInfo;
   final Pointer<ob_lane_info> _laneInfo;
   final Pointer<ob_clip_info> _clipInfo;
+  final Pointer<ob_audio_clip_info> _audioClipInfo;
+  final Pointer<ob_mixer_track_info> _mixerTrackInfo;
+  final Pointer<ob_effect_info> _effectInfo;
+  final Pointer<ob_effect_descriptor> _effectDescriptor;
+  final Pointer<Double> _doubleOut;
   final Pointer<Int32> _noteCount;
   final Pointer<ob_param_info> _paramInfo;
   final Pointer<ob_export_status> _exportStatus;
@@ -1320,6 +1404,235 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
     (Pointer<Char> native) => _bindings.ob_engine_clip_set_transpose(_engine, native, semitones),
   );
 
+  @override
+  void splitClip(String clipId, int atTicks) =>
+      _withNativeString(clipId, (Pointer<Char> native) => _bindings.ob_engine_clip_split(_engine, native, atTicks));
+
+  // --- audio clip editing ---
+
+  @override
+  AudioClipEdit readAudioClip(String clipId) => _readWithNativeString(clipId, (Pointer<Char> native) {
+    _check(_bindings.ob_engine_audio_clip_info(_engine, native, _audioClipInfo));
+    final ob_audio_clip_info value = _audioClipInfo.ref;
+    return AudioClipEdit(
+      stretchMode: StretchMode.fromIndex(value.stretch_mode),
+      sourceOffsetTicks: value.source_offset_ticks,
+      sourceLengthTicks: value.source_length_ticks,
+      sourceDurationTicks: value.source_duration_ticks,
+      sourceBpm: value.source_bpm,
+      gain: value.gain,
+      reversed: value.reversed != 0,
+    );
+  });
+
+  @override
+  void setAudioClipWindow(String clipId, {required int sourceOffsetTicks, required int sourceLengthTicks}) =>
+      _withNativeString(
+        clipId,
+        (Pointer<Char> native) =>
+            _bindings.ob_engine_audio_clip_set_window(_engine, native, sourceOffsetTicks, sourceLengthTicks),
+      );
+
+  @override
+  void setAudioClipStretchMode(String clipId, StretchMode mode) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_set_stretch_mode(_engine, native, mode.index),
+  );
+
+  @override
+  void setAudioClipSourceBpm(String clipId, double bpm) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_set_source_bpm(_engine, native, bpm),
+  );
+
+  @override
+  void setAudioClipReversed(String clipId, {required bool reversed}) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_set_reversed(_engine, native, reversed ? 1 : 0),
+  );
+
+  @override
+  void setAudioClipGain(String clipId, double gain) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_set_gain(_engine, native, gain),
+  );
+
+  @override
+  void resizeAudioClip(String clipId, int lengthTicks) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_resize(_engine, native, lengthTicks),
+  );
+
+  @override
+  void fitAudioClipToTempo(String clipId) => _withNativeString(
+    clipId,
+    (Pointer<Char> native) => _bindings.ob_engine_audio_clip_fit_to_tempo(_engine, native),
+  );
+
+  // --- mixer tracks and inserts ---
+
+  @override
+  List<MixerTrackInfo> readMixerTracks() {
+    final int count = _bindings.ob_engine_mixer_track_count(_engine);
+    final List<MixerTrackInfo> tracks = <MixerTrackInfo>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_mixer_track_at(_engine, index, _mixerTrackInfo));
+      final ob_mixer_track_info value = _mixerTrackInfo.ref;
+      tracks.add(
+        MixerTrackInfo(
+          id: _readFixedUtf8(value.id, 32),
+          outputId: _readFixedUtf8(value.output_id, 32),
+          name: _readFixedUtf8(value.name, 128),
+          gain: value.gain,
+          pan: value.pan,
+          effectCount: value.effect_count,
+          muted: (value.flags & mixerFlagMuted) != 0,
+          soloed: (value.flags & mixerFlagSoloed) != 0,
+          isMaster: (value.flags & mixerFlagMaster) != 0,
+        ),
+      );
+    }
+    return tracks;
+  }
+
+  @override
+  void setMixerTrackGain(String trackId, double gain) => _withNativeString(
+    trackId,
+    (Pointer<Char> native) => _bindings.ob_engine_mixer_track_set_gain(_engine, native, gain),
+  );
+
+  @override
+  void setMixerTrackPan(String trackId, double pan) => _withNativeString(
+    trackId,
+    (Pointer<Char> native) => _bindings.ob_engine_mixer_track_set_pan(_engine, native, pan),
+  );
+
+  @override
+  void setMixerTrackMuted(String trackId, {required bool muted}) => _withNativeString(
+    trackId,
+    (Pointer<Char> native) => _bindings.ob_engine_mixer_track_set_muted(_engine, native, muted ? 1 : 0),
+  );
+
+  @override
+  void setMixerTrackSoloed(String trackId, {required bool soloed}) => _withNativeString(
+    trackId,
+    (Pointer<Char> native) => _bindings.ob_engine_mixer_track_set_soloed(_engine, native, soloed ? 1 : 0),
+  );
+
+  @override
+  List<EffectDescriptor> readBuiltinEffects() {
+    final int count = _bindings.ob_engine_builtin_effect_count(_engine);
+    final List<EffectDescriptor> effects = <EffectDescriptor>[];
+    for (int index = 0; index < count; index++) {
+      _check(_bindings.ob_engine_builtin_effect_at(_engine, index, _effectDescriptor));
+      final ob_effect_descriptor value = _effectDescriptor.ref;
+      effects.add(
+        EffectDescriptor(
+          id: _readFixedUtf8(value.id, 128),
+          name: _readFixedUtf8(value.name, 128),
+          summary: _readFixedUtf8(value.summary, 256),
+        ),
+      );
+    }
+    return effects;
+  }
+
+  @override
+  List<EffectInfo> readMixerEffects(String trackId) => _readWithNativeString(trackId, (Pointer<Char> native) {
+    final int count = _bindings.ob_engine_mixer_effect_count(_engine, native);
+    final List<EffectInfo> effects = <EffectInfo>[];
+    for (int index = 0; index < count; index++) {
+      if (_bindings.ob_engine_mixer_effect_at(_engine, native, index, _effectInfo) != ob_status.OB_OK) {
+        continue;
+      }
+      final ob_effect_info value = _effectInfo.ref;
+      effects.add(
+        EffectInfo(
+          id: _readFixedUtf8(value.id, 32),
+          pluginId: _readFixedUtf8(value.plugin_id, 128),
+          name: _readFixedUtf8(value.name, 128),
+          index: value.index,
+          paramCount: value.param_count,
+          bypassed: (value.flags & effectFlagBypassed) != 0,
+          missing: (value.flags & effectFlagMissing) != 0,
+        ),
+      );
+    }
+    return effects;
+  });
+
+  @override
+  void addMixerEffect(String trackId, String pluginId, {int? index}) => _withTwoNativeStrings(
+    trackId,
+    pluginId,
+    (Pointer<Char> track, Pointer<Char> plugin) =>
+        _bindings.ob_engine_mixer_effect_add(_engine, track, plugin, index ?? -1),
+  );
+
+  @override
+  int mixerEffectImpact(String trackId, String effectId) => _readWithTwoNativeStrings(
+    trackId,
+    effectId,
+    (Pointer<Char> track, Pointer<Char> effect) =>
+        _bindings.ob_engine_mixer_effect_impact(_engine, track, effect),
+  );
+
+  @override
+  void removeMixerEffect(String trackId, String effectId) => _withTwoNativeStrings(
+    trackId,
+    effectId,
+    (Pointer<Char> track, Pointer<Char> effect) =>
+        _bindings.ob_engine_mixer_effect_remove(_engine, track, effect),
+  );
+
+  @override
+  void moveMixerEffect(String trackId, String effectId, int index) => _withTwoNativeStrings(
+    trackId,
+    effectId,
+    (Pointer<Char> track, Pointer<Char> effect) =>
+        _bindings.ob_engine_mixer_effect_move(_engine, track, effect, index),
+  );
+
+  @override
+  void setMixerEffectBypassed(String trackId, String effectId, {required bool bypassed}) =>
+      _withTwoNativeStrings(
+        trackId,
+        effectId,
+        (Pointer<Char> track, Pointer<Char> effect) =>
+            _bindings.ob_engine_mixer_effect_set_bypassed(_engine, track, effect, bypassed ? 1 : 0),
+      );
+
+  @override
+  List<HostedParameter> readMixerEffectParams(String trackId, String effectId) =>
+      _readWithTwoNativeStrings(trackId, effectId, (Pointer<Char> track, Pointer<Char> effect) {
+        final List<HostedParameter> params = <HostedParameter>[];
+        // Walk until a parameter index is refused rather than trusting a count
+        // read earlier: the chain may have been edited in between, and a stale
+        // count would ask for a parameter that is no longer there.
+        for (int index = 0; index < _maxEffectParams; index++) {
+          final ob_status status =
+              _bindings.ob_engine_mixer_effect_param_at(_engine, track, effect, index, _paramInfo);
+          if (status != ob_status.OB_OK) break;
+          params.add(_readParam());
+        }
+        return params;
+      });
+
+  /// The ceiling the engine's own effect base class declares. Reading past a
+  /// refused index would loop forever if the ABI ever started succeeding on
+  /// out-of-range queries.
+  static const int _maxEffectParams = 12;
+
+  @override
+  void setMixerEffectParam(String trackId, String effectId, int paramId, double value) =>
+      _withTwoNativeStrings(
+        trackId,
+        effectId,
+        (Pointer<Char> track, Pointer<Char> effect) =>
+            _bindings.ob_engine_mixer_effect_set_param(_engine, track, effect, paramId, value),
+      );
+
+
   // --- project files (OB-3-05's writer, reachable from the UI) --------------
 
   /// Replaces the current session with a clean Pattern 1 project.
@@ -1415,6 +1728,46 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
     }
   }
 
+  /// The reading counterparts of the two helpers above. A read call fills a
+  /// scratch struct and the caller wants the value back, which a `void` helper
+  /// cannot express without a captured variable at every call site.
+  T _readWithNativeString<T>(String value, T Function(Pointer<Char>) call) {
+    final Pointer<Utf8> native = value.toNativeUtf8();
+    try {
+      return call(native.cast<Char>());
+    } finally {
+      calloc.free(native);
+    }
+  }
+
+  T _readWithTwoNativeStrings<T>(String first, String second, T Function(Pointer<Char>, Pointer<Char>) call) {
+    final Pointer<Utf8> nativeFirst = first.toNativeUtf8();
+    final Pointer<Utf8> nativeSecond = second.toNativeUtf8();
+    try {
+      return call(nativeFirst.cast<Char>(), nativeSecond.cast<Char>());
+    } finally {
+      calloc.free(nativeFirst);
+      calloc.free(nativeSecond);
+    }
+  }
+
+  /// Reads `_paramInfo` into a [HostedParameter]. Shared by the hosted-plug-in
+  /// editor and the mixer inserts, which is the point of both going through
+  /// `ob_param_info`: one editor renders either.
+  HostedParameter _readParam() {
+    final ob_param_info value = _paramInfo.ref;
+    return HostedParameter(
+      id: value.param_id,
+      name: _readFixedUtf8(value.name, 128),
+      module: _readFixedUtf8(value.module, 128),
+      display: _readFixedUtf8(value.display, 128),
+      value: value.value,
+      minimum: value.min_value,
+      maximum: value.max_value,
+      defaultValue: value.default_value,
+    );
+  }
+
   void removePlugin(int instanceId) => _check(_bindings.ob_engine_instance_remove(_engine, instanceId));
 
   void openPluginEditor(int instanceId) => _check(_bindings.ob_engine_instance_editor_open(_engine, instanceId));
@@ -1473,6 +1826,11 @@ class EngineClient implements RackClient, NoteClient, PatternClient, Arrangement
     calloc.free(_patternInfo);
     calloc.free(_laneInfo);
     calloc.free(_clipInfo);
+    calloc.free(_audioClipInfo);
+    calloc.free(_mixerTrackInfo);
+    calloc.free(_effectInfo);
+    calloc.free(_effectDescriptor);
+    calloc.free(_doubleOut);
     calloc.free(_noteCount);
     calloc.free(_paramInfo);
     calloc.free(_exportStatus);
@@ -1860,6 +2218,115 @@ class ArrangementClip {
   }
 }
 
+/// An audio clip's edit parameters. The window is in *source* time and the
+/// clip's own length is in timeline time; [stretchMode] is the rule that maps
+/// one onto the other.
+class AudioClipEdit {
+  const AudioClipEdit({
+    required this.stretchMode,
+    required this.sourceOffsetTicks,
+    required this.sourceLengthTicks,
+    required this.sourceDurationTicks,
+    required this.sourceBpm,
+    required this.gain,
+    required this.reversed,
+  });
+
+  final StretchMode stretchMode;
+
+  /// Trim-in, in source time.
+  final int sourceOffsetTicks;
+
+  /// Trim-out as a duration from the offset. 0 means "to the end of the file",
+  /// which is the state a freshly dropped sample is in.
+  final int sourceLengthTicks;
+
+  /// The whole file's duration at the current tempo, so the editor can show how
+  /// much room a trim has left. 0 when unknown.
+  final int sourceDurationTicks;
+
+  /// The tempo the material was recorded at, 0 when unknown. Only fit-to-tempo
+  /// reads it, and it must be set before that can work.
+  final double sourceBpm;
+
+  final double gain;
+  final bool reversed;
+
+  /// How much source this clip consumes, resolving "to the end of the file"
+  /// against what the file actually holds.
+  int spanTicks(int clipLengthTicks) {
+    if (sourceLengthTicks > 0) return sourceLengthTicks;
+    if (sourceDurationTicks > sourceOffsetTicks) return sourceDurationTicks - sourceOffsetTicks;
+    return clipLengthTicks;
+  }
+
+  /// Whether fit-to-tempo can do anything. Offered rather than assumed, because
+  /// guessing a source tempo silently is how a project ends up out of time.
+  bool get canFitToTempo => sourceBpm > 0;
+}
+
+/// One mixer track: a signal path with a chain, a level and an output.
+class MixerTrackInfo {
+  const MixerTrackInfo({
+    required this.id,
+    required this.outputId,
+    required this.name,
+    required this.gain,
+    required this.pan,
+    required this.effectCount,
+    required this.muted,
+    required this.soloed,
+    required this.isMaster,
+  });
+
+  final String id;
+
+  /// The track this one feeds. Empty for the master, which feeds the device.
+  final String outputId;
+  final String name;
+  final double gain;
+  final double pan;
+  final int effectCount;
+  final bool muted;
+  final bool soloed;
+  final bool isMaster;
+}
+
+/// An effect this build can insert.
+class EffectDescriptor {
+  const EffectDescriptor({required this.id, required this.name, required this.summary});
+
+  final String id;
+  final String name;
+  final String summary;
+}
+
+/// One insert in a chain.
+class EffectInfo {
+  const EffectInfo({
+    required this.id,
+    required this.pluginId,
+    required this.name,
+    required this.index,
+    required this.paramCount,
+    required this.bypassed,
+    required this.missing,
+  });
+
+  /// The slot's own identity — what automation targets, and what survives a
+  /// reorder. Not the plug-in's identity, which is [pluginId].
+  final String id;
+  final String pluginId;
+  final String name;
+  final int index;
+  final int paramCount;
+  final bool bypassed;
+
+  /// The slot names a plug-in this build does not have. It stays in the chain
+  /// and in the file, and it is silent.
+  final bool missing;
+}
+
 class HostedParameter {
   const HostedParameter({
     required this.id,
@@ -1910,6 +2377,11 @@ const int laneFlagCollapsed = 0x4;
 const int clipFlagMuted = 0x1;
 const int clipFlagLoop = 0x2;
 const int clipFlagAudio = 0x4;
+const int mixerFlagMuted = 0x1;
+const int mixerFlagSoloed = 0x2;
+const int mixerFlagMaster = 0x4;
+const int effectFlagBypassed = 0x1;
+const int effectFlagMissing = 0x2;
 
 const int evtDeviceChanged = 1;
 const int evtDeviceLost = 2;

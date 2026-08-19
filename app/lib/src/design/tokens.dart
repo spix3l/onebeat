@@ -297,6 +297,9 @@ class ColorTokens {
 class SpacingTokens {
   const SpacingTokens();
 
+  /// No gap. Named rather than written as a literal so that an edge which is
+  /// deliberately flush reads as a decision instead of an oversight.
+  double get zero => 0;
   double get xxs => 2;
   double get xs => 4;
   double get sm => 8;
@@ -558,6 +561,14 @@ class SizeTokens {
   double get viewSwitcherTileWidth => 52;
   double get noticeHeight => 34;
   double get swatchSize => 18;
+
+  /// The mixer's insert rack. The chain number sits in a fixed gutter so the
+  /// effect names line up whatever position they are in, the small square
+  /// buttons beside them are the reorder and remove targets, and a parameter
+  /// cell is one knob wide plus room for its readout.
+  double get effectSlotNumberWidth => 18;
+  double get effectSlotButtonSize => 20;
+  double get effectParamCellWidth => 64;
 
   /// The left icon rail from the design screens: a fixed column of destination
   /// tiles down the window's left edge.

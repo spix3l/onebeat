@@ -19,6 +19,7 @@
 #include "audio_io/audio_device.h"
 #include "core/audio_buffer.h"
 #include "core/diagnostics.h"
+#include "core/mixer_graph.h"
 #include "core/rt/mpsc_ring.h"
 #include "core/rt/publisher.h"
 #include "core/rt/rt.h"
@@ -95,6 +96,35 @@ class Engine final : public audio_io::RenderCallback {
     // instruments. This lets the loader and render path defer their start until
     // the file is ready without delaying ordinary note channels.
     bool one_shot = false;
+    // How this clip reads its file: trim, direction and speed. Meaningful only
+    // when `one_shot` is set; a rack channel playing notes ignores all of it.
+    // The model's tick-based window is resolved to frames by the caller (the
+    // ABI's channel builder), because ticks are musical time and this side of
+    // the engine has none.
+    ClipPlayback clip;
+    // Dense index of the mixer track this channel renders into, or -1 to go
+    // straight to the master. Resolved by the caller from the instrument's
+    // routing (or, for an audio clip, from its destination).
+    int32_t mixer_track = -1;
+  };
+
+  // One mixer track, as the engine needs it. The chain is named by identifier
+  // and reconciled by the housekeeping thread; the levels beside it are applied
+  // every block without rebuilding anything.
+  struct MixerEffectDesc {
+    std::string effect_id;          // the model's EffectId, for reconciliation
+    std::string plugin_id;          // which effect to instantiate
+    int32_t automation_index = -1;  // the dense index the schedule addresses
+  };
+
+  struct MixerTrackDesc {
+    std::string track_id;
+    // Model ID of the track this one feeds; empty means this is the master.
+    std::string output_id;
+    float gain = 1.0F;
+    float pan = 0.0F;
+    bool muted = false;
+    std::vector<MixerEffectDesc> effects;
   };
 
   Engine(const Engine&) = delete;
@@ -133,6 +163,15 @@ class Engine final : public audio_io::RenderCallback {
   // keeps the sample it already has, so reordering the rack does not re-read
   // every file.
   void setChannels(std::vector<ChannelDesc> channels);
+  // Replaces the whole mixer. Asynchronous for the same reason `setChannels` is:
+  // reconciling a chain means constructing and activating plug-ins, which
+  // allocates. Levels land immediately; a changed chain or routing rebuilds the
+  // graph and publishes it by atomic swap.
+  void setMixerTracks(std::vector<MixerTrackDesc> tracks);
+  // Posts one insert parameter change, delivered to the effect on the next
+  // block. The path a knob takes; automation comes through the schedule instead.
+  bool setEffectParam(int32_t automation_index, plugin::ParamId param, double value) noexcept;
+  int32_t mixerTrackCount() const;
   // Requests a click-safe reset for one arrangement channel after a clip move,
   // delete, or mute edit. Unlike a global reset, adding another audio clip does
   // not interrupt clips that are already sounding.
@@ -244,6 +283,18 @@ class Engine final : public audio_io::RenderCallback {
     std::atomic<float> pan{0.0F};
     std::atomic<bool> muted{false};
     std::atomic<bool> one_shot{false};
+    // The clip window, published field by field because the audio thread reads
+    // it and the housekeeping thread writes it. Applied to the voice at its
+    // next start (see renderChannel), never underneath one already sounding.
+    std::atomic<int64_t> clip_start_frame{0};
+    std::atomic<int64_t> clip_length_frames{0};
+    std::atomic<bool> clip_reversed{false};
+    std::atomic<double> clip_rate{1.0};
+    std::atomic<bool> clip_pitch_preserving{false};
+    // Dense index of the mixer track this channel feeds, or -1 for the master.
+    // An atomic because the housekeeping thread rewrites it when routing
+    // changes while the audio thread is reading it every block.
+    std::atomic<int32_t> mixer_track{-1};
     std::atomic<bool> sample_ready{true};
     std::atomic<uint64_t> loaded_sample_hash{0};
     std::atomic<bool> reset_requested{false};
@@ -266,7 +317,16 @@ class Engine final : public audio_io::RenderCallback {
                      const plugin::EventList* block_events, bool release_all,
                      plugin::PluginInstance& instrument,
                      bool preview_voice = false) noexcept OB_NONBLOCKING;
+  void applyClipPlayback(Channel& channel,
+                         plugin::PluginInstance& instrument) noexcept OB_NONBLOCKING;
   void applyChannelSync(std::vector<ChannelDesc> channels);
+  void applyMixerSync(std::vector<MixerTrackDesc> tracks);
+  // Renders the mixer: every track's chain over its own bus, then a sum into
+  // whatever it feeds, in the graph's order, ending at the device.
+  void renderMixer(const AudioBufferView& output, int offset, int num_frames,
+                   const Schedule* schedule, int64_t chunk_start) noexcept OB_NONBLOCKING;
+  // A view onto one track's bus within `bus_storage_`.
+  AudioBufferView busView(int32_t track, int num_frames) noexcept OB_NONBLOCKING;
   // Compares `schedule` against the one published before it and requests a
   // click-safe reset on every channel whose events differ, so a voice from the
   // replaced schedule cannot hang while untouched channels keep sounding.
@@ -320,6 +380,28 @@ class Engine final : public audio_io::RenderCallback {
   std::array<std::unique_ptr<plugin::PluginInstance>, MaxRackChannels> hosted_;
   std::atomic<int> audition_channel_{0};
   rt::NonRealtimeMutable<Schedule> schedule_;
+  // The mixer's *shape*: routing and inserts. Published by atomic swap like the
+  // schedule, and for the same reason. Null until a project supplies one, in
+  // which case every channel goes straight to the master — which is exactly
+  // what the engine did before the mixer existed, and what its tests expect.
+  rt::NonRealtimeMutable<MixerGraph> mixer_;
+  // Levels live outside the graph so that moving a fader neither rebuilds it
+  // nor resets an effect tail. Indexed by dense track index.
+  std::array<std::atomic<float>, MaxMixerTracks> track_gain_{};
+  std::array<std::atomic<float>, MaxMixerTracks> track_pan_{};
+  std::array<std::atomic<bool>, MaxMixerTracks> track_muted_{};
+  // One bus per track: MaxChannels planes of `block_frames`, allocated once at
+  // initialise() and never resized.
+  std::vector<float> bus_storage_;
+  // One plane-pointer array **per track**, not one shared array. A view holds
+  // the pointer array rather than copying it, so a single shared one would make
+  // every bus view alias whichever track asked for a view last — and the render
+  // loop legitimately holds two at once (a track's own bus and the bus it sums
+  // into). Filled at initialise() and never touched again.
+  std::array<std::array<float*, MaxChannels>, MaxMixerTracks> bus_planes_{};
+  // Housekeeping thread only: what the live graph was built from, so a level
+  // change can be told from a structural one.
+  std::vector<MixerTrackDesc> live_mixer_;
 
   // One channel's render target, mixed into the master and reused across
   // channels. Sized at initialise() for the device's largest block; the audio
@@ -330,6 +412,7 @@ class Engine final : public audio_io::RenderCallback {
   // event on the audio thread must never allocate (OB-2-01 AC 3).
   plugin::EventBuffer command_events_;  // commands drained this block, all at time 0
   plugin::EventBuffer chunk_events_;    // commands + schedule events for one process() call
+  plugin::EventBuffer effect_events_;   // one insert's parameter events for one chunk
 
   rt::SpscRing<ob_command, CommandQueueCapacity> commands_;
   rt::MpscRing<ob_event, 256> events_;
@@ -379,6 +462,21 @@ class Engine final : public audio_io::RenderCallback {
   // queue.
   std::vector<ChannelDesc> pending_channels_;
   bool has_pending_channels_ = false;
+  std::vector<MixerTrackDesc> pending_mixer_;
+  bool has_pending_mixer_ = false;
+  // Knob moves on inserts, drained on the audio thread into the effect's event
+  // list. A ring rather than a mutex for the same reason the command queue is.
+  struct EffectParamChange {
+    int32_t effect = -1;
+    uint32_t param = 0;
+    float value = 0.0F;
+  };
+  rt::SpscRing<EffectParamChange, 512> effect_params_;
+  // Audio-thread-owned: the latest value posted for each insert parameter is
+  // re-sent every block until the effect has certainly seen it. Bounded by the
+  // ring, so this is simply where a drained change waits for its chunk.
+  std::array<EffectParamChange, 64> pending_effect_params_{};
+  size_t pending_effect_param_count_ = 0;
 };
 
 }  // namespace onebeat::core

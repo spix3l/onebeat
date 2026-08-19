@@ -2296,6 +2296,629 @@ class OneBeatBindings {
   late final _ob_engine_clip_set_transpose = _ob_engine_clip_set_transposePtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
 
+  ob_status ob_engine_audio_clip_info(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    ffi.Pointer<ob_audio_clip_info> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_info(
+        engine,
+        utf8_clip_id,
+        out_info,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_infoPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_audio_clip_info>)
+        >
+      >('ob_engine_audio_clip_info');
+  late final _ob_engine_audio_clip_info = _ob_engine_audio_clip_infoPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_audio_clip_info>)>();
+
+  ob_status ob_engine_audio_clip_set_window(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int source_offset_ticks,
+    int source_length_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_set_window(
+        engine,
+        utf8_clip_id,
+        source_offset_ticks,
+        source_length_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_set_windowPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int64, ffi.Int64)
+        >
+      >('ob_engine_audio_clip_set_window');
+  late final _ob_engine_audio_clip_set_window = _ob_engine_audio_clip_set_windowPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int, int)>();
+
+  ob_status ob_engine_audio_clip_set_stretch_mode(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int stretch_mode,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_set_stretch_mode(
+        engine,
+        utf8_clip_id,
+        stretch_mode,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_set_stretch_modePtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>>(
+        'ob_engine_audio_clip_set_stretch_mode',
+      );
+  late final _ob_engine_audio_clip_set_stretch_mode = _ob_engine_audio_clip_set_stretch_modePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_audio_clip_set_source_bpm(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    double bpm,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_set_source_bpm(
+        engine,
+        utf8_clip_id,
+        bpm,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_set_source_bpmPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Double)>>(
+        'ob_engine_audio_clip_set_source_bpm',
+      );
+  late final _ob_engine_audio_clip_set_source_bpm = _ob_engine_audio_clip_set_source_bpmPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)>();
+
+  ob_status ob_engine_audio_clip_set_reversed(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int reversed,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_set_reversed(
+        engine,
+        utf8_clip_id,
+        reversed,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_set_reversedPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>>(
+        'ob_engine_audio_clip_set_reversed',
+      );
+  late final _ob_engine_audio_clip_set_reversed = _ob_engine_audio_clip_set_reversedPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_audio_clip_set_gain(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    double gain,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_set_gain(
+        engine,
+        utf8_clip_id,
+        gain,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_set_gainPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Double)>>(
+        'ob_engine_audio_clip_set_gain',
+      );
+  late final _ob_engine_audio_clip_set_gain = _ob_engine_audio_clip_set_gainPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)>();
+
+  ob_status ob_engine_audio_clip_resize(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int length_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_resize(
+        engine,
+        utf8_clip_id,
+        length_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_resizePtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int64)>>(
+        'ob_engine_audio_clip_resize',
+      );
+  late final _ob_engine_audio_clip_resize = _ob_engine_audio_clip_resizePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_clip_split(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+    int at_ticks,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_clip_split(
+        engine,
+        utf8_clip_id,
+        at_ticks,
+      ),
+    );
+  }
+
+  late final _ob_engine_clip_splitPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int64)>>(
+        'ob_engine_clip_split',
+      );
+  late final _ob_engine_clip_split = _ob_engine_clip_splitPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_audio_clip_fit_to_tempo(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_clip_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_audio_clip_fit_to_tempo(
+        engine,
+        utf8_clip_id,
+      ),
+    );
+  }
+
+  late final _ob_engine_audio_clip_fit_to_tempoPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>>(
+        'ob_engine_audio_clip_fit_to_tempo',
+      );
+  late final _ob_engine_audio_clip_fit_to_tempo = _ob_engine_audio_clip_fit_to_tempoPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>();
+
+  int ob_engine_mixer_track_count(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return _ob_engine_mixer_track_count(
+      engine,
+    );
+  }
+
+  late final _ob_engine_mixer_track_countPtr = _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>(
+    'ob_engine_mixer_track_count',
+  );
+  late final _ob_engine_mixer_track_count = _ob_engine_mixer_track_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_mixer_track_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_mixer_track_info> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_track_at(
+        engine,
+        index,
+        out_info,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_track_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Int32, ffi.Pointer<ob_mixer_track_info>)
+        >
+      >('ob_engine_mixer_track_at');
+  late final _ob_engine_mixer_track_at = _ob_engine_mixer_track_atPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_mixer_track_info>)>();
+
+  ob_status ob_engine_mixer_track_set_gain(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    double gain,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_track_set_gain(
+        engine,
+        utf8_track_id,
+        gain,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_track_set_gainPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Double)>>(
+        'ob_engine_mixer_track_set_gain',
+      );
+  late final _ob_engine_mixer_track_set_gain = _ob_engine_mixer_track_set_gainPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)>();
+
+  ob_status ob_engine_mixer_track_set_pan(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    double pan,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_track_set_pan(
+        engine,
+        utf8_track_id,
+        pan,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_track_set_panPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Double)>>(
+        'ob_engine_mixer_track_set_pan',
+      );
+  late final _ob_engine_mixer_track_set_pan = _ob_engine_mixer_track_set_panPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, double)>();
+
+  ob_status ob_engine_mixer_track_set_muted(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    int muted,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_track_set_muted(
+        engine,
+        utf8_track_id,
+        muted,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_track_set_mutedPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>>(
+        'ob_engine_mixer_track_set_muted',
+      );
+  late final _ob_engine_mixer_track_set_muted = _ob_engine_mixer_track_set_mutedPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_mixer_track_set_soloed(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    int soloed,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_track_set_soloed(
+        engine,
+        utf8_track_id,
+        soloed,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_track_set_soloedPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Int32)>>(
+        'ob_engine_mixer_track_set_soloed',
+      );
+  late final _ob_engine_mixer_track_set_soloed = _ob_engine_mixer_track_set_soloedPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
+
+  int ob_engine_builtin_effect_count(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return _ob_engine_builtin_effect_count(
+      engine,
+    );
+  }
+
+  late final _ob_engine_builtin_effect_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>)>>('ob_engine_builtin_effect_count');
+  late final _ob_engine_builtin_effect_count = _ob_engine_builtin_effect_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
+  ob_status ob_engine_builtin_effect_at(
+    ffi.Pointer<ob_engine> engine,
+    int index,
+    ffi.Pointer<ob_effect_descriptor> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_builtin_effect_at(
+        engine,
+        index,
+        out_info,
+      ),
+    );
+  }
+
+  late final _ob_engine_builtin_effect_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Int32, ffi.Pointer<ob_effect_descriptor>)
+        >
+      >('ob_engine_builtin_effect_at');
+  late final _ob_engine_builtin_effect_at = _ob_engine_builtin_effect_atPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, int, ffi.Pointer<ob_effect_descriptor>)>();
+
+  int ob_engine_mixer_effect_count(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+  ) {
+    return _ob_engine_mixer_effect_count(
+      engine,
+      utf8_track_id,
+    );
+  }
+
+  late final _ob_engine_mixer_effect_countPtr =
+      _lookup<ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>>(
+        'ob_engine_mixer_effect_count',
+      );
+  late final _ob_engine_mixer_effect_count = _ob_engine_mixer_effect_countPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>();
+
+  ob_status ob_engine_mixer_effect_at(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    int index,
+    ffi.Pointer<ob_effect_info> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_at(
+        engine,
+        utf8_track_id,
+        index,
+        out_info,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int32,
+            ffi.Pointer<ob_effect_info>,
+          )
+        >
+      >('ob_engine_mixer_effect_at');
+  late final _ob_engine_mixer_effect_at = _ob_engine_mixer_effect_atPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int, ffi.Pointer<ob_effect_info>)>();
+
+  ob_status ob_engine_mixer_effect_add(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_plugin_id,
+    int index,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_add(
+        engine,
+        utf8_track_id,
+        utf8_plugin_id,
+        index,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Int32)
+        >
+      >('ob_engine_mixer_effect_add');
+  late final _ob_engine_mixer_effect_add = _ob_engine_mixer_effect_addPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_mixer_effect_remove(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_remove(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)
+        >
+      >('ob_engine_mixer_effect_remove');
+  late final _ob_engine_mixer_effect_remove = _ob_engine_mixer_effect_removePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+
+  int ob_engine_mixer_effect_impact(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+  ) {
+    return _ob_engine_mixer_effect_impact(
+      engine,
+      utf8_track_id,
+      utf8_effect_id,
+    );
+  }
+
+  late final _ob_engine_mixer_effect_impactPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Int32 Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>
+      >('ob_engine_mixer_effect_impact');
+  late final _ob_engine_mixer_effect_impact = _ob_engine_mixer_effect_impactPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+
+  ob_status ob_engine_mixer_effect_move(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+    int index,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_move(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+        index,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_movePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Int32)
+        >
+      >('ob_engine_mixer_effect_move');
+  late final _ob_engine_mixer_effect_move = _ob_engine_mixer_effect_movePtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_mixer_effect_set_bypassed(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+    int bypassed,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_set_bypassed(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+        bypassed,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_set_bypassedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, ffi.Int32)
+        >
+      >('ob_engine_mixer_effect_set_bypassed');
+  late final _ob_engine_mixer_effect_set_bypassed = _ob_engine_mixer_effect_set_bypassedPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, int)>();
+
+  ob_status ob_engine_mixer_effect_param_at(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+    int index,
+    ffi.Pointer<ob_param_info> out_info,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_param_at(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+        index,
+        out_info,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_param_atPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Uint32,
+            ffi.Pointer<ob_param_info>,
+          )
+        >
+      >('ob_engine_mixer_effect_param_at');
+  late final _ob_engine_mixer_effect_param_at = _ob_engine_mixer_effect_param_atPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<ob_engine>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<ob_param_info>,
+        )
+      >();
+
+  ob_status ob_engine_mixer_effect_param_value(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+    int param_id,
+    ffi.Pointer<ffi.Double> out_value,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_param_value(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+        param_id,
+        out_value,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_param_valuePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Double>,
+          )
+        >
+      >('ob_engine_mixer_effect_param_value');
+  late final _ob_engine_mixer_effect_param_value = _ob_engine_mixer_effect_param_valuePtr
+      .asFunction<
+        int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, int, ffi.Pointer<ffi.Double>)
+      >();
+
+  ob_status ob_engine_mixer_effect_set_param(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_track_id,
+    ffi.Pointer<ffi.Char> utf8_effect_id,
+    int param_id,
+    double value,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_mixer_effect_set_param(
+        engine,
+        utf8_track_id,
+        utf8_effect_id,
+        param_id,
+        value,
+      ),
+    );
+  }
+
+  late final _ob_engine_mixer_effect_set_paramPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ob_engine>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Uint32,
+            ffi.Double,
+          )
+        >
+      >('ob_engine_mixer_effect_set_param');
+  late final _ob_engine_mixer_effect_set_param = _ob_engine_mixer_effect_set_paramPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>, int, double)>();
+
   ob_status ob_engine_clips_make_unique(
     ffi.Pointer<ob_engine> engine,
     ffi.Pointer<ffi.Char> utf8_clip_ids,
@@ -3242,6 +3865,104 @@ final class ob_clip_info extends ffi.Struct {
   external ffi.Array<ffi.Char> audio_path;
 }
 
+final class ob_audio_clip_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Int32()
+  external int stretch_mode;
+
+  @ffi.Int64()
+  external int source_offset_ticks;
+
+  @ffi.Int64()
+  external int source_length_ticks;
+
+  @ffi.Int64()
+  external int source_duration_ticks;
+
+  @ffi.Double()
+  external double source_bpm;
+
+  @ffi.Double()
+  external double gain;
+
+  @ffi.Int32()
+  external int reversed;
+
+  @ffi.Int32()
+  external int reserved_;
+}
+
+final class ob_mixer_track_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Double()
+  external double gain;
+
+  @ffi.Double()
+  external double pan;
+
+  @ffi.Uint32()
+  external int effect_count;
+
+  @ffi.Uint32()
+  external int reserved_;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> output_id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+}
+
+final class ob_effect_descriptor extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int reserved_;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+
+  @ffi.Array.multi([256])
+  external ffi.Array<ffi.Char> summary;
+}
+
+final class ob_effect_info extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  @ffi.Uint32()
+  external int flags;
+
+  @ffi.Int32()
+  external int index;
+
+  @ffi.Uint32()
+  external int param_count;
+
+  @ffi.Array.multi([32])
+  external ffi.Array<ffi.Char> id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> plugin_id;
+
+  @ffi.Array.multi([128])
+  external ffi.Array<ffi.Char> name;
+}
+
 enum ob_export_format {
   OB_EXPORT_FORMAT_WAV(0),
   OB_EXPORT_FORMAT_AIFF(1);
@@ -3298,11 +4019,11 @@ final class ob_export_status extends ffi.Struct {
 
 const int OB_ABI_VERSION_MAJOR = 1;
 
-const int OB_ABI_VERSION_MINOR = 17;
+const int OB_ABI_VERSION_MINOR = 18;
 
 const int OB_ABI_VERSION_PATCH = 0;
 
-const int OB_ABI_VERSION_PACKED = 69888;
+const int OB_ABI_VERSION_PACKED = 70144;
 
 const int OB_SNAPSHOT_VERSION = 1;
 
@@ -3331,3 +4052,19 @@ const int OB_CLIP_FLAG_MUTED = 1;
 const int OB_CLIP_FLAG_LOOP = 2;
 
 const int OB_CLIP_FLAG_AUDIO = 4;
+
+const int OB_STRETCH_OFF = 0;
+
+const int OB_STRETCH_RESAMPLE = 1;
+
+const int OB_STRETCH_STRETCH = 2;
+
+const int OB_MIXER_FLAG_MUTED = 1;
+
+const int OB_MIXER_FLAG_SOLOED = 2;
+
+const int OB_MIXER_FLAG_MASTER = 4;
+
+const int OB_EFFECT_FLAG_BYPASSED = 1;
+
+const int OB_EFFECT_FLAG_MISSING = 2;

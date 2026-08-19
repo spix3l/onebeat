@@ -799,6 +799,372 @@ CommandPtr replaceNotes(PatternId pattern, InstrumentId instrument, std::vector<
                                        name, true);
 }
 
+// --------------------------------------------------------------------------
+// Audio clips
+// --------------------------------------------------------------------------
+
+namespace {
+
+// Every audio-clip command edits the same field of the same variant, so they
+// all funnel through here: find the clip, prove it is audio, mutate a copy of
+// its source. A clip of the wrong kind returns null rather than being coerced.
+CommandPtr editAudio(const Project& project, ClipId id,
+                     const std::function<void(AudioSource&)>& mutator, std::string name) {
+  const Clip* clip = project.findClip(id);
+  if (clip == nullptr || clip->audio() == nullptr) return nullptr;
+  return editClip(
+      project, id, ChangeField::Source,
+      [&mutator](Clip& live) {
+        if (AudioSource* audio = std::get_if<AudioSource>(&live.source)) mutator(*audio);
+      },
+      std::move(name));
+}
+
+}  // namespace
+
+CommandPtr setAudioClipWindow(const Project& project, ClipId id, Ticks source_offset,
+                              Ticks source_length) {
+  if (source_offset < 0 || source_length < 0) return nullptr;
+  return editAudio(
+      project, id,
+      [source_offset, source_length](AudioSource& audio) {
+        audio.source_offset = source_offset;
+        audio.source_length = source_length;
+      },
+      "Trim clip");
+}
+
+CommandPtr setAudioClipStretchMode(const Project& project, ClipId id, StretchMode mode) {
+  return editAudio(
+      project, id, [mode](AudioSource& audio) { audio.stretch_mode = mode; }, "Set clip stretch");
+}
+
+CommandPtr setAudioClipSourceBpm(const Project& project, ClipId id, double bpm) {
+  if (bpm < 0.0) return nullptr;
+  return editAudio(
+      project, id, [bpm](AudioSource& audio) { audio.source_bpm = bpm; }, "Set clip tempo");
+}
+
+CommandPtr setAudioClipReversed(const Project& project, ClipId id, bool reversed) {
+  return editAudio(
+      project, id, [reversed](AudioSource& audio) { audio.reversed = reversed; }, "Reverse clip");
+}
+
+CommandPtr setAudioClipGain(const Project& project, ClipId id, float gain) {
+  if (gain < 0.0F) return nullptr;
+  return editAudio(project, id, [gain](AudioSource& audio) { audio.gain = gain; }, "Set clip gain");
+}
+
+CommandPtr resizeAudioClip(const Project& project, ClipId id, Ticks length) {
+  if (length <= 0) return nullptr;
+  const Clip* clip = project.findClip(id);
+  if (clip == nullptr) return nullptr;
+  const AudioSource* audio = clip->audio();
+  // A pattern or automation clip has no window to keep in step; a plain resize
+  // is the whole of the edit.
+  if (audio == nullptr) {
+    return editClip(
+        project, id, ChangeField::Length, [length](Clip& live) { live.length = length; },
+        "Resize clip");
+  }
+
+  const bool stretching = audio->stretch_mode != StretchMode::Off;
+  const Ticks source_length = audio->source_length;
+  return editClip(
+      project, id, ChangeField::Length,
+      [length, stretching, source_length](Clip& live) {
+        live.length = length;
+        if (stretching) return;  // the window stands and the ratio moves with it
+        // Not stretching: the clip is a window onto the source, so dragging the
+        // edge is a trim. A window of 0 stays 0 — it already means "the rest of
+        // the file", which is exactly what an untrimmed clip wants to keep
+        // meaning as it grows.
+        if (source_length <= 0) return;
+        if (AudioSource* live_audio = std::get_if<AudioSource>(&live.source)) {
+          live_audio->source_length = length;
+        }
+      },
+      stretching ? "Stretch clip" : "Resize clip");
+}
+
+CommandPtr splitClip(Project& project, ClipId id, Ticks at) {
+  const Clip* clip = project.findClip(id);
+  if (clip == nullptr) return nullptr;
+  // Strictly inside: a cut on either edge produces the clip you already have
+  // and an empty one, which is not an edit worth an undo entry.
+  if (at <= clip->start || at >= clip->start + clip->length) return nullptr;
+
+  const Ticks left_length = at - clip->start;
+  const Ticks right_length = clip->start + clip->length - at;
+
+  Clip right = *clip;
+  right.id = project.mintId<EntityKind::Clip>();
+  right.start = at;
+  right.length = right_length;
+
+  if (AudioSource* audio = std::get_if<AudioSource>(&right.source)) {
+    // The right half must resume where the left half stopped, not restart the
+    // file — that is the difference between cutting a sample and duplicating
+    // it. How far into the source the cut lands depends on how the clip maps
+    // timeline time onto source time, so the stretch ratio is what converts it.
+    const double ratio = audioStretchRatio(*audio, clip->length);
+    const Ticks consumed = static_cast<Ticks>(static_cast<double>(left_length) * ratio);
+    audio->source_offset += consumed;
+    if (audio->source_length > 0) {
+      audio->source_length = audio->source_length > consumed ? audio->source_length - consumed : 0;
+    }
+  } else if (AutomationSource* automation = std::get_if<AutomationSource>(&right.source)) {
+    // Points are clip-relative, so each half keeps the points that fall in it,
+    // rebased onto its own origin.
+    std::vector<AutomationPoint> kept;
+    for (const AutomationPoint& point : automation->points) {
+      if (point.position < left_length) continue;
+      kept.push_back(AutomationPoint{point.position - left_length, point.value});
+    }
+    automation->points = std::move(kept);
+  }
+
+  auto composite = std::make_unique<CompositeCommand>("Cut clip");
+  // The left half keeps the original ID, so anything already referring to this
+  // clip keeps referring to the part the user cut off *from*.
+  CommandPtr shorten = editClip(
+      project, id, ChangeField::Length,
+      [left_length](Clip& live) {
+        live.length = left_length;
+        if (AudioSource* audio = std::get_if<AudioSource>(&live.source)) {
+          // The left half now ends early; its window has to end with it, or the
+          // two halves overlap in source time and the cut is inaudible.
+          const double ratio = audioStretchRatio(*audio, live.length);
+          const Ticks consumed = static_cast<Ticks>(static_cast<double>(left_length) * ratio);
+          audio->source_length = consumed > 0 ? consumed : audio->source_length;
+        }
+      },
+      "Cut clip");
+  if (shorten == nullptr) return nullptr;
+  composite->add(std::move(shorten));
+
+  composite->add(std::make_unique<AddCommand<Clip>>(std::move(right), "Cut clip"));
+  return composite;
+}
+
+CommandPtr fitAudioClipToTempo(const Project& project, ClipId id, double project_bpm,
+                               Ticks source_duration) {
+  const Clip* clip = project.findClip(id);
+  if (clip == nullptr) return nullptr;
+  const AudioSource* audio = clip->audio();
+  if (audio == nullptr) return nullptr;
+  const Ticks length = audioLengthAtTempo(*audio, clip->length, project_bpm, source_duration);
+  if (length <= 0) return nullptr;
+
+  // One command, not a composite of two.
+  //
+  // `editClip` captures the whole `Clip` before and after, so two of them built
+  // from the same starting state each carry a copy of the *original* clip with
+  // one field changed — and applying them in sequence makes the second silently
+  // undo the first. Anything that changes two fields of one entity has to be a
+  // single mutation.
+  const Ticks clip_length = clip->length;
+  return editClip(
+      project, id, ChangeField::Length,
+      [length, clip_length, source_duration](Clip& live) {
+        live.length = length;
+        AudioSource* live_audio = std::get_if<AudioSource>(&live.source);
+        if (live_audio == nullptr) return;
+        // Stretch, not resample: fitting a loop to the project is the case
+        // where holding the pitch is the entire point.
+        live_audio->stretch_mode = StretchMode::Stretch;
+        // Pin the window now. "To the end of the file" is a length the model
+        // cannot resolve on its own, and a stretch ratio needs a real one.
+        if (live_audio->source_length <= 0) {
+          live_audio->source_length = audioSourceSpan(*live_audio, clip_length, source_duration);
+        }
+      },
+      "Fit clip to tempo");
+}
+
+// --------------------------------------------------------------------------
+// Mixer effects
+// --------------------------------------------------------------------------
+
+namespace {
+
+CommandPtr editChain(const Project& project, MixerTrackId track,
+                     const std::function<void(std::vector<EffectSlot>&)>& mutator,
+                     std::string name) {
+  return editMixerTrack(
+      project, track, ChangeField::Effects, [&mutator](MixerTrack& live) { mutator(live.effects); },
+      std::move(name));
+}
+
+size_t indexOfEffect(const std::vector<EffectSlot>& effects, EffectId effect) {
+  for (size_t i = 0; i < effects.size(); ++i) {
+    if (effects[i].id == effect) return i;
+  }
+  return SIZE_MAX;
+}
+
+// A short display name for the undo menu. The plug-in's own name where it has
+// one, because "Add Reverb" reads better than "Add effect".
+std::string effectLabel(const PluginRef& plugin) {
+  return plugin.name.empty() ? std::string("effect") : plugin.name;
+}
+
+}  // namespace
+
+CommandPtr addEffect(Project& project, MixerTrackId track, const PluginRef& plugin, size_t index) {
+  const MixerTrack* live = project.findMixerTrack(track);
+  if (live == nullptr) return nullptr;
+
+  EffectSlot slot;
+  slot.id = project.mintId<EntityKind::Effect>();
+  slot.plugin = plugin;
+  return editChain(
+      project, track,
+      [slot = std::move(slot), index](std::vector<EffectSlot>& effects) {
+        const size_t at = index < effects.size() ? index : effects.size();
+        effects.insert(effects.begin() + static_cast<std::ptrdiff_t>(at), slot);
+      },
+      "Add " + effectLabel(plugin));
+}
+
+CommandPtr removeEffect(Project& project, MixerTrackId track, EffectId effect) {
+  const MixerTrack* live = project.findMixerTrack(track);
+  if (live == nullptr) return nullptr;
+  const EffectSlot* slot = live->findEffect(effect);
+  if (slot == nullptr) return nullptr;
+
+  auto composite = std::make_unique<CompositeCommand>("Remove " + effectLabel(slot->plugin));
+  // Automation first. A curve whose target has already gone is a dangling
+  // reference the invariant checker is right to abort on, so the clips leave
+  // before the slot they point at does.
+  for (const ClipId clip : project.effectImpact(track, effect).clips) {
+    composite->add(removeClip(clip));
+  }
+  CommandPtr drop = editChain(
+      project, track,
+      [effect](std::vector<EffectSlot>& effects) {
+        const size_t at = indexOfEffect(effects, effect);
+        if (at != SIZE_MAX) effects.erase(effects.begin() + static_cast<std::ptrdiff_t>(at));
+      },
+      "Remove " + effectLabel(slot->plugin));
+  if (drop == nullptr) return nullptr;
+  composite->add(std::move(drop));
+  return composite;
+}
+
+CommandPtr moveEffect(const Project& project, MixerTrackId track, EffectId effect, size_t index) {
+  const MixerTrack* live = project.findMixerTrack(track);
+  if (live == nullptr) return nullptr;
+  const size_t from = indexOfEffect(live->effects, effect);
+  if (from == SIZE_MAX) return nullptr;
+  const size_t to = index < live->effects.size() ? index : live->effects.size() - 1;
+  if (from == to) return nullptr;
+
+  return editChain(
+      project, track,
+      [effect, index](std::vector<EffectSlot>& effects) {
+        const size_t from = indexOfEffect(effects, effect);
+        if (from == SIZE_MAX || effects.empty()) return;
+        const size_t to = index < effects.size() ? index : effects.size() - 1;
+        if (from == to) return;
+        EffectSlot moved = effects[from];
+        effects.erase(effects.begin() + static_cast<std::ptrdiff_t>(from));
+        effects.insert(effects.begin() + static_cast<std::ptrdiff_t>(to), std::move(moved));
+      },
+      "Reorder effects");
+}
+
+namespace {
+
+// A parameter change is not a chain change, and it needs its own coalescing
+// rule: one knob drag is one undo entry, but two different knobs on the same
+// effect are two. `EditCommand` keys coalescing on (entity, field), which
+// cannot tell those apart, so this carries the parameter as well.
+class EffectParamCommand : public Command {
+ public:
+  EffectParamCommand(MixerTrackId track, EffectId effect, plugin::ParamId parameter,
+                     std::optional<float> before, float after, std::string name)
+      : track_(track),
+        effect_(effect),
+        parameter_(parameter),
+        before_(before),
+        after_(after),
+        name_(std::move(name)) {}
+
+  bool apply(Project& project) override { return write(project, after_); }
+
+  // `before_` is empty when the user had never touched this parameter, and
+  // undoing back to "absent" rather than to the default is the difference
+  // between a project that pins a value and one that follows the plug-in.
+  bool revert(Project& project) override { return write(project, before_); }
+
+  std::string name() const override { return name_; }
+
+  bool coalesceWith(const Command& next) override {
+    const auto* other = dynamic_cast<const EffectParamCommand*>(&next);
+    if (other == nullptr) return false;
+    if (other->track_ != track_ || other->effect_ != effect_ || other->parameter_ != parameter_) {
+      return false;
+    }
+    after_ = other->after_;
+    return true;
+  }
+
+ private:
+  bool write(Project& project, std::optional<float> value) {
+    return project.updateMixerTrack(track_, ChangeField::EffectParam,
+                                    [this, value](MixerTrack& live) {
+                                      const size_t at = indexOfEffect(live.effects, effect_);
+                                      if (at == SIZE_MAX) return;
+                                      if (value.has_value()) {
+                                        live.effects[at].params[parameter_] = *value;
+                                      } else {
+                                        live.effects[at].params.erase(parameter_);
+                                      }
+                                    });
+  }
+
+  MixerTrackId track_;
+  EffectId effect_;
+  plugin::ParamId parameter_;
+  std::optional<float> before_;
+  float after_;
+  std::string name_;
+};
+
+}  // namespace
+
+CommandPtr setEffectParam(const Project& project, MixerTrackId track, EffectId effect,
+                          plugin::ParamId parameter, float value) {
+  const MixerTrack* live = project.findMixerTrack(track);
+  if (live == nullptr) return nullptr;
+  const EffectSlot* slot = live->findEffect(effect);
+  if (slot == nullptr) return nullptr;
+
+  std::optional<float> before;
+  if (const auto found = slot->params.find(parameter); found != slot->params.end()) {
+    before = found->second;
+  }
+  return std::make_unique<EffectParamCommand>(track, effect, parameter, before, value,
+                                              "Adjust " + effectLabel(slot->plugin));
+}
+
+CommandPtr setEffectBypassed(const Project& project, MixerTrackId track, EffectId effect,
+                             bool bypassed) {
+  const MixerTrack* live = project.findMixerTrack(track);
+  if (live == nullptr) return nullptr;
+  const EffectSlot* slot = live->findEffect(effect);
+  if (slot == nullptr) return nullptr;
+  const std::string label = effectLabel(slot->plugin);
+  return editChain(
+      project, track,
+      [effect, bypassed](std::vector<EffectSlot>& effects) {
+        const size_t at = indexOfEffect(effects, effect);
+        if (at != SIZE_MAX) effects[at].bypassed = bypassed;
+      },
+      (bypassed ? "Bypass " : "Enable ") + label);
+}
+
 CommandPtr setTransport(const Project& project, const TransportState& transport) {
   return std::make_unique<TransportCommand>(project.transport(), transport);
 }

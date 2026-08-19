@@ -33,6 +33,14 @@ struct ResolvedAudio {
   core::InstrumentId channel = 0;
 };
 
+// An automation point resolved onto a mixer insert rather than an instrument.
+struct ResolvedEffectParam {
+  Ticks position = 0;
+  int32_t effect = 0;
+  uint32_t parameter = 0;
+  float value = 0.0F;
+};
+
 // Swing delays odd sixteenths by up to half a step. Only notes exactly on the
 // sixteenth grid move: an off-grid piano-roll edit must not be silently
 // quantised merely because the pattern has swing.
@@ -167,6 +175,15 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   for (const auto& [clip_id, clip] : project.clips()) {
     if (clip.audio() != nullptr) result.audio_channel_index.emplace(clip_id, next_index++);
   }
+  // Mixer inserts, in track order then chain order. Chain order is array order
+  // here, which is the one place in the model where it is the truth rather than
+  // a display detail (see MixerTrack::effects).
+  int32_t next_effect = 0;
+  for (const auto& [track_id, track] : project.mixerTracks()) {
+    for (const EffectSlot& slot : track.effects) {
+      result.effect_index.emplace(std::make_pair(track_id, slot.id), next_effect++);
+    }
+  }
 
   const core::TimeMap time_map(options.sample_rate, project.transport().tempo);
   const auto toFrames = [&time_map](Ticks ticks) {
@@ -186,6 +203,7 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   notes.reserve(note_estimate * (project.clips().empty() ? 1 : 2));
 
   std::vector<ResolvedParam> params;
+  std::vector<ResolvedEffectParam> effect_params;
   std::vector<ResolvedAudio> audio_starts;
   std::vector<std::pair<Ticks, Ticks>> occurrences;
   Ticks end_ticks = 0;
@@ -262,9 +280,24 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
       }
 
       if (const AutomationSource* source = clip->automation()) {
-        // Structural (scope §4): the points a curve is made of become the
-        // parameter events of OB-2-09. Stage 4 adds interpolation between
-        // them; the path from clip to plugin parameter is proven now.
+        // The points a curve is made of become parameter events. Stage 4 adds
+        // interpolation between them; the path from clip to plug-in parameter
+        // is what is proven here.
+        if (source->target_kind == AutomationSource::TargetKind::Effect) {
+          const auto index =
+              result.effect_index.find(std::make_pair(source->mixer_track, source->effect));
+          if (index == result.effect_index.end()) continue;
+          ++result.clips_flattened;
+          for (const AutomationPoint& point : source->points) {
+            if (point.position < 0 || point.position >= clip->length) continue;
+            effect_params.push_back(ResolvedEffectParam{clip->start + point.position, index->second,
+                                                        source->parameter, point.value});
+          }
+          continue;
+        }
+        // A curve on the mixer track's own gain or pan is a Stage 4 target the
+        // engine does not yet accept as an event; it is skipped rather than
+        // misdelivered to a channel that happens to share the number.
         if (source->target_kind != AutomationSource::TargetKind::Instrument) continue;
         const auto index = result.instrument_index.find(source->instrument);
         if (index == result.instrument_index.end()) continue;
@@ -281,7 +314,7 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   resolveOverlaps(notes);
 
   core::ScheduleBuilder builder;
-  builder.reserve((notes.size() * 2) + params.size() + audio_starts.size());
+  builder.reserve((notes.size() * 2) + params.size() + effect_params.size() + audio_starts.size());
   for (const ResolvedNote& note : notes) {
     const int64_t start_frame = toFrames(note.start);
     const int64_t end_frame = toFrames(note.end);
@@ -297,6 +330,18 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
   });
   for (const ResolvedParam& param : params) {
     builder.addParamValue(param.instrument, param.parameter, param.value, toFrames(param.position));
+  }
+  // Sorted on the same key shape as the instrument parameters, and for the same
+  // reason: same model, same bytes, whatever order the clips were built in.
+  std::sort(effect_params.begin(), effect_params.end(),
+            [](const ResolvedEffectParam& a, const ResolvedEffectParam& b) {
+              if (a.position != b.position) return a.position < b.position;
+              if (a.effect != b.effect) return a.effect < b.effect;
+              return a.parameter < b.parameter;
+            });
+  for (const ResolvedEffectParam& param : effect_params) {
+    builder.addEffectParam(static_cast<uint32_t>(param.effect), param.parameter, param.value,
+                           toFrames(param.position));
   }
   for (const ResolvedAudio& audio : audio_starts) {
     builder.addAudioStart(audio.channel, toFrames(audio.start));

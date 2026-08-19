@@ -393,7 +393,7 @@ class FakeEngineClient implements EngineClient {
         id: clip.id,
         laneId: clip.laneId,
         patternId: clip.patternId,
-        name: pattern?.name ?? '',
+        name: clip.isAudio ? clip.audioPath.split('/').last : (pattern?.name ?? ''),
         color: pattern?.color ?? '#6C8CFF',
         startTicks: clip.startTicks,
         lengthTicks: clip.lengthTicks,
@@ -409,8 +409,26 @@ class FakeEngineClient implements EngineClient {
         usageCount: _usageOf(clip.patternId),
         muted: clip.muted,
         loop: clip.loop,
+        isAudio: clip.isAudio,
+        audioPath: clip.audioPath,
       );
     }).toList();
+  }
+
+  /// Seeds an audio clip. Not an override — the real client reads a WAV to
+  /// derive the length, and a test wants to state it.
+  String addAudioClip(String laneId, {required int startTicks, required int lengthTicks, String path = '/samples/loop.wav'}) {
+    final String id = _mint('clip');
+    clips[id] = MutableClip(
+      id: id,
+      laneId: laneId,
+      patternId: '',
+      startTicks: startTicks,
+      lengthTicks: lengthTicks,
+    )
+      ..isAudio = true
+      ..audioPath = path;
+    return id;
   }
 
   @override
@@ -471,6 +489,279 @@ class FakeEngineClient implements EngineClient {
 
   @override
   void setClipTranspose(String clipId, int semitones) => clips[clipId]?.transpose = semitones;
+
+  // ----- mixer and inserts --------------------------------------------------
+  // A real chain, not a stub: the binding reads back what it just wrote, so a
+  // fake that swallowed the writes would make every rack test pass vacuously.
+
+  List<MixerTrackInfo> mixerTracks = <MixerTrackInfo>[
+    const MixerTrackInfo(
+      id: 'mix_master',
+      outputId: '',
+      name: 'Master',
+      gain: 1,
+      pan: 0,
+      effectCount: 0,
+      muted: false,
+      soloed: false,
+      isMaster: true,
+    ),
+  ];
+
+  /// Chains by track ID, in chain order.
+  final Map<String, List<EffectInfo>> effects = <String, List<EffectInfo>>{};
+
+  /// Parameter values by (track, slot, param). Sparse, like the model's.
+  final Map<String, double> effectParams = <String, double>{};
+
+  /// Every insert edit, in order, so a test can assert what the UI asked for
+  /// rather than only what it ended up showing.
+  final List<String> effectLog = <String>[];
+
+  int _nextEffectId = 0;
+
+  List<EffectDescriptor> builtinEffects = const <EffectDescriptor>[
+    EffectDescriptor(id: 'dev.onebeat.fx.reverb', name: 'OneBeat Reverb', summary: 'Room and hall.'),
+    EffectDescriptor(id: 'dev.onebeat.fx.delay', name: 'OneBeat Delay', summary: 'Feedback delay.'),
+  ];
+
+  @override
+  List<MixerTrackInfo> readMixerTracks() => mixerTracks;
+
+  @override
+  void setMixerTrackGain(String trackId, double gain) => effectLog.add('gain:$trackId:$gain');
+
+  @override
+  void setMixerTrackPan(String trackId, double pan) => effectLog.add('pan:$trackId:$pan');
+
+  @override
+  void setMixerTrackMuted(String trackId, {required bool muted}) =>
+      effectLog.add('mute:$trackId:$muted');
+
+  @override
+  void setMixerTrackSoloed(String trackId, {required bool soloed}) =>
+      effectLog.add('solo:$trackId:$soloed');
+
+  @override
+  List<EffectDescriptor> readBuiltinEffects() => builtinEffects;
+
+  @override
+  List<EffectInfo> readMixerEffects(String trackId) =>
+      effects[trackId] ?? const <EffectInfo>[];
+
+  @override
+  void addMixerEffect(String trackId, String pluginId, {int? index}) {
+    final List<EffectInfo> chain = effects.putIfAbsent(trackId, () => <EffectInfo>[]);
+    final String id = 'efx_${_nextEffectId++}';
+    final EffectDescriptor descriptor = builtinEffects.firstWhere(
+      (EffectDescriptor e) => e.id == pluginId,
+      orElse: () => const EffectDescriptor(id: '', name: 'Unknown', summary: ''),
+    );
+    final int at = (index ?? chain.length).clamp(0, chain.length);
+    chain.insert(
+      at,
+      EffectInfo(
+        id: id,
+        pluginId: pluginId,
+        name: descriptor.name,
+        index: at,
+        paramCount: 2,
+        bypassed: false,
+        missing: descriptor.id.isEmpty,
+      ),
+    );
+    _renumber(trackId);
+    effectLog.add('add:$trackId:$pluginId');
+  }
+
+  @override
+  int mixerEffectImpact(String trackId, String effectId) => 0;
+
+  @override
+  void removeMixerEffect(String trackId, String effectId) {
+    effects[trackId]?.removeWhere((EffectInfo e) => e.id == effectId);
+    _renumber(trackId);
+    effectLog.add('remove:$trackId:$effectId');
+  }
+
+  @override
+  void moveMixerEffect(String trackId, String effectId, int index) {
+    final List<EffectInfo>? chain = effects[trackId];
+    if (chain == null) return;
+    final int from = chain.indexWhere((EffectInfo e) => e.id == effectId);
+    if (from < 0) return;
+    final EffectInfo moved = chain.removeAt(from);
+    chain.insert(index.clamp(0, chain.length), moved);
+    _renumber(trackId);
+    effectLog.add('move:$trackId:$effectId:$index');
+  }
+
+  @override
+  void setMixerEffectBypassed(String trackId, String effectId, {required bool bypassed}) {
+    final List<EffectInfo>? chain = effects[trackId];
+    if (chain == null) return;
+    final int at = chain.indexWhere((EffectInfo e) => e.id == effectId);
+    if (at < 0) return;
+    chain[at] = EffectInfo(
+      id: chain[at].id,
+      pluginId: chain[at].pluginId,
+      name: chain[at].name,
+      index: chain[at].index,
+      paramCount: chain[at].paramCount,
+      bypassed: bypassed,
+      missing: chain[at].missing,
+    );
+    effectLog.add('bypass:$trackId:$effectId:$bypassed');
+  }
+
+  @override
+  List<HostedParameter> readMixerEffectParams(String trackId, String effectId) => <HostedParameter>[
+    for (final String name in const <String>['Bypass', 'Mix'])
+      HostedParameter(
+        id: name == 'Bypass' ? 1 : 5,
+        name: name,
+        module: '/',
+        display: '${effectParams['$trackId:$effectId:${name == 'Bypass' ? 1 : 5}'] ?? 0}',
+        value: effectParams['$trackId:$effectId:${name == 'Bypass' ? 1 : 5}'] ?? 0,
+        minimum: 0,
+        maximum: 1,
+        defaultValue: 0,
+      ),
+  ];
+
+  @override
+  void setMixerEffectParam(String trackId, String effectId, int paramId, double value) {
+    effectParams['$trackId:$effectId:$paramId'] = value;
+    effectLog.add('param:$trackId:$effectId:$paramId:$value');
+  }
+
+  /// Chain position is array position, so it has to be rewritten whenever the
+  /// array changes — which is the same thing the engine's flattener does.
+  void _renumber(String trackId) {
+    final List<EffectInfo>? chain = effects[trackId];
+    if (chain == null) return;
+    for (int i = 0; i < chain.length; i++) {
+      chain[i] = EffectInfo(
+        id: chain[i].id,
+        pluginId: chain[i].pluginId,
+        name: chain[i].name,
+        index: i,
+        paramCount: chain[i].paramCount,
+        bypassed: chain[i].bypassed,
+        missing: chain[i].missing,
+      );
+    }
+  }
+
+  // ----- audio clip editing -------------------------------------------------
+
+  /// Audio edit state by clip ID.
+  final Map<String, AudioClipEdit> audioClips = <String, AudioClipEdit>{};
+
+  /// Every clip edit the UI asked for, in order.
+  final List<String> clipLog = <String>[];
+
+  @override
+  AudioClipEdit readAudioClip(String clipId) =>
+      audioClips[clipId] ??
+      const AudioClipEdit(
+        stretchMode: StretchMode.off,
+        sourceOffsetTicks: 0,
+        sourceLengthTicks: 0,
+        sourceDurationTicks: 0,
+        sourceBpm: 0,
+        gain: 1,
+        reversed: false,
+      );
+
+  AudioClipEdit _withAudio(String clipId, AudioClipEdit Function(AudioClipEdit) update) {
+    final AudioClipEdit next = update(readAudioClip(clipId));
+    audioClips[clipId] = next;
+    return next;
+  }
+
+  @override
+  void setAudioClipWindow(String clipId, {required int sourceOffsetTicks, required int sourceLengthTicks}) {
+    _withAudio(
+      clipId,
+      (AudioClipEdit e) => AudioClipEdit(
+        stretchMode: e.stretchMode,
+        sourceOffsetTicks: sourceOffsetTicks,
+        sourceLengthTicks: sourceLengthTicks,
+        sourceDurationTicks: e.sourceDurationTicks,
+        sourceBpm: e.sourceBpm,
+        gain: e.gain,
+        reversed: e.reversed,
+      ),
+    );
+    clipLog.add('window:$clipId:$sourceOffsetTicks:$sourceLengthTicks');
+  }
+
+  @override
+  void setAudioClipStretchMode(String clipId, StretchMode mode) {
+    _withAudio(
+      clipId,
+      (AudioClipEdit e) => AudioClipEdit(
+        stretchMode: mode,
+        sourceOffsetTicks: e.sourceOffsetTicks,
+        sourceLengthTicks: e.sourceLengthTicks,
+        sourceDurationTicks: e.sourceDurationTicks,
+        sourceBpm: e.sourceBpm,
+        gain: e.gain,
+        reversed: e.reversed,
+      ),
+    );
+    clipLog.add('stretch:$clipId:${mode.name}');
+  }
+
+  @override
+  void setAudioClipSourceBpm(String clipId, double bpm) {
+    _withAudio(
+      clipId,
+      (AudioClipEdit e) => AudioClipEdit(
+        stretchMode: e.stretchMode,
+        sourceOffsetTicks: e.sourceOffsetTicks,
+        sourceLengthTicks: e.sourceLengthTicks,
+        sourceDurationTicks: e.sourceDurationTicks,
+        sourceBpm: bpm,
+        gain: e.gain,
+        reversed: e.reversed,
+      ),
+    );
+    clipLog.add('bpm:$clipId:$bpm');
+  }
+
+  @override
+  void setAudioClipReversed(String clipId, {required bool reversed}) {
+    _withAudio(
+      clipId,
+      (AudioClipEdit e) => AudioClipEdit(
+        stretchMode: e.stretchMode,
+        sourceOffsetTicks: e.sourceOffsetTicks,
+        sourceLengthTicks: e.sourceLengthTicks,
+        sourceDurationTicks: e.sourceDurationTicks,
+        sourceBpm: e.sourceBpm,
+        gain: e.gain,
+        reversed: reversed,
+      ),
+    );
+    clipLog.add('reverse:$clipId:$reversed');
+  }
+
+  @override
+  void setAudioClipGain(String clipId, double gain) => clipLog.add('gain:$clipId:$gain');
+
+  @override
+  void resizeAudioClip(String clipId, int lengthTicks) {
+    clips[clipId]?.lengthTicks = lengthTicks;
+    clipLog.add('resizeAudio:$clipId:$lengthTicks');
+  }
+
+  @override
+  void fitAudioClipToTempo(String clipId) => clipLog.add('fit:$clipId');
+
+  @override
+  void splitClip(String clipId, int atTicks) => clipLog.add('split:$clipId:$atTicks');
 
   // ----- project files ------------------------------------------------------
   // Written out rather than left to noSuchMethod: these return values, and a
@@ -621,6 +912,10 @@ class MutableClip {
   int transpose = 0;
   bool muted = false;
   bool loop = true;
+  /// Audio clips carry a source path instead of a pattern, and take the audio
+  /// branch of every edit. Set by [FakeEngineClient.addAudioClip].
+  bool isAudio = false;
+  String audioPath = '';
 
   MutableClip cloneAs(String newId, String newLaneId, int newStart) =>
       MutableClip(

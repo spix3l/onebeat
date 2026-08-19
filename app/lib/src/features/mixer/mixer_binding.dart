@@ -5,6 +5,7 @@ import '../../core/engine_controller.dart' as core;
 import '../../core/meter_state.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
+import 'effect_rack.dart';
 import 'mixer_screen.dart';
 import 'mixer_screen_vm.dart';
 import 'mixer_strip.dart';
@@ -36,6 +37,88 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   double _masterFader = 0.75;
   bool _masterMuted = false;
   bool _masterSoloed = false;
+
+  /// Which insert has its parameters showing. One at a time: a chain of four
+  /// expanded effects is taller than the panel and stops being readable at a
+  /// glance. Held by slot ID rather than by index so it survives a reorder.
+  String? _expandedEffectId;
+
+  /// The mixer track the insert rack is editing. The strips are per instrument,
+  /// so the track is the one the selected instrument routes into — and the
+  /// master when the master strip is selected.
+  String _selectedTrackId(List<ProjectInstrument> instruments) {
+    if (_selectedTrackIndex < 0 || _selectedTrackIndex >= instruments.length) {
+      for (final MixerTrackInfo track in widget.client.readMixerTracks()) {
+        if (track.isMaster) return track.id;
+      }
+      return '';
+    }
+    return instruments[_selectedTrackIndex].routeId;
+  }
+
+  String _trackName(String trackId) {
+    for (final MixerTrackInfo track in widget.client.readMixerTracks()) {
+      if (track.id == trackId) return track.name;
+    }
+    return 'Master';
+  }
+
+  EffectRackVm _buildRackVm() {
+    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    final String trackId = _selectedTrackId(instruments);
+    if (trackId.isEmpty) {
+      return const EffectRackVm(
+        trackName: '',
+        slots: <EffectSlotVm>[],
+        available: <EffectChoiceVm>[],
+        enabled: false,
+      );
+    }
+
+    final List<EffectSlotVm> slots = <EffectSlotVm>[
+      for (final EffectInfo effect in widget.client.readMixerEffects(trackId))
+        EffectSlotVm(
+          id: effect.id,
+          name: effect.name,
+          bypassed: effect.bypassed,
+          missing: effect.missing,
+          expanded: effect.id == _expandedEffectId,
+          // Parameters are read only for the slot that is showing them: the
+          // rack repaints on every engine tick, and reading four chains'
+          // worth of knobs to draw none of them is work for nothing.
+          params: effect.id == _expandedEffectId
+              ? <EffectParamVm>[
+                  for (final HostedParameter param
+                      in widget.client.readMixerEffectParams(trackId, effect.id))
+                    EffectParamVm(
+                      id: param.id,
+                      name: param.name,
+                      value: param.value,
+                      display: param.display,
+                      minimum: param.minimum,
+                      maximum: param.maximum,
+                    ),
+                ]
+              : const <EffectParamVm>[],
+        ),
+    ];
+
+    return EffectRackVm(
+      trackName: _trackName(trackId),
+      slots: slots,
+      available: <EffectChoiceVm>[
+        for (final EffectDescriptor effect in widget.client.readBuiltinEffects())
+          EffectChoiceVm(id: effect.id, name: effect.name, summary: effect.summary),
+      ],
+    );
+  }
+
+  void _withSelectedTrack(void Function(String trackId) action) {
+    final String trackId = _selectedTrackId(widget.client.readInstruments());
+    if (trackId.isEmpty) return;
+    action(trackId);
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
@@ -244,11 +327,39 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
 
     return MixerScreen(
       vm: vm,
-      onSelectTrack: (int idx) => setState(() => _selectedTrackIndex = idx),
+      onSelectTrack: (int idx) => setState(() {
+        _selectedTrackIndex = idx;
+        // The expanded slot belongs to the track that was showing; keeping it
+        // would expand an unrelated insert on the new one.
+        _expandedEffectId = null;
+      }),
       onToggleMute: _onToggleMute,
       onToggleSolo: _onToggleSolo,
       onFader: _onFader,
       onModeChanged: (MixerMode mode) => setState(() => _mode = mode),
+      effectRack: ObEffectRack(
+        vm: _buildRackVm(),
+        onAdd: (String pluginId) =>
+            _withSelectedTrack((String track) => widget.client.addMixerEffect(track, pluginId)),
+        onRemove: (String effectId) => _withSelectedTrack((String track) {
+          widget.client.removeMixerEffect(track, effectId);
+          if (_expandedEffectId == effectId) _expandedEffectId = null;
+        }),
+        onToggleBypass: (String effectId) => _withSelectedTrack((String track) {
+          final bool bypassed = widget.client
+              .readMixerEffects(track)
+              .firstWhere((EffectInfo e) => e.id == effectId)
+              .bypassed;
+          widget.client.setMixerEffectBypassed(track, effectId, bypassed: !bypassed);
+        }),
+        onToggleExpanded: (String effectId) =>
+            setState(() => _expandedEffectId = _expandedEffectId == effectId ? null : effectId),
+        onMove: (String effectId, int index) =>
+            _withSelectedTrack((String track) => widget.client.moveMixerEffect(track, effectId, index)),
+        onParamChanged: (String effectId, int paramId, double value) => _withSelectedTrack(
+          (String track) => widget.client.setMixerEffectParam(track, effectId, paramId, value),
+        ),
+      ),
     );
   }
 }

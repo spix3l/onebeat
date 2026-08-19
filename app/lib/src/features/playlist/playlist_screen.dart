@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
+import '../../engine/engine_client.dart';
 import '../../ui_kit/button.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/toggle_chip.dart';
@@ -44,6 +45,11 @@ class PlaylistScreen extends StatelessWidget {
     this.onTransposeChanged,
     this.onMakeUnique,
     this.onSplitByChannel,
+    this.onStretchModeChanged,
+    this.onReverseToggle,
+    this.onSourceBpmChanged,
+    this.onFitToTempo,
+    this.onSplitAtPlayhead,
     this.onLaneMute,
     this.onLaneSolo,
     this.onLaneCollapse,
@@ -80,6 +86,11 @@ class PlaylistScreen extends StatelessWidget {
   final ValueChanged<int>? onTransposeChanged;
   final VoidCallback? onMakeUnique;
   final VoidCallback? onSplitByChannel;
+  final ValueChanged<StretchMode>? onStretchModeChanged;
+  final ValueChanged<bool>? onReverseToggle;
+  final ValueChanged<double>? onSourceBpmChanged;
+  final VoidCallback? onFitToTempo;
+  final VoidCallback? onSplitAtPlayhead;
   final ValueChanged<String>? onLaneMute;
   final ValueChanged<String>? onLaneSolo;
   final ValueChanged<String>? onLaneCollapse;
@@ -179,6 +190,11 @@ class PlaylistScreen extends StatelessWidget {
             onTransposeChanged: onTransposeChanged,
             onMakeUnique: onMakeUnique,
             onSplitByChannel: onSplitByChannel,
+            onStretchModeChanged: onStretchModeChanged,
+            onReverseToggle: onReverseToggle,
+            onSourceBpmChanged: onSourceBpmChanged,
+            onFitToTempo: onFitToTempo,
+            onSplitAtPlayhead: onSplitAtPlayhead,
           ),
         ],
       ),
@@ -402,6 +418,11 @@ class _PlaylistInspectorPanel extends StatelessWidget {
     this.onTransposeChanged,
     this.onMakeUnique,
     this.onSplitByChannel,
+    this.onStretchModeChanged,
+    this.onReverseToggle,
+    this.onSourceBpmChanged,
+    this.onFitToTempo,
+    this.onSplitAtPlayhead,
   });
 
   final ClipInspectorVm vm;
@@ -413,6 +434,11 @@ class _PlaylistInspectorPanel extends StatelessWidget {
   final ValueChanged<int>? onTransposeChanged;
   final VoidCallback? onMakeUnique;
   final VoidCallback? onSplitByChannel;
+  final ValueChanged<StretchMode>? onStretchModeChanged;
+  final ValueChanged<bool>? onReverseToggle;
+  final ValueChanged<double>? onSourceBpmChanged;
+  final VoidCallback? onFitToTempo;
+  final VoidCallback? onSplitAtPlayhead;
 
   @override
   Widget build(BuildContext context) {
@@ -441,6 +467,11 @@ class _PlaylistInspectorPanel extends StatelessWidget {
                       onTransposeChanged: onTransposeChanged,
                       onMakeUnique: onMakeUnique,
                       onSplitByChannel: onSplitByChannel,
+                      onStretchModeChanged: onStretchModeChanged,
+                      onReverseToggle: onReverseToggle,
+                      onSourceBpmChanged: onSourceBpmChanged,
+                      onFitToTempo: onFitToTempo,
+                      onSplitAtPlayhead: onSplitAtPlayhead,
                     )),
       ),
     );
@@ -500,6 +531,11 @@ class _SingleClipInspectorContent extends StatelessWidget {
     this.onTransposeChanged,
     this.onMakeUnique,
     this.onSplitByChannel,
+    this.onStretchModeChanged,
+    this.onReverseToggle,
+    this.onSourceBpmChanged,
+    this.onFitToTempo,
+    this.onSplitAtPlayhead,
   });
 
   final ClipInspectorVm vm;
@@ -511,6 +547,11 @@ class _SingleClipInspectorContent extends StatelessWidget {
   final ValueChanged<int>? onTransposeChanged;
   final VoidCallback? onMakeUnique;
   final VoidCallback? onSplitByChannel;
+  final ValueChanged<StretchMode>? onStretchModeChanged;
+  final ValueChanged<bool>? onReverseToggle;
+  final ValueChanged<double>? onSourceBpmChanged;
+  final VoidCallback? onFitToTempo;
+  final VoidCallback? onSplitAtPlayhead;
 
   @override
   Widget build(BuildContext context) {
@@ -608,7 +649,115 @@ class _SingleClipInspectorContent extends StatelessWidget {
           SizedBox(height: tokens.spacing.xs),
           Text('Gives every channel in the pattern its own pattern, on its own track.', style: tokens.type.label),
         ],
+        if (vm.isAudio) ...<Widget>[
+          const _InspectorDivider(),
+          Text('STRETCH', style: tokens.type.label),
+          SizedBox(height: tokens.spacing.xs),
+          // Three exclusive modes, all visible. A dropdown would hide the fact
+          // that resizing means something different in each of them, which is
+          // the one thing a user has to know here.
+          Row(
+            children: <Widget>[
+              for (final StretchMode mode in StretchMode.values)
+                Padding(
+                  padding: EdgeInsets.only(right: tokens.spacing.xs),
+                  child: _InspectorPill(
+                    label: switch (mode) {
+                      StretchMode.off => 'TRIM',
+                      StretchMode.resample => 'SPEED',
+                      StretchMode.stretch => 'STRETCH',
+                    },
+                    active: vm.stretchMode == mode,
+                    onTap: onStretchModeChanged == null ? null : () => onStretchModeChanged!(mode),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            switch (vm.stretchMode) {
+              StretchMode.off => 'Resizing trims. Past the end is silence.',
+              StretchMode.resample => 'Resizing changes the speed, and the pitch with it.',
+              StretchMode.stretch => 'Resizing changes the length. The pitch stays put.',
+            },
+            style: tokens.type.label,
+          ),
+          const _InspectorDivider(),
+          Row(
+            children: <Widget>[
+              Expanded(child: Text('Reverse', style: tokens.type.label)),
+              _InspectorPill(
+                label: vm.reversed ? 'ON' : 'OFF',
+                active: vm.reversed,
+                onTap: onReverseToggle == null ? null : () => onReverseToggle!(!vm.reversed),
+              ),
+            ],
+          ),
+          const _InspectorDivider(),
+          _InspectorStepperRow(
+            label: 'Source tempo',
+            value: vm.sourceBpm > 0 ? '${vm.sourceBpm.toStringAsFixed(1)} bpm' : 'unknown',
+            onMinus: onSourceBpmChanged == null
+                ? null
+                : () => onSourceBpmChanged!(vm.sourceBpm <= 0 ? 120 : vm.sourceBpm - 1),
+            onPlus: onSourceBpmChanged == null
+                ? null
+                : () => onSourceBpmChanged!(vm.sourceBpm <= 0 ? 120 : vm.sourceBpm + 1),
+          ),
+          SizedBox(height: tokens.spacing.md),
+          ObButton(
+            label: 'Fit to tempo',
+            onTap: vm.canFitToTempo ? onFitToTempo : null,
+            width: double.infinity,
+          ),
+          SizedBox(height: tokens.spacing.xs),
+          Text(
+            vm.canFitToTempo
+                ? 'Stretches the clip so it plays at the project tempo.'
+                : 'Set the source tempo first — fitting without one would be a guess.',
+            style: tokens.type.label,
+          ),
+          SizedBox(height: tokens.spacing.md),
+          ObButton(label: 'Cut at playhead', onTap: onSplitAtPlayhead, width: double.infinity),
+          SizedBox(height: tokens.spacing.xs),
+          Text('The right half resumes where the left one stopped.', style: tokens.type.label),
+        ],
       ],
+    );
+  }
+}
+
+/// A small on/off pill. The inspector's loop control paints one inline; this is
+/// the same shape, named, because the audio section needs four of them.
+class _InspectorPill extends StatelessWidget {
+  const _InspectorPill({required this.label, required this.active, this.onTap});
+
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final OneBeatTokens tokens = OneBeatTheme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: tokens.spacing.xs, vertical: tokens.spacing.xxs),
+        decoration: BoxDecoration(
+          color: active ? tokens.color.accentWash : tokens.color.surfaceWell,
+          borderRadius: BorderRadius.all(tokens.radius.sm),
+          border: Border.all(
+            color: active ? tokens.color.accent : tokens.color.lineStrong,
+            width: tokens.border.hairline,
+          ),
+        ),
+        child: Text(
+          label,
+          style: tokens.type.tag.copyWith(
+            color: active ? tokens.color.accentBright : tokens.color.textMuted,
+          ),
+        ),
+      ),
     );
   }
 }

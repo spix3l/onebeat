@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "core/wav_loader.h"
+#include "plugin/builtin/effects/effect_factory.h"
 #include "plugin/missing_plugin.h"
 #include "plugin/sandbox/sandboxed_plugin_proxy.h"
 #include "plugin/state.h"
@@ -172,6 +173,23 @@ bool Engine::initialise(std::string& error) {
   // on every frame. Overflow is counted and logged, never grown.
   command_events_.reserve(CommandQueueCapacity);
   chunk_events_.reserve(CommandQueueCapacity + static_cast<uint32_t>(granted.block_frames) * 2U);
+  // One insert's parameter events for one chunk. Automation is written at the
+  // grid, not per sample, so a block's worth of headroom is generous.
+  effect_events_.reserve(static_cast<uint32_t>(granted.block_frames) + 64U);
+  // Every mixer bus, allocated once. The audio thread only ever takes views.
+  const auto bus_stride = static_cast<size_t>(granted.block_frames);
+  bus_storage_.assign(static_cast<size_t>(MaxMixerTracks) * MaxChannels * bus_stride, 0.0F);
+  for (size_t track = 0; track < MaxMixerTracks; ++track) {
+    const size_t base = track * static_cast<size_t>(MaxChannels) * bus_stride;
+    for (size_t plane = 0; plane < MaxChannels; ++plane) {
+      bus_planes_[track][plane] = bus_storage_.data() + base + (plane * bus_stride);
+    }
+  }
+  for (size_t track = 0; track < MaxMixerTracks; ++track) {
+    track_gain_[track].store(1.0F, std::memory_order_release);
+    track_pan_[track].store(0.0F, std::memory_order_release);
+    track_muted_[track].store(false, std::memory_order_release);
+  }
 
   // An empty schedule, so the audio thread never sees a null pointer.
   ScheduleBuilder builder;
@@ -518,19 +536,154 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
     }
   }
 
+  const MixerGraph* graph = mixer_.acquire();
+  const bool routed = graph != nullptr && graph->master() >= 0;
+
+  // With a mixer, a channel renders into the bus of the track it is routed to
+  // and the graph sums the buses; without one, every channel goes straight to
+  // the device, which is what the engine did before the mixer existed.
+  if (routed) {
+    const auto track_count = static_cast<int32_t>(graph->nodes().size());
+    for (int32_t track = 0; track < track_count; ++track) {
+      busView(track, num_frames).clear();
+    }
+  }
+
+  const auto destination = [&](int32_t track) noexcept -> AudioBufferView {
+    if (!routed) return output;
+    const int32_t resolved =
+        track >= 0 && track < static_cast<int32_t>(graph->nodes().size()) ? track : graph->master();
+    return busView(resolved, num_frames);
+  };
+  // A bus is written from frame zero; the device buffer is written at `offset`.
+  const int bus_offset = routed ? 0 : offset;
+
   int32_t voices = 0;
   for (int index = 0; index < MaxRackChannels; ++index) {
     Channel& channel = *channels_[static_cast<size_t>(index)];
     if (!channel.active.load(std::memory_order_acquire)) continue;
-    renderChannel(channel, static_cast<InstrumentId>(index), output, offset, num_frames, schedule,
-                  chunk_start, block_events, release_all, channelInstrument(index));
+    renderChannel(channel, static_cast<InstrumentId>(index),
+                  destination(channel.mixer_track.load(std::memory_order_acquire)), bus_offset,
+                  num_frames, schedule, chunk_start, block_events, release_all,
+                  channelInstrument(index));
     voices += channelInstrument(index).activeVoiceCount();
   }
+  // The audition voice and the metronome are monitoring, not material: they go
+  // to the master directly rather than through anybody's effect chain, so
+  // previewing a sound while a reverb is on the selected track does not drench
+  // it, and the click is never processed at all.
   renderChannel(*preview_channel_, 0, output, offset, num_frames, nullptr, chunk_start,
                 block_events, release_all, preview_channel_->instrument, true);
   voices += preview_channel_->instrument.activeVoiceCount();
+
+  if (routed) renderMixer(output, offset, num_frames, schedule, chunk_start);
   renderMetronome(output, offset, num_frames, chunk_start);
   active_voices_ = voices;
+}
+
+AudioBufferView Engine::busView(int32_t track, int num_frames) noexcept OB_NONBLOCKING {
+  const auto index = static_cast<size_t>(track < 0 ? 0 : track);
+  return AudioBufferView(bus_planes_[index].data(), MaxChannels, num_frames);
+}
+
+void Engine::renderMixer(const AudioBufferView& output, int offset, int num_frames,
+                         const Schedule* schedule, int64_t chunk_start) noexcept OB_NONBLOCKING {
+  const MixerGraph* graph = mixer_.acquire();
+  if (graph == nullptr || graph->master() < 0) return;
+
+  // Drain knob moves once for the whole chunk. They carry no time of their own,
+  // so they land at frame zero — the same place a command-queue note lands.
+  EffectParamChange change;
+  while (pending_effect_param_count_ < pending_effect_params_.size() &&
+         effect_params_.tryPop(change)) {
+    pending_effect_params_[pending_effect_param_count_++] = change;
+  }
+
+  const int64_t chunk_end = chunk_start + num_frames;
+  const auto& nodes = graph->nodes();
+
+  for (const int32_t index : graph->order()) {
+    const GraphNode& node = nodes[static_cast<size_t>(index)];
+    const AudioBufferView bus = busView(index, num_frames);
+
+    for (const GraphEffect& effect : node.effects) {
+      if (effect.instance == nullptr) continue;
+
+      // This insert's parameter events for this chunk: the automation from the
+      // schedule, plus anything the user just turned.
+      plugin::EventList effect_events = effect_events_.list();
+      if (schedule != nullptr) {
+        const int32_t event_count = schedule->eventCount();
+        const ScheduleEvent* events = schedule->events();
+        for (int32_t cursor = schedule->lowerBound(chunk_start);
+             cursor < event_count && events[cursor].frame < chunk_end; ++cursor) {
+          const ScheduleEvent& event = events[cursor];
+          if (static_cast<EventType>(event.type) != EventType::EffectParam) continue;
+          if (static_cast<int32_t>(event.instrument) != effect.index) continue;
+          effect_events.push(
+              plugin::PluginEvent::paramValue(static_cast<uint32_t>(event.frame - chunk_start),
+                                              event.reserved, static_cast<double>(event.value)));
+        }
+      }
+      for (size_t i = 0; i < pending_effect_param_count_; ++i) {
+        const EffectParamChange& pending = pending_effect_params_[i];
+        if (pending.effect != effect.index) continue;
+        effect_events.push(
+            plugin::PluginEvent::paramValue(0, pending.param, static_cast<double>(pending.value)));
+      }
+      effect_events.sortByTime();
+
+      plugin::ProcessBlock block;
+      block.frames = static_cast<uint32_t>(num_frames);
+      // In place: the same bus is the input and the output, which is what the
+      // port pair advertises with `supports_in_place`.
+      block.audio_inputs = &bus;
+      block.audio_input_count = 1;
+      block.audio_outputs = &bus;
+      block.audio_output_count = 1;
+      block.in_events = effect_events.view();
+      block.steady_time_frames = static_cast<int64_t>(callback_count_);
+
+      plugin::TransportInfo& transport = block.transport;
+      transport.is_valid = true;
+      transport.is_playing = transport_.playing();
+      transport.is_loop_active = transport_.loopEnabled();
+      transport.tempo_bpm = transport_.tempo();
+      transport.position_frames = chunk_start;
+      transport.position_beats = transport_.timeMap().framesToBeats(chunk_start);
+      transport.position_seconds = transport_.timeMap().framesToSeconds(chunk_start);
+
+      if (effect.instance->process(block) == plugin::ProcessStatus::Error) {
+        rt_log_.log(rt::LogLevel::Error, rt::RtMessage::InstrumentProcessFailed,
+                    static_cast<int64_t>(effect.index), 1);
+      }
+    }
+
+    const bool muted = track_muted_[static_cast<size_t>(index)].load(std::memory_order_acquire);
+    const float gain =
+        muted ? 0.0F : track_gain_[static_cast<size_t>(index)].load(std::memory_order_acquire);
+    const float pan = track_pan_[static_cast<size_t>(index)].load(std::memory_order_acquire);
+    const float left_gain = gain * (pan > 0.0F ? 1.0F - pan : 1.0F);
+    const float right_gain = gain * (pan < 0.0F ? 1.0F + pan : 1.0F);
+    if (gain == 0.0F) continue;
+
+    // The master's output is the device; everybody else sums into the track
+    // they feed. The graph's order guarantees that track has not been processed
+    // yet, so summing into it now is summing into its input.
+    const bool to_device = node.output < 0;
+    const AudioBufferView target = to_device ? output : busView(node.output, num_frames);
+    const int target_offset = to_device ? offset : 0;
+    const int target_channels = std::min(target.numChannels(), MaxChannels);
+
+    for (int frame = 0; frame < num_frames; ++frame) {
+      target.channel(0)[target_offset + frame] += bus.channel(0)[frame] * left_gain;
+      if (target_channels > 1) {
+        target.channel(1)[target_offset + frame] += bus.channel(1)[frame] * right_gain;
+      }
+    }
+  }
+
+  pending_effect_param_count_ = 0;
 }
 
 // One channel. Its events are the schedule events addressed to it, plus the
@@ -538,6 +691,25 @@ void Engine::processChunk(const AudioBufferView& output, int offset, int num_fra
 // the channel the user has selected, not to all of them at once. Renders into
 // the shared scratch buffer and mixes the result into `output`, so a channel
 // never sees, and cannot overwrite, what the channels before it produced.
+// Audio thread. Copies the published window onto the voice that is about to
+// start. A hosted plug-in has no sampler and no window; it is left alone.
+void Engine::applyClipPlayback(Channel& channel,
+                               plugin::PluginInstance& instrument) noexcept OB_NONBLOCKING {
+  // A pointer compare, not a dynamic_cast: `Channel::instrument` is the concrete
+  // built-in, and anything else on this channel is a hosted plug-in with no
+  // sampler and no window to give it. RTTI on the audio thread is a cost with
+  // no benefit when the identity is this cheap to establish.
+  if (&instrument != &channel.instrument) return;
+  ClipPlayback playback;
+  playback.enabled = true;
+  playback.start_frame = channel.clip_start_frame.load(std::memory_order_acquire);
+  playback.length_frames = channel.clip_length_frames.load(std::memory_order_acquire);
+  playback.reversed = channel.clip_reversed.load(std::memory_order_acquire);
+  playback.rate = channel.clip_rate.load(std::memory_order_acquire);
+  playback.pitch_preserving = channel.clip_pitch_preserving.load(std::memory_order_acquire);
+  channel.instrument.sampler().setClipPlayback(playback);
+}
+
 void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBufferView& output,
                            int offset, int num_frames, const Schedule* schedule,
                            int64_t chunk_start, const plugin::EventList* block_events,
@@ -609,7 +781,13 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
           break;
         case EventType::AudioStart:
           // Audio clips are one-shot samples; MIDI C3 is the sampler's neutral
-          // rate and the voice ends when the decoded source reaches EOF.
+          // rate and the voice ends when its window reaches the end.
+          //
+          // The window is applied here, immediately before the trigger, because
+          // `startVoice` latches it: a clip already sounding keeps the geometry
+          // it started with, and an edit takes effect on the next trigger
+          // rather than lurching mid-note.
+          applyClipPlayback(channel, instrument);
           events.push(plugin::PluginEvent::noteOn(time, Sampler::RootNote,
                                                   static_cast<double>(event.value)));
           scheduled_audio_start = true;
@@ -627,9 +805,15 @@ void Engine::renderChannel(Channel& channel, InstrumentId index, const AudioBuff
           events.push(plugin::PluginEvent::paramModulation(time, event.reserved,
                                                            static_cast<double>(event.value)));
           break;
+        case EventType::EffectParam:
+          // Addressed to an insert, not to a channel. `instrument` here is an
+          // index into the effect address space and would collide with a rack
+          // channel if it were read as one; renderMixer picks these up.
+          break;
       }
     }
     if (one_shot && sample_ready && channel.deferred_audio_start && !scheduled_audio_start) {
+      applyClipPlayback(channel, instrument);
       events.push(plugin::PluginEvent::noteOn(0, Sampler::RootNote, 1.0));
       channel.deferred_audio_start = false;
     } else if (scheduled_audio_start) {
@@ -1117,15 +1301,39 @@ void Engine::setChannels(std::vector<ChannelDesc> channels) {
   // Publish the loading state before the schedule that references these
   // channels. A newly added audio clip can therefore defer its AudioStart
   // instead of triggering the fallback/old sample while the worker decodes.
+  //
+  // This first, atomic part is deliberately done here rather than only in
+  // applyChannelSync(): publishModel queues the decode and publishes the new
+  // schedule in the same call. In an empty project the first audio clip is
+  // channel 0, which is already active as the audition sampler; leaving
+  // one_shot false for even one block makes AudioStart look like a MIDI note
+  // and plays the sampler's fallback tone. The worker still owns all file I/O,
+  // while the render thread gets the correct gate before it can see the event.
   const size_t count = std::min(channels.size(), static_cast<size_t>(MaxRackChannels));
   for (size_t index = 0; index < count; ++index) {
     Channel& channel = *channels_[index];
     const ChannelDesc& desc = channels[index];
+    channel.active.store(true, std::memory_order_release);
     channel.one_shot.store(desc.one_shot, std::memory_order_release);
+    channel.clip_start_frame.store(desc.clip.start_frame, std::memory_order_release);
+    channel.clip_length_frames.store(desc.clip.length_frames, std::memory_order_release);
+    channel.clip_reversed.store(desc.clip.reversed, std::memory_order_release);
+    channel.clip_rate.store(desc.clip.rate, std::memory_order_release);
+    channel.clip_pitch_preserving.store(desc.clip.pitch_preserving, std::memory_order_release);
+    channel.mixer_track.store(desc.mixer_track, std::memory_order_release);
     if (desc.one_shot && samplePathHash(desc.sample_path) !=
                              channel.loaded_sample_hash.load(std::memory_order_acquire)) {
       channel.sample_ready.store(false, std::memory_order_release);
+    } else if (!desc.one_shot) {
+      channel.sample_ready.store(true, std::memory_order_release);
     }
+  }
+  for (size_t index = count; index < MaxRackChannels; ++index) {
+    // Slot 0 remains the manual audition voice when the project has no rack;
+    // every other slot is out of the published rack immediately.
+    channels_[index]->active.store(index == 0 && count == 0, std::memory_order_release);
+    channels_[index]->one_shot.store(false, std::memory_order_release);
+    channels_[index]->sample_ready.store(true, std::memory_order_release);
   }
   {
     std::lock_guard<std::mutex> lock(work_mutex_);
@@ -1133,6 +1341,118 @@ void Engine::setChannels(std::vector<ChannelDesc> channels) {
     has_pending_channels_ = true;
   }
   work_signal_.notify_one();
+}
+
+void Engine::setMixerTracks(std::vector<MixerTrackDesc> tracks) {
+  {
+    std::lock_guard<std::mutex> lock(work_mutex_);
+    pending_mixer_ = std::move(tracks);
+    has_pending_mixer_ = true;
+  }
+  work_signal_.notify_one();
+}
+
+bool Engine::setEffectParam(int32_t automation_index, plugin::ParamId param,
+                            double value) noexcept {
+  if (automation_index < 0) return false;
+  return effect_params_.tryPush(
+      EffectParamChange{automation_index, param, static_cast<float>(value)});
+}
+
+int32_t Engine::mixerTrackCount() const {
+  const MixerGraph* graph = mixer_.acquire();
+  return graph == nullptr ? 0 : static_cast<int32_t>(graph->nodes().size());
+}
+
+// Housekeeping thread. Levels are published immediately, because they are
+// atomics the audio thread re-reads every block. The *graph* is rebuilt only
+// when the shape changed — a chain edit or a re-route — because rebuilding
+// constructs fresh effect instances and therefore drops their tails, and a
+// fader move must not do that.
+void Engine::applyMixerSync(std::vector<MixerTrackDesc> tracks) {
+  const size_t count = std::min(tracks.size(), static_cast<size_t>(MaxMixerTracks));
+
+  const auto sameShape = [](const std::vector<MixerTrackDesc>& a,
+                            const std::vector<MixerTrackDesc>& b, size_t limit) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < limit; ++i) {
+      if (a[i].track_id != b[i].track_id || a[i].output_id != b[i].output_id) return false;
+      if (a[i].effects.size() != b[i].effects.size()) return false;
+      for (size_t slot = 0; slot < a[i].effects.size(); ++slot) {
+        // Identity *and* position: a reorder keeps both IDs and needs a rebuild.
+        if (a[i].effects[slot].effect_id != b[i].effects[slot].effect_id) return false;
+        if (a[i].effects[slot].plugin_id != b[i].effects[slot].plugin_id) return false;
+        if (a[i].effects[slot].automation_index != b[i].effects[slot].automation_index) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  for (size_t index = 0; index < count; ++index) {
+    const MixerTrackDesc& desc = tracks[index];
+    track_gain_[index].store(std::clamp(desc.gain, 0.0F, 2.0F), std::memory_order_release);
+    track_pan_[index].store(std::clamp(desc.pan, -1.0F, 1.0F), std::memory_order_release);
+    track_muted_[index].store(desc.muted, std::memory_order_release);
+  }
+
+  if (sameShape(tracks, live_mixer_, count)) {
+    live_mixer_ = std::move(tracks);
+    return;
+  }
+
+  auto graph = std::make_unique<MixerGraph>();
+  graph->nodes().resize(count);
+  for (size_t index = 0; index < count; ++index) {
+    graph->nodes()[index].track_id = tracks[index].track_id;
+  }
+  // Resolve routing by ID, now that every node has one. An output naming a
+  // track that is not in this mixer falls back to the master, which is the same
+  // repair the model makes on load.
+  for (size_t index = 0; index < count; ++index) {
+    const std::string& output = tracks[index].output_id;
+    graph->nodes()[index].output = output.empty() ? -1 : graph->indexOf(output);
+  }
+
+  for (size_t index = 0; index < count; ++index) {
+    for (const MixerEffectDesc& slot : tracks[index].effects) {
+      GraphEffect effect;
+      effect.effect_id = slot.effect_id;
+      effect.index = slot.automation_index;
+      effect.instance = plugin::builtin::createBuiltinEffect(slot.plugin_id.c_str(), &host_bridge_);
+      if (effect.instance == nullptr) {
+        // An identifier this build does not ship. The slot stays in the chain
+        // as a hole rather than silently disappearing, so the project still
+        // round-trips and the UI can say which effect is missing (FR-PLG-10).
+        diagnostics_.log(LogLevel::Warn, "mixer",
+                         "Effect '" + slot.plugin_id + "' is not available; the insert is silent.");
+      } else {
+        plugin::ProcessSetup configure;
+        configure.sample_rate = config_.sample_rate;
+        configure.max_block_frames = static_cast<uint32_t>(config_.block_frames);
+        if (!effect.instance->configure(configure) || !effect.instance->activate()) {
+          diagnostics_.log(
+              LogLevel::Error, "mixer",
+              "Effect '" + slot.plugin_id + "' failed to start; the insert is silent.");
+          effect.instance.reset();
+        }
+      }
+      graph->nodes()[index].effects.push_back(std::move(effect));
+    }
+  }
+
+  if (!graph->finalise()) {
+    // A cycle, or no master. The model's invariant checker should have caught
+    // it; refusing the graph rather than publishing it is what keeps the audio
+    // thread's traversal bounded.
+    diagnostics_.log(LogLevel::Error, "mixer",
+                     "The mixer routing is not a tree; the previous mixer is kept.");
+    return;
+  }
+
+  mixer_.publish(std::move(graph));
+  live_mixer_ = std::move(tracks);
 }
 
 void Engine::requestChannelReset(int index) noexcept {
@@ -1157,6 +1477,12 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
     channel.pan.store(std::clamp(desc.pan, -1.0F, 1.0F), std::memory_order_release);
     channel.muted.store(desc.muted, std::memory_order_release);
     channel.one_shot.store(desc.one_shot, std::memory_order_release);
+    channel.clip_start_frame.store(desc.clip.start_frame, std::memory_order_release);
+    channel.clip_length_frames.store(desc.clip.length_frames, std::memory_order_release);
+    channel.clip_reversed.store(desc.clip.reversed, std::memory_order_release);
+    channel.clip_rate.store(desc.clip.rate, std::memory_order_release);
+    channel.clip_pitch_preserving.store(desc.clip.pitch_preserving, std::memory_order_release);
+    channel.mixer_track.store(desc.mixer_track, std::memory_order_release);
     const uint64_t requested_hash = samplePathHash(desc.sample_path);
     if (desc.sample_path != channel.loaded_path) {
       if (desc.one_shot) channel.sample_ready.store(false, std::memory_order_release);
@@ -1216,7 +1542,9 @@ void Engine::housekeepingLoop() {
   while (housekeeping_active_.load(std::memory_order_acquire)) {
     std::vector<std::string> pending;
     std::vector<ChannelDesc> channels;
+    std::vector<MixerTrackDesc> mixer;
     bool has_channels = false;
+    bool has_mixer = false;
     {
       std::unique_lock<std::mutex> lock(work_mutex_);
       work_signal_.wait_for(lock, std::chrono::milliseconds(20));
@@ -1224,8 +1552,14 @@ void Engine::housekeepingLoop() {
       has_channels = has_pending_channels_;
       channels.swap(pending_channels_);
       has_pending_channels_ = false;
+      has_mixer = has_pending_mixer_;
+      mixer.swap(pending_mixer_);
+      has_pending_mixer_ = false;
     }
 
+    // The mixer first: a channel's routing is resolved against the graph, so
+    // the graph has to exist before the channels that point into it.
+    if (has_mixer) applyMixerSync(std::move(mixer));
     if (has_channels) applyChannelSync(std::move(channels));
     for (const std::string& path : pending) {
       std::string error;

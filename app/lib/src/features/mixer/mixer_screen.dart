@@ -21,6 +21,7 @@ class MixerScreen extends StatelessWidget {
     this.onRoutingPrePostToggle,
     this.onRoutingSidechainToggle,
     this.onAddTrack,
+    this.effectRack,
     super.key,
   });
 
@@ -35,6 +36,10 @@ class MixerScreen extends StatelessWidget {
   final ValueChanged<int>? onRoutingPrePostToggle;
   final VoidCallback? onRoutingSidechainToggle;
   final VoidCallback? onAddTrack;
+
+  /// The selected track's insert chain, built by the binding. Passed in rather
+  /// than constructed here so this screen stays a pure view over its vm.
+  final Widget? effectRack;
 
   @override
   Widget build(BuildContext context) {
@@ -95,12 +100,31 @@ class MixerScreen extends StatelessWidget {
                   color: tokens.color.line,
                 ),
                 Expanded(
-                  child: ObRoutingPanel(
-                    vm: vm.routingPanel,
-                    onFeedTap: onRoutingFeedTap,
-                    onSendChange: onRoutingSendChange,
-                    onPrePostToggle: onRoutingPrePostToggle,
-                    onSidechainToggle: onRoutingSidechainToggle,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      // The rack takes the height it needs and scrolls inside
+                      // its own share; the routing panel keeps the rest. It
+                      // must not go in a shared scroll view — the panel sizes
+                      // itself to its parent, and an unbounded height leaves it
+                      // with nothing to size against.
+                      if (effectRack != null)
+                        Flexible(
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.all(tokens.spacing.md),
+                            child: effectRack,
+                          ),
+                        ),
+                      Expanded(
+                        child: ObRoutingPanel(
+                          vm: vm.routingPanel,
+                          onFeedTap: onRoutingFeedTap,
+                          onSendChange: onRoutingSendChange,
+                          onPrePostToggle: onRoutingPrePostToggle,
+                          onSidechainToggle: onRoutingSidechainToggle,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

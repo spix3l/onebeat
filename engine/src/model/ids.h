@@ -33,6 +33,11 @@ enum class EntityKind : uint8_t {
   ArrangementLane,
   Clip,
   MixerTrack,
+  // A slot in a mixer track's effect chain. It needs an identity of its own
+  // because automation targets it: an automation clip written against slot 2
+  // must keep pointing at the same reverb after the user drags it to slot 1,
+  // and a chain position cannot promise that.
+  Effect,
   // Not an entity and never an ID in the file: `Project` addresses
   // project-level state (transport, meta) in change events, which otherwise
   // would have to pretend to be some entity they are not.
@@ -53,6 +58,8 @@ constexpr std::string_view entityPrefix(EntityKind kind) {
       return "clp";
     case EntityKind::MixerTrack:
       return "mix";
+    case EntityKind::Effect:
+      return "efx";
     case EntityKind::Project:
       return "prj";
   }
@@ -71,6 +78,8 @@ constexpr std::string_view entityNoun(EntityKind kind) {
       return "clip";
     case EntityKind::MixerTrack:
       return "mixer track";
+    case EntityKind::Effect:
+      return "effect";
     case EntityKind::Project:
       return "project";
   }
@@ -133,6 +142,7 @@ using PatternId = TypedId<EntityKind::Pattern>;
 using ArrangementLaneId = TypedId<EntityKind::ArrangementLane>;
 using ClipId = TypedId<EntityKind::Clip>;
 using MixerTrackId = TypedId<EntityKind::MixerTrack>;
+using EffectId = TypedId<EntityKind::Effect>;
 
 // The compiler is the enforcement mechanism for ARCHITECTURE.md §4. If any of
 // these ever compiles as convertible, a lane has become able to hold a routing
@@ -141,6 +151,10 @@ static_assert(!std::is_convertible_v<MixerTrackId, ArrangementLaneId>);
 static_assert(!std::is_convertible_v<ArrangementLaneId, MixerTrackId>);
 static_assert(!std::is_convertible_v<PatternId, ClipId>);
 static_assert(!std::is_convertible_v<InstrumentId, MixerTrackId>);
+// An effect lives *in* a track and is not one: a chain slot must never be
+// usable as a routing destination.
+static_assert(!std::is_convertible_v<EffectId, MixerTrackId>);
+static_assert(!std::is_convertible_v<MixerTrackId, EffectId>);
 
 // Generates ULIDs: 48 bits of Unix milliseconds, 80 bits of randomness,
 // monotonic within a millisecond (the random field is incremented rather than

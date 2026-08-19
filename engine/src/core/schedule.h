@@ -27,7 +27,12 @@ enum class EventType : uint16_t {
   TempoChange = 2,      // value = bpm
   ParamValue = 3,       // reserved = ParamId, value is the absolute value
   ParamModulation = 4,  // reserved = ParamId, value is a non-destructive offset
-  AudioStart = 5        // starts the whole sample loaded on `instrument`
+  AudioStart = 5,       // starts the clip loaded on `instrument`
+  // A mixer insert's parameter. `instrument` carries the effect's dense index
+  // rather than a channel's — effects have an address space of their own
+  // because they are not on the rack and never sound by themselves. `reserved`
+  // is the ParamId, `value` the absolute value.
+  EffectParam = 6
 };
 
 // POD, 24 bytes, sorted by `frame`. Deliberately cache-friendly: a block scan
@@ -119,6 +124,12 @@ class ScheduleBuilder {
                                       int64_t frame) {
     events_.push_back(ScheduleEvent{
         frame, instrument, static_cast<uint16_t>(EventType::ParamModulation), -1, amount, param});
+    return *this;
+  }
+
+  ScheduleBuilder& addEffectParam(uint32_t effect, uint32_t param, float value, int64_t frame) {
+    events_.push_back(ScheduleEvent{frame, effect, static_cast<uint16_t>(EventType::EffectParam),
+                                    -1, value, param});
     return *this;
   }
 
