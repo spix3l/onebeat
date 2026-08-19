@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../design/tokens.dart';
 import '../../../ui_kit/knob.dart';
+import '../typing_keyboard.dart';
 
 class SynthPresetData {
   const SynthPresetData({
@@ -697,6 +698,10 @@ class _SynthKeyboardState extends State<_SynthKeyboard> {
   static const List<int> _blackPositions = <int>[0, 1, 3, 4, 5, 7, 8, 10, 11, 12];
   final Set<int> _held = <int>{};
 
+  /// Pointer-held keys plus the computer keyboard's, which plays the same
+  /// instrument and should light the same keys.
+  Set<int> _down(BuildContext context) => <int>{..._held, ...TypingKeysScope.of(context)};
+
   int _whiteKey(int index) => 36 + (index ~/ _whiteOffsets.length) * 12 + _whiteOffsets[index % _whiteOffsets.length];
 
   void _press(int key, double velocity) {
@@ -713,6 +718,7 @@ class _SynthKeyboardState extends State<_SynthKeyboard> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final Set<int> down = _down(context);
     return Container(
       height: tokens.size.synthKeyboardHeight,
       padding: EdgeInsets.fromLTRB(tokens.spacing.md, tokens.spacing.sm, tokens.spacing.md, tokens.spacing.sm),
@@ -742,7 +748,7 @@ class _SynthKeyboardState extends State<_SynthKeyboard> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: List<Widget>.generate(whiteCount, (int index) {
                         final int key = _whiteKey(index);
-                        final bool held = _held.contains(key);
+                        final bool held = down.contains(key);
                         return Expanded(
                           child: GestureDetector(
                             onTapDown: (_) => _press(key, .82),
@@ -773,7 +779,7 @@ class _SynthKeyboardState extends State<_SynthKeyboard> {
                         height: tokens.size.synthKeyboardBlackHeight,
                         child: _BlackKey(
                           keyNumber: _whiteKey(position) + 1,
-                          held: _held.contains(_whiteKey(position) + 1),
+                          held: down.contains(_whiteKey(position) + 1),
                           onPress: _press,
                           onRelease: _release,
                         ),

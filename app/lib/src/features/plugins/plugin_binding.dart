@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../../core/shortcuts.dart';
 import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import '../../ui_kit/floating_window.dart';
@@ -11,6 +12,15 @@ import 'stock/organ_editor.dart';
 import 'stock/piano_editor.dart';
 import 'stock/sampler_editor.dart';
 import 'stock/synth_editor.dart';
+import 'typing_keyboard.dart';
+
+/// C of the typing keyboard's lower row when a plug-in window opens: MIDI 48,
+/// the middle of every stock editor's drawn range.
+const int _kTypingBaseOctave = 4;
+
+const List<String> _kNoteNames = <String>['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+String _noteName(int midi) => '${_kNoteNames[midi % 12]}${midi ~/ 12 - 1}';
 
 class PluginBinding extends StatefulWidget {
   const PluginBinding({
@@ -44,6 +54,11 @@ class _PluginBindingState extends State<PluginBinding> {
   late bool _bypassed;
   late List<HostedParameter> _parameters;
   bool _samplerReverse = false;
+
+  /// Where the typing keyboard's lower letter row currently sits. Shown in the
+  /// window subtitle, because an octave shift with no readout leaves the user
+  /// guessing why the same keys now sound different.
+  int _typingBaseKey = _kTypingBaseOctave * 12;
   final Map<String, double> _stockFallbackValues = <String, double>{};
 
   @override
@@ -51,6 +66,27 @@ class _PluginBindingState extends State<PluginBinding> {
     super.initState();
     _bypassed = widget.isBypassed;
     _parameters = widget.parameters;
+  }
+
+  /// Audition plays through the engine's *selected* channel, so taking the
+  /// keyboard also points the engine at this window's instrument. Doing it on
+  /// focus rather than on every key-down keeps it to one command per visit.
+  void _selectOwnInstrument() {
+    if (widget.trackId.isEmpty) return;
+    try {
+      widget.client.selectInstrument(widget.trackId);
+    } catch (_) {
+      // The command is a stub on a fake client.
+    }
+  }
+
+  @override
+  void dispose() {
+    // Closing the window hands the keyboard back to whichever editor had it,
+    // rather than leaving it on a node that no longer exists — otherwise the
+    // rack's shortcuts stay asleep until the user clicks something.
+    FocusPolicy.returnToEditor();
+    super.dispose();
   }
 
   void _onToggleBypass() {
@@ -429,7 +465,7 @@ class _PluginBindingState extends State<PluginBinding> {
 
     final ObFloatingWindowVm windowVm = ObFloatingWindowVm(
       title: widget.pluginName,
-      subtitle: '${widget.trackName} · ${_bypassed ? "BYPASSED" : "ACTIVE"}',
+      subtitle: '${widget.trackName} · ${_bypassed ? "BYPASSED" : "ACTIVE"} · KEYS ${_noteName(_typingBaseKey)}',
       actions: <ObWindowAction>[
         ObWindowAction(icon: ObKitGlyphKind.waveform, onTap: _onToggleBypass, tooltip: _bypassed ? 'Engage' : 'Bypass'),
         ObWindowAction(icon: ObKitGlyphKind.close, onTap: widget.onClose, tooltip: 'Close window'),
@@ -438,24 +474,37 @@ class _PluginBindingState extends State<PluginBinding> {
 
     final OneBeatTokens tokens = OneBeatTheme.of(context);
 
-    return ObFloatingWindow.plugin(
-      vm: windowVm,
-      width:
-          isPiano
-              ? 720
-              : (isGuitar
-                  ? 860
-                  : (isLowkey ? 900 : (isSynth ? tokens.size.synthWindowWidth : tokens.size.pluginWindowWidth))),
-      height:
-          isPiano
-              ? 430
-              : (isGuitar
-                  ? 520
-                  : (isLowkey
-                      ? 680
-                      : (isOrgan ? 500 : (isSynth ? tokens.size.synthWindowHeight : tokens.size.pluginWindowHeight)))),
-      onDragUpdate: widget.onDragUpdate,
-      child: editorContent,
+    // The typing keyboard wraps the whole window, not just the drawn keys: the
+    // user's hands are on the letter rows wherever the pointer happens to be,
+    // and a generic third-party editor with no on-screen keyboard at all still
+    // gets to be played. [ and ] shift its octave.
+    return TypingKeyboard(
+      baseOctave: _kTypingBaseOctave,
+      onNoteOn: widget.client.auditionNoteOn,
+      onNoteOff: widget.client.auditionNoteOff,
+      onFocusGained: _selectOwnInstrument,
+      onBaseKeyChanged: (int key) => setState(() => _typingBaseKey = key),
+      child: ObFloatingWindow.plugin(
+        vm: windowVm,
+        width:
+            isPiano
+                ? 720
+                : (isGuitar
+                    ? 860
+                    : (isLowkey ? 900 : (isSynth ? tokens.size.synthWindowWidth : tokens.size.pluginWindowWidth))),
+        height:
+            isPiano
+                ? 430
+                : (isGuitar
+                    ? 520
+                    : (isLowkey
+                        ? 680
+                        : (isOrgan
+                            ? 500
+                            : (isSynth ? tokens.size.synthWindowHeight : tokens.size.pluginWindowHeight)))),
+        onDragUpdate: widget.onDragUpdate,
+        child: editorContent,
+      ),
     );
   }
 }

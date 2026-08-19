@@ -2,6 +2,8 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
+import '../typing_keyboard.dart';
+
 class PianoPresetData {
   const PianoPresetData({
     required this.id,
@@ -1722,6 +1724,10 @@ class PianoHardwareKeyboard extends StatefulWidget {
 class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
   final Set<int> _activeKeys = <int>{};
 
+  /// Keys held by the pointer, plus keys held on the computer keyboard, so a
+  /// typed note lights the drawn key it is playing.
+  bool _isDown(int key, Set<int> typed) => _activeKeys.contains(key) || typed.contains(key);
+
   void _press(int key) {
     if (_activeKeys.contains(key)) return;
     setState(() => _activeKeys.add(key));
@@ -1737,6 +1743,7 @@ class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
   @override
   Widget build(BuildContext context) {
     final int startMidi = widget.baseOctave * 12; // C_base
+    final Set<int> typed = TypingKeysScope.of(context);
 
     return Container(
       height: 56,
@@ -1800,9 +1807,7 @@ class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
                     Expanded(
                       child: PianoWhiteKey(
                         midiKey: startMidi + whiteKeyOffsets[i],
-                        isPressed: _activeKeys.contains(
-                          startMidi + whiteKeyOffsets[i],
-                        ),
+                        isPressed: _isDown(startMidi + whiteKeyOffsets[i], typed),
                         onPointerDown: () => _press(startMidi + whiteKeyOffsets[i]),
                         onPointerUp: () => _release(startMidi + whiteKeyOffsets[i]),
                       ),
@@ -1818,7 +1823,7 @@ class _PianoHardwareKeyboardState extends State<PianoHardwareKeyboard> {
                   height: blackKeyHeight,
                   child: PianoBlackKey(
                     midiKey: startMidi + bp.semitone,
-                    isPressed: _activeKeys.contains(startMidi + bp.semitone),
+                    isPressed: _isDown(startMidi + bp.semitone, typed),
                     onPointerDown: () => _press(startMidi + bp.semitone),
                     onPointerUp: () => _release(startMidi + bp.semitone),
                   ),

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
+import '../typing_keyboard.dart';
+
 class GuitarPresetData {
   const GuitarPresetData({
     required this.id,
@@ -1672,6 +1674,9 @@ class _GuitarKeyboardStrip extends StatefulWidget {
 class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
   int? _activeKey;
 
+  /// The pointer holds at most one key; the computer keyboard can hold a chord.
+  bool _isDown(int midi, Set<int> typed) => _activeKey == midi || typed.contains(midi);
+
   // 6-String Guitar Standard Range: E2 (MIDI 40) to E6 (MIDI 88)
   static const int kMinActiveGuitarKey = 40;
   static const int kMaxActiveGuitarKey = 88;
@@ -1690,6 +1695,8 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
 
   @override
   Widget build(BuildContext context) {
+    final Set<int> typed = TypingKeysScope.of(context);
+
     // 60-key full keyboard display from C1 (24) to C7 (96)
     const int startMidi = 24;
     const int endMidi = 96;
@@ -1718,7 +1725,7 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
                     midiKey: midi,
                     width: keyWidth,
                     isActiveRange: midi >= kMinActiveGuitarKey && midi <= kMaxActiveGuitarKey,
-                    isPressed: _activeKey == midi,
+                    isPressed: _isDown(midi, typed),
                     onDown: () => _handlePointerDown(midi),
                     onUp: () => _handlePointerUp(midi),
                   ),
@@ -1734,7 +1741,7 @@ class _GuitarKeyboardStripState extends State<_GuitarKeyboardStrip> {
                   keyWidth: keyWidth,
                   minActive: kMinActiveGuitarKey,
                   maxActive: kMaxActiveGuitarKey,
-                  isPressed: _activeKey == k,
+                  isPressed: _isDown(k, typed),
                   onDown: () => _handlePointerDown(k),
                   onUp: () => _handlePointerUp(k),
                 ),
