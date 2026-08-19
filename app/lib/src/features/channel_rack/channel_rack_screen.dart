@@ -177,6 +177,8 @@ class ChannelRackScreen extends StatelessWidget {
                               onPanChanged: onPanChanged,
                               onRouteTap: onRouteTap,
                               gridWidth: gridWidth,
+                              gridStepCount: vm.stepCount,
+                              stepTicks: vm.stepTicks,
                               onAddChannel: onAddChannel,
                               onRowSecondaryTapDown: onRowSecondaryTapDown,
                               onDropInstrument: onDropInstrument,
@@ -469,6 +471,8 @@ class _RackRowsScrollArea extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     required this.gridWidth,
+    required this.gridStepCount,
+    required this.stepTicks,
     this.onAddChannel,
     this.onRowSecondaryTapDown,
     this.onDropInstrument,
@@ -493,6 +497,11 @@ class _RackRowsScrollArea extends StatelessWidget {
 
   /// The width every lane's grid occupies — see [ObRackRow.gridWidth].
   final double gridWidth;
+
+  /// The rack's shared time base — see [ObRackRow.gridStepCount].
+  final int gridStepCount;
+  final int stepTicks;
+
   final VoidCallback? onAddChannel;
   final void Function(int rowIndex, TapDownDetails details)? onRowSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
@@ -567,6 +576,8 @@ class _RackRowsScrollArea extends StatelessWidget {
                   onPanChanged: onPanChanged,
                   onRouteTap: onRouteTap,
                   gridWidth: gridWidth,
+                  gridStepCount: gridStepCount,
+                  stepTicks: stepTicks,
                   onSecondaryTapDown: onRowSecondaryTapDown,
                   onDropInstrument: onDropInstrument,
                   onPointerDownStep: onPointerDownStep,
@@ -599,6 +610,8 @@ class _RackRowItem extends StatelessWidget {
     this.onPanChanged,
     this.onRouteTap,
     required this.gridWidth,
+    required this.gridStepCount,
+    required this.stepTicks,
     this.onSecondaryTapDown,
     this.onDropInstrument,
     this.onPointerDownStep,
@@ -620,6 +633,8 @@ class _RackRowItem extends StatelessWidget {
   final void Function(int rowIndex, double value)? onPanChanged;
   final ValueChanged<int>? onRouteTap;
   final double gridWidth;
+  final int gridStepCount;
+  final int stepTicks;
   final void Function(int rowIndex, TapDownDetails details)? onSecondaryTapDown;
   final void Function(int rowIndex, Object data)? onDropInstrument;
   final void Function(PointerDownEvent event, int rowIndex, int stepIndex)? onPointerDownStep;
@@ -676,6 +691,8 @@ class _RackRowItem extends StatelessWidget {
               onPan: onPanChanged == null ? null : (double val) => onPanChanged!(index, val),
               onRouteTap: onRouteTap == null ? null : () => onRouteTap!(index),
               gridWidth: gridWidth,
+              gridStepCount: gridStepCount,
+              stepTicks: stepTicks,
             ),
           ),
         );

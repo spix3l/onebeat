@@ -41,6 +41,7 @@ class ChannelRackScreenVm {
     this.patterns = const <PatternTabVm>[],
     required this.toolbar,
     this.stepCount = 16,
+    this.stepTicks = 240,
     required this.rows,
     this.playingStep,
     this.playingTick,
@@ -58,6 +59,12 @@ class ChannelRackScreenVm {
   final List<PatternTabVm> patterns;
   final RackToolbarVm toolbar;
   final int stepCount;
+
+  /// Ticks per column. With [stepCount] it is the rack's time base: what one
+  /// column of the grid is worth, and so where a piano-roll lane's notes and
+  /// read head belong. The sixteenth-note default matches the engine's.
+  final int stepTicks;
+
   final List<RackRowVm> rows;
   final int? playingStep;
 

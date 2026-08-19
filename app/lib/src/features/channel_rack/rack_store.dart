@@ -302,6 +302,89 @@ class RackStore extends ChangeNotifier {
   /// The notes of [instrumentId], or an empty list when it has none.
   List<SequenceNote> notesFor(String instrumentId) => notesByInstrument[instrumentId] ?? const <SequenceNote>[];
 
+  // --- the channel clipboard: moving notes between patterns ----------------
+
+  /// The clipboard is deliberately **static**, not a field on this store.
+  ///
+  /// Cutting is only half a move — the other half happens after the user has
+  /// switched patterns, and switching away from the rack (to the playlist, say)
+  /// rebuilds this object. A per-store clipboard would therefore drop the notes
+  /// the user is in the middle of moving, which is data loss dressed up as a
+  /// paste that does nothing. One clipboard per session is also what the user
+  /// means by "the clipboard".
+  static ChannelNoteClipboard? _clipboard;
+
+  static ChannelNoteClipboard? get clipboard => _clipboard;
+
+  /// Tests share a process, and therefore share the static clipboard.
+  @visibleForTesting
+  static void clearClipboard() => _clipboard = null;
+
+  bool get canPaste => _clipboard != null;
+
+  /// Reads the live notes of [instrumentId] rather than the cached ones, so a
+  /// copy never lags an edit made in the piano roll since the last refresh.
+  List<SequenceNote> _liveNotes(String instrumentId) {
+    try {
+      return _client.readNotes(instrumentId);
+    } catch (_) {
+      return notesFor(instrumentId);
+    }
+  }
+
+  /// Puts the selected channel's notes *in the current pattern* on the
+  /// clipboard. Returns false when there is nothing to copy — no channel, or a
+  /// channel that is empty in this pattern.
+  bool copyNotes([String? instrumentId]) {
+    final String? id = instrumentId ?? selectedInstrumentId;
+    if (id == null || instrumentFor(id) == null) return false;
+    final List<SequenceNote> notes = _liveNotes(id);
+    if (notes.isEmpty) return false;
+    _clipboard = ChannelNoteClipboard(
+      instrumentId: id,
+      instrumentName: instrumentFor(id)?.name ?? '',
+      notes: List<SequenceNote>.unmodifiable(notes),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  /// Copy, then lift the notes out of the current pattern as one undo entry.
+  /// The channel itself stays: cut moves note data, it does not delete a
+  /// channel — deleting one would take its notes out of every other pattern
+  /// too, which is the opposite of a move.
+  bool cutNotes([String? instrumentId]) {
+    final String? id = instrumentId ?? selectedInstrumentId;
+    if (id == null || !copyNotes(id)) return false;
+    _client.beginRackGesture('Cut notes');
+    _client.removeNotes(id, _clipboard!.notes.toList(growable: false));
+    _client.commitRackGesture();
+    refresh();
+    return true;
+  }
+
+  /// Writes the clipboard into the *current* pattern — the whole point of the
+  /// feature: cut in one pattern, select another, paste. The notes land on the
+  /// channel they came from when it still exists, and on the selected channel
+  /// otherwise, so a paste after deleting the source channel is not silently
+  /// lost. Pasting adds to whatever is already there, as one undo entry.
+  bool pasteNotes([String? instrumentId]) {
+    final ChannelNoteClipboard? clipboard = _clipboard;
+    if (clipboard == null) return false;
+    final String? target =
+        instrumentId ?? (instrumentFor(clipboard.instrumentId) != null ? clipboard.instrumentId : selectedInstrumentId);
+    if (target == null || instrumentFor(target) == null) return false;
+
+    _client.beginRackGesture('Paste notes');
+    for (final SequenceNote note in clipboard.notes) {
+      _client.addNote(target, note.startTicks, note.lengthTicks, note.key, velocity: note.velocity);
+    }
+    _client.commitRackGesture();
+    selectedInstrumentId = target;
+    refresh();
+    return true;
+  }
+
   void undo() {
     _client.undoProject();
     refresh();
@@ -311,4 +394,17 @@ class RackStore extends ChangeNotifier {
     _client.redoProject();
     refresh();
   }
+}
+
+/// Notes lifted off one channel, waiting to be dropped into a pattern.
+///
+/// It holds values, not references: the notes are the ones the source pattern
+/// held at the moment of the copy, so editing that pattern afterwards does not
+/// change what a later paste writes.
+class ChannelNoteClipboard {
+  const ChannelNoteClipboard({required this.instrumentId, required this.instrumentName, required this.notes});
+
+  final String instrumentId;
+  final String instrumentName;
+  final List<SequenceNote> notes;
 }

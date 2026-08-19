@@ -65,23 +65,20 @@ class RackBinding extends StatefulWidget {
   State<RackBinding> createState() => _RackBindingState();
 }
 
-class _CopyChannelIntent extends Intent {
-  const _CopyChannelIntent();
+/// The rack clipboard works on *note data*, not on channels: it is how a riff
+/// written in the wrong pattern gets moved to the right one. Copy takes the
+/// selected channel's notes in the current pattern, cut lifts them out, and
+/// paste writes them into whichever pattern is current when it runs.
+class _CopyNotesIntent extends Intent {
+  const _CopyNotesIntent();
 }
 
-class _CutChannelIntent extends Intent {
-  const _CutChannelIntent();
+class _CutNotesIntent extends Intent {
+  const _CutNotesIntent();
 }
 
-class _PasteChannelIntent extends Intent {
-  const _PasteChannelIntent();
-}
-
-class _ChannelClipboard {
-  const _ChannelClipboard({required this.instrument, required this.notes});
-
-  final ProjectInstrument instrument;
-  final List<SequenceNote> notes;
+class _PasteNotesIntent extends Intent {
+  const _PasteNotesIntent();
 }
 
 class _RackBindingState extends State<RackBinding> with SingleTickerProviderStateMixin {
@@ -106,7 +103,6 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   String? _deletePatternId;
   String? _renameInstrumentId;
   String? _renamePatternId;
-  _ChannelClipboard? _channelClipboard;
 
   @override
   void initState() {
@@ -427,6 +423,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       patterns: patternTabs,
       toolbar: toolbarVm,
       stepCount: stepCount,
+      // The rack's time base, so a piano-roll lane places its notes and its
+      // read head on the same columns the step lanes are counting.
+      stepTicks: pattern?.baseGridTicks ?? 240,
       rows: rowVms,
       playingStep: playingStep,
       playingTick: playingTick,
@@ -529,57 +528,22 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     }
   }
 
-  void _copySelectedChannel() {
-    final String? id = _store.selectedInstrumentId;
-    final ProjectInstrument? instrument = id == null ? null : _store.instrumentFor(id);
-    if (instrument == null) return;
-    _channelClipboard = _ChannelClipboard(
-      instrument: instrument,
-      notes: List<SequenceNote>.of(_store.notesFor(instrument.id)),
-    );
+  void _copyNotes([String? instrumentId]) {
+    _store.copyNotes(instrumentId);
   }
 
-  void _cutSelectedChannel() {
-    final String? id = _store.selectedInstrumentId;
-    if (id == null) return;
-    _copySelectedChannel();
-    _deleteInstrument(id);
+  /// Cut is the first half of a move: the notes leave the current pattern and
+  /// wait on the clipboard. The channel and its plug-in stay exactly where they
+  /// were — only this pattern's note data moves.
+  void _cutNotes([String? instrumentId]) {
+    if (_store.cutNotes(instrumentId)) _noteEditStarted();
   }
 
-  void _pasteChannel() {
-    final _ChannelClipboard? clipboard = _channelClipboard;
-    if (clipboard == null) return;
-    final String sourceId = clipboard.instrument.id;
-    final Set<String> existingIds = _store.instruments.map((ProjectInstrument instrument) => instrument.id).toSet();
-    try {
-      final bool sourceExists = existingIds.contains(sourceId);
-      if (sourceExists) {
-        widget.client.duplicateInstrument(sourceId);
-      } else if (clipboard.instrument.pluginId == _kSamplePluginId) {
-        widget.client.addSampleInstrument(clipboard.instrument.name, clipboard.instrument.pluginPath);
-      } else if (clipboard.instrument.pluginId.isEmpty) {
-        widget.client.addEmptyInstrument(clipboard.instrument.name);
-      } else {
-        widget.client.addPluginByPath(clipboard.instrument.pluginPath, clipboard.instrument.pluginId);
-      }
-      _store.refresh();
-      final ProjectInstrument? pasted = _store.instruments.cast<ProjectInstrument?>().firstWhere(
-        (ProjectInstrument? instrument) => instrument != null && !existingIds.contains(instrument.id),
-        orElse: () => null,
-      );
-      if (pasted != null && !sourceExists) {
-        for (final SequenceNote note in clipboard.notes) {
-          widget.client.addNote(pasted.id, note.startTicks, note.lengthTicks, note.key, velocity: note.velocity);
-        }
-        widget.client.renameInstrument(pasted.id, clipboard.instrument.name);
-        widget.client.recolorInstrument(pasted.id, clipboard.instrument.color);
-        widget.client.setInstrumentGain(pasted.id, clipboard.instrument.gain);
-        widget.client.setInstrumentPan(pasted.id, clipboard.instrument.pan);
-        _store.refresh();
-      }
-    } catch (_) {
-      // The command is a stub on a fake client.
-    }
+  /// The second half: paste writes the clipboard into whatever pattern is
+  /// current now, which is what makes "cut here, select another pattern, paste"
+  /// a move between patterns.
+  void _pasteNotes([String? instrumentId]) {
+    if (_store.pasteNotes(instrumentId)) _noteEditStarted();
   }
 
   /// A double-click on a lane that hosts a plug-in selects it and hands the
@@ -913,6 +877,14 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
         ),
       const ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
       const ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
+      // Moving a riff to another pattern: cut here, switch pattern, paste. The
+      // rows name the pattern they act on so the reference semantics are on
+      // screen rather than in the manual.
+      if (hasSequence) const ObMenuRowVm(label: 'Copy notes', icon: ObKitGlyphKind.note, shortcut: '⌘C'),
+      if (hasSequence)
+        const ObMenuRowVm(label: 'Cut notes from this pattern', icon: ObKitGlyphKind.note, shortcut: '⌘X'),
+      if (_store.canPaste)
+        const ObMenuRowVm(label: 'Paste notes into this pattern', icon: ObKitGlyphKind.note, shortcut: '⌘V'),
       ObMenuRowVm(
         label: 'Solo',
         checkable: true,
@@ -925,6 +897,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       if (hostsPlugin) () => _openPluginFromMenu(instrumentId),
       () => _beginRename(instrumentId),
       () => _duplicateInstrument(instrumentId),
+      if (hasSequence) () => _copyNotes(instrumentId),
+      if (hasSequence) () => _cutNotes(instrumentId),
+      if (_store.canPaste) () => _pasteNotes(instrumentId),
       () => _toggleSolo(instrumentId),
     ];
 
@@ -1107,9 +1082,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       shortcuts: <ShortcutActivator, Intent>{
         ...shortcutsForArea(ActionArea.pattern),
         const SingleActivator(LogicalKeyboardKey.space): const _TogglePatternPreviewIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): const _CopyChannelIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyX, meta: true): const _CutChannelIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): const _PasteChannelIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyC, meta: true): const _CopyNotesIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyX, meta: true): const _CutNotesIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyV, meta: true): const _PasteNotesIntent(),
       },
       handlers: <String, VoidCallback>{'pattern.create': _onCreatePattern},
       extraActions: <Type, Action<Intent>>{
@@ -1125,21 +1100,21 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
             return null;
           },
         ),
-        _CopyChannelIntent: CallbackAction<_CopyChannelIntent>(
+        _CopyNotesIntent: CallbackAction<_CopyNotesIntent>(
           onInvoke: (_) {
-            _copySelectedChannel();
+            _copyNotes();
             return null;
           },
         ),
-        _CutChannelIntent: CallbackAction<_CutChannelIntent>(
+        _CutNotesIntent: CallbackAction<_CutNotesIntent>(
           onInvoke: (_) {
-            _cutSelectedChannel();
+            _cutNotes();
             return null;
           },
         ),
-        _PasteChannelIntent: CallbackAction<_PasteChannelIntent>(
+        _PasteNotesIntent: CallbackAction<_PasteNotesIntent>(
           onInvoke: (_) {
-            _pasteChannel();
+            _pasteNotes();
             return null;
           },
         ),

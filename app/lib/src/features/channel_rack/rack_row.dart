@@ -106,6 +106,8 @@ class ObRackRow extends StatelessWidget {
     this.onRouteTap,
     this.reorderIndex,
     this.gridWidth,
+    this.gridStepCount,
+    this.stepTicks,
     super.key,
   });
 
@@ -120,6 +122,14 @@ class ObRackRow extends StatelessWidget {
   /// each lane fits its own cells into it. Null sizes the lane to its own
   /// steps, which is what a lane rendered on its own wants.
   final double? gridWidth;
+
+  /// The rack's shared time base: how many columns the pattern's own grid has,
+  /// and how many ticks each of them covers. A piano-roll lane has no columns
+  /// of its own to count, so this is what tells it where bar one ends — the
+  /// same answer the step lanes and the header are giving. Null leaves a lane
+  /// drawn on its own to fall back on its notes' extent.
+  final int? gridStepCount;
+  final int? stepTicks;
 
   /// This lane's position in the rack, when the rack is reorderable. Non-null
   /// makes the name block a drag handle. The handle is the *name*, not the
@@ -155,6 +165,7 @@ class ObRackRow extends StatelessWidget {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final ColorTokens color = tokens.color;
     final double width = gridWidth ?? rackGridWidth(tokens.size, vm.steps.length);
+    final int columns = gridStepCount ?? vm.steps.length;
 
     return _RackGestureLayer(
       onPointerDown: onPointerDown,
@@ -189,7 +200,14 @@ class ObRackRow extends StatelessWidget {
             SizedBox(width: tokens.spacing.md),
             _NameBlock(vm: vm, reorderIndex: reorderIndex),
             if (vm.previewNotes != null)
-              RackPianoPreview(notes: vm.previewNotes!, color: vm.color, width: width, playingTick: playingTick)
+              RackPianoPreview(
+                notes: vm.previewNotes!,
+                color: vm.color,
+                width: width,
+                stepCount: columns,
+                spanTicks: stepTicks == null ? null : columns * stepTicks!,
+                playingTick: playingTick,
+              )
             else
               ObStepGrid(
                 steps: vm.steps,
@@ -326,7 +344,7 @@ class ObStepGrid extends StatelessWidget {
     this.onStepTap,
     this.onPointerDownStep,
     this.onPointerMoveStep,
-    this.groupSize = 4,
+    this.groupSize = kRackGroupSize,
     super.key,
   });
 
@@ -412,14 +430,27 @@ class ObStepGrid extends StatelessWidget {
   }
 }
 
+/// Cells per visual group, everywhere in the rack: the step grid's banding,
+/// the header's numbers and the preview's columns all break on the beat.
+const int kRackGroupSize = 4;
+
 /// The compact piano-roll preview a melody channel shows in place of its step
-/// grid: the same notes as the piano roll, scaled into one strip.
+/// grid: the same notes as the piano roll, laid out on the rack's own columns.
+///
+/// The time base is [spanTicks] — the stretch of the pattern the lane's grid
+/// covers — and not the notes' own extent. Normalising to the last note was
+/// what made the preview a lane unto itself: a riff that stopped on beat two
+/// filled the strip, so it disagreed with the step lanes beside it about where
+/// bar one ended, and its read head crossed the lane at a different speed from
+/// the playing column ring. Both now come from the same arithmetic the grid
+/// uses.
 class RackPianoPreview extends StatelessWidget {
   const RackPianoPreview({
     required this.notes,
     required this.color,
     this.width,
     this.stepCount = 16,
+    this.spanTicks,
     this.playingTick,
     super.key,
   });
@@ -427,14 +458,20 @@ class RackPianoPreview extends StatelessWidget {
   final List<RackPreviewNoteVm> notes;
   final Color color;
 
-  /// The shared grid width. The preview scales its notes into whatever it is
-  /// given, so it takes the width directly rather than a step count it would
-  /// only convert — the count it used to take was the lane's own, which is how
-  /// a fine lane came to paint a strip wider than the window.
+  /// The shared grid width. The preview fits the rack's columns into whatever
+  /// it is given, so it takes the width directly rather than a step count it
+  /// would only convert — the count it used to take was the lane's own, which
+  /// is how a fine lane came to paint a strip wider than the window.
   final double? width;
 
-  /// The step count to size by when no [width] is given.
+  /// The pattern's own column count: the same one the header numbers and the
+  /// playing-column ring are counted in.
   final int stepCount;
+
+  /// The ticks those columns span. Null falls back to the notes' own extent,
+  /// which is all a lane rendered outside a rack — a fixture, a component
+  /// gallery — can know.
+  final int? spanTicks;
 
   /// The loop-wrapped transport tick, drawn as a read head over the notes.
   final int? playingTick;
@@ -442,14 +479,22 @@ class RackPianoPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
+    final int columns = stepCount > 0 ? stepCount : 16;
+    final double target = width ?? rackGridWidth(tokens.size, columns);
+    // The same fit the neighbouring step lanes make, so a note lands on the
+    // column its step would have.
+    final SizeTokens size = fitRackStepsToWidth(tokens.size, columns, target);
     return SizedBox(
-      width: width ?? rackGridWidth(tokens.size, stepCount),
+      width: target,
       height: tokens.size.rackStepCell,
       child: CustomPaint(
         painter: _RackPianoPreviewPainter(
           notes: notes,
           color: color,
           noteRadius: tokens.radius.xs,
+          columns: columns,
+          spanTicks: spanTicks,
+          size: size,
           playingTick: playingTick,
           playheadColor: tokens.color.playhead,
           playheadWidth: tokens.size.playheadWidth,
@@ -470,6 +515,33 @@ double rackGridWidth(SizeTokens size, int count) {
     width += size.rackStepCell;
   }
   return width;
+}
+
+/// The left edge of column [index] in a lane laid out with [size]: the cells
+/// before it, plus the gap that precedes it — a plain one, or the wider group
+/// gap on a beat break.
+///
+/// [rackGridWidth] measures whole lanes; this places a single column inside
+/// one. Both the step grid and the piano-roll preview lay out through here, so
+/// the two lane kinds cannot drift apart by a gap.
+double rackColumnStart(SizeTokens size, int index) =>
+    index * size.rackStepCell +
+    (index ~/ kRackGroupSize) * size.rackStepGroupGap +
+    (index - index ~/ kRackGroupSize) * size.rackStepGap;
+
+/// Where [tick] falls on a lane of [columns] columns covering [spanTicks].
+///
+/// The gaps between cells are not time, so this maps through the columns
+/// rather than across the raw width: a note lands on the column of the step
+/// that plays it, not a gap's worth of pixels away from it. Ticks outside the
+/// span clamp to the lane's ends.
+double rackTickX(SizeTokens size, {required int columns, required int spanTicks, required num tick}) {
+  if (columns <= 0 || spanTicks <= 0) return 0;
+  final double column = (tick / spanTicks) * columns;
+  if (column <= 0) return 0;
+  if (column >= columns) return rackColumnStart(size, columns - 1) + size.rackStepCell;
+  final int index = column.floor();
+  return rackColumnStart(size, index) + (column - index) * size.rackStepCell;
 }
 
 /// The smallest step cell the rack will draw of its own accord.
@@ -575,6 +647,9 @@ class _RackPianoPreviewPainter extends CustomPainter {
     required this.notes,
     required this.color,
     required this.noteRadius,
+    required this.columns,
+    required this.size,
+    this.spanTicks,
     this.playingTick,
     this.playheadColor,
     this.playheadWidth = 1,
@@ -583,29 +658,49 @@ class _RackPianoPreviewPainter extends CustomPainter {
   final List<RackPreviewNoteVm> notes;
   final Color color;
   final Radius noteRadius;
+
+  /// The rack's columns, and the geometry they are drawn with — cell pitch and
+  /// the two gaps — copied from the step grid so the two lane kinds cannot
+  /// drift apart.
+  final int columns;
+  final SizeTokens size;
+
+  final int? spanTicks;
   final int? playingTick;
   final Color? playheadColor;
   final double playheadWidth;
 
+  double _x(num tick, int span) => rackTickX(size, columns: columns, spanTicks: span, tick: tick);
+
   @override
-  void paint(Canvas canvas, Size size) {
+  void paint(Canvas canvas, Size canvasSize) {
+    // No cells: a melody lane is a piano roll, and drawing the step grid under
+    // it makes the lane look like a grid you can click. The columns are still
+    // what the notes are placed on — they are just not drawn.
     if (notes.isEmpty) return;
     int low = 1 << 30;
     int high = -(1 << 30);
-    int end = 1;
+    int extent = 1;
     for (final RackPreviewNoteVm note in notes) {
       if (note.midiNote < low) low = note.midiNote;
       if (note.midiNote > high) high = note.midiNote;
       final int noteEnd = note.startTick + note.lengthTicks;
-      if (noteEnd > end) end = noteEnd;
+      if (noteEnd > extent) extent = noteEnd;
     }
+    // The pattern's span when the rack gave one; the notes' own only when the
+    // lane is drawn outside a rack and there is nothing else to go on.
+    final int span = (spanTicks ?? 0) > 0 ? spanTicks! : extent;
     final int pitchSpan = (high - low) + 1;
-    final double rowHeight = size.height / pitchSpan;
+    final double rowHeight = canvasSize.height / pitchSpan;
     final Paint paint = Paint()..color = color;
 
     for (final RackPreviewNoteVm note in notes) {
-      final double x = (note.startTick / end) * size.width;
-      final double width = (note.lengthTicks / end) * size.width;
+      // A note past the end of the pattern is not played, and drawing it piled
+      // up against the right edge would claim it is.
+      if (note.startTick >= span) continue;
+      final double x = _x(note.startTick, span);
+      final double end = _x(note.startTick + note.lengthTicks, span);
+      final double width = end - x;
       final double y = (high - note.midiNote) * rowHeight;
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -618,13 +713,15 @@ class _RackPianoPreviewPainter extends CustomPainter {
 
     final int? tick = playingTick;
     final Color? head = playheadColor;
-    if (tick != null && head != null && end > 0) {
-      final double x = (tick / end) * size.width;
-      final Paint headPaint =
-          Paint()
-            ..color = head
-            ..strokeWidth = playheadWidth;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), headPaint);
+    if (tick != null && head != null) {
+      final double x = _x(tick, span);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, canvasSize.height),
+        Paint()
+          ..color = head
+          ..strokeWidth = playheadWidth,
+      );
     }
   }
 
@@ -632,6 +729,11 @@ class _RackPianoPreviewPainter extends CustomPainter {
   bool shouldRepaint(_RackPianoPreviewPainter oldDelegate) =>
       oldDelegate.notes != notes ||
       oldDelegate.color != color ||
+      oldDelegate.columns != columns ||
+      oldDelegate.size.rackStepCell != size.rackStepCell ||
+      oldDelegate.size.rackStepGap != size.rackStepGap ||
+      oldDelegate.size.rackStepGroupGap != size.rackStepGroupGap ||
+      oldDelegate.spanTicks != spanTicks ||
       oldDelegate.playingTick != playingTick ||
       oldDelegate.playheadColor != playheadColor;
 }
