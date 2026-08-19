@@ -525,22 +525,49 @@ class FakeEngineClient implements EngineClient {
     EffectDescriptor(id: 'dev.onebeat.fx.delay', name: 'OneBeat Delay', summary: 'Feedback delay.'),
   ];
 
-  @override
-  List<MixerTrackInfo> readMixerTracks() => mixerTracks;
+  /// Bumped by every edit below, so a view that memoises on it sees exactly
+  /// what it would see against the real engine.
+  int revision = 0;
+
+  /// Records an edit and marks the model as moved. Every mutating call goes
+  /// through one of these two, so the two can never disagree.
+  void _logEffect(String entry) {
+    revision++;
+    effectLog.add(entry);
+  }
+
+  void _logClip(String entry) {
+    revision++;
+    clipLog.add(entry);
+  }
+
+  /// How many times a view has asked for the model. A view that reads it once
+  /// per frame instead of once per change shows up here as a number that keeps
+  /// climbing while nothing is being edited.
+  int modelReads = 0;
 
   @override
-  void setMixerTrackGain(String trackId, double gain) => effectLog.add('gain:$trackId:$gain');
+  int get modelRevision => revision;
 
   @override
-  void setMixerTrackPan(String trackId, double pan) => effectLog.add('pan:$trackId:$pan');
+  List<MixerTrackInfo> readMixerTracks() {
+    modelReads++;
+    return mixerTracks;
+  }
+
+  @override
+  void setMixerTrackGain(String trackId, double gain) => _logEffect('gain:$trackId:$gain');
+
+  @override
+  void setMixerTrackPan(String trackId, double pan) => _logEffect('pan:$trackId:$pan');
 
   @override
   void setMixerTrackMuted(String trackId, {required bool muted}) =>
-      effectLog.add('mute:$trackId:$muted');
+      _logEffect('mute:$trackId:$muted');
 
   @override
   void setMixerTrackSoloed(String trackId, {required bool soloed}) =>
-      effectLog.add('solo:$trackId:$soloed');
+      _logEffect('solo:$trackId:$soloed');
 
   @override
   List<EffectDescriptor> readBuiltinEffects() => builtinEffects;
@@ -571,7 +598,7 @@ class FakeEngineClient implements EngineClient {
       ),
     );
     _renumber(trackId);
-    effectLog.add('add:$trackId:$pluginId');
+    _logEffect('add:$trackId:$pluginId');
   }
 
   @override
@@ -581,7 +608,7 @@ class FakeEngineClient implements EngineClient {
   void removeMixerEffect(String trackId, String effectId) {
     effects[trackId]?.removeWhere((EffectInfo e) => e.id == effectId);
     _renumber(trackId);
-    effectLog.add('remove:$trackId:$effectId');
+    _logEffect('remove:$trackId:$effectId');
   }
 
   @override
@@ -593,7 +620,7 @@ class FakeEngineClient implements EngineClient {
     final EffectInfo moved = chain.removeAt(from);
     chain.insert(index.clamp(0, chain.length), moved);
     _renumber(trackId);
-    effectLog.add('move:$trackId:$effectId:$index');
+    _logEffect('move:$trackId:$effectId:$index');
   }
 
   @override
@@ -611,7 +638,7 @@ class FakeEngineClient implements EngineClient {
       bypassed: bypassed,
       missing: chain[at].missing,
     );
-    effectLog.add('bypass:$trackId:$effectId:$bypassed');
+    _logEffect('bypass:$trackId:$effectId:$bypassed');
   }
 
   @override
@@ -632,7 +659,7 @@ class FakeEngineClient implements EngineClient {
   @override
   void setMixerEffectParam(String trackId, String effectId, int paramId, double value) {
     effectParams['$trackId:$effectId:$paramId'] = value;
-    effectLog.add('param:$trackId:$effectId:$paramId:$value');
+    _logEffect('param:$trackId:$effectId:$paramId:$value');
   }
 
   /// Chain position is array position, so it has to be rewritten whenever the
@@ -694,7 +721,7 @@ class FakeEngineClient implements EngineClient {
         reversed: e.reversed,
       ),
     );
-    clipLog.add('window:$clipId:$sourceOffsetTicks:$sourceLengthTicks');
+    _logClip('window:$clipId:$sourceOffsetTicks:$sourceLengthTicks');
   }
 
   @override
@@ -711,7 +738,7 @@ class FakeEngineClient implements EngineClient {
         reversed: e.reversed,
       ),
     );
-    clipLog.add('stretch:$clipId:${mode.name}');
+    _logClip('stretch:$clipId:${mode.name}');
   }
 
   @override
@@ -728,7 +755,7 @@ class FakeEngineClient implements EngineClient {
         reversed: e.reversed,
       ),
     );
-    clipLog.add('bpm:$clipId:$bpm');
+    _logClip('bpm:$clipId:$bpm');
   }
 
   @override
@@ -745,23 +772,23 @@ class FakeEngineClient implements EngineClient {
         reversed: reversed,
       ),
     );
-    clipLog.add('reverse:$clipId:$reversed');
+    _logClip('reverse:$clipId:$reversed');
   }
 
   @override
-  void setAudioClipGain(String clipId, double gain) => clipLog.add('gain:$clipId:$gain');
+  void setAudioClipGain(String clipId, double gain) => _logClip('gain:$clipId:$gain');
 
   @override
   void resizeAudioClip(String clipId, int lengthTicks) {
     clips[clipId]?.lengthTicks = lengthTicks;
-    clipLog.add('resizeAudio:$clipId:$lengthTicks');
+    _logClip('resizeAudio:$clipId:$lengthTicks');
   }
 
   @override
-  void fitAudioClipToTempo(String clipId) => clipLog.add('fit:$clipId');
+  void fitAudioClipToTempo(String clipId) => _logClip('fit:$clipId');
 
   @override
-  void splitClip(String clipId, int atTicks) => clipLog.add('split:$clipId:$atTicks');
+  void splitClip(String clipId, int atTicks) => _logClip('split:$clipId:$atTicks');
 
   // ----- project files ------------------------------------------------------
   // Written out rather than left to noSuchMethod: these return values, and a

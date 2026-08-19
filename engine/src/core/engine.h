@@ -13,6 +13,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "abi/onebeat_abi.h"
@@ -115,6 +116,14 @@ class Engine final : public audio_io::RenderCallback {
     std::string effect_id;          // the model's EffectId, for reconciliation
     std::string plugin_id;          // which effect to instantiate
     int32_t automation_index = -1;  // the dense index the schedule addresses
+    bool bypassed = false;
+    // The user's parameter values, sparse. Delivered to the instance at the
+    // moment it is constructed rather than posted through the parameter queue:
+    // a rebuild makes fresh instances holding plug-in defaults, and re-sending
+    // every value of every insert afterwards is O(project) queue traffic on
+    // every edit — which is how a large project saturates the queue and its
+    // effects quietly stop responding.
+    std::vector<std::pair<plugin::ParamId, float>> params;
   };
 
   struct MixerTrackDesc {
@@ -402,6 +411,10 @@ class Engine final : public audio_io::RenderCallback {
   // Housekeeping thread only: what the live graph was built from, so a level
   // change can be told from a structural one.
   std::vector<MixerTrackDesc> live_mixer_;
+  // Housekeeping thread only: scratch for the parameter values handed to a
+  // freshly built insert. A member so a chain rebuild does not allocate once
+  // per effect.
+  std::vector<plugin::PluginEvent> param_events_;
 
   // One channel's render target, mixed into the master and reused across
   // channels. Sized at initialise() for the device's largest block; the audio

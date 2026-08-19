@@ -211,6 +211,78 @@ TEST_SUITE("unit") {
     CHECK(stretch.finished());
   }
 
+  TEST_CASE("Replacing a channel's sample under a sounding voice does not read the old one") {
+    // The crash this covers, from a real report: adding playlist and rack items
+    // reconciles the rack, which republishes samples — and a voice that had
+    // latched the old `SampleData*` at note-on then dereferenced it after the
+    // publisher had retired and freed it. A published sample is valid only for
+    // the block it was acquired in (rt/publisher.h), so a voice, which outlives
+    // its block, must never hold one.
+    Sampler sampler;
+    sampler.prepare(kRate, 512);
+    sampler.setSample(makeRamp(4000));
+
+    ClipPlayback playback;
+    playback.enabled = true;
+    playback.start_frame = 0;
+    playback.length_frames = 0;
+    sampler.setClipPlayback(playback);
+    sampler.noteOn(Sampler::RootNote, 1.0F);
+
+    Scratch scratch(512);
+    sampler.render(scratch.view(), 0, 128);
+    REQUIRE(sampler.activeVoices() == 1);
+
+    // What reconciliation does: a different, and deliberately much shorter,
+    // sample takes the channel while the voice is still going.
+    sampler.setSample(makeRamp(300));
+    sampler.beginBlock();
+    // The old buffer is retired here and freed once nothing can reach it — which
+    // under ASan is exactly when a stale pointer would be caught.
+    sampler.collectRetiredSamples(false);
+
+    scratch.clear();
+    sampler.render(scratch.view(), 0, 128);
+
+    // It must read the *new* sample, clamped to what that sample holds, and
+    // never past its end. Anything it produces is in range; the point is that it
+    // does not fault.
+    for (int i = 0; i < 128; ++i) {
+      const float value = scratch.storage[static_cast<size_t>(i)];
+      CHECK(value >= -1.5F);
+      CHECK(value <= 1.5F);
+    }
+  }
+
+  TEST_CASE("A voice whose window no longer fits the sample ends instead of reading past it") {
+    Sampler sampler;
+    sampler.prepare(kRate, 512);
+    sampler.setSample(makeRamp(4000));
+
+    // A window deep inside the long sample...
+    ClipPlayback playback;
+    playback.enabled = true;
+    playback.start_frame = 3000;
+    playback.length_frames = 500;
+    sampler.setClipPlayback(playback);
+    sampler.noteOn(Sampler::RootNote, 1.0F);
+
+    Scratch scratch(512);
+    sampler.render(scratch.view(), 0, 64);
+    REQUIRE(sampler.activeVoices() == 1);
+
+    // ...and a replacement far too short to contain it.
+    sampler.setSample(makeRamp(100));
+    sampler.beginBlock();
+    sampler.collectRetiredSamples(false);
+
+    scratch.clear();
+    sampler.render(scratch.view(), 0, 128);
+    // Reading frame 3,000 of a 100-frame buffer is the crash; ending the voice is
+    // the honest alternative.
+    CHECK(sampler.activeVoices() == 0);
+  }
+
   TEST_CASE("A clip with no stretching is bit-identical to its source") {
     Sampler sampler;
     sampler.prepare(kRate, 512);

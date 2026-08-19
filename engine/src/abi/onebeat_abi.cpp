@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <new>
@@ -115,6 +116,20 @@ struct ob_engine {
    * the clip inspector asks on every repaint and the answer costs a decode;
    * seconds rather than ticks because the tempo may change under it. */
   std::map<std::string, double> source_durations;
+  /* What was last sent to the transport, so a publish that changed none of it
+   * sends nothing.
+   *
+   * publishModel runs after *every* edit, and each of these is a command in a
+   * fixed-capacity queue. Re-posting three unchanged values per keystroke is
+   * how a burst of edits fills the queue — at which point the commands that
+   * did matter are the ones refused. NaN so the first publish always sends. */
+  /* Bumped by publishModel, which every edit goes through. See
+   * ob_engine_model_revision. */
+  uint64_t model_revision = 0;
+  double published_tempo = std::numeric_limits<double>::quiet_NaN();
+  double published_loop_end = std::numeric_limits<double>::quiet_NaN();
+  int published_loop_enabled = -1;
+  int published_metronome = -1;
   std::string undo_name_cache;
   std::string redo_name_cache;
   // Where the project last came from or went to. Kept so that a save can carry
@@ -312,17 +327,27 @@ void fitClipsToPatterns(ob_engine& handle) {
   }
 }
 
-/* The dense index of a mixer track: its position in `project.mixerTracks()`,
- * which is ULID order, which is the order syncMixer builds the graph in. -1
- * when the track is not in the project, which routes the caller to the master. */
-int32_t mixerIndexOf(const ob_engine& handle, onebeat::model::MixerTrackId id) {
+/* The dense index of every mixer track: its position in `project.mixerTracks()`,
+ * which is ULID order, which is the order syncMixer builds the graph in.
+ *
+ * Built once per publish rather than searched per channel. A project auto-
+ * creates a mixer track per instrument (D-M2), so a linear search here is
+ * O(tracks) inside a loop over O(channels) — quadratic in the size of the
+ * project, on every single edit. */
+std::map<onebeat::model::MixerTrackId, int32_t> mixerIndices(const ob_engine& handle) {
+  std::map<onebeat::model::MixerTrackId, int32_t> indices;
   int32_t index = 0;
-  for (const auto& [other, track] : handle.project.mixerTracks()) {
+  for (const auto& [id, track] : handle.project.mixerTracks()) {
     (void)track;
-    if (other == id) return index;
-    ++index;
+    indices.emplace(id, index++);
   }
-  return -1;
+  return indices;
+}
+
+int32_t mixerIndexIn(const std::map<onebeat::model::MixerTrackId, int32_t>& indices,
+                     onebeat::model::MixerTrackId id) {
+  const auto found = indices.find(id);
+  return found == indices.end() ? -1 : found->second;
 }
 
 /* An audio clip's playback geometry, in frames.
@@ -385,27 +410,37 @@ void syncMixer(ob_engine& handle) {
       effect.plugin_id = slot.plugin.id;
       const auto index = handle.effect_indices.find(std::make_pair(id, slot.id));
       effect.automation_index = index == handle.effect_indices.end() ? -1 : index->second;
+      effect.bypassed = slot.bypassed;
+      effect.params.reserve(slot.params.size());
+      for (const auto& [param, value] : slot.params) {
+        effect.params.emplace_back(param, value);
+      }
       desc.effects.push_back(std::move(effect));
     }
     tracks.push_back(std::move(desc));
   }
+  /* The values travel *with* the descriptor, not through the parameter queue.
+   *
+   * Re-sending every value of every insert on every publish is O(the whole
+   * project) queue traffic per keystroke: a project with eighty tracks and two
+   * inserts each overflows the ring on a single edit, after which parameter
+   * changes are silently dropped. The engine applies these to each instance as
+   * it constructs it, and a knob move posts exactly one event (see
+   * ob_engine_mixer_effect_set_param). */
   handle.engine->setMixerTracks(std::move(tracks));
+}
 
-  /* Base parameter values reach the effects the same way a knob move does —
-   * through the engine's insert-parameter queue — rather than by being baked
-   * into the graph. That keeps a value change from rebuilding a chain, which is
-   * what would otherwise cut every tail on the track. */
-  for (const auto& [id, track] : handle.project.mixerTracks()) {
-    for (const onebeat::model::EffectSlot& slot : track.effects) {
-      const auto index = handle.effect_indices.find(std::make_pair(id, slot.id));
-      if (index == handle.effect_indices.end()) continue;
-      handle.engine->setEffectParam(index->second, onebeat::plugin::builtin::EffectParamBypass,
-                                    slot.bypassed ? 1.0 : 0.0);
-      for (const auto& [param, value] : slot.params) {
-        handle.engine->setEffectParam(index->second, param, static_cast<double>(value));
-      }
-    }
-  }
+/* Sends one insert parameter straight to the audio thread.
+ *
+ * The model edit that precedes this is what makes the value persistent; this is
+ * what makes it audible *now*, without waiting for a chain rebuild. Together
+ * they are the whole of "turn a knob". */
+void postEffectParam(ob_engine& handle, onebeat::model::MixerTrackId track,
+                     onebeat::model::EffectId effect, onebeat::plugin::ParamId parameter,
+                     double value) {
+  const auto index = handle.effect_indices.find(std::make_pair(track, effect));
+  if (index == handle.effect_indices.end()) return;
+  handle.engine->setEffectParam(index->second, parameter, value);
 }
 
 /* Hands the engine the rack the model describes.
@@ -416,6 +451,7 @@ void syncMixer(ob_engine& handle) {
  * order *is* the index. Building the rack any other way would route every
  * channel's notes to the wrong voice. */
 void syncChannels(ob_engine& handle) {
+  const std::map<onebeat::model::MixerTrackId, int32_t> mixer_indices = mixerIndices(handle);
   std::vector<onebeat::core::Engine::ChannelDesc> channels;
   channels.reserve(handle.project.instruments().size() + handle.audio_channel_indices.size());
   bool any_instrument_solo = false;
@@ -443,7 +479,7 @@ void syncChannels(ob_engine& handle) {
      * channel per port, which is why routing is a list and this reads the
      * first entry rather than assuming there is only one. */
     if (!instrument.routing.empty()) {
-      desc.mixer_track = mixerIndexOf(handle, instrument.routing.front().track);
+      desc.mixer_track = mixerIndexIn(mixer_indices, instrument.routing.front().track);
     }
     channels.push_back(std::move(desc));
     if (handle.selected_instrument.has_value() && *handle.selected_instrument == id) {
@@ -467,7 +503,7 @@ void syncChannels(ob_engine& handle) {
     desc.clip = resolveClipPlayback(handle, *clip, *audio);
     /* An audio clip routes to a mixer track directly — it has no instrument to
      * inherit routing from (D-M7). */
-    desc.mixer_track = mixerIndexOf(handle, audio->destination);
+    desc.mixer_track = mixerIndexIn(mixer_indices, audio->destination);
     if (channel_index != static_cast<onebeat::core::InstrumentId>(channels.size())) {
       // This should only be possible after a malformed model/map mismatch; do
       // not silently route a song to the wrong sampler if it ever happens.
@@ -625,6 +661,9 @@ void refreshInstanceView(ob_engine& handle) {
 }
 
 void publishModel(ob_engine& handle) {
+  /* Every edit reaches the engine through here, so this is the one place that
+   * can honestly say "the model moved". */
+  ++handle.model_revision;
   /* Before the flatten, so the schedule is built from placements that match
    * what the pattern now plays rather than from ones that were too short to
    * hold the edit just made. */
@@ -709,6 +748,22 @@ void publishModel(ob_engine& handle) {
   // it loops at all is the user's switch (`TransportState::loop_enabled`),
   // which is persisted with the project and is no longer overwritten here
   // every time anything is edited.
+  /* The transport's tempo, before anything derived from it.
+   *
+   * Nothing else sends it: the UI's BPM field posts OB_CMD_SET_TEMPO, and that
+   * is the *only* path, so a project opened from disk used to leave the engine
+   * running at whatever tempo the previous session ended on while the model
+   * held the file's. Publishing it here covers open, undo and every other way
+   * the model's tempo can change without a command having caused it. */
+  const double model_tempo = handle.project.transport().tempo;
+  if (!(std::abs(model_tempo - handle.published_tempo) < 0.000001)) {
+    ob_command tempo{};
+    tempo.type = OB_CMD_SET_TEMPO;
+    tempo.f64_a = model_tempo;
+    handle.engine->postCommand(tempo);
+    handle.published_tempo = model_tempo;
+  }
+
   double loop_end_beats = 4.0;
   bool loop_enabled = handle.project.transport().loop_enabled;
   if (handle.pattern_preview) {
@@ -731,22 +786,36 @@ void publishModel(ob_engine& handle) {
       loop_end_beats = std::max(loop_end_beats, clip_end);
     }
     if (flattened.length_frames > 0) {
-      loop_end_beats = std::max(
-          loop_end_beats,
-          handle.engine->transportForTests().timeMap().framesToBeats(flattened.length_frames));
+      /* Converted with the *project's* tempo, not the engine's. The command
+       * above is queued for the audio thread and has not been applied yet, so
+       * the engine's time map still holds the old tempo — and on open that is
+       * the previous session's, which would size this region wrongly. */
+      const onebeat::core::TimeMap map(handle.engine->config().sample_rate,
+                                       handle.project.transport().tempo);
+      loop_end_beats = std::max(loop_end_beats, map.framesToBeats(flattened.length_frames));
     }
   }
-  ob_command loop{};
-  loop.type = OB_CMD_SET_LOOP;
-  loop.f64_a = 0.0;
-  loop.f64_b = loop_end_beats;
-  loop.i64_a = loop_enabled ? 1 : 0;
-  handle.engine->postCommand(loop);
+  const int loop_flag = loop_enabled ? 1 : 0;
+  if (!(std::abs(loop_end_beats - handle.published_loop_end) < 0.000001) ||
+      loop_flag != handle.published_loop_enabled) {
+    ob_command loop{};
+    loop.type = OB_CMD_SET_LOOP;
+    loop.f64_a = 0.0;
+    loop.f64_b = loop_end_beats;
+    loop.i64_a = loop_flag;
+    handle.engine->postCommand(loop);
+    handle.published_loop_end = loop_end_beats;
+    handle.published_loop_enabled = loop_flag;
+  }
 
-  ob_command metronome{};
-  metronome.type = OB_CMD_SET_METRONOME;
-  metronome.i64_a = handle.project.transport().metronome_enabled ? 1 : 0;
-  handle.engine->postCommand(metronome);
+  const int metronome_flag = handle.project.transport().metronome_enabled ? 1 : 0;
+  if (metronome_flag != handle.published_metronome) {
+    ob_command metronome{};
+    metronome.type = OB_CMD_SET_METRONOME;
+    metronome.i64_a = metronome_flag;
+    handle.engine->postCommand(metronome);
+    handle.published_metronome = metronome_flag;
+  }
 }
 
 /* How much arrangement there is to render, in beats: the end of the last clip.
@@ -1288,6 +1357,16 @@ ob_status ob_engine_post_command(ob_engine* engine, const ob_command* command) {
     }
     if (changed) {
       (void)engine->commands.execute(onebeat::model::setTransport(engine->project, transport));
+      /* Record the caller's value *before* publishing, so publishModel sees it
+       * as already sent and the command below is the only one that goes. Doing
+       * it the other way round posts the same value twice. */
+      if (command->type == OB_CMD_SET_TEMPO) engine->published_tempo = command->f64_a;
+      if (command->type == OB_CMD_SET_METRONOME) {
+        engine->published_metronome = command->i64_a != 0 ? 1 : 0;
+      }
+      if (command->type == OB_CMD_SET_LOOP) {
+        engine->published_loop_enabled = command->i64_a != 0 ? 1 : 0;
+      }
       publishModel(*engine);
     }
   }
@@ -1563,7 +1642,10 @@ ob_status ob_engine_instance_add(ob_engine* engine, const char* utf8_bundle_path
     }
     engine->selected_instrument = added;
     refreshInstanceView(*engine);
-    syncChannels(*engine);
+    // The model publish already reconciled every channel. Selection only changes
+    // the destination for manual audition notes; queueing another full channel
+    // sync here can race playlist sample decoding.
+    engine->engine->setAuditionChannel(channelIndexOf(*engine, *added));
     g_last_error.clear();
     return OB_OK;
   } catch (const std::bad_alloc&) {
@@ -1869,11 +1951,11 @@ ob_status ob_engine_instrument_select(ob_engine* engine, const char* utf8_instru
      * last. */
     engine->selected_instrument = *id;
     refreshInstanceView(*engine);
-    /* Moves the audition voice onto the newly selected channel and republishes
-     * every channel's gain, pan and mute from the model — which is where the
-     * per-channel mix now lives, so switching channels cannot carry the
-     * previous channel's levels over to the next one. */
-    syncChannels(*engine);
+    /* Move manual audition notes onto the newly selected channel. Selection
+     * does not change any channel description, so republishing all samples here
+     * would only create another worker reconciliation — especially expensive,
+     * and previously unsafe, when playlist audio clips already occupy slots. */
+    engine->engine->setAuditionChannel(channelIndexOf(*engine, *id));
     g_last_error.clear();
     return OB_OK;
   } catch (const std::exception& exception) {
@@ -2075,17 +2157,22 @@ ob_status ob_engine_instrument_add_sample(ob_engine* engine, const char* utf8_na
       return fail(OB_ERR_INTERNAL, "Could not add the sample instrument.");
     }
     const int32_t count = static_cast<int32_t>(engine->project.instruments().size());
+    std::optional<onebeat::model::InstrumentId> added;
     for (const auto& [id, instrument] : engine->project.instruments()) {
       if (instrument.order == count - 1) {
-        engine->selected_instrument = id;
+        added = id;
         break;
       }
     }
+    if (!added.has_value())
+      return fail(OB_ERR_INTERNAL, "The sample channel could not be selected.");
+    engine->selected_instrument = added;
     engine->has_instance = false;
     /* The sample reaches its own channel through syncChannels, which the
-     * executeModel above already ran. Loading it here as well would put it on
-     * whatever slot the global sampler happened to be. */
-    syncChannels(*engine);
+     * executeModel above already ran. Selection only moves the manual audition
+     * target; re-sending the whole channel list would race the worker's sample
+     * reconciliation when playlist clips are present. */
+    engine->engine->setAuditionChannel(channelIndexOf(*engine, *added));
     return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
@@ -2120,9 +2207,11 @@ ob_status ob_engine_instrument_replace_sample(ob_engine* engine, const char* utf
     if (status != OB_OK) return status;
     engine->selected_instrument = *id;
     engine->has_instance = false;
-    /* Re-run now that the selection has moved, so the audition voice follows
-     * the replaced channel. The sample itself came in with executeModel. */
-    syncChannels(*engine);
+    /* The sample itself came in with executeModel. Selection only changes where
+     * manual audition notes go; rebuilding the whole channel list here would
+     * queue a second sample reconciliation while the first one may still be
+     * decoding playlist clips. */
+    engine->engine->setAuditionChannel(channelIndexOf(*engine, *id));
     return OB_OK;
   } catch (const std::exception& exception) {
     return fail(OB_ERR_INTERNAL, exception.what());
@@ -3373,6 +3462,10 @@ ob_status ob_engine_audio_clip_fit_to_tempo(ob_engine* engine, const char* utf8_
 /* Mixer tracks (ABI 1.18)                                                  */
 /* ------------------------------------------------------------------------ */
 
+uint64_t ob_engine_model_revision(ob_engine* engine) {
+  return engine == nullptr ? 0 : engine->model_revision;
+}
+
 int32_t ob_engine_mixer_track_count(ob_engine* engine) {
   if (engine == nullptr) return 0;
   return static_cast<int32_t>(engine->project.mixerTracks().size());
@@ -3581,10 +3674,18 @@ ob_status ob_engine_mixer_effect_set_bypassed(ob_engine* engine, const char* utf
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
   const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
   if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
-  return executeModel(*engine,
-                      onebeat::model::setEffectBypassed(engine->project, resolved->track,
-                                                        resolved->effect, bypassed != 0),
-                      "The effect could not be bypassed.");
+  const ob_status status =
+      executeModel(*engine,
+                   onebeat::model::setEffectBypassed(engine->project, resolved->track,
+                                                     resolved->effect, bypassed != 0),
+                   "The effect could not be bypassed.");
+  if (status != OB_OK) return status;
+  /* One event, not a republished chain: bypass has to be audible immediately,
+   * and rebuilding the graph to deliver it would cut the tail of every other
+   * insert on the track. */
+  postEffectParam(*engine, resolved->track, resolved->effect,
+                  onebeat::plugin::builtin::EffectParamBypass, bypassed != 0 ? 1.0 : 0.0);
+  return OB_OK;
 }
 
 ob_status ob_engine_mixer_effect_param_at(ob_engine* engine, const char* utf8_track_id,
@@ -3650,11 +3751,14 @@ ob_status ob_engine_mixer_effect_set_param(ob_engine* engine, const char* utf8_t
   if (engine == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
   const auto resolved = resolveEffect(*engine, utf8_track_id, utf8_effect_id);
   if (!resolved) return fail(OB_ERR_INVALID_ARGUMENT, "The effect does not exist.");
-  return executeModel(
+  const ob_status status = executeModel(
       *engine,
       onebeat::model::setEffectParam(engine->project, resolved->track, resolved->effect, param_id,
                                      static_cast<float>(value)),
       "The effect parameter could not be set.");
+  if (status != OB_OK) return status;
+  postEffectParam(*engine, resolved->track, resolved->effect, param_id, value);
+  return OB_OK;
 }
 
 ob_status ob_engine_clip_duplicate(ob_engine* engine, const char* utf8_clip_id,

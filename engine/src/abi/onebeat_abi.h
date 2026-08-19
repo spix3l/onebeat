@@ -866,6 +866,17 @@ OB_API ob_status ob_engine_clip_split(ob_engine* engine, const char* utf8_clip_i
  * because guessing silently is how a project ends up subtly out of time. */
 OB_API ob_status ob_engine_audio_clip_fit_to_tempo(ob_engine* engine, const char* utf8_clip_id);
 
+/* A counter that changes whenever the project model changes (ABI 1.18).
+ *
+ * The UI repaints every frame — meters and the playhead have to — but the model
+ * behind it changes only when the user edits something. Reading the whole rack,
+ * the whole mixer and every insert on every frame is O(project) work sixty
+ * times a second, which is felt as the app getting heavier the bigger the song
+ * gets. A view can compare this instead and rebuild only when it moved.
+ *
+ * Opaque and monotonic: compare it for equality, never interpret it. */
+OB_API uint64_t ob_engine_model_revision(ob_engine* engine);
+
 /* Mixer tracks (added in ABI 1.18, EPIC-4)                                   */
 
 #define OB_MIXER_FLAG_MUTED 0x1u

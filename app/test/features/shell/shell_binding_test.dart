@@ -147,6 +147,9 @@ class _FakeEngineClient implements EngineClient {
   // than as an empty mixer.
 
   @override
+  int get modelRevision => 1;
+
+  @override
   List<MixerTrackInfo> readMixerTracks() => const <MixerTrackInfo>[];
 
   @override

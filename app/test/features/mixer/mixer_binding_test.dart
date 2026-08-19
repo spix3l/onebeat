@@ -173,4 +173,31 @@ void main() {
     await tester.tap(find.text('Graph'));
     await tester.pump();
   });
+
+  // A large project is one whose model is expensive to read, so a view that
+  // reads it once per frame rather than once per change is the difference
+  // between the app scaling and not. Asserted as "no reads without a change",
+  // which stays true on any machine, rather than as a timing.
+  testWidgets('The mixer reads the model when it changes, not when it repaints', (
+    WidgetTester tester,
+  ) async {
+    final _FakeMixerEngineClient client = _FakeMixerEngineClient();
+    await pumpForTest(tester, MixerBinding(client: client));
+
+    final int afterFirstBuild = client.modelReads;
+    expect(afterFirstBuild, greaterThan(0), reason: 'it has to read the model at least once');
+
+    // Frames with nothing edited. The engine's ticker drives one of these every
+    // 16 ms in the real app, which is exactly the load being guarded against.
+    for (int frame = 0; frame < 10; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(client.modelReads, afterFirstBuild, reason: 'repaints must not re-read the model');
+
+    // An edit moves the revision, and the next build picks it up.
+    client.revision++;
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(client.modelReads, greaterThan(afterFirstBuild));
+  });
+
 }

@@ -91,16 +91,31 @@ class Sampler final {
     uint64_t order = 0;         // start order, for oldest-first stealing
     int16_t pending_note = -1;  // queued retrigger after a steal fade
     float pending_velocity = 0.0F;
-    // The window this voice reads, resolved at start. A note voice gets the
-    // whole file forwards; a clip voice gets its trim, its direction and — when
-    // `stretching` — the overlap-add path instead of the resampler.
-    SourceWindow window;
+    // The *geometry* of the window this voice reads — never the sample it reads
+    // from. A note voice gets the whole file forwards; a clip voice gets its
+    // trim, its direction and, when `stretching`, the overlap-add path.
+    //
+    // Deliberately not a `SourceWindow`: that holds a `const SampleData*`, and
+    // a published sample is only guaranteed to be alive **for the block it was
+    // acquired in** (rt/publisher.h). A voice outlives its block, so holding
+    // the pointer across one is a use-after-free the moment the channel's
+    // sample is replaced under a sounding voice — which is what reconciling the
+    // rack after an edit does. The pointer is re-acquired every block and the
+    // window rebuilt from these integers; see `windowFor`.
+    int64_t window_start = 0;
+    int64_t window_length = 0;
+    bool reversed = false;
     bool stretching = false;
   };
 
   void startVoice(Voice& voice, int16_t note, float velocity) noexcept OB_NONBLOCKING;
-  void renderStretchedVoice(Voice& voice, const AudioBufferView& output, int start_frame,
-                            int num_frames) noexcept OB_NONBLOCKING;
+  // Rebuilds this voice's window against the sample that is live *this* block,
+  // clamped to what that sample actually holds. Returns an invalid window when
+  // there is nothing left to read, and the caller ends the voice.
+  static SourceWindow windowFor(const Voice& voice,
+                                const SampleData* sample) noexcept OB_NONBLOCKING;
+  void renderStretchedVoice(Voice& voice, const SourceWindow& window, const AudioBufferView& output,
+                            int start_frame, int num_frames) noexcept OB_NONBLOCKING;
 
   std::array<Voice, MaxVoices> voices_{};
   rt::NonRealtimeMutable<SampleData> sample_;

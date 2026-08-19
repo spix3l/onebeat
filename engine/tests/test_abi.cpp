@@ -669,6 +669,75 @@ TEST_SUITE("abi") {
     ob_engine_destroy(engine);
   }
 
+  // Arrangement audio clips occupy engine channels after rack instruments. Adding
+  // a rack item must rebuild that dense mapping without treating an existing
+  // playlist sample as the new instrument's voice (or indexing past a channel
+  // slot while the worker is reconciling the two publishes).
+  TEST_CASE("Adding rack items after multiple playlist samples keeps every channel valid") {
+    namespace fs = std::filesystem;
+    const fs::path scratch =
+        fs::path("/tmp/onebeat-tests") / ("playlist-samples-rack-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    onebeat::testing::RenderResult tone;
+    tone.left.assign(4800, 0.25F);
+    tone.right.assign(4800, 0.25F);
+    const std::string first_path = (scratch / "first.wav").string();
+    const std::string second_path = (scratch / "second.wav").string();
+    REQUIRE(onebeat::testing::writeWav(tone, first_path));
+    REQUIRE(onebeat::testing::writeWav(tone, second_path));
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    const std::string log_directory = (scratch / "logs").string();
+    config.log_directory = log_directory.c_str();
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+
+    ob_lane_info first_lane{};
+    ob_lane_info second_lane{};
+    REQUIRE(ob_engine_lane_at(engine, 0, &first_lane) == OB_OK);
+    REQUIRE(ob_engine_lane_at(engine, 1, &second_lane) == OB_OK);
+    REQUIRE(ob_engine_audio_clip_add(engine, first_lane.id, first_path.c_str(), 0) == OB_OK);
+    REQUIRE(ob_engine_audio_clip_add(engine, second_lane.id, second_path.c_str(), 3840) == OB_OK);
+
+    // These are the operations that previously crashed after the playlist had
+    // supplied more than one sampler channel. Exercise both blank and
+    // sample-backed rack additions while the first playlist samples are still
+    // being reconciled by the worker.
+    REQUIRE(ob_engine_instrument_add_empty(engine, "Blank") == OB_OK);
+    REQUIRE(ob_engine_instrument_add_sample(engine, "Rack sample", first_path.c_str()) == OB_OK);
+
+    CHECK(ob_engine_instrument_count(engine) == 2);
+    CHECK(ob_engine_clip_count(engine) == 3);  // the default pattern clip plus two samples
+    ob_instrument_info rack_sample{};
+    REQUIRE(ob_engine_instrument_at(engine, 1, &rack_sample) == OB_OK);
+    CHECK(std::string(rack_sample.plugin_id) == "onebeat.sample");
+    CHECK(std::string(rack_sample.plugin_path) == first_path);
+
+    // A hosted item exercises the same add path with an instrument that replaces
+    // its built-in sampler after the playlist channels have already been mapped.
+    const onebeat::tests::ScopedPluginHost helper(OB_TEST_HELPER);
+    const std::string bundle = std::string(OB_TEST_PLUGIN_DIR) + "/ob_test_plugin_ok.clap";
+    REQUIRE_MESSAGE(
+        ob_engine_instance_add(engine, bundle.c_str(), "dev.onebeat.test.synth") == OB_OK,
+        ob_last_error_message());
+
+    // A final model publish after the additions must still be able to enumerate
+    // every playlist clip and rack row. This also flushes the worker's pending
+    // channel description before destruction on platforms with a live loader.
+    REQUIRE(ob_engine_instrument_select(engine, rack_sample.id) == OB_OK);
+    CHECK(ob_engine_instrument_count(engine) == 3);
+
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
+  }
+
   // Split by channel: one clip of a two-channel pattern becomes two clips of
   // one-channel patterns, on two lanes, and undo puts the single clip back.
   TEST_CASE("Splitting a clip by channel gives every channel its own lane") {
@@ -1011,6 +1080,57 @@ TEST_SUITE("abi") {
     REQUIRE_MESSAGE(ob_engine_param_at(engine, instance.instance_id, 0, &param) == OB_OK,
                     ob_last_error_message());
     CHECK(param.value == doctest::Approx(edited));
+
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
+  }
+
+  TEST_CASE("Opening a project restores its tempo to the transport, not just to the model") {
+    namespace fs = std::filesystem;
+    const fs::path scratch = fs::temp_directory_path() / "onebeat-abi-tempo";
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 128;
+    config.use_null_device = 1;
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    // Commands drain on the audio thread, so the engine has to be rendering
+    // for any of this to be observable — which is also the only state the user
+    // ever sees it in.
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+
+    ob_command tempo{};
+    tempo.type = OB_CMD_SET_TEMPO;
+    tempo.f64_a = 174.0;
+    REQUIRE(ob_engine_post_command(engine, &tempo) == OB_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    const fs::path bundle = scratch / "Tempo.obt";
+    REQUIRE_MESSAGE(ob_engine_project_save(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+
+    // A fresh project resets the transport to the default, which is what makes
+    // the reopen below a real test rather than a no-op.
+    REQUIRE(ob_engine_project_new(engine) == OB_OK);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    ob_snapshot snapshot{};
+    ob_engine_read_snapshot(engine, &snapshot);
+    REQUIRE(snapshot.tempo_bpm == doctest::Approx(120.0));
+
+    REQUIRE_MESSAGE(ob_engine_project_open(engine, bundle.c_str()) == OB_OK,
+                    ob_last_error_message());
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // The engine's transport, not merely the model: the tempo the user sees and
+    // the tempo the schedule was flattened at have to be the same number, and
+    // only a command carries it across.
+    ob_engine_read_snapshot(engine, &snapshot);
+    CHECK(snapshot.tempo_bpm == doctest::Approx(174.0));
 
     ob_engine_destroy(engine);
     fs::remove_all(scratch);

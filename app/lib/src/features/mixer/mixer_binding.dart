@@ -43,12 +43,38 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   /// glance. Held by slot ID rather than by index so it survives a reorder.
   String? _expandedEffectId;
 
+  /// The model, read once per change rather than once per frame.
+  ///
+  /// The engine's ticker rebuilds this widget every frame so the meters move;
+  /// the rack and the mixer behind it only move when the user edits something.
+  /// Reading them unconditionally is O(project) FFI work at 60 Hz — a few
+  /// hundred Dart objects per frame on a large song — and it is the difference
+  /// between the app scaling and not.
+  int _modelRevision = -1;
+  int _rackKey = -1;
+  List<ProjectInstrument> _instruments = const <ProjectInstrument>[];
+  List<MixerTrackInfo> _tracks = const <MixerTrackInfo>[];
+  List<EffectDescriptor> _availableEffects = const <EffectDescriptor>[];
+  EffectRackVm? _rackVm;
+
+  void _refreshModelIfStale() {
+    final int revision = widget.client.modelRevision;
+    if (revision == _modelRevision) return;
+    _modelRevision = revision;
+    _instruments = widget.client.readInstruments();
+    _tracks = widget.client.readMixerTracks();
+    // The catalogue is fixed for the life of the build, but it is cheap and
+    // reading it here keeps every model read in one place.
+    _availableEffects = widget.client.readBuiltinEffects();
+    _rackVm = null;
+  }
+
   /// The mixer track the insert rack is editing. The strips are per instrument,
   /// so the track is the one the selected instrument routes into — and the
   /// master when the master strip is selected.
   String _selectedTrackId(List<ProjectInstrument> instruments) {
     if (_selectedTrackIndex < 0 || _selectedTrackIndex >= instruments.length) {
-      for (final MixerTrackInfo track in widget.client.readMixerTracks()) {
+      for (final MixerTrackInfo track in _tracks) {
         if (track.isMaster) return track.id;
       }
       return '';
@@ -57,14 +83,26 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   }
 
   String _trackName(String trackId) {
-    for (final MixerTrackInfo track in widget.client.readMixerTracks()) {
+    for (final MixerTrackInfo track in _tracks) {
       if (track.id == trackId) return track.name;
     }
     return 'Master';
   }
 
   EffectRackVm _buildRackVm() {
-    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    // Keyed on the model *and* on what is selected and expanded, because those
+    // change the rack without changing the project.
+    final int key = Object.hash(_modelRevision, _selectedTrackIndex, _expandedEffectId);
+    final EffectRackVm? cached = _rackVm;
+    if (cached != null && key == _rackKey) return cached;
+    final EffectRackVm built = _buildRackVmUncached();
+    _rackVm = built;
+    _rackKey = key;
+    return built;
+  }
+
+  EffectRackVm _buildRackVmUncached() {
+    final List<ProjectInstrument> instruments = _instruments;
     final String trackId = _selectedTrackId(instruments);
     if (trackId.isEmpty) {
       return const EffectRackVm(
@@ -107,14 +145,15 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
       trackName: _trackName(trackId),
       slots: slots,
       available: <EffectChoiceVm>[
-        for (final EffectDescriptor effect in widget.client.readBuiltinEffects())
+        for (final EffectDescriptor effect in _availableEffects)
           EffectChoiceVm(id: effect.id, name: effect.name, summary: effect.summary),
       ],
     );
   }
 
   void _withSelectedTrack(void Function(String trackId) action) {
-    final String trackId = _selectedTrackId(widget.client.readInstruments());
+    _refreshModelIfStale();
+    final String trackId = _selectedTrackId(_instruments);
     if (trackId.isEmpty) return;
     action(trackId);
     if (mounted) setState(() {});
@@ -161,7 +200,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   }
 
   MixerScreenVm _buildVm(OneBeatTokens tokens) {
-    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    final List<ProjectInstrument> instruments = _instruments;
     final EngineSnapshot snapshot = _controller.snapshot;
     final double masterLevel =
         (dbToFraction(_controller.meter.left.levelDb) + dbToFraction(_controller.meter.right.levelDb)) / 2.0;
@@ -274,7 +313,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
       setState(() => _masterMuted = !_masterMuted);
       return;
     }
-    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    final List<ProjectInstrument> instruments = _instruments;
     if (index >= 0 && index < instruments.length) {
       final String id = instruments[index].id;
       final bool nowMuted = !_mutedInstrumentIds.contains(id);
@@ -297,7 +336,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
       });
       return;
     }
-    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    final List<ProjectInstrument> instruments = _instruments;
     if (index >= 0 && index < instruments.length) {
       final ProjectInstrument instrument = instruments[index];
       final String id = instrument.id;
@@ -332,7 +371,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
       widget.client.setMasterGain(value);
       return;
     }
-    final List<ProjectInstrument> instruments = widget.client.readInstruments();
+    final List<ProjectInstrument> instruments = _instruments;
     if (index >= 0 && index < instruments.length) {
       final String id = instruments[index].id;
       setState(() => _faders[id] = value);
@@ -341,6 +380,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    _refreshModelIfStale();
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final MixerScreenVm vm = _buildVm(tokens);
 

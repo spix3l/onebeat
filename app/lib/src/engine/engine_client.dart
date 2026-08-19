@@ -300,6 +300,15 @@ enum StretchMode {
 
 /// The mixer seam: tracks, their levels, and the inserts on them (EPIC-4).
 abstract interface class MixerClient {
+  /// A counter that changes whenever the project model changes.
+  ///
+  /// The UI repaints every frame because meters and the playhead must, but the
+  /// model behind it moves only when the user edits something. A view that
+  /// rebuilds its model-derived state unconditionally does O(project) work
+  /// sixty times a second, which is what makes a large song feel heavy. Compare
+  /// this instead; never interpret it.
+  int get modelRevision;
+
   List<MixerTrackInfo> readMixerTracks();
   void setMixerTrackGain(String trackId, double gain);
   void setMixerTrackPan(String trackId, double pan);
@@ -1470,6 +1479,9 @@ class EngineClient
   );
 
   // --- mixer tracks and inserts ---
+
+  @override
+  int get modelRevision => _bindings.ob_engine_model_revision(_engine);
 
   @override
   List<MixerTrackInfo> readMixerTracks() {

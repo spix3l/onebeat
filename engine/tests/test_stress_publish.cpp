@@ -1,8 +1,13 @@
 // Stress tests (OB-1-07 §5, OB-1-10 §5). Run under TSan and ASan in CI.
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <string>
 #include <thread>
 
+#include <unistd.h>
+
+#include "abi/onebeat_abi.h"
 #include "doctest.h"
 #include "test_helpers.h"
 #include "testing/offline_driver.h"
@@ -142,6 +147,102 @@ TEST_SUITE("stress") {
     running.store(false, std::memory_order_release);
     commander.join();
     reader.join();
+  }
+
+  // A project the size a user actually builds. The report this covers: "added
+  // multiple playlist items and multiple channel rack items, the app crashed".
+  //
+  // The interesting number is not how big it gets but where the *fixed*
+  // capacities sit — MaxRackChannels, MaxMixerTracks, MaxMixerEffects — because
+  // every one of them indexes an array the audio thread walks. This deliberately
+  // goes past all three, since a project that merely approaches them proves
+  // nothing about the one that exceeds them.
+  TEST_CASE("A project larger than every fixed capacity renders without misbehaving") {
+    namespace fs = std::filesystem;
+    const fs::path scratch =
+        fs::temp_directory_path() / ("onebeat-large-" + std::to_string(::getpid()));
+    fs::remove_all(scratch);
+    fs::create_directories(scratch);
+
+    onebeat::testing::RenderResult tone;
+    tone.left.assign(2400, 0.25F);
+    tone.right.assign(2400, 0.25F);
+    const std::string sample = (scratch / "tone.wav").string();
+    REQUIRE(onebeat::testing::writeWav(tone, sample));
+
+    ob_engine_config config{};
+    config.struct_size = sizeof(config);
+    config.sample_rate = 48000.0;
+    config.block_frames = 256;
+    config.use_null_device = 1;
+    ob_engine* engine = nullptr;
+    REQUIRE(ob_engine_create(&config, &engine) == OB_OK);
+
+    // Past MaxRackChannels (64) and, because each instrument auto-creates one,
+    // past MaxMixerTracks too.
+    constexpr int Instruments = 150;
+    for (int i = 0; i < Instruments; ++i) {
+      REQUIRE(ob_engine_instrument_add_sample(engine, "Ch", sample.c_str()) == OB_OK);
+    }
+    CHECK(ob_engine_instrument_count(engine) == Instruments);
+    CHECK(ob_engine_mixer_track_count(engine) == Instruments + 1);
+
+    ob_lane_info lane{};
+    REQUIRE(ob_engine_lane_at(engine, 0, &lane) == OB_OK);
+
+    // Pattern clips and audio clips both. Audio clips are the ones that consume
+    // a rack channel each (model/flattener.h), so this is what actually pushes
+    // the channel index past the end of the array.
+    constexpr int PatternClips = 400;
+    for (int i = 0; i < PatternClips; ++i) {
+      REQUIRE(ob_engine_clip_add(engine, lane.id, "", static_cast<int64_t>(i) * 3840, 3840) ==
+              OB_OK);
+    }
+    constexpr int AudioClips = 200;
+    for (int i = 0; i < AudioClips; ++i) {
+      REQUIRE(ob_engine_audio_clip_add(engine, lane.id, sample.c_str(),
+                                       static_cast<int64_t>(i) * 1920) == OB_OK);
+    }
+
+    // Inserts past MaxMixerEffects would be the next ceiling; a chain on every
+    // track is the realistic version of the same pressure.
+    for (int i = 0; i < ob_engine_mixer_track_count(engine); ++i) {
+      ob_mixer_track_info track{};
+      if (ob_engine_mixer_track_at(engine, i, &track) != OB_OK) continue;
+      ob_engine_mixer_effect_add(engine, track.id, "dev.onebeat.fx.reverb", -1);
+      ob_engine_mixer_effect_add(engine, track.id, "dev.onebeat.fx.delay", -1);
+    }
+
+    REQUIRE(ob_engine_start(engine) == OB_OK);
+    ob_command play{};
+    play.type = OB_CMD_TRANSPORT_PLAY;
+    REQUIRE(ob_engine_post_command(engine, &play) == OB_OK);
+    // Long enough for the housekeeping thread to reconcile the rack and the
+    // mixer, and for the audio thread to render what it published.
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+    ob_snapshot snapshot{};
+    ob_engine_read_snapshot(engine, &snapshot);
+    CHECK(snapshot.callback_count > 0);
+
+    // Editing while all of that is live is the other half of the report, and
+    // the dangerous half: every edit reconciles the rack, which republishes the
+    // channels' samples underneath whatever voices are currently sounding.
+    for (int i = 0; i < 40; ++i) {
+      ob_clip_info clip{};
+      if (ob_engine_clip_at(engine, i, &clip) != OB_OK) continue;
+      ob_engine_clip_move(engine, clip.id, "", static_cast<int64_t>(i) * 1920);
+    }
+    // Adding more audio clips mid-playback is what actually forces the sample
+    // swap, so it happens here rather than only during the quiet set-up above.
+    for (int i = 0; i < 20; ++i) {
+      ob_engine_audio_clip_add(engine, lane.id, sample.c_str(), static_cast<int64_t>(i) * 960);
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    ob_engine_destroy(engine);
+    fs::remove_all(scratch);
   }
 
 }  // TEST_SUITE

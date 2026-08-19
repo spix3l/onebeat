@@ -61,10 +61,13 @@ void Sampler::startVoice(Voice& voice, int16_t note, float velocity) noexcept OB
   // A note voice reads the whole file forwards and pitches by playback rate.
   // A clip voice reads its own window, in its own direction, at its own rate —
   // and the two cases meet in `SourceWindow` so there is one interpolator.
-  voice.window.sample = sample;
-  voice.window.reversed = false;
-  voice.window.start = 0;
-  voice.window.length = source_frames;
+  //
+  // Geometry only. The sample this resolves against is acquired per block by
+  // `render`, because a published sample outlives only the block it was
+  // acquired in (see Voice::window_start).
+  voice.reversed = false;
+  voice.window_start = 0;
+  voice.window_length = source_frames;
 
   if (!clip_.enabled) {
     const double semitones = static_cast<double>(note - RootNote);
@@ -76,9 +79,9 @@ void Sampler::startVoice(Voice& voice, int16_t note, float velocity) noexcept OB
   const int64_t remaining = source_frames > start ? source_frames - start : 0;
   const int64_t length =
       clip_.length_frames > 0 && clip_.length_frames < remaining ? clip_.length_frames : remaining;
-  voice.window.start = start;
-  voice.window.length = length;
-  voice.window.reversed = clip_.reversed;
+  voice.window_start = start;
+  voice.window_length = length;
+  voice.reversed = clip_.reversed;
 
   // The file's own rate against the device's is a resample either way; the
   // clip's rate multiplies it. Keeping the two separate is what lets a 44.1 kHz
@@ -149,7 +152,24 @@ int Sampler::activeVoices() const noexcept OB_NONBLOCKING {
   return count;
 }
 
-void Sampler::renderStretchedVoice(Voice& voice, const AudioBufferView& output, int start_frame,
+SourceWindow Sampler::windowFor(const Voice& voice,
+                                const SampleData* sample) noexcept OB_NONBLOCKING {
+  SourceWindow window;
+  if (sample == nullptr || sample->frames <= 0) return window;
+  // Clamped against the sample that is live *now*, not the one the voice
+  // started on. A replacement may be shorter, and reading the old geometry off
+  // the end of the new buffer is the same crash by a different route.
+  const int64_t start = voice.window_start < sample->frames ? voice.window_start : 0;
+  const int64_t remaining = sample->frames - start;
+  window.sample = sample;
+  window.start = start;
+  window.length = voice.window_length < remaining ? voice.window_length : remaining;
+  window.reversed = voice.reversed;
+  return window;
+}
+
+void Sampler::renderStretchedVoice(Voice& voice, const SourceWindow& window,
+                                   const AudioBufferView& output, int start_frame,
                                    int num_frames) noexcept OB_NONBLOCKING {
   const int out_channels = output.numChannels();
   const int planes =
@@ -164,7 +184,7 @@ void Sampler::renderStretchedVoice(Voice& voice, const AudioBufferView& output, 
                         (static_cast<size_t>(channel) * static_cast<size_t>(max_block_frames_));
   }
 
-  const int64_t produced = stretch_.render(voice.window, clip_.rate, channels, planes, frames);
+  const int64_t produced = stretch_.render(window, clip_.rate, channels, planes, frames);
 
   for (int64_t frame = 0; frame < produced; ++frame) {
     const float amplitude = voice.gain * voice.fade;
@@ -192,32 +212,38 @@ void Sampler::renderStretchedVoice(Voice& voice, const AudioBufferView& output, 
 void Sampler::render(const AudioBufferView& output, int start_frame,
                      int num_frames) noexcept OB_NONBLOCKING {
   const int out_channels = output.numChannels();
+  // Acquired once, here, and used only within this call. Holding it on a voice
+  // across blocks is a use-after-free the moment the channel's sample is
+  // replaced under a sounding voice (rt/publisher.h, and Voice::window_start).
+  const SampleData* sample = sample_.acquire();
 
   for (Voice& voice : voices_) {
     if (!voice.active) {
       continue;
     }
-    // A voice started before its sample finished decoding has nothing to read.
-    if (!voice.window.valid()) {
+    const SourceWindow window = windowFor(voice, sample);
+    // Nothing to read: the sample has not finished decoding, or the one that
+    // replaced it does not reach this voice's window.
+    if (!window.valid()) {
       voice.active = false;
       continue;
     }
     if (voice.stretching) {
-      renderStretchedVoice(voice, output, start_frame, num_frames);
+      renderStretchedVoice(voice, window, output, start_frame, num_frames);
       continue;
     }
 
     for (int frame = 0; frame < num_frames; ++frame) {
       // One frame of headroom: `SourceWindow::read` interpolates towards the
       // next position, and the last one has no next.
-      if (voice.position >= static_cast<double>(voice.window.length - 1)) {
+      if (voice.position >= static_cast<double>(window.length - 1)) {
         voice.active = false;
         break;
       }
       const float amplitude = voice.gain * voice.fade;
       for (int channel = 0; channel < out_channels; ++channel) {
         output.channel(channel)[start_frame + frame] +=
-            voice.window.read(voice.position, channel) * amplitude;
+            window.read(voice.position, channel) * amplitude;
       }
 
       voice.position += voice.rate;

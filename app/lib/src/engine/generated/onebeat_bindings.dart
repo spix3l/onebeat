@@ -2489,6 +2489,20 @@ class OneBeatBindings {
   late final _ob_engine_audio_clip_fit_to_tempo = _ob_engine_audio_clip_fit_to_tempoPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>)>();
 
+  int ob_engine_model_revision(
+    ffi.Pointer<ob_engine> engine,
+  ) {
+    return _ob_engine_model_revision(
+      engine,
+    );
+  }
+
+  late final _ob_engine_model_revisionPtr = _lookup<ffi.NativeFunction<ffi.Uint64 Function(ffi.Pointer<ob_engine>)>>(
+    'ob_engine_model_revision',
+  );
+  late final _ob_engine_model_revision = _ob_engine_model_revisionPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>)>();
+
   int ob_engine_mixer_track_count(
     ffi.Pointer<ob_engine> engine,
   ) {
