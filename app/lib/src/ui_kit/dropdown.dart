@@ -283,9 +283,13 @@ class _MenuRowState extends State<_MenuRow> {
                         : null,
               ),
               SizedBox(width: tokens.spacing.xs),
-              Text(
-                widget.label,
-                style: tokens.type.bodySecondary.copyWith(color: highlight ? color.textPrimary : color.textSecondary),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.type.bodySecondary.copyWith(color: highlight ? color.textPrimary : color.textSecondary),
+                ),
               ),
             ],
           ),

@@ -69,6 +69,30 @@ struct NoteDefaults {
   int16_t pitch_offset = 0;
 };
 
+// Channel-level playback settings. Kept on the project-global instrument so
+// they apply consistently to every pattern that addresses the channel.
+struct ChannelSettings {
+  int32_t gate_percent = 100;
+  Ticks shift_ticks = 0;
+  int32_t cut_group = 0;
+  int32_t cut_by_group = 0;
+  int32_t max_polyphony = 0;  // 0 means unlimited
+  bool mono = false;
+  bool portamento = false;
+  int32_t root_key = 60;
+  int32_t key_low = 0;
+  int32_t key_high = 127;
+  int32_t fine_tune_cents = 0;
+  float velocity_tracking = 1.0F;
+  int32_t mod_x = 0;
+  int32_t mod_y = 0;
+  bool arpeggiator = false;
+  int32_t arpeggiator_time_ticks = TicksPerQuarter / 4;
+  int32_t arpeggiator_gate_percent = 100;
+  int32_t echo_time_ticks = 0;
+  int32_t echo_feedback_percent = 0;
+};
+
 struct Instrument {
   InstrumentId id;
   std::string name;
@@ -78,6 +102,7 @@ struct Instrument {
   int32_t order = 0;
   PluginRef plugin;
   NoteDefaults note_defaults;
+  ChannelSettings channel_settings;
   std::vector<OutputRoute> routing;
   bool muted = false;
   bool soloed = false;
@@ -143,6 +168,25 @@ struct TimeSignature {
   int32_t denominator = 4;
 };
 
+// One point on an automation curve: a value at a position, clip-relative.
+struct AutomationPoint {
+  Ticks position = 0;
+  float value = 0.0F;
+};
+
+// Pattern and arrangement automation share the same target vocabulary. Keeping
+// this value type above Pattern lets patterns own automation without a pointer
+// or a second, subtly different curve representation.
+struct AutomationSource {
+  enum class TargetKind : uint8_t { Instrument, MixerTrack, Effect };
+  TargetKind target_kind = TargetKind::Instrument;
+  InstrumentId instrument;
+  MixerTrackId mixer_track;
+  EffectId effect;
+  plugin::ParamId parameter = plugin::InvalidParamId;
+  std::vector<AutomationPoint> points;
+};
+
 // A horizontal slice across instruments, not a container belonging to one. The
 // map is **sparse**: a pattern stores sequences only for the instruments it
 // actually uses (D-M5's "show only what the pattern uses" is a view over this,
@@ -160,6 +204,10 @@ struct Pattern {
   // Stored on the pattern because swing is part of the groove, not transport.
   double swing = 0.0;
   std::map<InstrumentId, NoteSequence> sequences;
+  // Automation authored with the pattern rather than as a separate arrangement
+  // clip. Arrangement automation remains supported for compatibility; this
+  // collection is what makes a pattern self-contained when it is duplicated.
+  std::vector<AutomationSource> automation;
 };
 
 // Purely organisational. Holds no instrument, no effects, no routing, no audio.
@@ -243,29 +291,6 @@ struct AudioSource {
   // reads it, and it is stored rather than re-detected so that a user who
   // corrects a bad guess corrects it once.
   double source_bpm = 0.0;
-};
-
-// One point on an automation curve: a value at a position, clip-relative.
-// Stage 4 owns curve *shapes* (the interpolation between points, tension,
-// stepped vs smooth). v0.3 stores the points and flattens each one to a
-// parameter event, which is enough to prove the path end to end.
-struct AutomationPoint {
-  Ticks position = 0;
-  float value = 0.0F;
-};
-
-// Stage 4 owns curves. The target is an entity plus a parameter, by ID.
-struct AutomationSource {
-  enum class TargetKind : uint8_t { Instrument, MixerTrack, Effect };
-  TargetKind target_kind = TargetKind::Instrument;
-  InstrumentId instrument;   // valid when target_kind == Instrument
-  MixerTrackId mixer_track;  // valid when target_kind == MixerTrack or Effect
-  // Valid when target_kind == Effect. The track is still named above because a
-  // chain slot is only findable through the track that owns it — an effect is
-  // not a project-global entity and deliberately has no map of its own.
-  EffectId effect;
-  plugin::ParamId parameter = plugin::InvalidParamId;
-  std::vector<AutomationPoint> points;
 };
 
 using ClipSource = std::variant<PatternSource, AudioSource, AutomationSource>;

@@ -1,4 +1,6 @@
 // MixerBinding — wires mixer presentation and routing to the engine (UI-D-05).
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../core/engine_controller.dart' as core;
@@ -74,12 +76,10 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   /// master when the master strip is selected.
   String _selectedTrackId(List<ProjectInstrument> instruments) {
     if (_selectedTrackIndex < 0 || _selectedTrackIndex >= instruments.length) {
-      for (final MixerTrackInfo track in _tracks) {
-        if (track.isMaster) return track.id;
-      }
-      return '';
+      return _masterTrack()?.id ?? '';
     }
-    return instruments[_selectedTrackIndex].routeId;
+    final String routeId = instruments[_selectedTrackIndex].routeId;
+    return routeId.isNotEmpty ? routeId : (_masterTrack()?.id ?? '');
   }
 
   MixerTrackInfo? _trackById(String trackId) {
@@ -90,6 +90,19 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   }
 
   String _trackName(String trackId) => _trackById(trackId)?.name ?? 'Master';
+
+  MixerTrackInfo? _masterTrack() {
+    for (final MixerTrackInfo track in _tracks) {
+      if (track.isMaster) return track;
+    }
+    return null;
+  }
+
+  String _gainText(double gain) {
+    if (gain <= 0.0) return '−∞ dB';
+    final double db = 20.0 * math.log(gain) / math.ln10;
+    return '${db >= 0 ? '+' : ''}${db.toStringAsFixed(1)} dB';
+  }
 
   String _instrumentRoute(ProjectInstrument instrument) {
     final String name = instrument.routeName.trim();
@@ -221,7 +234,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
           final bool isSelected = i == _selectedTrackIndex;
           final bool muted = _mutedInstrumentIds.contains(inst.id) || inst.muted;
           final bool soloed = _soloedInstrumentIds.contains(inst.id) || inst.soloed;
-          final double fader = _faders[inst.id] ?? 0.75;
+          final double fader = _faders[inst.id] ?? inst.gain.clamp(0.0, 1.0);
           final Color color = _resolveColor(i, inst.color);
 
           // Simulated live activity if playing
@@ -240,19 +253,23 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
             routeActive: isSelected,
             selected: isSelected,
             isMaster: false,
-            sidechainIn: i == 4, // Visual badge per mockup
+            sidechainIn: false,
           );
         })(),
     ];
 
+    final MixerTrackInfo? masterTrack = _masterTrack();
+    final double masterGain = masterTrack?.gain ?? _masterFader;
     final MixerStripVm masterStripVm = MixerStripVm(
+      // Track names are model data; the master strip's label is a UI role and
+      // stays uppercase like the rest of the mixer chrome.
       name: 'MASTER',
       color: tokens.color.accent,
-      route: '0.0 dB',
+      route: _gainText(masterGain),
       level: snapshot.playing ? masterLevel.clamp(0.0, 1.0) : 0.0,
-      fader: _masterFader,
-      muted: _masterMuted,
-      soloed: _masterSoloed,
+      fader: _masterFader == 0.75 && masterTrack != null ? masterGain.clamp(0.0, 1.0) : _masterFader,
+      muted: masterTrack?.muted ?? _masterMuted,
+      soloed: masterTrack?.soloed ?? _masterSoloed,
       routeActive: true,
       selected: _selectedTrackIndex == -1,
       isMaster: true,
@@ -261,11 +278,11 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
     // Selected track for routing panel. Every row is derived from the model:
     // the panel must not claim that every instrument feeds the selected strip,
     // or that every strip feeds Master, when the project has a real graph.
-    final String selectedName = (_selectedTrackIndex >= 0 && _selectedTrackIndex < instruments.length)
-        ? instruments[_selectedTrackIndex].name
-        : 'Master';
     final String selectedTrackId = _selectedTrackId(instruments);
     final MixerTrackInfo? selectedTrack = _trackById(selectedTrackId);
+    final String selectedName = (_selectedTrackIndex >= 0 && _selectedTrackIndex < instruments.length)
+        ? instruments[_selectedTrackIndex].name
+        : (selectedTrack?.name ?? 'Master');
     final List<ProjectInstrument> routedInto = instruments
         .where((ProjectInstrument instrument) =>
             selectedTrackId.isEmpty ? instrument.routeId.isEmpty : instrument.routeId == selectedTrackId)
@@ -293,31 +310,16 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
           routeText: outputTrack == null ? '→ output' : '→ ${outputTrack.name}',
         ),
       ],
-      sends: const <SendVm>[
-        SendVm(
-          name: '→ Reverb Send',
-          value: 0.42,
-          valueText: '0.42',
-          pre: true,
-        ),
-        SendVm(
-          name: '→ Delay',
-          value: 0.18,
-          valueText: '0.18',
-          pre: false,
-        ),
-      ],
-      caption: 'Feeds to stereo output with 2 auxiliary effect sends.',
-      sidechain: _selectedTrackIndex == 4
-          ? SidechainVm(
-              sourceName: 'Sub Bass',
-              sourceColor: channelColors[3],
-              targetName: 'Drums Bus',
-              targetCaption: 'compressor key input',
-              amountText: '−6 dB',
-              enabled: true,
-            )
-          : null,
+      // Sends and sidechains are intentionally empty until their native model
+      // fields exist. Showing plausible names here made the routing panel lie
+      // about the project graph.
+      sends: const <SendVm>[],
+      caption: selectedTrack == null
+          ? 'This instrument has no mixer destination.'
+          : outputTrack == null
+              ? 'This track has no output destination.'
+              : 'Feeds ${outputTrack.name}.',
+      sidechain: null,
     );
 
     return MixerScreenVm(
@@ -332,7 +334,12 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
 
   void _onToggleMute(int index) {
     if (index == -1) {
-      setState(() => _masterMuted = !_masterMuted);
+      final MixerTrackInfo? master = _masterTrack();
+      final bool next = !(master?.muted ?? _masterMuted);
+      setState(() => _masterMuted = next);
+      if (master != null) {
+        widget.client.setMixerTrackMuted(master.id, muted: next);
+      }
       return;
     }
     final List<ProjectInstrument> instruments = _instruments;
@@ -352,10 +359,22 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
 
   void _onToggleSolo(int index) {
     if (index == -1) {
+      final MixerTrackInfo? master = _masterTrack();
+      final bool next = !(master?.soloed ?? _masterSoloed);
       setState(() {
-        _masterSoloed = !_masterSoloed;
-        if (_masterSoloed) _soloedInstrumentIds.clear();
+        _masterSoloed = next;
+        if (next) _soloedInstrumentIds.clear();
       });
+      if (next) {
+        for (final ProjectInstrument instrument in _instruments) {
+          if (instrument.soloed) {
+            widget.client.setInstrumentSoloed(instrument.id, soloed: false);
+          }
+        }
+      }
+      if (master != null) {
+        widget.client.setMixerTrackSoloed(master.id, soloed: next);
+      }
       return;
     }
     final List<ProjectInstrument> instruments = _instruments;
@@ -369,6 +388,10 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
             ..clear()
             ..add(id);
           _masterSoloed = false;
+          final MixerTrackInfo? master = _masterTrack();
+          if (master?.soloed == true) {
+            widget.client.setMixerTrackSoloed(master!.id, soloed: false);
+          }
         } else {
           _soloedInstrumentIds.remove(id);
         }
@@ -390,13 +413,19 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
   void _onFader(int index, double value) {
     if (index == -1) {
       setState(() => _masterFader = value);
-      widget.client.setMasterGain(value);
+      final MixerTrackInfo? master = _masterTrack();
+      if (master != null) {
+        widget.client.setMixerTrackGain(master.id, value);
+      } else {
+        widget.client.setMasterGain(value);
+      }
       return;
     }
     final List<ProjectInstrument> instruments = _instruments;
     if (index >= 0 && index < instruments.length) {
       final String id = instruments[index].id;
       setState(() => _faders[id] = value);
+      widget.client.setInstrumentGain(id, value);
     }
   }
 

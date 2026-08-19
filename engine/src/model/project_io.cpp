@@ -397,6 +397,28 @@ json::Value writeInstrument(const Instrument& instrument,
   defaults.emplace("pan", json::Value::real(instrument.note_defaults.pan));
   defaults.emplace("pitch_offset", json::Value::integer(instrument.note_defaults.pitch_offset));
 
+  const ChannelSettings& settings = instrument.channel_settings;
+  json::Object channel_settings;
+  channel_settings.emplace("gate_percent", json::Value::integer(settings.gate_percent));
+  channel_settings.emplace("shift_ticks", json::Value::integer(settings.shift_ticks));
+  channel_settings.emplace("cut_group", json::Value::integer(settings.cut_group));
+  channel_settings.emplace("cut_by_group", json::Value::integer(settings.cut_by_group));
+  channel_settings.emplace("max_polyphony", json::Value::integer(settings.max_polyphony));
+  channel_settings.emplace("mono", json::Value::boolean(settings.mono));
+  channel_settings.emplace("portamento", json::Value::boolean(settings.portamento));
+  channel_settings.emplace("root_key", json::Value::integer(settings.root_key));
+  channel_settings.emplace("key_low", json::Value::integer(settings.key_low));
+  channel_settings.emplace("key_high", json::Value::integer(settings.key_high));
+  channel_settings.emplace("fine_tune_cents", json::Value::integer(settings.fine_tune_cents));
+  channel_settings.emplace("velocity_tracking", json::Value::real(settings.velocity_tracking));
+  channel_settings.emplace("mod_x", json::Value::integer(settings.mod_x));
+  channel_settings.emplace("mod_y", json::Value::integer(settings.mod_y));
+  channel_settings.emplace("arpeggiator", json::Value::boolean(settings.arpeggiator));
+  channel_settings.emplace("arpeggiator_time_ticks", json::Value::integer(settings.arpeggiator_time_ticks));
+  channel_settings.emplace("arpeggiator_gate_percent", json::Value::integer(settings.arpeggiator_gate_percent));
+  channel_settings.emplace("echo_time_ticks", json::Value::integer(settings.echo_time_ticks));
+  channel_settings.emplace("echo_feedback_percent", json::Value::integer(settings.echo_feedback_percent));
+
   const std::string state_ref =
       state_override != nullptr ? state_override->state_ref : instrument.plugin.state_ref;
   const std::string state_sha =
@@ -412,11 +434,50 @@ json::Value writeInstrument(const Instrument& instrument,
   out.emplace("pan", json::Value::real(instrument.pan));
   out.emplace("plugin", json::Value::object(std::move(plugin)));
   out.emplace("note_defaults", json::Value::object(std::move(defaults)));
+  const bool non_default_settings =
+      settings.gate_percent != 100 || settings.shift_ticks != 0 || settings.cut_group != 0 ||
+      settings.cut_by_group != 0 || settings.max_polyphony != 0 || settings.mono ||
+      settings.portamento || settings.root_key != 60 || settings.key_low != 0 ||
+      settings.key_high != 127 || settings.fine_tune_cents != 0 ||
+      settings.velocity_tracking != 1.0F || settings.mod_x != 0 || settings.mod_y != 0 ||
+      settings.arpeggiator || settings.arpeggiator_time_ticks != TicksPerQuarter / 4 ||
+      settings.arpeggiator_gate_percent != 100 || settings.echo_time_ticks != 0 ||
+      settings.echo_feedback_percent != 0;
+  if (non_default_settings) {
+    out.emplace("channel_settings", json::Value::object(std::move(channel_settings)));
+  }
   out.emplace("routing", json::Value::array(std::move(routing)));
   out.emplace("state_ref",
               state_ref.empty() ? json::Value::null() : json::Value::string(state_ref));
   out.emplace("state_sha256",
               state_sha.empty() ? json::Value::null() : json::Value::string(state_sha));
+  return json::Value::object(std::move(out));
+}
+
+json::Value writePatternAutomation(const AutomationSource& source) {
+  json::Object out;
+  switch (source.target_kind) {
+    case AutomationSource::TargetKind::Instrument:
+      out.emplace("target_kind", json::Value::string("instrument"));
+      out.emplace("target_id", json::Value::string(source.instrument.str()));
+      break;
+    case AutomationSource::TargetKind::MixerTrack:
+      out.emplace("target_kind", json::Value::string("mixer_track"));
+      out.emplace("target_id", json::Value::string(source.mixer_track.str()));
+      break;
+    case AutomationSource::TargetKind::Effect:
+      out.emplace("target_kind", json::Value::string("effect"));
+      out.emplace("target_id", json::Value::string(source.mixer_track.str()));
+      out.emplace("effect_id", json::Value::string(source.effect.str()));
+      break;
+  }
+  out.emplace("parameter", json::Value::integer(source.parameter));
+  json::Array points;
+  for (const AutomationPoint& point : source.points) {
+    points.push_back(
+        json::Value::array({json::Value::integer(point.position), json::Value::real(point.value)}));
+  }
+  out.emplace("points", json::Value::array(std::move(points)));
   return json::Value::object(std::move(out));
 }
 
@@ -449,6 +510,13 @@ json::Value writePattern(const Pattern& pattern, const Residue& residue) {
   }
   out.emplace("swing", json::Value::real(pattern.swing));
   out.emplace("sequences", json::Value::object(std::move(sequences)));
+  if (!pattern.automation.empty()) {
+    json::Array automation;
+    for (const AutomationSource& source : pattern.automation) {
+      automation.push_back(writePatternAutomation(source));
+    }
+    out.emplace("automation", json::Value::array(std::move(automation)));
+  }
   return json::Value::object(std::move(out));
 }
 
@@ -931,6 +999,32 @@ class Loader {
         fields->emplace("note_defaults", std::move(defaults_value));
       }
 
+      json::Value settings_value = take(*fields, "channel_settings");
+      if (json::Object* settings = settings_value.asObject(); settings != nullptr) {
+        instrument.channel_settings.gate_percent = static_cast<int32_t>(takeInt(*settings, "gate_percent", 100));
+        instrument.channel_settings.shift_ticks = takeInt(*settings, "shift_ticks");
+        instrument.channel_settings.cut_group = static_cast<int32_t>(takeInt(*settings, "cut_group"));
+        instrument.channel_settings.cut_by_group = static_cast<int32_t>(takeInt(*settings, "cut_by_group"));
+        instrument.channel_settings.max_polyphony = static_cast<int32_t>(takeInt(*settings, "max_polyphony"));
+        instrument.channel_settings.mono = takeBool(*settings, "mono");
+        instrument.channel_settings.portamento = takeBool(*settings, "portamento");
+        instrument.channel_settings.root_key = static_cast<int32_t>(takeInt(*settings, "root_key", 60));
+        instrument.channel_settings.key_low = static_cast<int32_t>(takeInt(*settings, "key_low"));
+        instrument.channel_settings.key_high = static_cast<int32_t>(takeInt(*settings, "key_high", 127));
+        instrument.channel_settings.fine_tune_cents = static_cast<int32_t>(takeInt(*settings, "fine_tune_cents"));
+        instrument.channel_settings.velocity_tracking = takeFloat(*settings, "velocity_tracking", 1.0F);
+        instrument.channel_settings.mod_x = static_cast<int32_t>(takeInt(*settings, "mod_x"));
+        instrument.channel_settings.mod_y = static_cast<int32_t>(takeInt(*settings, "mod_y"));
+        instrument.channel_settings.arpeggiator = takeBool(*settings, "arpeggiator");
+        instrument.channel_settings.arpeggiator_time_ticks =
+            static_cast<int32_t>(takeInt(*settings, "arpeggiator_time_ticks", TicksPerQuarter / 4));
+        instrument.channel_settings.arpeggiator_gate_percent =
+            static_cast<int32_t>(takeInt(*settings, "arpeggiator_gate_percent", 100));
+        instrument.channel_settings.echo_time_ticks = static_cast<int32_t>(takeInt(*settings, "echo_time_ticks"));
+        instrument.channel_settings.echo_feedback_percent =
+            static_cast<int32_t>(takeInt(*settings, "echo_feedback_percent"));
+      }
+
       json::Value routing_value = take(*fields, "routing");
       if (const json::Array* routing = routing_value.asArray(); routing != nullptr) {
         int32_t position = 0;
@@ -986,14 +1080,58 @@ class Loader {
         warn("Pattern '" + pattern.name + "' has an invalid time signature; using 4/4.");
         pattern.time_signature = TimeSignature{};
       }
-      if (pattern.length <= 0) {
-        warn("Pattern '" + pattern.name + "' has no length; using one bar.");
-        pattern.length = TicksPerBarFourFour;
+      if (pattern.length < 0) {
+        warn("Pattern '" + pattern.name + "' has an invalid length; using Auto.");
+        pattern.length = 0;
       }
       pattern.swing = takeDouble(*fields, "swing", 0.0);
       if (pattern.swing < 0.0 || pattern.swing > 1.0) {
         warn("Pattern '" + pattern.name + "' has invalid swing; using none.");
         pattern.swing = 0.0;
+      }
+
+      json::Value automation_value = take(*fields, "automation");
+      if (const json::Array* automation = automation_value.asArray(); automation != nullptr) {
+        for (const json::Value& automationValue : *automation) {
+          const json::Object* source = automationValue.asObject();
+          if (source == nullptr) continue;
+          AutomationSource automationEntry;
+          const std::string kind = stringAt(automationValue, "target_kind");
+          const std::string target = stringAt(automationValue, "target_id");
+          if (kind == "instrument") {
+            const auto instrumentId = InstrumentId::parse(target);
+            if (!instrumentId) continue;
+            automationEntry.target_kind = AutomationSource::TargetKind::Instrument;
+            automationEntry.instrument = *instrumentId;
+          } else if (kind == "mixer_track") {
+            const auto trackId = MixerTrackId::parse(target);
+            if (!trackId) continue;
+            automationEntry.target_kind = AutomationSource::TargetKind::MixerTrack;
+            automationEntry.mixer_track = *trackId;
+          } else if (kind == "effect") {
+            const auto trackId = MixerTrackId::parse(target);
+            const auto effectId = EffectId::parse(stringAt(automationValue, "effect_id"));
+            if (!trackId || !effectId) continue;
+            automationEntry.target_kind = AutomationSource::TargetKind::Effect;
+            automationEntry.mixer_track = *trackId;
+            automationEntry.effect = *effectId;
+          } else {
+            continue;
+          }
+          automationEntry.parameter = static_cast<plugin::ParamId>(
+              automationValue.find("parameter") == nullptr
+                  ? plugin::InvalidParamId
+                  : automationValue.find("parameter")->asInt());
+          const json::Value* points = automationValue.find("points");
+          if (points == nullptr || points->asArray() == nullptr) continue;
+          for (const json::Value& point : *points->asArray()) {
+            const json::Array* pair = point.asArray();
+            if (pair == nullptr || pair->size() < 2) continue;
+            automationEntry.points.push_back(
+                AutomationPoint{(*pair)[0].asInt(), static_cast<float>((*pair)[1].asDouble())});
+          }
+          if (!automationEntry.points.empty()) pattern.automation.push_back(std::move(automationEntry));
+        }
       }
 
       json::Value sequences_value = take(*fields, "sequences");

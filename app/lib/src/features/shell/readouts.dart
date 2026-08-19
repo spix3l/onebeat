@@ -71,12 +71,12 @@ class _ObReadoutState extends State<ObReadout> {
       // the box, so the column centres itself in what remains.
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
       decoration: BoxDecoration(
-        // The one surface darker than the bar it sits on: the readout is an
-        // inset, and the near-black border deepens the step.
-        color: tokens.color.surfaceSunken,
-        borderRadius: tokens.radius.controlBorder,
+        // Lift the readouts one step from the bar so the four instruments read
+        // as a coherent control group rather than disappearing into chrome.
+        color: tokens.color.surfaceColumnHead,
+        borderRadius: tokens.radius.panelBorder,
         border: Border.all(
-          color: tokens.color.meterTrack,
+          color: tokens.color.lineStrong,
           width: tokens.border.hairline,
         ),
       ),

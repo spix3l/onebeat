@@ -227,9 +227,7 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
         if (pattern == nullptr) continue;
         // The effective length, not the declared one: a note drawn past the end
         // of the pattern must sound rather than be dropped here (entities.h).
-        const Ticks pattern_length = pattern->length > 0          ? patternEffectiveLength(*pattern)
-                                     : pattern->sequences.empty() ? 0
-                                                                  : 1;
+        const Ticks pattern_length = patternEffectiveLength(*pattern);
         if (pattern_length <= 0) continue;
 
         ++result.clips_flattened;
@@ -251,8 +249,16 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
               continue;
             }
 
+            const ChannelSettings& settings = instrument->channel_settings;
+            if (key < settings.key_low || key > settings.key_high) {
+              ++result.notes_dropped;
+              continue;
+            }
             Note swung_note = note;
-            swung_note.start = swungPosition(note.start, pattern->swing);
+            swung_note.start = swungPosition(note.start, pattern->swing) + settings.shift_ticks;
+            swung_note.length = std::max<Ticks>(
+                1, static_cast<Ticks>(std::llround(
+                       static_cast<double>(note.length) * settings.gate_percent / 100.0)));
             collectOccurrences(swung_note, *clip, pattern_length, occurrences);
             for (const auto& [start, end] : occurrences) {
               ResolvedNote resolved;
@@ -260,8 +266,34 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
               resolved.end = clip->start + end;
               resolved.instrument = index->second;
               resolved.key = static_cast<int16_t>(key);
-              resolved.velocity = velocityToUnit(note.velocity);
+              resolved.velocity = std::clamp(
+                  velocityToUnit(note.velocity) * settings.velocity_tracking, 0.0F, 1.0F);
               notes.push_back(resolved);
+            }
+          }
+        }
+
+        // Pattern-owned automation follows the pattern reference and therefore
+        // survives duplication and every placement that uses the pattern. It
+        // is resolved at the clip boundary just like its notes.
+        for (const AutomationSource& automation : pattern->automation) {
+          if (automation.target_kind == AutomationSource::TargetKind::Instrument) {
+            const auto index = result.instrument_index.find(automation.instrument);
+            if (index == result.instrument_index.end()) continue;
+            for (const AutomationPoint& point : automation.points) {
+              if (point.position < 0 || point.position >= clip->length) continue;
+              params.push_back(ResolvedParam{clip->start + point.position, index->second,
+                                             automation.parameter, point.value});
+            }
+          } else if (automation.target_kind == AutomationSource::TargetKind::Effect) {
+            const auto index = result.effect_index.find(
+                std::make_pair(automation.mixer_track, automation.effect));
+            if (index == result.effect_index.end()) continue;
+            for (const AutomationPoint& point : automation.points) {
+              if (point.position < 0 || point.position >= clip->length) continue;
+              effect_params.push_back(ResolvedEffectParam{clip->start + point.position,
+                                                          index->second, automation.parameter,
+                                                          point.value});
             }
           }
         }

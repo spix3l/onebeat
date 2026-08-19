@@ -33,6 +33,7 @@ class PluginBinding extends StatefulWidget {
     this.isBypassed = false,
     this.parameters = const <HostedParameter>[],
     this.onDragUpdate,
+    this.embedded = false,
     super.key,
   });
 
@@ -45,6 +46,10 @@ class PluginBinding extends StatefulWidget {
   final List<HostedParameter> parameters;
   final ValueChanged<Offset>? onDragUpdate;
   final VoidCallback onClose;
+
+  /// Omits the floating-window chrome when this editor is hosted inside the
+  /// shared channel editor's Plugin tab.
+  final bool embedded;
 
   @override
   State<PluginBinding> createState() => _PluginBindingState();
@@ -484,27 +489,27 @@ class _PluginBindingState extends State<PluginBinding> {
       onNoteOff: widget.client.auditionNoteOff,
       onFocusGained: _selectOwnInstrument,
       onBaseKeyChanged: (int key) => setState(() => _typingBaseKey = key),
-      child: ObFloatingWindow.plugin(
-        vm: windowVm,
-        width:
-            isPiano
-                ? 720
-                : (isGuitar
-                    ? 860
-                    : (isLowkey ? 900 : (isSynth ? tokens.size.synthWindowWidth : tokens.size.pluginWindowWidth))),
-        height:
-            isPiano
-                ? 430
-                : (isGuitar
-                    ? 520
-                    : (isLowkey
-                        ? 680
-                        : (isOrgan
-                            ? 500
-                            : (isSynth ? tokens.size.synthWindowHeight : tokens.size.pluginWindowHeight)))),
-        onDragUpdate: widget.onDragUpdate,
-        child: editorContent,
-      ),
+      child: widget.embedded
+          ? editorContent
+          : ObFloatingWindow.plugin(
+              vm: windowVm,
+              width: isPiano
+                  ? 720
+                  : (isGuitar
+                      ? 860
+                      : (isLowkey ? 900 : (isSynth ? tokens.size.synthWindowWidth : tokens.size.pluginWindowWidth))),
+              height: isPiano
+                  ? 430
+                  : (isGuitar
+                      ? 520
+                      : (isLowkey
+                          ? 680
+                          : (isOrgan
+                              ? 500
+                              : (isSynth ? tokens.size.synthWindowHeight : tokens.size.pluginWindowHeight)))),
+              onDragUpdate: widget.onDragUpdate,
+              child: editorContent,
+            ),
     );
   }
 }

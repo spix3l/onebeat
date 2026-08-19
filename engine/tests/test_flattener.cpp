@@ -611,3 +611,21 @@ TEST_SUITE("stress") {
     CHECK(result.elapsed_ms < 2000.0);
   }
 }
+
+TEST_SUITE("unit") {
+  TEST_CASE("REPRO: notes drawn past the clip length never sound") {
+    Scene scene;
+    // Pattern declared one bar; the user draws out to bar 4 in the piano roll.
+    scene.addNotes({note(0, 60), note(TicksPerBarFourFour * 2, 62),
+                    note(TicksPerBarFourFour * 3, 64)});
+    // The clip was placed when the pattern was still one bar long.
+    scene.place(0, TicksPerBarFourFour, false);
+
+    const FlattenResult result = run(scene.project);
+    MESSAGE("effective pattern length = "
+            << onebeat::model::patternEffectiveLength(*scene.project.findPattern(scene.pattern)));
+    MESSAGE("onsets = " << ticksOfOnsets(*result.schedule).size());
+    CHECK(ticksOfOnsets(*result.schedule) ==
+          std::vector<int64_t>{0, TicksPerBarFourFour * 2, TicksPerBarFourFour * 3});
+  }
+}

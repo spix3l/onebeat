@@ -18,8 +18,10 @@ import '../../core/shortcuts.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/popover_menu.dart';
 import '../browser/sample_pack.dart';
+import '../plugins/channel_editor_binding.dart';
 import 'channel_inspector.dart';
 import 'channel_rack_screen.dart';
+import 'channel_settings_editor.dart';
 import 'channel_rack_screen_vm.dart';
 import 'delete_pattern_dialog.dart';
 import 'rack_row.dart';
@@ -42,6 +44,7 @@ class RackBinding extends StatefulWidget {
     this.onOpenPianoRoll,
     this.onOpenPlugin,
     this.onOpenSampler,
+    this.onOpenChannelEditor,
     super.key,
   });
 
@@ -60,6 +63,10 @@ class RackBinding extends StatefulWidget {
   /// Opens the built-in sampler editor for a sample lane. Kept separate from
   /// hosted plug-ins so a sample lane never masquerades as a CLAP instance.
   final void Function(String instrumentId)? onOpenSampler;
+
+  /// Opens the shared FL-style Plugin/Settings editor. The legacy callbacks
+  /// remain available for lightweight hosts and presentation tests.
+  final void Function(String instrumentId, ChannelEditorTab tab)? onOpenChannelEditor;
 
   @override
   State<RackBinding> createState() => _RackBindingState();
@@ -100,6 +107,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   bool _showRenameDialog = false;
   bool _renamePattern = false;
   bool _showDeletePatternDialog = false;
+  bool _showChannelSettings = false;
+  InstrumentSettings? _channelSettings;
+  String? _settingsInstrumentId;
   String? _deletePatternId;
   String? _renameInstrumentId;
   String? _renamePatternId;
@@ -178,6 +188,25 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   }
 
   void _noteEditStarted() => _patternStore.noteEditStarted();
+
+  void _makeUniqueSharedPattern() {
+    final SharedPatternNotice? notice = _patternStore.notice;
+    if (notice == null) return;
+
+    if (notice.clipId.isNotEmpty) {
+      _patternStore.makeUnique(<String>[notice.clipId]);
+      _store.refresh();
+      return;
+    }
+
+    // The rack edits a pattern globally and normally has no playlist clip
+    // context. Cloning and selecting the pattern gives the user an isolated
+    // editing target without guessing which of its arrangement instances they
+    // meant to detach.
+    _patternStore.duplicate(notice.patternId);
+    _patternStore.dismissNotice();
+    _store.refresh();
+  }
 
   void _selectNextEmptyPattern() {
     final List<PatternSummary> patterns = _store.patterns;
@@ -361,6 +390,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           PatternTabVm(
             id: p.id,
             name: p.name,
+            color: p.color,
             selected: p.isCurrent,
             count: p.usageCount,
             group: p.group,
@@ -442,6 +472,8 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       );
     }
 
+    final SharedPatternNotice? sharedNotice = _patternStore.notice;
+
     final String? velocityInstrument = _store.selectedVelocityInstrument;
     final int? velocityStep = _store.selectedVelocityStep;
     final RackRow? velocityRow = velocityInstrument == null ? null : _store.rowFor(velocityInstrument);
@@ -473,8 +505,16 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
       playingStep: playingStep,
       playingTick: playingTick,
       inspector: inspectorVm,
-      sharedPatternNotice:
-          _patternStore.notice == null ? null : SharedPatternNoticeVm(message: _patternStore.notice!.message),
+      sharedPatternNotice: sharedNotice == null
+          ? null
+          : SharedPatternNoticeVm(
+              message: sharedNotice.message,
+              // A rack edit has no playlist clip selection, so its fallback is
+              // to clone the pattern and continue editing the clone. When the
+              // store was entered from a clip, the same action repoints that
+              // one clip instead.
+              canMakeUnique: true,
+            ),
       canUndo: _store.canUndo,
       canRedo: _store.canRedo,
     );
@@ -600,7 +640,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     widget.client.selectInstrument(instrumentId);
     _store.selectInstrument(instrumentId);
     final ProjectInstrument? inst = _store.instrumentFor(instrumentId);
-    if (inst?.pluginId == _kSamplePluginId) {
+    if (widget.onOpenChannelEditor != null) {
+      widget.onOpenChannelEditor!(instrumentId, ChannelEditorTab.plugin);
+    } else if (inst?.pluginId == _kSamplePluginId) {
       widget.onOpenSampler?.call(instrumentId);
     } else {
       widget.onOpenPlugin?.call(instrumentId);
@@ -725,7 +767,11 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     if (id == null) return;
     final ProjectInstrument? inst = _store.instrumentFor(id);
     if (inst == null || inst.pluginId.isEmpty) return;
-    _openPluginFromMenu(id);
+    if (widget.onOpenChannelEditor != null) {
+      widget.onOpenChannelEditor!(id, ChannelEditorTab.plugin);
+    } else {
+      _openPluginFromMenu(id);
+    }
   }
 
   /// Toggles the engine-backed solo gate for [instrumentId]. Solo is exclusive
@@ -929,6 +975,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
           label: isSample ? 'Open sampler' : 'Open plugin window',
           icon: isSample ? ObKitGlyphKind.waveform : ObKitGlyphKind.keyboard,
         ),
+      const ObMenuRowVm(label: 'Channel settings', icon: ObKitGlyphKind.grid),
       const ObMenuRowVm(label: 'Rename', icon: ObKitGlyphKind.pencil),
       const ObMenuRowVm(label: 'Duplicate', icon: ObKitGlyphKind.plus),
       const ObMenuRowVm(label: 'Recolor', icon: ObKitGlyphKind.grid),
@@ -953,6 +1000,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     final List<void Function()> actions = <void Function()>[
       () => widget.onOpenPianoRoll?.call(instrumentId),
       if (hostsPlugin) () => _openPluginFromMenu(instrumentId),
+      () => _openChannelSettings(instrumentId),
       () => _beginRename(instrumentId),
       () => _duplicateInstrument(instrumentId),
       () => _recolorInstrument(instrumentId),
@@ -1053,7 +1101,9 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   void _openPluginFromMenu(String instrumentId) {
     widget.client.selectInstrument(instrumentId);
     _store.selectInstrument(instrumentId);
-    if (_store.instrumentFor(instrumentId)?.pluginId == _kSamplePluginId) {
+    if (widget.onOpenChannelEditor != null) {
+      widget.onOpenChannelEditor!(instrumentId, ChannelEditorTab.plugin);
+    } else if (_store.instrumentFor(instrumentId)?.pluginId == _kSamplePluginId) {
       widget.onOpenSampler?.call(instrumentId);
     } else {
       widget.onOpenPlugin?.call(instrumentId);
@@ -1063,7 +1113,55 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
   void _onInspectorOpenSampler() {
     final String? id = _store.selectedInstrumentId;
     if (id == null || _store.instrumentFor(id)?.pluginId != _kSamplePluginId) return;
-    widget.onOpenSampler?.call(id);
+    if (widget.onOpenChannelEditor != null) {
+      widget.onOpenChannelEditor!(id, ChannelEditorTab.plugin);
+    } else {
+      widget.onOpenSampler?.call(id);
+    }
+  }
+
+  void _openChannelSettings(String instrumentId) {
+    if (widget.onOpenChannelEditor != null) {
+      widget.onOpenChannelEditor!(instrumentId, ChannelEditorTab.settings);
+      return;
+    }
+    final ProjectInstrument? instrument = _store.instrumentFor(instrumentId);
+    if (instrument == null) return;
+    InstrumentSettings settings = const InstrumentSettings();
+    try {
+      settings = widget.client.readInstrumentSettings(instrumentId);
+    } catch (_) {
+      // Presentation fakes can still open the editor with safe defaults.
+    }
+    setState(() {
+      _settingsInstrumentId = instrumentId;
+      _channelSettings = settings;
+      _showChannelSettings = true;
+    });
+  }
+
+  void _applyChannelSettings(InstrumentSettings settings) {
+    final String? instrumentId = _settingsInstrumentId;
+    if (instrumentId == null) return;
+    try {
+      widget.client.setInstrumentSettings(instrumentId, settings);
+    } catch (_) {
+      return;
+    }
+    _store.refresh();
+    setState(() {
+      _showChannelSettings = false;
+      _settingsInstrumentId = null;
+      _channelSettings = null;
+    });
+  }
+
+  void _closeChannelSettings() {
+    setState(() {
+      _showChannelSettings = false;
+      _settingsInstrumentId = null;
+      _channelSettings = null;
+    });
   }
 
   void _beginRename(String instrumentId) {
@@ -1269,6 +1367,7 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
               onGroup: _onShowFilter,
               onInspectorGrid: _onInspectorGrid,
               onDismissSharedPatternNotice: _patternStore.dismissNotice,
+              onMakeUniqueSharedPattern: _makeUniqueSharedPattern,
               onInspectorKeyPress: (int note) => _store.auditionNote(note),
               onPointerDownStep: (PointerDownEvent event, int rowIndex, int stepIndex) {
                 final List<RackRow> visible = _store.visibleRows;
@@ -1323,6 +1422,13 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
                 onClose: _closeRenameDialog,
                 title: _renamePattern ? 'Rename pattern' : 'Rename channel',
                 fieldLabel: _renamePattern ? 'Pattern name' : 'Channel name',
+              ),
+            if (_showChannelSettings && _channelSettings != null && _settingsInstrumentId != null)
+              ChannelSettingsEditor(
+                channelName: _store.instrumentFor(_settingsInstrumentId!)?.name ?? 'Channel',
+                initial: _channelSettings!,
+                onApply: _applyChannelSettings,
+                onClose: _closeChannelSettings,
               ),
             if (_showDeletePatternDialog)
               DeletePatternDialog(

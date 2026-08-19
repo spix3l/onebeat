@@ -11,6 +11,7 @@ class PatternTabVm {
   const PatternTabVm({
     required this.id,
     required this.name,
+    this.color = '#6C8CFF',
     this.selected = false,
     this.count,
     this.group = '',
@@ -19,6 +20,7 @@ class PatternTabVm {
 
   final String id;
   final String name;
+  final String color;
   final bool selected;
   final String group;
   final String timeSignature;
@@ -29,9 +31,10 @@ class PatternTabVm {
 
 @immutable
 class SharedPatternNoticeVm {
-  const SharedPatternNoticeVm({required this.message});
+  const SharedPatternNoticeVm({required this.message, this.canMakeUnique = false});
 
   final String message;
+  final bool canMakeUnique;
 }
 
 @immutable

@@ -427,6 +427,7 @@ class EngineClient
       _pluginInfo = calloc<ob_plugin_info>(),
       _instanceInfo = calloc<ob_instance_info>(),
       _instrumentInfo = calloc<ob_instrument_info>(),
+      _instrumentSettings = calloc<ob_instrument_settings>(),
       _rackPatternInfo = calloc<ob_rack_pattern_info>(),
       _rackRowInfo = calloc<ob_rack_row_info>(),
       _patternInfo = calloc<ob_pattern_info>(),
@@ -479,6 +480,7 @@ class EngineClient
   final Pointer<ob_plugin_info> _pluginInfo;
   final Pointer<ob_instance_info> _instanceInfo;
   final Pointer<ob_instrument_info> _instrumentInfo;
+  final Pointer<ob_instrument_settings> _instrumentSettings;
   final Pointer<ob_rack_pattern_info> _rackPatternInfo;
   final Pointer<ob_rack_row_info> _rackRowInfo;
   final Pointer<ob_pattern_info> _patternInfo;
@@ -910,6 +912,27 @@ class EngineClient
         _bindings.ob_engine_instrument_set_route(_engine, instrument, track),
   );
 
+  InstrumentSettings readInstrumentSettings(String id) {
+    final Pointer<Utf8> nativeId = id.toNativeUtf8();
+    try {
+      _check(_bindings.ob_engine_instrument_settings(_engine, nativeId.cast<Char>(), _instrumentSettings));
+      final ob_instrument_settings value = _instrumentSettings.ref;
+      return InstrumentSettings.fromNative(value);
+    } finally {
+      calloc.free(nativeId);
+    }
+  }
+
+  void setInstrumentSettings(String id, InstrumentSettings settings) {
+    final Pointer<Utf8> nativeId = id.toNativeUtf8();
+    try {
+      settings.writeNative(_instrumentSettings.ref);
+      _check(_bindings.ob_engine_instrument_set_settings(_engine, nativeId.cast<Char>(), _instrumentSettings));
+    } finally {
+      calloc.free(nativeId);
+    }
+  }
+
   @override
   bool get canUndoProject => _bindings.ob_engine_project_can_undo(_engine) != 0;
   @override
@@ -927,12 +950,14 @@ class EngineClient
   RackPattern readRackPattern() {
     _check(_bindings.ob_engine_rack_pattern(_engine, _rackPatternInfo));
     final ob_rack_pattern_info value = _rackPatternInfo.ref;
+    final bool autoLength = value.length_ticks < 0;
     return RackPattern(
       id: _readFixedUtf8(value.id, 32),
       name: _readFixedUtf8(value.name, 128),
-      lengthTicks: value.length_ticks,
+      lengthTicks: value.length_ticks.abs(),
       baseGridTicks: value.base_grid_ticks,
       swing: value.swing,
+      autoLength: autoLength,
     );
   }
 
@@ -1833,6 +1858,7 @@ class EngineClient
     calloc.free(_pluginInfo);
     calloc.free(_instanceInfo);
     calloc.free(_instrumentInfo);
+    calloc.free(_instrumentSettings);
     calloc.free(_rackPatternInfo);
     calloc.free(_rackRowInfo);
     calloc.free(_patternInfo);
@@ -1988,6 +2014,95 @@ class HostedInstance {
   final int paramCount;
 }
 
+class InstrumentSettings {
+  const InstrumentSettings({
+    this.gatePercent = 100,
+    this.shiftTicks = 0,
+    this.cutGroup = 0,
+    this.cutByGroup = 0,
+    this.maxPolyphony = 0,
+    this.mono = false,
+    this.portamento = false,
+    this.rootKey = 60,
+    this.keyLow = 0,
+    this.keyHigh = 127,
+    this.fineTuneCents = 0,
+    this.velocityTracking = 1.0,
+    this.modX = 0,
+    this.modY = 0,
+    this.arpeggiator = false,
+    this.arpeggiatorTimeTicks = 240,
+    this.arpeggiatorGatePercent = 100,
+    this.echoTimeTicks = 0,
+    this.echoFeedbackPercent = 0,
+  });
+
+  final int gatePercent;
+  final int shiftTicks;
+  final int cutGroup;
+  final int cutByGroup;
+  final int maxPolyphony;
+  final bool mono;
+  final bool portamento;
+  final int rootKey;
+  final int keyLow;
+  final int keyHigh;
+  final int fineTuneCents;
+  final double velocityTracking;
+  final int modX;
+  final int modY;
+  final bool arpeggiator;
+  final int arpeggiatorTimeTicks;
+  final int arpeggiatorGatePercent;
+  final int echoTimeTicks;
+  final int echoFeedbackPercent;
+
+  factory InstrumentSettings.fromNative(ob_instrument_settings value) => InstrumentSettings(
+    gatePercent: value.gate_percent,
+    shiftTicks: value.shift_ticks,
+    cutGroup: value.cut_group,
+    cutByGroup: value.cut_by_group,
+    maxPolyphony: value.max_polyphony,
+    mono: value.mono != 0,
+    portamento: value.portamento != 0,
+    rootKey: value.root_key,
+    keyLow: value.key_low,
+    keyHigh: value.key_high,
+    fineTuneCents: value.fine_tune_cents,
+    velocityTracking: value.velocity_tracking,
+    modX: value.mod_x,
+    modY: value.mod_y,
+    arpeggiator: value.arpeggiator != 0,
+    arpeggiatorTimeTicks: value.arpeggiator_time_ticks,
+    arpeggiatorGatePercent: value.arpeggiator_gate_percent,
+    echoTimeTicks: value.echo_time_ticks,
+    echoFeedbackPercent: value.echo_feedback_percent,
+  );
+
+  void writeNative(ob_instrument_settings value) {
+    value.struct_size = sizeOf<ob_instrument_settings>();
+    value.gate_percent = gatePercent;
+    value.shift_ticks = shiftTicks;
+    value.cut_group = cutGroup;
+    value.cut_by_group = cutByGroup;
+    value.max_polyphony = maxPolyphony;
+    value.mono = mono ? 1 : 0;
+    value.portamento = portamento ? 1 : 0;
+    value.root_key = rootKey;
+    value.key_low = keyLow;
+    value.key_high = keyHigh;
+    value.fine_tune_cents = fineTuneCents;
+    value.velocity_tracking = velocityTracking;
+    value.mod_x = modX;
+    value.mod_y = modY;
+    value.arpeggiator = arpeggiator ? 1 : 0;
+    value.arpeggiator_time_ticks = arpeggiatorTimeTicks;
+    value.arpeggiator_gate_percent = arpeggiatorGatePercent;
+    value.echo_time_ticks = echoTimeTicks;
+    value.echo_feedback_percent = echoFeedbackPercent;
+  }
+}
+
 class ProjectInstrument {
   const ProjectInstrument({
     required this.id,
@@ -2041,6 +2156,7 @@ class RackPattern {
     required this.lengthTicks,
     required this.baseGridTicks,
     required this.swing,
+    this.autoLength = false,
   });
 
   final String id;
@@ -2048,6 +2164,7 @@ class RackPattern {
   final int lengthTicks;
   final int baseGridTicks;
   final double swing;
+  final bool autoLength;
 
   int get baseStepCount => (lengthTicks / baseGridTicks).ceil();
 }

@@ -42,6 +42,7 @@ class ChannelRackScreen extends StatelessWidget {
     this.onMixerTap,
     this.onAutomationTap,
     this.onDismissSharedPatternNotice,
+    this.onMakeUniqueSharedPattern,
     this.onInspectorVol,
     this.onInspectorPan,
     this.onInspectorMute,
@@ -89,6 +90,7 @@ class ChannelRackScreen extends StatelessWidget {
   final VoidCallback? onMixerTap;
   final VoidCallback? onAutomationTap;
   final VoidCallback? onDismissSharedPatternNotice;
+  final VoidCallback? onMakeUniqueSharedPattern;
   final ValueChanged<double>? onInspectorVol;
   final ValueChanged<double>? onInspectorPan;
   final VoidCallback? onInspectorMute;
@@ -139,7 +141,11 @@ class ChannelRackScreen extends StatelessWidget {
             onVelocityDelta: onVelocityDelta,
           ),
           if (vm.sharedPatternNotice != null)
-            _SharedPatternNotice(message: vm.sharedPatternNotice!.message, onDismiss: onDismissSharedPatternNotice),
+            _SharedPatternNotice(
+              message: vm.sharedPatternNotice!.message,
+              onDismiss: onDismissSharedPatternNotice,
+              onMakeUnique: vm.sharedPatternNotice!.canMakeUnique ? onMakeUniqueSharedPattern : null,
+            ),
           Expanded(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
@@ -246,10 +252,11 @@ double _rackChromeWidth(OneBeatTokens tokens) {
 }
 
 class _SharedPatternNotice extends StatelessWidget {
-  const _SharedPatternNotice({required this.message, this.onDismiss});
+  const _SharedPatternNotice({required this.message, this.onDismiss, this.onMakeUnique});
 
   final String message;
   final VoidCallback? onDismiss;
+  final VoidCallback? onMakeUnique;
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +270,15 @@ class _SharedPatternNotice extends StatelessWidget {
           Expanded(
             child: Text(message, maxLines: 1, overflow: TextOverflow.ellipsis, style: tokens.type.bodySecondary),
           ),
+          if (onMakeUnique != null)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onMakeUnique,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: tokens.spacing.sm),
+                child: Text('Make unique', style: tokens.type.microCaps.copyWith(color: tokens.color.accentBright)),
+              ),
+            ),
           if (onDismiss != null)
             GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -385,11 +401,13 @@ class _PatternSelect extends StatelessWidget {
   final ValueChanged<String>? onSelect;
   final void Function(String patternId, TapDownDetails details)? onSecondaryTapDown;
 
-  /// A pattern's row in the menu. The group is a prefix because that is how the
-  /// tabs read it, and it is what disambiguates two `Verse` patterns in
-  /// different groups.
   static String _label(PatternTabVm pattern) =>
       pattern.group.isEmpty ? pattern.name : '${pattern.group} · ${pattern.name}';
+
+  static Color? _parseColor(String value) {
+    final int? parsed = int.tryParse(value.replaceFirst('#', ''), radix: 16);
+    return parsed == null || parsed == 0 ? null : Color(0xFF000000 | parsed);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -398,31 +416,40 @@ class _PatternSelect extends StatelessWidget {
       (PatternTabVm pattern) => pattern.selected,
       orElse: () => patterns.first,
     );
+    final Color color = _parseColor(current.color) ?? tokens.color.accent;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: onSecondaryTapDown == null
-          ? null
-          : (TapDownDetails details) => onSecondaryTapDown!(current.id, details),
-      child: ObDropdown(
-        label: 'Pattern',
-        value: _label(current),
-        items: <String>[for (final PatternTabVm pattern in patterns) _label(pattern)],
-        width: tokens.size.rackPatternFieldWidth,
-        onSelected: onSelect == null
-            ? null
-            : (String label) {
-                // Labels are what the select speaks; the store speaks ids. Two
-                // patterns can carry the same name, and the first match is the
-                // only sane reading of a click on a row that says that name.
-                for (final PatternTabVm pattern in patterns) {
-                  if (_label(pattern) == label) {
-                    onSelect!(pattern.id);
-                    return;
-                  }
-                }
-              },
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: tokens.size.rackColorChipSize,
+          height: tokens.size.rackColorChipSize,
+          decoration: BoxDecoration(color: color, borderRadius: tokens.radius.controlBorder),
+        ),
+        SizedBox(width: tokens.spacing.xs),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onSecondaryTapDown: onSecondaryTapDown == null
+              ? null
+              : (TapDownDetails details) => onSecondaryTapDown!(current.id, details),
+          child: ObDropdown(
+            label: 'Pattern',
+            value: _label(current),
+            items: <String>[for (final PatternTabVm pattern in patterns) _label(pattern)],
+            width: tokens.size.rackPatternFieldWidth,
+            onSelected: onSelect == null
+                ? null
+                : (String label) {
+                    for (final PatternTabVm pattern in patterns) {
+                      if (_label(pattern) == label) {
+                        onSelect!(pattern.id);
+                        return;
+                      }
+                    }
+                  },
+          ),
+        ),
+      ],
     );
   }
 }

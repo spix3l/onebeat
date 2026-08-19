@@ -2286,6 +2286,79 @@ ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_ins
                       "The instrument could not be routed.");
 }
 
+ob_status ob_engine_instrument_settings(ob_engine* engine, const char* utf8_instrument_id,
+                                             ob_instrument_settings* out_settings) {
+  if (engine == nullptr || out_settings == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and settings output are required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  const onebeat::model::Instrument* instrument = id ? engine->project.findInstrument(*id) : nullptr;
+  if (instrument == nullptr) return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  const onebeat::model::ChannelSettings& value = instrument->channel_settings;
+  std::memset(out_settings, 0, sizeof(*out_settings));
+  out_settings->struct_size = sizeof(*out_settings);
+  out_settings->gate_percent = value.gate_percent;
+  out_settings->shift_ticks = value.shift_ticks;
+  out_settings->cut_group = value.cut_group;
+  out_settings->cut_by_group = value.cut_by_group;
+  out_settings->max_polyphony = value.max_polyphony;
+  out_settings->mono = value.mono ? 1 : 0;
+  out_settings->portamento = value.portamento ? 1 : 0;
+  out_settings->root_key = value.root_key;
+  out_settings->key_low = value.key_low;
+  out_settings->key_high = value.key_high;
+  out_settings->fine_tune_cents = value.fine_tune_cents;
+  out_settings->velocity_tracking = value.velocity_tracking;
+  out_settings->mod_x = value.mod_x;
+  out_settings->mod_y = value.mod_y;
+  out_settings->arpeggiator = value.arpeggiator ? 1 : 0;
+  out_settings->arpeggiator_time_ticks = value.arpeggiator_time_ticks;
+  out_settings->arpeggiator_gate_percent = value.arpeggiator_gate_percent;
+  out_settings->echo_time_ticks = value.echo_time_ticks;
+  out_settings->echo_feedback_percent = value.echo_feedback_percent;
+  g_last_error.clear();
+  return OB_OK;
+}
+
+ob_status ob_engine_instrument_set_settings(ob_engine* engine, const char* utf8_instrument_id,
+                                             const ob_instrument_settings* settings) {
+  if (engine == nullptr || settings == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "An engine and settings are required.");
+  }
+  const auto id = instrumentId(utf8_instrument_id);
+  if (!id || engine->project.findInstrument(*id) == nullptr) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "The instrument does not exist.");
+  }
+  const onebeat::model::ChannelSettings next{
+      std::clamp(settings->gate_percent, 1, 100),
+      settings->shift_ticks,
+      std::max(0, settings->cut_group),
+      std::max(0, settings->cut_by_group),
+      std::max(0, settings->max_polyphony),
+      settings->mono != 0,
+      settings->portamento != 0,
+      std::clamp(settings->root_key, 0, 127),
+      std::clamp(settings->key_low, 0, 127),
+      std::clamp(settings->key_high, 0, 127),
+      std::clamp(settings->fine_tune_cents, -1200, 1200),
+      std::clamp(settings->velocity_tracking, 0.0F, 2.0F),
+      std::clamp(settings->mod_x, -100, 100),
+      std::clamp(settings->mod_y, -100, 100),
+      settings->arpeggiator != 0,
+      std::max(1, settings->arpeggiator_time_ticks),
+      std::clamp(settings->arpeggiator_gate_percent, 1, 100),
+      std::max(0, settings->echo_time_ticks),
+      std::clamp(settings->echo_feedback_percent, 0, 100),
+  };
+  return executeModel(
+      *engine,
+      onebeat::model::editInstrument(
+          engine->project, *id, onebeat::model::ChangeField::Meta,
+          [next](onebeat::model::Instrument& instrument) { instrument.channel_settings = next; },
+          "Set channel settings"),
+      "The channel settings could not be changed.");
+}
+
 int32_t ob_engine_project_can_undo(ob_engine* engine) {
   return engine != nullptr && engine->commands.canUndo() ? 1 : 0;
 }
@@ -2346,7 +2419,11 @@ ob_status ob_engine_rack_pattern(ob_engine* engine, ob_rack_pattern_info* out_in
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
-  out_info->length_ticks = onebeat::model::patternEffectiveLength(*pattern);
+  // Negative length is the ABI-compatible Auto sentinel. The existing struct
+  // layout is frozen, so Auto is carried without growing ob_rack_pattern_info;
+  // the Dart seam turns it back into a positive effective length plus a flag.
+  const onebeat::model::Ticks effective_length = onebeat::model::patternEffectiveLength(*pattern);
+  out_info->length_ticks = pattern->length <= 0 ? -effective_length : effective_length;
   out_info->base_grid_ticks = onebeat::model::TicksPerQuarter / 4;
   out_info->swing = pattern->swing;
   copyText(out_info->id, sizeof(out_info->id), pattern->id.str().c_str());
@@ -2415,13 +2492,17 @@ ob_status ob_engine_rack_set_row_grid(ob_engine* engine, const char* utf8_instru
 }
 
 ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) {
-  if (engine == nullptr || base_step_count < 1 || base_step_count > 512) {
-    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern length must be between 1 and 512 steps.");
+  if (engine == nullptr || base_step_count < 0 || base_step_count > 512) {
+    return fail(OB_ERR_INVALID_ARGUMENT, "Pattern length must be Auto or between 1 and 512 steps.");
   }
   const onebeat::model::Pattern* pattern = currentPattern(*engine);
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
+  // Zero is the persisted Auto mode. The model's effective-length helper
+  // expands it to the shortest whole-bar span containing the pattern content.
   const onebeat::model::Ticks length =
-      static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
+      base_step_count == 0
+          ? 0
+          : static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
   /* Placements are the size the pattern *plays*, not the size it declares, so
    * that is what "this clip still fits the pattern" is measured against. A
    * pattern held open by a note past its declared end keeps its clips where

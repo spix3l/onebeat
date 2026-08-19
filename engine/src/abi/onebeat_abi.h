@@ -523,6 +523,35 @@ OB_API ob_status ob_engine_instrument_set_pan(ob_engine* engine, const char* utf
 /* Routes output port 0 to an existing mixer track by stable ID. */
 OB_API ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_instrument_id,
                                                 const char* utf8_mixer_track_id);
+
+/* Advanced Channel Settings. This is a new struct/API rather than an extension
+ * of ob_instrument_info, whose layout is frozen for ABI compatibility. */
+typedef struct ob_instrument_settings {
+  uint32_t struct_size;
+  int32_t gate_percent;
+  int64_t shift_ticks;
+  int32_t cut_group;
+  int32_t cut_by_group;
+  int32_t max_polyphony;
+  int32_t mono;
+  int32_t portamento;
+  int32_t root_key;
+  int32_t key_low;
+  int32_t key_high;
+  int32_t fine_tune_cents;
+  float velocity_tracking;
+  int32_t mod_x;
+  int32_t mod_y;
+  int32_t arpeggiator;
+  int32_t arpeggiator_time_ticks;
+  int32_t arpeggiator_gate_percent;
+  int32_t echo_time_ticks;
+  int32_t echo_feedback_percent;
+} ob_instrument_settings;
+OB_API ob_status ob_engine_instrument_settings(ob_engine* engine, const char* utf8_instrument_id,
+                                               ob_instrument_settings* out_settings);
+OB_API ob_status ob_engine_instrument_set_settings(ob_engine* engine, const char* utf8_instrument_id,
+                                                   const ob_instrument_settings* settings);
 OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
 OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);
 /* Main/UI thread. Never blocks. Engine-owned UTF-8, valid until the next call

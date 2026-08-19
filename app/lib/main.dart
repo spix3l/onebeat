@@ -1,4 +1,4 @@
-// OneBeat v0.1 — "it makes sound".
+// OneBeat v0.3 — "it sequences".
 //
 // The app owns the engine handle: it is created here, on the UI isolate, and
 // destroyed when the app closes (ADR-002 §6).
@@ -12,6 +12,7 @@ import 'src/design/tokens.dart';
 import 'src/engine/engine_client.dart';
 import 'src/engine/engine_library.dart';
 import 'src/features/shell/shell_binding.dart';
+import 'src/features/startup/loading_page.dart';
 
 /// Time from Dart entry to a window the user can act on. NFR-04 puts a five
 /// second ceiling on cold start with a large plug-in library, and the only way
@@ -32,9 +33,7 @@ void main() {
     // stdout rather than developer.log or debugPrint: this has to survive a
     // release build, because a release build is what the five second ceiling
     // is about. One line, once, at startup.
-    stdout.writeln(
-      'onebeat: first frame in ${startupStopwatch.elapsedMilliseconds} ms',
-    );
+    stdout.writeln('onebeat: first frame in ${startupStopwatch.elapsedMilliseconds} ms');
   });
   runApp(const OneBeatApp());
 }
@@ -47,14 +46,9 @@ void main() {
 PageRoute<T> _pageRoute<T>(RouteSettings settings, WidgetBuilder builder) {
   return PageRouteBuilder<T>(
     settings: settings,
-    pageBuilder:
-        (
-          BuildContext context,
-          Animation<double> animation,
-          Animation<double> secondaryAnimation,
-        ) {
-          return builder(context);
-        },
+    pageBuilder: (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+      return builder(context);
+    },
   );
 }
 
@@ -73,10 +67,14 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _startEngine();
+    });
+  }
+
+  void _startEngine() {
     try {
-      final EngineClient client = EngineClient.start(
-        useNullDevice: isHeadlessEnvironment,
-      );
+      final EngineClient client = EngineClient.start(useNullDevice: isHeadlessEnvironment);
       client.startAudio();
       // FR-PLG-05: the plug-in library is ready by the first frame. The cache
       // load is one blocking file read; the scan itself runs on a background
@@ -84,16 +82,22 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
       // the user adds a channel.
       client.loadPluginCache();
       client.startPluginScan();
-      _client = client;
+      if (!mounted) {
+        client.dispose();
+        return;
+      }
+      setState(() => _client = client);
     } on EngineLoadException catch (error) {
-      _failure = error.message;
+      if (!mounted) return;
+      setState(() => _failure = error.message);
       // Also to stdout: the on-screen failure state is for a user, but a
       // developer runs this from a terminal, and "the window says something is
       // wrong" is a slow way to find out what. `toString()` rather than
       // `message` because it appends the paths that were searched.
       stdout.writeln('onebeat: engine unavailable — $error');
     } on EngineException catch (error) {
-      _failure = error.message;
+      if (!mounted) return;
+      setState(() => _failure = error.message);
       stdout.writeln('onebeat: engine unavailable — ${error.message}');
     }
   }
@@ -125,14 +129,14 @@ class _OneBeatAppState extends State<OneBeatApp> with WidgetsBindingObserver {
     return OneBeatTheme(
       tokens: tokens,
       child: WidgetsApp(
-        title: 'OneBeat',
+        title: 'ONEBEAT',
         color: tokens.color.surfaceDeep,
         debugShowCheckedModeBanner: false,
         pageRouteBuilder: _pageRoute,
         home: client == null
-            ? _EngineUnavailable(
-                message: _failure ?? 'The engine could not start.',
-              )
+            ? _failure == null
+                  ? const OneBeatLoadingPage()
+                  : _EngineUnavailable(message: _failure ?? 'The engine could not start.')
             : ShellBinding(client: client),
       ),
     );
@@ -156,10 +160,7 @@ class _EngineUnavailable extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            'OneBeat cannot reach its audio engine',
-            style: tokens.type.title,
-          ),
+          Text('OneBeat cannot reach its audio engine', style: tokens.type.title),
           SizedBox(height: tokens.spacing.md),
           SizedBox(
             width: tokens.size.dialogProseWidth,

@@ -20,6 +20,7 @@ import '../browser/sample_pack.dart';
 import '../browser/sample_pack_platform.dart';
 import '../channel_rack/rack_binding.dart';
 import '../export/export_binding.dart';
+import '../plugins/channel_editor_binding.dart';
 import '../mixer/mixer_binding.dart';
 import '../piano_roll/piano_roll_binding.dart';
 import '../playlist/playlist_binding.dart';
@@ -83,6 +84,15 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
   List<PluginListing> _builtins = const <PluginListing>[];
   HostedInstance? _openPlugin;
   List<HostedParameter> _openPluginParameters = const <HostedParameter>[];
+
+  HostedInstance? _openChannelEditorPlugin;
+  List<HostedParameter> _openChannelEditorParameters = const <HostedParameter>[];
+  InstrumentSettings _openChannelEditorSettings = const InstrumentSettings();
+  String? _openChannelEditorTrackId;
+  String _openChannelEditorTrackName = 'Channel';
+  String? _openChannelEditorSampleName;
+  ChannelEditorTab _openChannelEditorTab = ChannelEditorTab.plugin;
+  final Map<String, ChannelEditorTab> _channelEditorTabs = <String, ChannelEditorTab>{};
   String? _openPluginTrackId;
   Offset _pluginOffset = const Offset(140, 70);
 
@@ -432,6 +442,90 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       _openPlugin = null;
       _openPluginParameters = const <HostedParameter>[];
       _openPluginTrackId = null;
+    });
+  }
+
+  void _openChannelEditorForInstrument(String instrumentId, ChannelEditorTab tab) {
+    if (instrumentId.isEmpty) return;
+    ProjectInstrument? target;
+    for (final ProjectInstrument instrument in _controller.client.readInstruments()) {
+      if (instrument.id == instrumentId) {
+        target = instrument;
+        break;
+      }
+    }
+    if (target == null) return;
+
+    final ProjectInstrument instrument = target;
+    _controller.client.selectInstrument(instrumentId);
+    HostedInstance? hosted;
+    String? sampleName;
+    if (instrument.pluginId == _samplePluginId) {
+      hosted = HostedInstance(
+        id: 0,
+        pluginId: _samplePluginId,
+        name: 'OneBeat Sampler',
+        vendor: 'OneBeat',
+        path: instrument.pluginPath,
+        format: PluginFormat.builtin,
+        missing: false,
+        hasEditor: false,
+        needsRestart: false,
+        paramCount: 0,
+      );
+      sampleName = instrument.name;
+    } else {
+      hosted = _controller.client.readHostedInstance();
+      if (hosted == null || hosted.pluginId != instrument.pluginId) return;
+    }
+
+    InstrumentSettings settings = const InstrumentSettings();
+    try {
+      settings = _controller.client.readInstrumentSettings(instrumentId);
+    } catch (_) {
+      // Presentation-only clients can still show the tabbed shell with defaults.
+    }
+
+    setState(() {
+      _openChannelEditorPlugin = hosted;
+      _openChannelEditorTrackId = instrument.id;
+      _openChannelEditorTrackName = instrument.name;
+      _openChannelEditorSampleName = sampleName;
+      _openChannelEditorParameters = hosted == null
+          ? const <HostedParameter>[]
+          : _controller.client.readParameters(hosted);
+      _openChannelEditorSettings = settings;
+      _openChannelEditorTab = tab;
+    });
+  }
+
+  void _rememberChannelEditorTab(ChannelEditorTab tab) {
+    final String? instrumentId = _openChannelEditorTrackId;
+    if (instrumentId == null || instrumentId.isEmpty) return;
+    _channelEditorTabs[instrumentId] = tab;
+    _openChannelEditorTab = tab;
+  }
+
+  void _applyChannelEditorSettings(InstrumentSettings settings) {
+    final String? instrumentId = _openChannelEditorTrackId;
+    if (instrumentId == null) return;
+    try {
+      _controller.client.setInstrumentSettings(instrumentId, settings);
+    } catch (_) {
+      return;
+    }
+    _closeChannelEditor();
+  }
+
+  void _closeChannelEditor() {
+    setState(() {
+      _openChannelEditorPlugin = null;
+      _openChannelEditorParameters = const <HostedParameter>[];
+      _openChannelEditorSettings = const InstrumentSettings();
+      _openChannelEditorTrackId = null;
+      _openChannelEditorTrackName = 'Channel';
+      _openChannelEditorSampleName = null;
+      _openChannelEditorTab = ChannelEditorTab.plugin;
     });
   }
 
@@ -791,6 +885,7 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
                   onSelectRail: _onRailSelect,
                   onOpenPianoRoll: _openPianoRoll,
                   onOpenPlugin: _openPluginForInstrument,
+                  onOpenChannelEditor: _openChannelEditorForInstrument,
                   onOpenPattern: () => _openPianoRoll(),
                   onClosePianoRoll: _closePianoRoll,
                   externalAudioDrop: _audioFileDrop,
@@ -844,6 +939,25 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
                   currentFileName: _project.hasFile ? _project.path : '',
                   onSubmit: (String name) => unawaited(_renameProject(name)),
                   onClose: () => setState(() => _showRenameDialog = false),
+                ),
+              if (_openChannelEditorPlugin case final HostedInstance plugin)
+                Positioned(
+                  left: _pluginOffset.dx,
+                  top: _pluginOffset.dy,
+                  child: ChannelEditorBinding(
+                    client: widget.client,
+                    trackId: _openChannelEditorTrackId ?? '',
+                    channelName: _openChannelEditorTrackName,
+                    plugin: plugin,
+                    parameters: _openChannelEditorParameters,
+                    sampleName: _openChannelEditorSampleName,
+                    initialSettings: _openChannelEditorSettings,
+                    initialTab: _channelEditorTabs[_openChannelEditorTrackId] ?? _openChannelEditorTab,
+                    onTabChanged: _rememberChannelEditorTab,
+                    onApplySettings: _applyChannelEditorSettings,
+                    onClose: _closeChannelEditor,
+                    onDragUpdate: _movePlugin,
+                  ),
                 ),
               if (_openPlugin case final HostedInstance plugin)
                 Positioned(
@@ -920,6 +1034,7 @@ class _WorkspaceSlot extends StatelessWidget {
     required this.onSelectRail,
     required this.onOpenPianoRoll,
     required this.onOpenPlugin,
+    required this.onOpenChannelEditor,
     required this.onOpenPattern,
     required this.onClosePianoRoll,
     this.externalAudioDrop,
@@ -931,6 +1046,7 @@ class _WorkspaceSlot extends StatelessWidget {
   final ValueChanged<int> onSelectRail;
   final ValueChanged<String> onOpenPianoRoll;
   final ValueChanged<String> onOpenPlugin;
+  final void Function(String instrumentId, ChannelEditorTab tab) onOpenChannelEditor;
   final VoidCallback onOpenPattern;
   final VoidCallback onClosePianoRoll;
   final AudioFileDrop? externalAudioDrop;
@@ -947,6 +1063,7 @@ class _WorkspaceSlot extends StatelessWidget {
         onOpenPianoRoll: onOpenPianoRoll,
         onOpenPlugin: onOpenPlugin,
         onOpenSampler: onOpenPlugin,
+        onOpenChannelEditor: onOpenChannelEditor,
       ),
       1 => PlaylistBinding(
         client: coreController.client,

@@ -172,7 +172,15 @@ class ObAppBrandMark extends StatelessWidget {
         decoration: BoxDecoration(
           color: tokens.color.accent,
           borderRadius: tokens.radius.controlBorder,
-          image: const DecorationImage(image: AssetImage('assets/branding/onebeat_logo.png'), fit: BoxFit.cover),
+        ),
+        alignment: Alignment.center,
+        child: Container(
+          width: tokens.spacing.sm,
+          height: tokens.spacing.sm,
+          decoration: BoxDecoration(
+            color: tokens.color.surfaceSunken,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );

@@ -28,7 +28,9 @@ class _FakeRackEngineClient implements EngineClient {
     this.loopStartBeats = 0,
     this.loopEndBeats = 4,
     this.withPluginRow = false,
+    this.withRouting = false,
   }) {
+    mixerTracks = <MixerTrackInfo>[];
     patterns = <PatternSummary>[
       const PatternSummary(
         id: 'pat_1',
@@ -145,6 +147,21 @@ class _FakeRackEngineClient implements EngineClient {
         ),
       ];
     }
+    if (withRouting) {
+      mixerTracks = <MixerTrackInfo>[
+        const MixerTrackInfo(
+          id: 'track_drums',
+          outputId: 'master',
+          name: 'Drums',
+          gain: 1.0,
+          pan: 0.0,
+          effectCount: 0,
+          muted: false,
+          soloed: false,
+          isMaster: false,
+        ),
+      ];
+    }
   }
 
   bool isPlaying;
@@ -156,8 +173,10 @@ class _FakeRackEngineClient implements EngineClient {
   /// lanes), so the double-click-to-open-plug-in behaviour has a row to act
   /// on.
   final bool withPluginRow;
+  final bool withRouting;
 
   late List<PatternSummary> patterns;
+  late List<MixerTrackInfo> mixerTracks;
   late List<ProjectInstrument> instruments;
   late List<RackRow> rows;
 
@@ -176,9 +195,45 @@ class _FakeRackEngineClient implements EngineClient {
   int redoCalls = 0;
   final List<int> auditionedNotes = <int>[];
   final List<String> selectedInstruments = <String>[];
+  final List<(String, String)> routeCalls = <(String, String)>[];
 
   @override
   void selectInstrument(String id) => selectedInstruments.add(id);
+
+  @override
+  List<MixerTrackInfo> readMixerTracks() => mixerTracks;
+
+  @override
+  void setInstrumentRoute(String instrumentId, String mixerTrackId) {
+    routeCalls.add((instrumentId, mixerTrackId));
+    final MixerTrackInfo track = mixerTracks.firstWhere((MixerTrackInfo value) => value.id == mixerTrackId);
+    instruments = instruments
+        .map(
+          (ProjectInstrument inst) => inst.id == instrumentId
+              ? ProjectInstrument(
+                  id: inst.id,
+                  name: inst.name,
+                  color: inst.color,
+                  order: inst.order,
+                  pluginId: inst.pluginId,
+                  pluginName: inst.pluginName,
+                  pluginVendor: inst.pluginVendor,
+                  pluginPath: inst.pluginPath,
+                  muted: inst.muted,
+                  soloed: inst.soloed,
+                  selected: inst.selected,
+                  affectedPatterns: inst.affectedPatterns,
+                  affectedClips: inst.affectedClips,
+                  affectedNotes: inst.affectedNotes,
+                  gain: inst.gain,
+                  pan: inst.pan,
+                  routeId: track.id,
+                  routeName: track.name,
+                )
+              : inst,
+        )
+        .toList();
+  }
 
   /// Every transport-facing call the binding made, in order, so a test can
   /// assert that an action left the transport alone.
@@ -602,6 +657,25 @@ void main() {
     expect(find.text('Kick 808'), findsNWidgets(2));
     expect(find.byType(ObChannelInspector), findsOneWidget);
     expect(find.byType(MiniKeyboard), findsOneWidget);
+  });
+
+  testWidgets('the inspector assigns a selected channel to a mixer route', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient(withRouting: true);
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    await tester.tap(find.text('Kick 808').first);
+    await tester.pump();
+    expect(find.text('Select route'), findsOneWidget);
+
+    await tester.tap(find.text('Select route'));
+    await tester.pump();
+    await tester.tap(find.text('Drums').last);
+    await tester.pump();
+
+    expect(client.routeCalls, <(String, String)>[('kick', 'track_drums')]);
+    expect(find.text('Drums'), findsOneWidget);
   });
 
   testWidgets('selecting a lane during a pattern preview leaves the transport alone', (WidgetTester tester) async {
@@ -1103,6 +1177,25 @@ void main() {
     final Rect gridAfterDismiss = tester.getRect(find.byType(ObStepGrid).first);
     await tester.tapAt(Offset(gridAfterDismiss.left + 5.5 * 30 + 4, gridAfterDismiss.center.dy));
     await tester.pump();
+    expect(find.text("Editing 'Main Groove' — used in 4 places. Changes apply to all of them."), findsNothing);
+  });
+
+  testWidgets('shared-pattern notice can isolate the rack edit', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    final Rect grid = tester.getRect(find.byType(ObStepGrid).first);
+    await tester.tapAt(Offset(grid.left + 1.5 * 30 + 4, grid.center.dy));
+    await tester.pump();
+
+    expect(find.text('Make unique'), findsOneWidget);
+    await tester.tap(find.text('Make unique'));
+    await tester.pump();
+
+    expect(client.patternDuplicateCalls, 1);
+    expect(client.pattern.name, 'Main Groove 2');
     expect(find.text("Editing 'Main Groove' — used in 4 places. Changes apply to all of them."), findsNothing);
   });
 
