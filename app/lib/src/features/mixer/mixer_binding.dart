@@ -172,7 +172,7 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
           final ProjectInstrument inst = instruments[i];
           final bool isSelected = i == _selectedTrackIndex;
           final bool muted = _mutedInstrumentIds.contains(inst.id) || inst.muted;
-          final bool soloed = _soloedInstrumentIds.contains(inst.id);
+          final bool soloed = _soloedInstrumentIds.contains(inst.id) || inst.soloed;
           final double fader = _faders[inst.id] ?? 0.75;
           final Color color = _resolveColor(i, inst.color);
 
@@ -291,19 +291,38 @@ class _MixerBindingState extends State<MixerBinding> with SingleTickerProviderSt
 
   void _onToggleSolo(int index) {
     if (index == -1) {
-      setState(() => _masterSoloed = !_masterSoloed);
+      setState(() {
+        _masterSoloed = !_masterSoloed;
+        if (_masterSoloed) _soloedInstrumentIds.clear();
+      });
       return;
     }
     final List<ProjectInstrument> instruments = widget.client.readInstruments();
     if (index >= 0 && index < instruments.length) {
-      final String id = instruments[index].id;
+      final ProjectInstrument instrument = instruments[index];
+      final String id = instrument.id;
+      final bool next = !(_soloedInstrumentIds.contains(id) || instrument.soloed);
       setState(() {
-        if (_soloedInstrumentIds.contains(id)) {
-          _soloedInstrumentIds.remove(id);
+        if (next) {
+          _soloedInstrumentIds
+            ..clear()
+            ..add(id);
+          _masterSoloed = false;
         } else {
-          _soloedInstrumentIds.add(id);
+          _soloedInstrumentIds.remove(id);
         }
       });
+      // Keep the engine-backed channel state in step with the mixer when this
+      // view is the one that changes solo. Enabling one channel clears every
+      // other channel, so both surfaces obey the same exclusive-solo rule.
+      if (next) {
+        for (final ProjectInstrument other in instruments) {
+          if (other.id != id && other.soloed) {
+            widget.client.setInstrumentSoloed(other.id, soloed: false);
+          }
+        }
+      }
+      widget.client.setInstrumentSoloed(id, soloed: next);
     }
   }
 

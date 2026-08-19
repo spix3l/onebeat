@@ -7,6 +7,7 @@
 #include "core/sampler.h"
 #include "core/wav_loader.h"
 #include "doctest.h"
+#include "plugin/builtin/effects/effect_plugin.h"
 #include "test_helpers.h"
 #include "testing/offline_driver.h"
 
@@ -35,6 +36,138 @@ TEST_SUITE("engine") {
     const auto result = renderOffline(*engine, 48000, 128);
     CHECK(result.peak() > 0.05F);
     CHECK(result.peak() <= 1.0F);
+  }
+
+  // ------------------------------------------------------------------------
+  // The mixer graph, rendered
+  // ------------------------------------------------------------------------
+  //
+  // The unit tests prove the effects process audio and the graph sorts itself.
+  // These prove the seam between them: that a chain published to a live engine
+  // is actually in the signal path, and that routing a channel somewhere really
+  // sends it there.
+
+  // The mixer the engine is given for these: a master, and a "Drums" bus that
+  // feeds it. Named tracks rather than indices, exactly as the ABI builds them.
+  std::vector<onebeat::core::Engine::MixerTrackDesc> twoTrackMixer() {
+    onebeat::core::Engine::MixerTrackDesc master;
+    master.track_id = "mix_master";
+    onebeat::core::Engine::MixerTrackDesc drums;
+    drums.track_id = "mix_drums";
+    drums.output_id = "mix_master";
+    return {master, drums};
+  }
+
+  TEST_CASE("Publishing a mixer leaves an unaffected render bit-identical") {
+    auto plain = makeOfflineEngine();
+    REQUIRE(plain != nullptr);
+    plain->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    plain->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto reference = renderOffline(*plain, 24000, 128);
+
+    auto routed = makeOfflineEngine();
+    REQUIRE(routed != nullptr);
+    routed->setMixerTracks(twoTrackMixer());
+    routed->applyPendingWorkForTests();
+    routed->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    routed->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto through = renderOffline(*routed, 24000, 128);
+
+    // A mixer with no inserts and unity levels must be transparent. If simply
+    // turning the graph on changed the sound, every gain stage in it would be
+    // suspect and no mix would survive a version bump.
+    CHECK(through.peak() == doctest::Approx(reference.peak()).epsilon(0.0001));
+  }
+
+  TEST_CASE("An insert on the master is really in the signal path") {
+    auto dry = makeOfflineEngine();
+    REQUIRE(dry != nullptr);
+    dry->setMixerTracks(twoTrackMixer());
+    dry->applyPendingWorkForTests();
+    dry->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    dry->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto clean = renderOffline(*dry, 24000, 128);
+
+    auto wet = makeOfflineEngine();
+    REQUIRE(wet != nullptr);
+    std::vector<onebeat::core::Engine::MixerTrackDesc> mixer = twoTrackMixer();
+    onebeat::core::Engine::MixerEffectDesc reverb;
+    reverb.effect_id = "efx_reverb";
+    reverb.plugin_id = "dev.onebeat.fx.reverb";
+    reverb.automation_index = 0;
+    mixer[0].effects.push_back(reverb);
+    wet->setMixerTracks(mixer);
+    wet->applyPendingWorkForTests();
+    wet->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    wet->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto reverbed = renderOffline(*wet, 24000, 128);
+
+    CHECK(clean.peak() > 0.05F);
+    CHECK(reverbed.peak() > 0.0F);
+    // Different audio, not merely audio. A chain that was published but never
+    // reached would pass every other assertion in this file.
+    CHECK(reverbed.peak() != doctest::Approx(clean.peak()).epsilon(0.0001));
+  }
+
+  TEST_CASE("A bypassed insert is transparent again") {
+    std::vector<onebeat::core::Engine::MixerTrackDesc> mixer = twoTrackMixer();
+    onebeat::core::Engine::MixerEffectDesc reverb;
+    reverb.effect_id = "efx_reverb";
+    reverb.plugin_id = "dev.onebeat.fx.reverb";
+    reverb.automation_index = 0;
+    mixer[0].effects.push_back(reverb);
+
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+    engine->setMixerTracks(mixer);
+    engine->applyPendingWorkForTests();
+    // Bypass travels as a parameter, not as a rebuild — which is what keeps
+    // toggling it from cutting the tail of everything else on the track.
+    engine->setEffectParam(0, onebeat::plugin::builtin::EffectParamBypass, 1.0);
+    engine->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto bypassed = renderOffline(*engine, 24000, 128);
+
+    auto plain = makeOfflineEngine();
+    REQUIRE(plain != nullptr);
+    plain->setMixerTracks(twoTrackMixer());
+    plain->applyPendingWorkForTests();
+    plain->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    plain->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+    const auto reference = renderOffline(*plain, 24000, 128);
+
+    CHECK(bypassed.peak() == doctest::Approx(reference.peak()).epsilon(0.0001));
+  }
+
+  TEST_CASE("A muted mixer track silences what it carries") {
+    std::vector<onebeat::core::Engine::MixerTrackDesc> mixer = twoTrackMixer();
+    mixer[0].muted = true;  // the master
+
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+    engine->setMixerTracks(mixer);
+    engine->applyPendingWorkForTests();
+    engine->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    CHECK(renderOffline(*engine, 24000, 128).isSilent());
+  }
+
+  TEST_CASE("Routing that feeds itself is refused, and the engine keeps playing") {
+    auto engine = makeOfflineEngine();
+    REQUIRE(engine != nullptr);
+    std::vector<onebeat::core::Engine::MixerTrackDesc> cycle = twoTrackMixer();
+    cycle[0].output_id = "mix_drums";  // master into drums, drums into master
+
+    engine->setMixerTracks(cycle);
+    engine->applyPendingWorkForTests();
+    engine->publishSchedule(makeGridSchedule(4, 60, 48000.0, 1.0, 120.0));
+    engine->postCommand(command(OB_CMD_TRANSPORT_PLAY));
+
+    // The graph is rejected rather than published, so the engine renders as it
+    // did before — which is audible, not hung. A cycle reaching the audio
+    // thread would be an unbounded walk.
+    CHECK(renderOffline(*engine, 24000, 128).peak() > 0.05F);
   }
 
   TEST_CASE("The metronome can be enabled and disabled without notes") {

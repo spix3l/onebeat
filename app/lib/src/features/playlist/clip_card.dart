@@ -66,6 +66,8 @@ class ClipVm {
   final List<ClipPreviewNoteVm> previewNotes;
 }
 
+enum ClipResizeEdge { start, end }
+
 class ObClipCard extends StatefulWidget {
   const ObClipCard({
     required this.vm,
@@ -89,7 +91,7 @@ class ObClipCard extends StatefulWidget {
   final GestureDragUpdateCallback? onPanUpdate;
   final GestureDragEndCallback? onPanEnd;
   final VoidCallback? onPanCancel;
-  final GestureDragStartCallback? onResizeStart;
+  final void Function(ClipResizeEdge edge, DragStartDetails details)? onResizeStart;
   final GestureDragUpdateCallback? onResizeUpdate;
   final GestureDragEndCallback? onResizeEnd;
   final VoidCallback? onResizeCancel;
@@ -103,25 +105,25 @@ class _ObClipCardState extends State<ObClipCard> {
   bool _resizeEdgeHover = false;
   bool _resizing = false;
 
-  bool _isResizeEdge(Offset local) {
+  ClipResizeEdge? _resizeEdge(Offset local) {
     final double width = context.size?.width ?? 0;
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     final double handle = tokens.size.playlistResizeHandleWidth;
     final double edgeWidth = math.min(handle, width / 3);
-    final bool inCardEdge = local.dx >= width - edgeWidth && local.dx <= width;
-    // Some Flutter render paths report the pointer in the positioned canvas
-    // space rather than the card's local space. Keep a small, separated band
-    // for that coordinate space so the card centre never becomes a resize hit.
-    final bool positionedEdge = local.dx >= width + handle;
-    return widget.onResizeStart != null && width > 0 && (inCardEdge || positionedEdge);
+    if (widget.onResizeStart == null || width <= 0) return null;
+    if (local.dx <= edgeWidth) return ClipResizeEdge.start;
+    if (local.dx >= width - edgeWidth || local.dx >= width + handle) return ClipResizeEdge.end;
+    return null;
   }
 
   void _onPanStart(DragStartDetails details) {
-    final RenderBox? box = context.findRenderObject() as RenderBox?;
-    final Offset cardLocal = box == null ? details.localPosition : box.globalToLocal(details.globalPosition);
-    _resizing = _isResizeEdge(cardLocal);
+    // The left edge is an explicit child handle. Use the gesture recogniser's
+    // own coordinates for the right-edge fallback so a parent-positioned card
+    // cannot turn a body drag into a resize.
+    final ClipResizeEdge? edge = _resizeEdge(details.localPosition);
+    _resizing = edge == ClipResizeEdge.end;
     if (_resizing) {
-      widget.onResizeStart?.call(details);
+      widget.onResizeStart?.call(ClipResizeEdge.end, details);
     } else {
       widget.onPanStart?.call(details);
     }
@@ -166,12 +168,12 @@ class _ObClipCardState extends State<ObClipCard> {
       onEnter: enabled
           ? (PointerEnterEvent event) => setState(() {
               _hover = true;
-              _resizeEdgeHover = _isResizeEdge(event.localPosition);
+              _resizeEdgeHover = _resizeEdge(event.localPosition) != null;
             })
           : null,
       onHover: enabled
           ? (PointerHoverEvent event) => setState(() {
-              _resizeEdgeHover = _isResizeEdge(event.localPosition);
+              _resizeEdgeHover = _resizeEdge(event.localPosition) != null;
             })
           : null,
       onExit: enabled
@@ -182,6 +184,7 @@ class _ObClipCardState extends State<ObClipCard> {
           : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        dragStartBehavior: DragStartBehavior.down,
         onTap: widget.onTap,
         onDoubleTap: widget.onDoubleTap,
         onPanStart: enabled ? _onPanStart : null,
@@ -245,7 +248,20 @@ class _ObClipCardState extends State<ObClipCard> {
                   ],
                 ),
               ),
-              if (widget.onResizeStart != null)
+              if (widget.onResizeStart != null) ...<Widget>[
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: tokens.size.playlistResizeHandleWidth,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: (DragStartDetails details) => widget.onResizeStart!(ClipResizeEdge.start, details),
+                    onPanUpdate: widget.onResizeUpdate,
+                    onPanEnd: widget.onResizeEnd,
+                    onPanCancel: widget.onResizeCancel,
+                  ),
+                ),
                 Positioned(
                   right: 0,
                   top: 0,
@@ -253,12 +269,13 @@ class _ObClipCardState extends State<ObClipCard> {
                   width: tokens.size.playlistResizeHandleWidth,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onPanStart: widget.onResizeStart,
+                    onPanStart: (DragStartDetails details) => widget.onResizeStart!(ClipResizeEdge.end, details),
                     onPanUpdate: widget.onResizeUpdate,
                     onPanEnd: widget.onResizeEnd,
                     onPanCancel: widget.onResizeCancel,
                   ),
                 ),
+              ],
             ],
           ),
         ),

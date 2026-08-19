@@ -31,6 +31,35 @@ void main() {
     expect(store.clipById(clip.id)!.lengthTicks, 1920);
   });
 
+  test('dragging the start edge trims the source and preserves the clip end', () {
+    final EditorHarness harness = EditorHarness()..seedArrangement();
+    final String audioId = harness.client.addAudioClip('lane_a', startTicks: 7680, lengthTicks: 3840);
+    harness.client.audioClips[audioId] = const AudioClipEdit(
+      stretchMode: StretchMode.off,
+      sourceOffsetTicks: 0,
+      sourceLengthTicks: 3840,
+      sourceDurationTicks: 7680,
+      sourceBpm: 0,
+      gain: 1,
+      reversed: false,
+    );
+    final ArrangementStore store = harness.arrangement..refresh();
+
+    store
+      ..selectClip(audioId)
+      ..beginClipDrag(ClipDragKind.resizeStart)
+      ..updateClipResizeStart(audioId, 8640)
+      ..endClipDrag();
+
+    final ArrangementClip clip = store.clipById(audioId)!;
+    expect(clip.startTicks, 8640);
+    expect(clip.endTicks, 11520, reason: 'trimming the start must not move the right edge');
+    expect(clip.lengthTicks, 2880);
+    final AudioClipEdit edit = harness.client.audioClips[audioId]!;
+    expect(edit.sourceOffsetTicks, 960);
+    expect(edit.sourceLengthTicks, 2880);
+  });
+
   test('dragging the edge and typing a length agree with each other', () {
     final EditorHarness harness = EditorHarness()..seedArrangement();
     final String audioId = harness.client.addAudioClip('lane_a', startTicks: 7680, lengthTicks: 3840);

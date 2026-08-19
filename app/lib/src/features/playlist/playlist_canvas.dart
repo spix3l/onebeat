@@ -123,7 +123,7 @@ class PlaylistCanvas extends StatelessWidget {
   final void Function(int clipId, DragUpdateDetails details)? onClipPanUpdate;
   final void Function(int clipId, DragEndDetails details)? onClipPanEnd;
   final ValueChanged<int>? onClipPanCancel;
-  final void Function(int clipId, DragStartDetails details)? onClipResizeStart;
+  final void Function(int clipId, ClipResizeEdge edge, DragStartDetails details)? onClipResizeStart;
   final void Function(int clipId, DragUpdateDetails details)? onClipResizeUpdate;
   final void Function(int clipId, DragEndDetails details)? onClipResizeEnd;
   final ValueChanged<int>? onClipResizeCancel;
@@ -216,7 +216,7 @@ class PlaylistCanvas extends StatelessWidget {
                   onPanCancel: onClipPanCancel == null ? null : () => onClipPanCancel!(clip.id),
                   onResizeStart: onClipResizeStart == null
                       ? null
-                      : (DragStartDetails details) => onClipResizeStart!(clip.id, details),
+                      : (ClipResizeEdge edge, DragStartDetails details) => onClipResizeStart!(clip.id, edge, details),
                   onResizeUpdate: onClipResizeUpdate == null
                       ? null
                       : (DragUpdateDetails details) => onClipResizeUpdate!(clip.id, details),

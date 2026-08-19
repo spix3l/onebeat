@@ -8,7 +8,7 @@ import '../../core/pattern_store.dart';
 import '../../engine/engine_client.dart';
 import 'playlist_selection.dart';
 
-enum ClipDragKind { none, move, resizeEnd, offset, marquee }
+enum ClipDragKind { none, move, resizeStart, resizeEnd, offset, marquee }
 
 class GridChoice {
   const GridChoice(this.label, this.ticks);
@@ -75,6 +75,9 @@ class PlaylistStore extends ChangeNotifier {
   String _dragLaneId = '';
   int? _dragLaneDelta;
   final Map<String, int> _dragLaneIndexes = <String, int>{};
+  int _resizeOriginStart = 0;
+  int _resizeOriginLength = 0;
+  AudioClipEdit? _resizeOriginAudio;
 
   static const double _basePixelsPerTick = 0.012;
   double get pixelsPerTick => _basePixelsPerTick * horizontalZoom;
@@ -601,6 +604,12 @@ class PlaylistStore extends ChangeNotifier {
           return MapEntry<String, int>(id, clip == null ? 0 : _laneIndex(clip.laneId));
         }),
       );
+    if (kind == ClipDragKind.resizeStart) {
+      final ArrangementClip? clip = selectedClip;
+      _resizeOriginStart = clip?.startTicks ?? 0;
+      _resizeOriginLength = clip?.lengthTicks ?? 0;
+      _resizeOriginAudio = clip?.isAudio == true ? _client.readAudioClip(clip!.id) : null;
+    }
     _client.beginGesture(name);
     _gestureOpen = true;
     notifyListeners();
@@ -657,6 +666,55 @@ class PlaylistStore extends ChangeNotifier {
     refresh();
   }
 
+  /// Moves the left edge while keeping the original right edge fixed. Audio
+  /// clips also move their source trim-in by the amount of source material the
+  /// new left edge removes; reversed clips remove material from the other end
+  /// of their source window instead.
+  void updateClipResizeStart(String clipId, int startTicks) {
+    if (dragKind != ClipDragKind.resizeStart) return;
+    final ArrangementClip? clip = clipById(clipId);
+    if (clip == null || _resizeOriginLength <= 0) return;
+
+    final int end = _resizeOriginStart + _resizeOriginLength;
+    final int start = startTicks.clamp(0, end - 1);
+    final int length = end - start;
+    final int delta = start - _resizeOriginStart;
+
+    if (!clip.isAudio) {
+      _client.moveClip(clipId, startTicks: start);
+      _client.resizeClip(clipId, length);
+      refresh();
+      return;
+    }
+
+    final AudioClipEdit audio = _resizeOriginAudio ?? _client.readAudioClip(clipId);
+    final double ratio = audio.stretchMode == StretchMode.off || _resizeOriginLength <= 0
+        ? 1.0
+        : audio.spanTicks(_resizeOriginLength) / _resizeOriginLength;
+    final int consumed = (delta * ratio).round();
+    int sourceOffset = audio.sourceOffsetTicks;
+    int sourceLength = audio.sourceLengthTicks;
+    if (audio.reversed) {
+      if (sourceLength > 0) {
+        sourceLength = (sourceLength - consumed).clamp(0, 1 << 62);
+      } else if (consumed > 0 && audio.sourceDurationTicks > sourceOffset) {
+        sourceLength = (audio.sourceDurationTicks - sourceOffset - consumed).clamp(0, 1 << 62);
+      }
+    } else {
+      sourceOffset = (sourceOffset + consumed).clamp(0, 1 << 62);
+      if (sourceLength > 0) sourceLength = (sourceLength - consumed).clamp(0, 1 << 62);
+    }
+
+    _client.moveClip(clipId, startTicks: start);
+    _client.resizeAudioClip(clipId, length);
+    _client.setAudioClipWindow(
+      clipId,
+      sourceOffsetTicks: sourceOffset,
+      sourceLengthTicks: sourceLength,
+    );
+    refresh();
+  }
+
   void updateClipOffset(String clipId, int windowStartTicks) {
     if (dragKind != ClipDragKind.offset) return;
     _client.setClipWindowStart(clipId, windowStartTicks < 0 ? 0 : windowStartTicks);
@@ -675,6 +733,9 @@ class PlaylistStore extends ChangeNotifier {
     _dragLaneId = '';
     _dragLaneDelta = null;
     _dragLaneIndexes.clear();
+    _resizeOriginStart = 0;
+    _resizeOriginLength = 0;
+    _resizeOriginAudio = null;
     refresh();
   }
 
@@ -690,6 +751,9 @@ class PlaylistStore extends ChangeNotifier {
     _dragLaneId = '';
     _dragLaneDelta = null;
     _dragLaneIndexes.clear();
+    _resizeOriginStart = 0;
+    _resizeOriginLength = 0;
+    _resizeOriginAudio = null;
     refresh();
   }
 

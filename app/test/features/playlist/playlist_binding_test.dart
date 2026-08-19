@@ -220,6 +220,37 @@ void main() {
     expect(fakeClient.gestureCommits, 1);
   });
 
+  testWidgets('dragging the left edge trims an audio clip from the start', (
+    WidgetTester tester,
+  ) async {
+    final String audioId = fakeClient.addAudioClip('lane_a', startTicks: 0, lengthTicks: 3840);
+    fakeClient.audioClips[audioId] = const AudioClipEdit(
+      stretchMode: StretchMode.off,
+      sourceOffsetTicks: 0,
+      sourceLengthTicks: 3840,
+      sourceDurationTicks: 7680,
+      sourceBpm: 0,
+      gain: 1,
+      reversed: false,
+    );
+    store.refresh();
+
+    await pumpForTest(tester, PlaylistBinding(client: fakeClient, store: store));
+
+    final RenderBox card = tester.renderObject(find.byType(ObClipCard));
+    await tester.dragFrom(
+      card.localToGlobal(const Offset(2, 20)),
+      const Offset(50, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final ArrangementClip clip = store.clipById(audioId)!;
+    expect(clip.startTicks, greaterThan(0));
+    expect(clip.endTicks, 3840, reason: 'the right edge stays fixed while trimming from the start');
+    expect(fakeClient.audioClips[audioId]!.sourceOffsetTicks, greaterThan(0));
+  });
+
   testWidgets('shift-click adds clips and alt-drag lassos them', (
     WidgetTester tester,
   ) async {

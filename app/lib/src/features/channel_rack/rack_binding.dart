@@ -685,13 +685,22 @@ class _RackBindingState extends State<RackBinding> with SingleTickerProviderStat
     _openPluginFromMenu(id);
   }
 
-  /// Flips the engine-backed solo gate for [instrumentId]. The native publish
-  /// path reapplies all channel gates so turning solo on or off is audible
-  /// immediately and remains undoable.
+  /// Toggles the engine-backed solo gate for [instrumentId]. Solo is exclusive
+  /// in the channel rack: enabling one channel clears any previous solo, while
+  /// pressing the already-soloed channel turns solo off and restores the full
+  /// rack. The native publish path reapplies the gates immediately.
   void _toggleSolo(String instrumentId) {
     final ProjectInstrument? instrument = _store.instrumentFor(instrumentId);
     if (instrument == null) return;
-    widget.client.setInstrumentSoloed(instrumentId, soloed: !instrument.soloed);
+    final bool next = !instrument.soloed;
+    if (next) {
+      for (final ProjectInstrument other in _store.instruments) {
+        if (other.id != instrumentId && other.soloed) {
+          widget.client.setInstrumentSoloed(other.id, soloed: false);
+        }
+      }
+    }
+    widget.client.setInstrumentSoloed(instrumentId, soloed: next);
     _store.refresh();
   }
 

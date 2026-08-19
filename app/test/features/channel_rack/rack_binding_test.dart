@@ -1151,6 +1151,25 @@ void main() {
     expect(cleared.checked, isFalse);
   });
 
+  testWidgets('soloing another channel clears the previous channel solo', (WidgetTester tester) async {
+    final _FakeRackEngineClient client = _FakeRackEngineClient();
+
+    await pumpForTest(tester, RackBinding(client: client), size: const Size(1520, 880));
+    await tester.pump();
+
+    await rightClickRow(tester, 'Kick 808');
+    await tester.tap(find.text('Solo'));
+    await tester.pump();
+    expect(client.instruments.firstWhere((ProjectInstrument inst) => inst.id == 'kick').soloed, isTrue);
+
+    await rightClickRow(tester, 'Snare');
+    await tester.tap(find.text('Solo'));
+    await tester.pump();
+
+    expect(client.instruments.firstWhere((ProjectInstrument inst) => inst.id == 'kick').soloed, isFalse);
+    expect(client.instruments.firstWhere((ProjectInstrument inst) => inst.id == 'snare').soloed, isTrue);
+  });
+
   testWidgets('narrow binding does not emit a flex overflow', (WidgetTester tester) async {
     final _FakeRackEngineClient client = _FakeRackEngineClient();
     final List<FlutterErrorDetails> errors = <FlutterErrorDetails>[];

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:onebeat/src/engine/engine_client.dart';
 import 'package:onebeat/src/features/mixer/mixer_binding.dart';
+import 'package:onebeat/src/ui_kit/toggle_chip.dart';
 
 import '../../support/fake_engine_client.dart';
 import '../../support/app_harness.dart';
@@ -128,6 +129,28 @@ void main() {
     await tester.pump();
 
     expect(find.text('ROUTING — SNARE'), findsOneWidget);
+  });
+
+  testWidgets('MixerBinding keeps solo exclusive across channels', (
+    WidgetTester tester,
+  ) async {
+    final _FakeMixerEngineClient client = _FakeMixerEngineClient();
+
+    await pumpForTest(tester, MixerBinding(client: client));
+
+    await tester.tap(find.text('S').at(0));
+    await tester.pump();
+    await tester.tap(find.text('S').at(1));
+    await tester.pump();
+
+    final List<ObToggleChip> soloChips = tester
+        .widgetList<ObToggleChip>(find.byType(ObToggleChip))
+        .where((ObToggleChip chip) => chip.tone == ObToggleTone.solo)
+        .toList();
+    expect(soloChips, hasLength(3));
+    expect(soloChips[0].on, isFalse);
+    expect(soloChips[1].on, isTrue);
+    expect(soloChips[2].on, isFalse);
   });
 
   testWidgets('MixerBinding toggles mute and switches mode tabs', (

@@ -8,6 +8,7 @@ import '../../engine/engine_client.dart';
 import '../../ui_kit/button.dart';
 import '../../ui_kit/kit_glyphs.dart';
 import '../../ui_kit/toggle_chip.dart';
+import 'clip_card.dart';
 import 'playlist_canvas.dart';
 import 'playlist_screen_vm.dart';
 import 'playlist_store.dart';
@@ -66,7 +67,7 @@ class PlaylistScreen extends StatelessWidget {
   final void Function(int clipId, DragUpdateDetails details)? onClipPanUpdate;
   final void Function(int clipId, DragEndDetails details)? onClipPanEnd;
   final ValueChanged<int>? onClipPanCancel;
-  final void Function(int clipId, DragStartDetails details)? onClipResizeStart;
+  final void Function(int clipId, ClipResizeEdge edge, DragStartDetails details)? onClipResizeStart;
   final void Function(int clipId, DragUpdateDetails details)? onClipResizeUpdate;
   final void Function(int clipId, DragEndDetails details)? onClipResizeEnd;
   final ValueChanged<int>? onClipResizeCancel;

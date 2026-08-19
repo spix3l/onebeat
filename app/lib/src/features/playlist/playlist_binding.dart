@@ -48,6 +48,8 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
   String _draggingClipId = '';
   String _resizingClipId = '';
   int _resizeOriginLength = 0;
+  int _resizeOriginStart = 0;
+  ClipResizeEdge _resizingEdge = ClipResizeEdge.end;
   int _dragStartLane = 0;
   Offset _dragPixels = Offset.zero;
   final Map<String, List<double>> _waveforms = <String, List<double>>{};
@@ -441,7 +443,7 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     }
   }
 
-  void _onClipResizeStart(int hashId, DragStartDetails details) {
+  void _onClipResizeStart(int hashId, ClipResizeEdge edge, DragStartDetails details) {
     ArrangementClip? clip;
     for (final ArrangementClip candidate in _store.clips) {
       if (candidate.id.hashCode == hashId) {
@@ -455,9 +457,14 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
       _store.selectClip(clip.id);
     }
     _resizingClipId = clip.id;
+    _resizingEdge = edge;
+    _resizeOriginStart = clip.startTicks;
     _resizeOriginLength = clip.lengthTicks;
     _dragPixels = Offset.zero;
-    _store.beginClipDrag(ClipDragKind.resizeEnd, name: 'Resize clip');
+    _store.beginClipDrag(
+      edge == ClipResizeEdge.start ? ClipDragKind.resizeStart : ClipDragKind.resizeEnd,
+      name: edge == ClipResizeEdge.start ? 'Trim clip start' : 'Resize clip',
+    );
   }
 
   void _onClipResizeUpdate(int hashId, DragUpdateDetails details) {
@@ -466,14 +473,20 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     final OneBeatTokens tokens = OneBeatTokens.dark();
     final double pxPerBar = tokens.size.playlistPxPerBar * _store.horizontalZoom;
     final int deltaTicks = _store.snapDelta((_dragPixels.dx / pxPerBar * ticksPerBar).round());
-    _store.updateClipResize(_resizingClipId, _resizeOriginLength + deltaTicks);
+    if (_resizingEdge == ClipResizeEdge.start) {
+      _store.updateClipResizeStart(_resizingClipId, _resizeOriginStart + deltaTicks);
+    } else {
+      _store.updateClipResize(_resizingClipId, _resizeOriginLength + deltaTicks);
+    }
   }
 
   void _onClipResizeEnd(int hashId, DragEndDetails details) {
     if (_resizingClipId.isEmpty) return;
     _store.endClipDrag();
     _resizingClipId = '';
+    _resizeOriginStart = 0;
     _resizeOriginLength = 0;
+    _resizingEdge = ClipResizeEdge.end;
     _dragPixels = Offset.zero;
   }
 
@@ -481,7 +494,9 @@ class _PlaylistBindingState extends State<PlaylistBinding> with SingleTickerProv
     if (_resizingClipId.isEmpty) return;
     _store.cancelClipDrag();
     _resizingClipId = '';
+    _resizeOriginStart = 0;
     _resizeOriginLength = 0;
+    _resizingEdge = ClipResizeEdge.end;
     _dragPixels = Offset.zero;
   }
 

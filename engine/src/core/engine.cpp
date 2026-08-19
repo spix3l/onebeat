@@ -1520,14 +1520,23 @@ void Engine::applyChannelSync(std::vector<ChannelDesc> channels) {
 void Engine::applyPendingWorkForTests() {
   std::vector<std::string> pending;
   std::vector<ChannelDesc> channels;
+  std::vector<MixerTrackDesc> mixer;
   bool has_channels = false;
+  bool has_mixer = false;
   {
     std::lock_guard<std::mutex> lock(work_mutex_);
     pending.swap(pending_sample_loads_);
     has_channels = has_pending_channels_;
     channels.swap(pending_channels_);
     has_pending_channels_ = false;
+    has_mixer = has_pending_mixer_;
+    mixer.swap(pending_mixer_);
+    has_pending_mixer_ = false;
   }
+  // Same order as the housekeeping loop, and for the same reason: a channel's
+  // routing is resolved against the graph, so the graph goes first. A test that
+  // pumped only part of the queue would be testing a state the app never has.
+  if (has_mixer) applyMixerSync(std::move(mixer));
   if (has_channels) applyChannelSync(std::move(channels));
   for (const std::string& path : pending) {
     std::string error;
