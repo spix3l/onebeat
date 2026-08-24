@@ -12,6 +12,26 @@ Windows hardware by the maintainer. The Windows build also leaves third-party
 plug-in hosting disabled until the macOS Mach/POSIX sandbox transport has a
 Windows equivalent.
 
+## Opening an unsigned CI build
+
+The archive the release workflow publishes is ad-hoc signed, so it has no team
+identifier and no notarization ticket. A download picks up
+`com.apple.quarantine`, Gatekeeper finds no ticket, and refuses to launch it
+with "Apple could not verify onebeat is free of malware". Confirm what a given
+archive actually carries with `codesign -dv --verbose=4 onebeat.app` — an
+ad-hoc build reports `Signature=adhoc` and `TeamIdentifier=not set`.
+
+Testers can strip the flag:
+
+```sh
+xattr -dr com.apple.quarantine /path/to/onebeat.app
+```
+
+or approve it once under System Settings > Privacy & Security > Open Anyway.
+Both are per-machine, and neither travels with the archive: everyone who
+downloads it hits the same dialog. That is what the Developer ID release below
+exists to fix.
+
 ## macOS Developer ID release
 
 OneBeat ships outside the Mac

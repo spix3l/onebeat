@@ -67,3 +67,28 @@ jobs:
         with:
           files: artifacts/*.zip
           generate_release_notes: true
+          # Prepended above the generated notes. Every macOS downloader hits the
+          # Gatekeeper dialog, so the way past it belongs on the release page
+          # rather than three clicks into the repository.
+          body: |
+            ### Installing
+
+            **macOS** — these builds are ad-hoc signed, not notarized, so
+            Gatekeeper will say it "could not verify onebeat is free of
+            malware". The app is unsigned, not damaged. Clear the quarantine
+            flag it picked up on download:
+
+            ```sh
+            xattr -dr com.apple.quarantine /path/to/onebeat.app
+            open /path/to/onebeat.app
+            ```
+
+            Or launch it once and allow it under System Settings > Privacy &
+            Security > Open Anyway. On macOS 15+ the right-click > Open
+            shortcut no longer works for unsigned apps.
+
+            **Windows** — unsigned and experimental; SmartScreen will warn.
+            Third-party plug-in hosting is disabled on this platform.
+
+            ---
+

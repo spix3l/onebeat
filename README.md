@@ -63,6 +63,21 @@ release generated from the tag. The current macOS CI archive is ad-hoc signed,
 not Developer ID signed or notarized; use `tools/release_macos.sh` for a local
 signed/notarized package when credentials are available.
 
+### Opening a CI build on macOS
+
+Because the CI archive carries no Developer ID, macOS quarantines it on download
+and Gatekeeper refuses to launch it: *"Apple could not verify onebeat is free of
+malware."* The app is not damaged — it is unsigned. Clear the quarantine flag:
+
+```sh
+xattr -dr com.apple.quarantine /path/to/onebeat.app
+open /path/to/onebeat.app
+```
+
+Or launch it once, then allow it under **System Settings > Privacy & Security >
+Open Anyway**. On macOS 15 and later the old right-click > Open shortcut no
+longer works for unsigned apps, so it has to be one of those two.
+
 ## Hear it without the app
 
 The engine builds and runs standalone — no Flutter needed:
