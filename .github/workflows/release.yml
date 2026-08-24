@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.44.4
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-15
+            artifact: OneBeat-macOS.zip
+          - name: Windows
+            os: windows-2025
+            artifact: OneBeat-Windows-x64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Read version from tag
+        shell: bash
+        run: |
+          echo "OB_RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "OB_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - name: Build macOS package
+        if: runner.os == 'macOS'
+        run: |
+          tools/build.sh
+          mkdir -p artifacts
+          ditto -c -k --keepParent \
+            app/build/macos/Build/Products/Release/onebeat.app \
+            artifacts/OneBeat-macOS.zip
+      - name: Build Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/build_windows.ps1 -Version "$env:OB_RELEASE_VERSION" -BuildNumber "$env:OB_BUILD_NUMBER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: artifacts/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          generate_release_notes: true

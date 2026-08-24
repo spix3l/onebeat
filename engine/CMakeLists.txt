@@ -22,6 +22,7 @@ option(ONEBEAT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" O
 option(ONEBEAT_TSAN "Build with ThreadSanitizer" OFF)
 option(ONEBEAT_RTSAN "Build with RealtimeSanitizer (needs LLVM >= 20; Xcode clang has no RTSan)" OFF)
 option(ONEBEAT_WERROR "Promote warnings to errors" ON)
+option(ONEBEAT_BUILD_TESTS "Build the engine test suite" ON)
 
 set(ONEBEAT_THIRD_PARTY ${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
 
@@ -37,16 +38,20 @@ target_include_directories(onebeat_third_party SYSTEM INTERFACE
 # ---------------------------------------------------------------------------
 # Warning / sanitizer discipline (NFR-08)
 # ---------------------------------------------------------------------------
-set(ONEBEAT_WARNINGS
-  -Wall -Wextra -Wpedantic
-  -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused
-  -Woverloaded-virtual -Wconversion -Wsign-conversion -Wdouble-promotion
-  # The compile-time half of the RT contract: every [[clang::nonblocking]]
-  # function is proved allocation-, lock- and exception-free at build time.
-  -Wfunction-effects
-)
-if(ONEBEAT_WERROR)
-  list(APPEND ONEBEAT_WARNINGS -Werror)
+if(MSVC)
+  set(ONEBEAT_WARNINGS /W4 /permissive- /Zc:__cplusplus /wd4100 /wd4244 /wd4267)
+  if(ONEBEAT_WERROR)
+    list(APPEND ONEBEAT_WARNINGS /WX)
+  endif()
+else()
+  set(ONEBEAT_WARNINGS
+    -Wall -Wextra -Wpedantic
+    -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused
+    -Woverloaded-virtual -Wconversion -Wsign-conversion -Wdouble-promotion
+    -Wfunction-effects)
+  if(ONEBEAT_WERROR)
+    list(APPEND ONEBEAT_WARNINGS -Werror)
+  endif()
 endif()
 
 add_library(onebeat_flags INTERFACE)
@@ -103,6 +108,10 @@ endif()
 # ---------------------------------------------------------------------------
 if(APPLE)
   set(ONEBEAT_PLATFORM_SOURCES src/audio_io/coreaudio/coreaudio_device.cpp)
+  set(ONEBEAT_SANDBOX_SOURCES
+    src/plugin/sandbox/sandboxed_plugin_proxy.cpp
+    src/plugin/sandbox/runtime_host.cpp
+    src/plugin/scan/subprocess_probe.cpp)
   if(ONEBEAT_ASAN OR ONEBEAT_TSAN OR ONEBEAT_RTSAN)
     set(ONEBEAT_EDITOR_SOURCE src/plugin/clap/clap_editor_stub.cpp)
   else()
@@ -111,9 +120,15 @@ if(APPLE)
   set(ONEBEAT_PLATFORM_LIBS
     "-framework CoreAudio" "-framework AudioToolbox" "-framework CoreFoundation"
     "-framework AppKit" "-framework QuartzCore")
+elseif(WIN32)
+  set(ONEBEAT_PLATFORM_SOURCES src/audio_io/wasapi/wasapi_device.cpp)
+  set(ONEBEAT_EDITOR_SOURCE src/plugin/clap/clap_editor_stub.cpp)
+  set(ONEBEAT_SANDBOX_SOURCES
+    src/plugin/sandbox/sandboxed_plugin_proxy_windows.cpp
+    src/plugin/scan/subprocess_probe_windows.cpp)
+  set(ONEBEAT_PLATFORM_LIBS ole32 uuid avrt)
 else()
-  message(FATAL_ERROR "OneBeat v0.1 targets macOS. Windows/Linux backends are a v2 port: "
-                      "add engine/src/audio_io/<platform>/ and implement createPlatformAudioDevice().")
+  message(FATAL_ERROR "OneBeat currently supports macOS and Windows.")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -142,8 +157,7 @@ add_library(onebeat_core STATIC
   src/plugin/plugin_types.cpp
   src/plugin/clap/clap_plugin_instance.cpp
   ${ONEBEAT_EDITOR_SOURCE}
-  src/plugin/sandbox/sandboxed_plugin_proxy.cpp
-  src/plugin/sandbox/runtime_host.cpp
+  ${ONEBEAT_SANDBOX_SOURCES}
   src/plugin/builtin/sampler_plugin.cpp
   src/plugin/builtin/effects/effect_plugin.cpp
   src/plugin/builtin/effects/effect_factory.cpp
@@ -155,7 +169,6 @@ add_library(onebeat_core STATIC
   src/plugin/scan/plugin_cache.cpp
   src/plugin/scan/plugin_library.cpp
   src/plugin/scan/scanner.cpp
-  src/plugin/scan/subprocess_probe.cpp
   src/audio_io/null/null_device.cpp
   ${ONEBEAT_PLATFORM_SOURCES}
 )
@@ -398,5 +411,7 @@ set_target_properties(onebeat_plugin_host PROPERTIES
   OUTPUT_NAME onebeat-plugin-host
   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-enable_testing()
-add_subdirectory(tests)
+if(ONEBEAT_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()

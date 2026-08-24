@@ -12,6 +12,11 @@ namespace onebeat::core {
 namespace {
 
 constexpr int MaxRetainedSessions = 10;
+#if defined(_WIN32)
+constexpr const char* WriteMode = "w";
+#else
+constexpr const char* WriteMode = "we";
+#endif
 
 // Set once by installCrashHandler so the signal handler can flush without
 // touching anything that needs a lock.
@@ -29,7 +34,11 @@ void crashHandler(int signal_number) {
 std::string timestampForFilename() {
   const std::time_t now = std::time(nullptr);
   std::tm parts{};
+#if defined(_WIN32)
+  localtime_s(&parts, &now);
+#else
   localtime_r(&now, &parts);
+#endif
   char buffer[32];
   std::strftime(buffer, sizeof(buffer), "%Y%m%d-%H%M%S", &parts);
   return buffer;
@@ -38,7 +47,11 @@ std::string timestampForFilename() {
 std::string timestampForLine() {
   const std::time_t now = std::time(nullptr);
   std::tm parts{};
+#if defined(_WIN32)
+  localtime_s(&parts, &now);
+#else
   localtime_r(&now, &parts);
+#endif
   char buffer[32];
   std::strftime(buffer, sizeof(buffer), "%H:%M:%S", &parts);
   return buffer;
@@ -58,9 +71,15 @@ Diagnostics::~Diagnostics() {
 }
 
 std::string Diagnostics::defaultLogDirectory() {
+#if defined(_WIN32)
+  const char* local_app_data = std::getenv("LOCALAPPDATA");
+  const std::string base = local_app_data != nullptr ? std::string(local_app_data) : ".";
+  return base + "/OneBeat/logs";
+#else
   const char* home = std::getenv("HOME");
   const std::string base = home != nullptr ? std::string(home) : std::string("/tmp");
   return base + "/Library/Application Support/OneBeat/logs";
+#endif
 }
 
 void Diagnostics::open(const std::string& directory) {
@@ -87,7 +106,7 @@ void Diagnostics::open(const std::string& directory) {
   }
 
   session_path_ = directory_ + "/onebeat-" + timestampForFilename() + ".log";
-  file_ = std::fopen(session_path_.c_str(), "we");
+  file_ = std::fopen(session_path_.c_str(), WriteMode);
   if (file_ != nullptr) {
     writeLine(LogLevel::Info, "session", "log opened");
     if (previous_session_crashed_) {
@@ -152,7 +171,7 @@ void Diagnostics::writeRunningMarker() {
   if (marker_path_.empty()) {
     return;
   }
-  std::FILE* marker = std::fopen(marker_path_.c_str(), "we");
+  std::FILE* marker = std::fopen(marker_path_.c_str(), WriteMode);
   if (marker != nullptr) {
     std::fprintf(marker, "%s\n", session_path_.c_str());
     std::fclose(marker);
@@ -170,7 +189,11 @@ void Diagnostics::clearRunningMarker() {
 void Diagnostics::installCrashHandler() {
   std::lock_guard<std::mutex> lock(mutex_);
   g_crash_flush_target = file_;
-  for (const int signal_number : {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT}) {
+  for (const int signal_number : {SIGSEGV,
+#if !defined(_WIN32)
+                                  SIGBUS,
+#endif
+                                  SIGILL, SIGFPE, SIGABRT}) {
     std::signal(signal_number, &crashHandler);
   }
 }

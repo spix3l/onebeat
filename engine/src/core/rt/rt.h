@@ -4,6 +4,9 @@
 #pragma once
 
 #include <cstdint>
+#if defined(_MSC_VER) && defined(_M_X64)
+#include <xmmintrin.h>
+#endif
 
 // Every function reachable from the audio callback carries this. It expands to
 // [[clang::nonblocking]], which makes the compiler prove (Function Effect
@@ -37,6 +40,8 @@ inline void enableFlushToZero() noexcept OB_NONBLOCKING {
   __asm__ __volatile__("mrs %0, fpcr" : "=r"(fpcr));
   fpcr |= (1ULL << 24);  // FZ
   __asm__ __volatile__("msr fpcr, %0" : : "r"(fpcr));
+#elif defined(_MSC_VER) && defined(_M_X64)
+  _mm_setcsr(_mm_getcsr() | 0x8040u);
 #elif defined(__x86_64__)
   // _MM_SET_FLUSH_ZERO_MODE / _MM_SET_DENORMALS_ZERO_MODE without the header.
   unsigned int csr = 0;

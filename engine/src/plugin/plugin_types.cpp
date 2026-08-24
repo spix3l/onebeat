@@ -1,6 +1,11 @@
 #include "plugin/plugin_types.h"
 
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
 #include <pthread.h>
+#endif
 
 #include <atomic>
 #include <cstdint>
@@ -17,11 +22,15 @@ std::atomic<uintptr_t> AudioThread{0};
 std::atomic<uintptr_t> MainThread{0};
 
 uintptr_t currentThread() noexcept OB_NONBLOCKING {
+#if defined(_WIN32)
+  return static_cast<uintptr_t>(GetCurrentThreadId());
+#else
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wfunction-effects"
   const auto thread = reinterpret_cast<uintptr_t>(::pthread_self());
 #pragma clang diagnostic pop
   return thread;
+#endif
 }
 
 }  // namespace

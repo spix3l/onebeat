@@ -20,6 +20,13 @@ static_assert(std::has_unique_object_representations_v<CacheFileHeader>,
 // hostile input, and "allocate first, validate second" is how that goes wrong.
 // 200,000 plugins is roughly 400× the 500 NFR-04 asks about.
 constexpr uint64_t MaxCacheEntries = 200000;
+#if defined(_WIN32)
+constexpr const char* ReadMode = "rb";
+constexpr const char* WriteMode = "wb";
+#else
+constexpr const char* ReadMode = "rbe";
+constexpr const char* WriteMode = "wbe";
+#endif
 
 // Fixed-capacity text arrives from disk with no guarantee of a terminator. Every
 // consumer of a descriptor treats these as C strings, so a missing NUL is a read
@@ -114,7 +121,7 @@ PluginCache::PluginCache(std::string path) : path_(std::move(path)) {}
 CacheLoadResult PluginCache::load() {
   entries_.clear();
 
-  FileHandle file(path_.c_str(), "rbe");
+  FileHandle file(path_.c_str(), ReadMode);
   if (!file) {
     return errno == ENOENT ? CacheLoadResult::Missing : CacheLoadResult::Rebuilt;
   }
@@ -168,7 +175,7 @@ bool PluginCache::save() const {
   const std::string temp_path = path_ + ".tmp";
 
   {
-    FileHandle file(temp_path.c_str(), "wbe");
+    FileHandle file(temp_path.c_str(), WriteMode);
     if (!file) {
       return false;
     }

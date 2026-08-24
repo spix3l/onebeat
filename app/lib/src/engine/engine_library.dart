@@ -1,4 +1,4 @@
-// Locating and opening the engine dylib.
+// Locating and opening the native engine library.
 //
 // Three resolution steps, in order, each with a reason:
 //   1. OB_ENGINE_DYLIB      — an explicit override, used by tests and CI.
@@ -29,7 +29,7 @@ class EngineLoadException implements Exception {
       searchedPaths.isEmpty ? message : '$message\nLooked in:\n${searchedPaths.map((String p) => '  $p').join('\n')}';
 }
 
-const String _libraryFileName = 'libonebeat_engine.dylib';
+String get _libraryFileName => Platform.isWindows ? 'onebeat_engine.dll' : 'libonebeat_engine.dylib';
 
 List<String> _candidatePaths() {
   final List<String> candidates = <String>[];
@@ -40,7 +40,11 @@ List<String> _candidatePaths() {
   }
 
   final Directory executableDir = File(Platform.resolvedExecutable).parent;
-  candidates.add('${executableDir.path}/../Frameworks/$_libraryFileName');
+  if (Platform.isWindows) {
+    candidates.add('${executableDir.path}/$_libraryFileName');
+  } else {
+    candidates.add('${executableDir.path}/../Frameworks/$_libraryFileName');
+  }
 
   // Development: walk up from the working directory looking for the engine
   // build output, so `flutter run` from app/ or from the repository root works.

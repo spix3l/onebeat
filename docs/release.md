@@ -1,10 +1,20 @@
-# macOS release and notarization
+# Releases, signing and notarization
 
-OneBeat is not being published yet. This document and the local script are kept
-only to validate the architecture when release work resumes; there is no CI
-release job and no command here uploads a public release.
+Pushing a semantic version tag (`vMAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH`) runs
+`.github/workflows/release.yml`. It builds macOS and Windows x64 archives and
+publishes them together in a GitHub release. The tag supplies the application
+version; the GitHub run number supplies the monotonically increasing build
+number.
 
-When distribution work resumes, OneBeat is expected to ship outside the Mac
+The Windows archive is currently unsigned and experimental. Its native WASAPI
+backend and Win32 runner compile in CI, but have not been runtime-tested on
+Windows hardware by the maintainer. The Windows build also leaves third-party
+plug-in hosting disabled until the macOS Mach/POSIX sandbox transport has a
+Windows equivalent.
+
+## macOS Developer ID release
+
+OneBeat ships outside the Mac
 App Store. The App Sandbox is intentionally off
 because a DAW must discover plug-ins in system and user Audio/Plug-Ins folders.
 Both processes use Hardened Runtime. The main app keeps library validation on;
@@ -20,7 +30,7 @@ xcrun notarytool store-credentials onebeat-notary \
   --apple-id you@example.com --team-id TEAMID --password APP_PASSWORD
 ```
 
-When Gate G-B is explicitly scheduled, run locally:
+To make a signed and notarized package, run locally:
 
 ```sh
 OB_SIGNING_IDENTITY='Developer ID Application: Name (TEAMID)' \

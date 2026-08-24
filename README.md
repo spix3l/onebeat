@@ -3,7 +3,7 @@
 Open-source, MIT-licensed digital audio workstation built around FL Studio's
 pattern-based production workflow. It hosts third-party plugins (CLAP, VST3, AU),
 accepts user soundpacks, and ships with a small suite of built-in instruments and
-effects. macOS first; Windows and Linux are a v2 target rather than an exclusion.
+effects. It currently builds for macOS and Windows; Linux remains a future port.
 
 The app bundle includes **OneBeat Piano**, **Lowkey**, and **OneBeat Drill Synth**:
 lightweight, sample-free CLAP instruments with docked playable editors. Drill Synth
@@ -20,6 +20,8 @@ on is in place. There is no sequencer yet; that is v0.3.
 
 ## Build it
 
+### macOS
+
 Prerequisites: macOS 14+ on Apple Silicon, Xcode command-line tools,
 CMake ≥ 3.28, Flutter 3.44+.
 
@@ -35,6 +37,31 @@ Incrementally, with caches warm, `tools/build.sh --debug` takes about 19 s.
 
 For day-to-day work, `tools/dev.sh` rebuilds the engine and starts the app with
 hot reload.
+
+### Windows (experimental)
+
+Prerequisites: 64-bit Windows 10 or later, Visual Studio 2022 with the Desktop
+development with C++ workload, CMake 3.28+, Flutter 3.44+, and PowerShell 7.
+
+```powershell
+tools\build_windows.ps1 -Version "0.2.0" -BuildNumber "1"
+```
+
+This creates `artifacts\OneBeat-Windows-x64.zip`. The Windows port includes a
+native event-driven WASAPI audio backend and a Flutter Win32 runner. It has not
+been runtime-tested on Windows hardware by the maintainer, so treat Windows
+releases as experimental and report audio/device issues. The first Windows port
+also disables the Mach-based out-of-process third-party plug-in sandbox; bundled
+DSP and the rest of the application are available, but third-party plug-in
+hosting still needs its Windows process-isolation implementation.
+
+## Releases
+
+Push a semantic version tag such as `v0.3.0` (or `0.3.0`) to run the release workflow. CI
+builds versioned macOS and Windows x64 archives and publishes both to a GitHub
+release generated from the tag. The current macOS CI archive is ad-hoc signed,
+not Developer ID signed or notarized; use `tools/release_macos.sh` for a local
+signed/notarized package when credentials are available.
 
 ## Hear it without the app
 
@@ -67,12 +94,13 @@ engine/            C++20 core — platform-independent
   src/core/rt/       the real-time toolkit; read docs/rt-rules.md first
   src/audio_io/      abstract device interface
     coreaudio/       the only CoreAudio-aware code in the repository
+    wasapi/          the only WASAPI-aware code in the repository
   src/abi/           the extern "C" surface — the only door to the app
   stock_plugins/     first-party CLAP plug-ins; DSP and CLAP adapters stay isolated
   testing/           offline render driver and fixtures
   tests/             unit / engine / abi / stress suites
   tools/             onebeat_devtool
-app/               Flutter macOS application
+app/               Flutter desktop application (macOS and Windows runners)
   lib/src/design/    design tokens — every colour and size in the app
   lib/src/engine/    FFI client (bindings generated from the ABI header)
   lib/src/stock_plugins/ docked editors and routing for shipped plug-ins

@@ -92,7 +92,11 @@ bool AudioFileWriter::open(const std::string& path, ExportFormat format, int sam
     error = "invalid sample rate";
     return false;
   }
+#if defined(_WIN32)
+  file_ = std::fopen(path.c_str(), "wb");
+#else
   file_ = std::fopen(path.c_str(), "wbe");
+#endif
   if (file_ == nullptr) {
     error = "could not create " + path;
     return false;

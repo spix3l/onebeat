@@ -1,4 +1,6 @@
 // StartupBinding — manages initial startup, project template and recovery states (UI-D-07).
+import 'dart:io' show Platform;
+
 import 'package:flutter/widgets.dart';
 
 import '../../engine/engine_client.dart';
@@ -32,15 +34,15 @@ class StartupBinding extends StatefulWidget {
 class _StartupBindingState extends State<StartupBinding> {
   final StartupPhase _phase = StartupPhase.ready;
 
-  static const ObEmptyStateVm _welcomeVm = ObEmptyStateVm(
+  static final ObEmptyStateVm _welcomeVm = ObEmptyStateVm(
     icon: ObKitGlyphKind.waveform,
     heading: 'Welcome to OneBeat',
     body: <ObProseRun>[
-      ObProseRun(
+      const ObProseRun(
         'Create a new beat, open an existing project, or load the factory demo template to explore the sound engine.',
       ),
     ],
-    footnote: 'Audio engine initialized · CoreAudio 48.0 kHz 128 samples',
+    footnote: 'Audio engine initialized · ${Platform.isWindows ? 'WASAPI' : 'CoreAudio'} 48.0 kHz 128 samples',
   );
 
   static const ObEmptyStateVm _recoveryVm = ObEmptyStateVm(
@@ -68,10 +70,7 @@ class _StartupBindingState extends State<StartupBinding> {
               widget.onNewProject();
             },
           ),
-          ObButton(
-            label: 'Discard & Start Fresh',
-            onTap: widget.onNewProject,
-          ),
+          ObButton(label: 'Discard & Start Fresh', onTap: widget.onNewProject),
         ],
       );
     }
@@ -79,21 +78,10 @@ class _StartupBindingState extends State<StartupBinding> {
     return ObEmptyState(
       vm: _welcomeVm,
       actions: <Widget>[
-        ObButton(
-          label: 'New Project',
-          tone: ObButtonTone.primary,
-          onTap: widget.onNewProject,
-        ),
-        ObButton(
-          label: 'Open Project...',
-          onTap: widget.onOpenProject,
-        ),
+        ObButton(label: 'New Project', tone: ObButtonTone.primary, onTap: widget.onNewProject),
+        ObButton(label: 'Open Project...', onTap: widget.onOpenProject),
         if (widget.onLoadDemo != null)
-          ObButton(
-            label: 'Load Demo',
-            tone: ObButtonTone.accentOutline,
-            onTap: widget.onLoadDemo,
-          ),
+          ObButton(label: 'Load Demo', tone: ObButtonTone.accentOutline, onTap: widget.onLoadDemo),
       ],
     );
   }

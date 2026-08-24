@@ -25,6 +25,19 @@ if [[ -n "$offenders" ]]; then
   echo "$offenders"
 fi
 
+# Windows multimedia headers are held to the same seam as Apple frameworks.
+offenders=$(grep -rlE '#[[:space:]]*include[[:space:]]*<(audioclient|avrt|functiondiscoverykeys_devpkey|mmdeviceapi|windows)\.h>' \
+  engine/src engine/tests engine/testing engine/tools 2>/dev/null \
+  | grep -v '^engine/src/audio_io/wasapi/' \
+  | grep -v '^engine/src/core/rt/rt\.' \
+  | grep -v '^engine/src/plugin/plugin_types.cpp$' \
+  | grep -v '^engine/src/plugin/clap/clap_plugin_instance.cpp$' \
+  | grep -v '^engine/src/plugin/scan/scanner.cpp$' || true)
+if [[ -n "$offenders" ]]; then
+  fail "Windows multimedia headers outside the WASAPI/platform loader seams:"
+  echo "$offenders"
+fi
+
 # 2. The public ABI header must stay free of C++ and of platform types.
 if grep -nE '\b(class|namespace|template|std::)' engine/src/abi/onebeat_abi.h >/dev/null; then
   fail "engine/src/abi/onebeat_abi.h contains C++ constructs; it must compile as C."

@@ -1,15 +1,21 @@
 // PluginInstance proxy backed by onebeat-plugin-host (OB-2-05).
 #pragma once
 
+#if defined(_WIN32)
+#include <cstdint>
+#else
 #include <mach/mach.h>
 #include <sys/types.h>
+#endif
 
 #include <atomic>
 #include <string>
 #include <vector>
 
 #include "plugin/plugin_instance.h"
+#if !defined(_WIN32)
 #include "plugin/sandbox/runtime_protocol.h"
+#endif
 
 namespace onebeat::plugin::sandbox {
 
@@ -46,10 +52,20 @@ class SandboxedPluginProxy final : public PluginInstance {
   // Main-thread recovery. The helper is replaced and the most recently saved
   // or loaded opaque state checkpoint is restored before audio resumes.
   bool restartHost();
-  bool hasEditor() const noexcept { return shared_ != nullptr && shared_->has_gui != 0; }
+  bool hasEditor() const noexcept {
+#if defined(_WIN32)
+    return false;
+#else
+    return shared_ != nullptr && shared_->has_gui != 0;
+#endif
+  }
   bool openEditor();
   void closeEditor();
+#if defined(_WIN32)
+  int helperPid() const noexcept { return -1; }
+#else
   pid_t helperPid() const noexcept { return child_pid_; }
+#endif
   const std::string& lastError() const noexcept { return last_error_; }
 
  protected:
@@ -60,6 +76,16 @@ class SandboxedPluginProxy final : public PluginInstance {
   void onStopProcessing() noexcept OB_NONBLOCKING override;
 
  private:
+#if defined(_WIN32)
+  void silence(const ProcessBlock& block) const noexcept OB_NONBLOCKING;
+
+  std::string bundle_path_;
+  std::string plugin_id_;
+  std::string helper_path_;
+  mutable std::string last_error_;
+  mutable std::vector<uint8_t> checkpoint_;
+  std::atomic<bool> dead_{true};
+#else
   bool launch(const ProcessSetup& setup);
   void shutdown();
   bool control(const ControlRequest& request, ControlResponse& response,
@@ -87,6 +113,7 @@ class SandboxedPluginProxy final : public PluginInstance {
   std::atomic<bool> editor_transition_{false};
   mutable std::vector<uint8_t> checkpoint_;
   bool editor_open_ = false;
+#endif
 };
 
 }  // namespace onebeat::plugin::sandbox

@@ -1,4 +1,6 @@
 // PreferencesBinding — manages preferences state and engine device configuration (UI-D-07).
+import 'dart:io' show Platform;
+
 import 'package:flutter/widgets.dart';
 
 import '../../core/engine_controller.dart' as core;
@@ -94,7 +96,8 @@ class _PreferencesBindingState extends State<PreferencesBinding> {
 
   void _onRescanPlugins() {
     setState(() => _isScanning = true);
-    Future<void>.delayed(const Duration(milliseconds: 600), () { // token-lint-ok: simulated scan delay
+    Future<void>.delayed(const Duration(milliseconds: 600), () {
+      // token-lint-ok: simulated scan delay
       // token-lint-ok: simulated scan delay
       if (mounted) {
         setState(() => _isScanning = false);
@@ -112,7 +115,7 @@ class _PreferencesBindingState extends State<PreferencesBinding> {
       activeTab: _activeTab,
       isScanning: _isScanning,
       audio: AudioPrefsVm(
-        deviceName: 'MacBook Pro Built-in Output (CoreAudio)',
+        deviceName: Platform.isWindows ? 'Default Windows Output (WASAPI)' : 'MacBook Pro Built-in Output (CoreAudio)',
         selectedBuffer: _selectedBuffer,
         sampleRateText: '${sampleRateKhz.toStringAsFixed(1)} kHz',
         latencyText:

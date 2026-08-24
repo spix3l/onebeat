@@ -1,6 +1,11 @@
 #include "plugin/clap/clap_plugin_instance.h"
 
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -31,6 +36,38 @@ std::string binaryInside(const std::string& bundle_path) {
     }
   }
   return {};
+}
+
+void* openLibrary(const std::string& path, std::string& error) {
+#if defined(_WIN32)
+  HMODULE library = LoadLibraryW(std::filesystem::path(path).c_str());
+  if (library == nullptr)
+    error = "LoadLibrary failed with Windows error " + std::to_string(GetLastError()) + ".";
+  return library;
+#else
+  void* library = ::dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+  if (library == nullptr) {
+    const char* detail = ::dlerror();
+    error = detail != nullptr ? detail : "dlopen failed.";
+  }
+  return library;
+#endif
+}
+
+void* librarySymbol(void* library, const char* name) {
+#if defined(_WIN32)
+  return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(library), name));
+#else
+  return ::dlsym(library, name);
+#endif
+}
+
+void closeLibrary(void* library) {
+#if defined(_WIN32)
+  if (library != nullptr) FreeLibrary(static_cast<HMODULE>(library));
+#else
+  if (library != nullptr) ::dlclose(library);
+#endif
 }
 
 uint32_t inputSize(const clap_input_events_t* list) {
@@ -151,17 +188,15 @@ std::unique_ptr<ClapPluginInstance> ClapPluginInstance::create(PluginHost* host,
     error = "The CLAP bundle has no loadable binary.";
     return nullptr;
   }
-  void* library = ::dlopen(binary.c_str(), RTLD_NOW | RTLD_LOCAL);
+  void* library = openLibrary(binary, error);
   if (library == nullptr) {
-    const char* detail = ::dlerror();
-    error = detail != nullptr ? detail : "dlopen failed.";
     return nullptr;
   }
-  const auto* entry = static_cast<const clap_plugin_entry_t*>(::dlsym(library, "clap_entry"));
+  const auto* entry = static_cast<const clap_plugin_entry_t*>(librarySymbol(library, "clap_entry"));
   if (entry == nullptr || !clap_version_is_compatible(entry->clap_version) ||
       entry->init == nullptr || !entry->init(bundle_path.c_str())) {
     error = "The bundle does not expose a compatible CLAP entry point.";
-    ::dlclose(library);
+    closeLibrary(library);
     return nullptr;
   }
   const auto* factory = static_cast<const clap_plugin_factory_t*>(
@@ -169,7 +204,7 @@ std::unique_ptr<ClapPluginInstance> ClapPluginInstance::create(PluginHost* host,
   if (factory == nullptr || factory->get_plugin_count(factory) == 0) {
     error = "The CLAP bundle contains no plug-ins.";
     entry->deinit();
-    ::dlclose(library);
+    closeLibrary(library);
     return nullptr;
   }
 
@@ -185,7 +220,7 @@ std::unique_ptr<ClapPluginInstance> ClapPluginInstance::create(PluginHost* host,
   if (descriptor == nullptr) {
     error = "The requested CLAP plug-in is not in this bundle.";
     entry->deinit();
-    ::dlclose(library);
+    closeLibrary(library);
     return nullptr;
   }
 
@@ -199,7 +234,7 @@ std::unique_ptr<ClapPluginInstance> ClapPluginInstance::create(PluginHost* host,
     instance->entry_->deinit();
     instance->entry_ = nullptr;
     instance->library_ = nullptr;
-    ::dlclose(library);
+    closeLibrary(library);
     return nullptr;
   }
   instance->plugin_ = plugin;
@@ -237,7 +272,7 @@ ClapPluginInstance::~ClapPluginInstance() {
     plugin_->destroy(plugin_);
   }
   if (entry_ != nullptr) entry_->deinit();
-  if (library_ != nullptr) ::dlclose(library_);
+  closeLibrary(library_);
 }
 
 void ClapPluginInstance::cacheExtensions() {

@@ -4,7 +4,7 @@
 // the core EngineController, formats readouts, routes transport commands and
 // handles workspace navigation.
 import 'dart:async';
-import 'dart:io' show stdout;
+import 'dart:io' show Platform, stdout;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -200,8 +200,9 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     if (!mounted) return false;
     if (pack == null) {
       setState(
-        () => _samplePackMessage =
-            'That folder has no supported audio files. Add a folder containing at least one WAV file.',
+        () =>
+            _samplePackMessage =
+                'That folder has no supported audio files. Add a folder containing at least one WAV file.',
       );
       return false;
     }
@@ -491,9 +492,8 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       _openChannelEditorTrackId = instrument.id;
       _openChannelEditorTrackName = instrument.name;
       _openChannelEditorSampleName = sampleName;
-      _openChannelEditorParameters = hosted == null
-          ? const <HostedParameter>[]
-          : _controller.client.readParameters(hosted);
+      _openChannelEditorParameters =
+          hosted == null ? const <HostedParameter>[] : _controller.client.readParameters(hosted);
       _openChannelEditorSettings = settings;
       _openChannelEditorTab = tab;
     });
@@ -745,8 +745,9 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     final double sampleRateKhz = snapshot.sampleRate / 1000.0;
     final double latencyMs = (snapshot.latencyFramesRoundTrip / snapshot.sampleRate) * 1000.0;
 
+    final String audioBackend = Platform.isWindows ? 'WASAPI' : 'CoreAudio';
     final String leftDetail =
-        'CoreAudio · ${sampleRateKhz.toStringAsFixed(1)} kHz · ${snapshot.blockFrames} spl · ${latencyMs.toStringAsFixed(1)} ms';
+        '$audioBackend · ${sampleRateKhz.toStringAsFixed(1)} kHz · ${snapshot.blockFrames} spl · ${latencyMs.toStringAsFixed(1)} ms';
 
     // The project line is the same in both states: whether the transport is
     // running has nothing to do with whether the work is safe on disk, and the
@@ -756,14 +757,15 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
     final ObStatusBarVm statusVm = ObStatusBarVm(
       tone: _project.message.isNotEmpty || snapshot.xrunCount > 0 ? StatusTone.warning : StatusTone.ok,
       primary: snapshot.playing ? 'Playing' : _project.name,
-      details: snapshot.playing
-          ? <String>[
-              projectDetail,
-              leftDetail,
-              '${cpuPercent.toStringAsFixed(0)}% CPU',
-              '${snapshot.activeVoices} voices',
-            ]
-          : <String>[projectDetail, if (_project.message.isNotEmpty) _project.message else 'Press ⌘S to save'],
+      details:
+          snapshot.playing
+              ? <String>[
+                projectDetail,
+                leftDetail,
+                '${cpuPercent.toStringAsFixed(0)}% CPU',
+                '${snapshot.activeVoices} voices',
+              ]
+              : <String>[projectDetail, if (_project.message.isNotEmpty) _project.message else 'Press ⌘S to save'],
       rightHint: snapshot.playing ? '⌘K Search actions' : '⌘S save · ⌘K actions',
     );
 
@@ -773,17 +775,18 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
       rail: railVm,
       status: statusVm,
       browserWidth: _browserWidth,
-      browser: (_activeRailIndex == 0 || _activeRailIndex == 1)
-          ? ObBrowserPanelVm(
-              nodes: _browserNodes,
-              title: 'Browser',
-              emptyHeading: 'No instruments yet.',
-              emptyButtonLabel: 'Add packs',
-              searchQuery: _browserSearchQuery,
-              scrollOffset: _browserScrollOffset,
-              message: _samplePackMessage,
-            )
-          : null,
+      browser:
+          (_activeRailIndex == 0 || _activeRailIndex == 1)
+              ? ObBrowserPanelVm(
+                nodes: _browserNodes,
+                title: 'Browser',
+                emptyHeading: 'No instruments yet.',
+                emptyButtonLabel: 'Add packs',
+                searchQuery: _browserSearchQuery,
+                scrollOffset: _browserScrollOffset,
+                message: _samplePackMessage,
+              )
+              : null,
     );
   }
 
@@ -967,52 +970,56 @@ class _ShellBindingState extends State<ShellBinding> with TickerProviderStateMix
                     client: widget.client,
                     trackId: _openPluginTrackId ?? '',
                     pluginName: plugin.name,
-                    sampleName: plugin.pluginId == _samplePluginId
-                        ? _controller.client
-                              .readInstruments()
-                              .firstWhere(
-                                (ProjectInstrument item) => item.id == (_openPluginTrackId ?? ''),
-                                orElse: () => const ProjectInstrument(
-                                  id: '',
-                                  name: '808_Kick_Punchy.wav',
-                                  color: '',
-                                  order: 0,
-                                  pluginId: '',
-                                  pluginName: '',
-                                  pluginVendor: '',
-                                  pluginPath: '',
-                                  muted: false,
-                                  selected: false,
-                                  affectedPatterns: 0,
-                                  affectedClips: 0,
-                                  affectedNotes: 0,
-                                ),
-                              )
-                              .name
-                        : null,
-                    trackName: _openPluginTrackId?.isNotEmpty == true
-                        ? (_controller.client
-                              .readInstruments()
-                              .firstWhere(
-                                (ProjectInstrument item) => item.id == _openPluginTrackId,
-                                orElse: () => const ProjectInstrument(
-                                  id: '',
-                                  name: 'Instrument',
-                                  color: '',
-                                  order: 0,
-                                  pluginId: '',
-                                  pluginName: '',
-                                  pluginVendor: '',
-                                  pluginPath: '',
-                                  muted: false,
-                                  selected: false,
-                                  affectedPatterns: 0,
-                                  affectedClips: 0,
-                                  affectedNotes: 0,
-                                ),
-                              )
-                              .name)
-                        : 'Instrument',
+                    sampleName:
+                        plugin.pluginId == _samplePluginId
+                            ? _controller.client
+                                .readInstruments()
+                                .firstWhere(
+                                  (ProjectInstrument item) => item.id == (_openPluginTrackId ?? ''),
+                                  orElse:
+                                      () => const ProjectInstrument(
+                                        id: '',
+                                        name: '808_Kick_Punchy.wav',
+                                        color: '',
+                                        order: 0,
+                                        pluginId: '',
+                                        pluginName: '',
+                                        pluginVendor: '',
+                                        pluginPath: '',
+                                        muted: false,
+                                        selected: false,
+                                        affectedPatterns: 0,
+                                        affectedClips: 0,
+                                        affectedNotes: 0,
+                                      ),
+                                )
+                                .name
+                            : null,
+                    trackName:
+                        _openPluginTrackId?.isNotEmpty == true
+                            ? (_controller.client
+                                .readInstruments()
+                                .firstWhere(
+                                  (ProjectInstrument item) => item.id == _openPluginTrackId,
+                                  orElse:
+                                      () => const ProjectInstrument(
+                                        id: '',
+                                        name: 'Instrument',
+                                        color: '',
+                                        order: 0,
+                                        pluginId: '',
+                                        pluginName: '',
+                                        pluginVendor: '',
+                                        pluginPath: '',
+                                        muted: false,
+                                        selected: false,
+                                        affectedPatterns: 0,
+                                        affectedClips: 0,
+                                        affectedNotes: 0,
+                                      ),
+                                )
+                                .name)
+                            : 'Instrument',
                     parameters: _openPluginParameters,
                     onDragUpdate: _movePlugin,
                     onClose: _closePlugin,
@@ -1179,16 +1186,18 @@ class _PlatformMenuHost extends StatelessWidget {
           label: 'Edit',
           menus: <PlatformMenuItem>[
             PlatformMenuItem(
-              label: controller.client.canUndoProject && controller.client.undoProjectName.isNotEmpty
-                  ? 'Undo ${controller.client.undoProjectName}'
-                  : 'Undo',
+              label:
+                  controller.client.canUndoProject && controller.client.undoProjectName.isNotEmpty
+                      ? 'Undo ${controller.client.undoProjectName}'
+                      : 'Undo',
               shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true),
               onSelected: controller.client.canUndoProject ? controller.undoProject : null,
             ),
             PlatformMenuItem(
-              label: controller.client.canRedoProject && controller.client.redoProjectName.isNotEmpty
-                  ? 'Redo ${controller.client.redoProjectName}'
-                  : 'Redo',
+              label:
+                  controller.client.canRedoProject && controller.client.redoProjectName.isNotEmpty
+                      ? 'Redo ${controller.client.redoProjectName}'
+                      : 'Redo',
               shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true),
               onSelected: controller.client.canRedoProject ? controller.redoProject : null,
             ),

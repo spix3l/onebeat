@@ -1,12 +1,18 @@
 #include "model/project_io.h"
 
 #include <fcntl.h>
+#if defined(_WIN32)
+#include <io.h>
+#include <process.h>
+#else
 #include <sys/stdio.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -20,6 +26,43 @@ namespace {
 
 constexpr std::string_view FormatTag = "onebeat.project";
 constexpr int64_t FormatVersion = 1;
+
+#if defined(_WIN32)
+int openForWrite(const std::filesystem::path& path) {
+  return ::_wopen(path.c_str(), _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IREAD | _S_IWRITE);
+}
+int writeBytes(int fd, const char* data, size_t size) {
+  return ::_write(fd, data, static_cast<unsigned int>(std::min<size_t>(size, UINT_MAX)));
+}
+int flushFile(int fd) {
+  return ::_commit(fd);
+}
+int closeFile(int fd) {
+  return ::_close(fd);
+}
+int processId() {
+  return ::_getpid();
+}
+#else
+int openForWrite(const std::filesystem::path& path) {
+  return ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+}
+int openForRead(const std::filesystem::path& path) {
+  return ::open(path.c_str(), O_RDONLY);
+}
+ssize_t writeBytes(int fd, const char* data, size_t size) {
+  return ::write(fd, data, size);
+}
+int flushFile(int fd) {
+  return ::fsync(fd);
+}
+int closeFile(int fd) {
+  return ::close(fd);
+}
+int processId() {
+  return static_cast<int>(::getpid());
+}
+#endif
 
 // --------------------------------------------------------------------------
 // SHA-256 (FIPS 180-4)
@@ -86,7 +129,7 @@ void sha256Block(const uint8_t* block, std::array<uint32_t, 8>& state) {
 // reached the disk, which is the one failure that looks like corruption.
 bool writeFileSynced(const std::filesystem::path& path, const void* data, size_t size,
                      std::string& error) {
-  const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  const int fd = openForWrite(path);
   if (fd < 0) {
     error = "could not create '" + path.string() + "': " + std::strerror(errno);
     return false;
@@ -94,32 +137,36 @@ bool writeFileSynced(const std::filesystem::path& path, const void* data, size_t
   const auto* cursor = static_cast<const char*>(data);
   size_t remaining = size;
   while (remaining > 0) {
-    const ssize_t written = ::write(fd, cursor, remaining);
+    const auto written = writeBytes(fd, cursor, remaining);
     if (written <= 0) {
       if (errno == EINTR) continue;
       error = "could not write '" + path.string() + "': " + std::strerror(errno);
-      ::close(fd);
+      closeFile(fd);
       return false;
     }
     cursor += written;
     remaining -= static_cast<size_t>(written);
   }
-  if (::fsync(fd) != 0) {
+  if (flushFile(fd) != 0) {
     error = "could not flush '" + path.string() + "': " + std::strerror(errno);
-    ::close(fd);
+    closeFile(fd);
     return false;
   }
-  ::close(fd);
+  closeFile(fd);
   return true;
 }
 
 // A file's own fsync does not promise that the *directory entry* naming it
 // survives a power loss; the directory needs its own.
 void syncDirectory(const std::filesystem::path& path) {
-  const int fd = ::open(path.c_str(), O_RDONLY);
+#if defined(_WIN32)
+  (void)path;
+#else
+  const int fd = openForRead(path);
   if (fd < 0) return;
-  ::fsync(fd);
-  ::close(fd);
+  flushFile(fd);
+  closeFile(fd);
+#endif
 }
 
 bool readFile(const std::filesystem::path& path, std::string& out, std::string& error) {
@@ -414,10 +461,13 @@ json::Value writeInstrument(const Instrument& instrument,
   channel_settings.emplace("mod_x", json::Value::integer(settings.mod_x));
   channel_settings.emplace("mod_y", json::Value::integer(settings.mod_y));
   channel_settings.emplace("arpeggiator", json::Value::boolean(settings.arpeggiator));
-  channel_settings.emplace("arpeggiator_time_ticks", json::Value::integer(settings.arpeggiator_time_ticks));
-  channel_settings.emplace("arpeggiator_gate_percent", json::Value::integer(settings.arpeggiator_gate_percent));
+  channel_settings.emplace("arpeggiator_time_ticks",
+                           json::Value::integer(settings.arpeggiator_time_ticks));
+  channel_settings.emplace("arpeggiator_gate_percent",
+                           json::Value::integer(settings.arpeggiator_gate_percent));
   channel_settings.emplace("echo_time_ticks", json::Value::integer(settings.echo_time_ticks));
-  channel_settings.emplace("echo_feedback_percent", json::Value::integer(settings.echo_feedback_percent));
+  channel_settings.emplace("echo_feedback_percent",
+                           json::Value::integer(settings.echo_feedback_percent));
 
   const std::string state_ref =
       state_override != nullptr ? state_override->state_ref : instrument.plugin.state_ref;
@@ -1001,18 +1051,26 @@ class Loader {
 
       json::Value settings_value = take(*fields, "channel_settings");
       if (json::Object* settings = settings_value.asObject(); settings != nullptr) {
-        instrument.channel_settings.gate_percent = static_cast<int32_t>(takeInt(*settings, "gate_percent", 100));
+        instrument.channel_settings.gate_percent =
+            static_cast<int32_t>(takeInt(*settings, "gate_percent", 100));
         instrument.channel_settings.shift_ticks = takeInt(*settings, "shift_ticks");
-        instrument.channel_settings.cut_group = static_cast<int32_t>(takeInt(*settings, "cut_group"));
-        instrument.channel_settings.cut_by_group = static_cast<int32_t>(takeInt(*settings, "cut_by_group"));
-        instrument.channel_settings.max_polyphony = static_cast<int32_t>(takeInt(*settings, "max_polyphony"));
+        instrument.channel_settings.cut_group =
+            static_cast<int32_t>(takeInt(*settings, "cut_group"));
+        instrument.channel_settings.cut_by_group =
+            static_cast<int32_t>(takeInt(*settings, "cut_by_group"));
+        instrument.channel_settings.max_polyphony =
+            static_cast<int32_t>(takeInt(*settings, "max_polyphony"));
         instrument.channel_settings.mono = takeBool(*settings, "mono");
         instrument.channel_settings.portamento = takeBool(*settings, "portamento");
-        instrument.channel_settings.root_key = static_cast<int32_t>(takeInt(*settings, "root_key", 60));
+        instrument.channel_settings.root_key =
+            static_cast<int32_t>(takeInt(*settings, "root_key", 60));
         instrument.channel_settings.key_low = static_cast<int32_t>(takeInt(*settings, "key_low"));
-        instrument.channel_settings.key_high = static_cast<int32_t>(takeInt(*settings, "key_high", 127));
-        instrument.channel_settings.fine_tune_cents = static_cast<int32_t>(takeInt(*settings, "fine_tune_cents"));
-        instrument.channel_settings.velocity_tracking = takeFloat(*settings, "velocity_tracking", 1.0F);
+        instrument.channel_settings.key_high =
+            static_cast<int32_t>(takeInt(*settings, "key_high", 127));
+        instrument.channel_settings.fine_tune_cents =
+            static_cast<int32_t>(takeInt(*settings, "fine_tune_cents"));
+        instrument.channel_settings.velocity_tracking =
+            takeFloat(*settings, "velocity_tracking", 1.0F);
         instrument.channel_settings.mod_x = static_cast<int32_t>(takeInt(*settings, "mod_x"));
         instrument.channel_settings.mod_y = static_cast<int32_t>(takeInt(*settings, "mod_y"));
         instrument.channel_settings.arpeggiator = takeBool(*settings, "arpeggiator");
@@ -1020,7 +1078,8 @@ class Loader {
             static_cast<int32_t>(takeInt(*settings, "arpeggiator_time_ticks", TicksPerQuarter / 4));
         instrument.channel_settings.arpeggiator_gate_percent =
             static_cast<int32_t>(takeInt(*settings, "arpeggiator_gate_percent", 100));
-        instrument.channel_settings.echo_time_ticks = static_cast<int32_t>(takeInt(*settings, "echo_time_ticks"));
+        instrument.channel_settings.echo_time_ticks =
+            static_cast<int32_t>(takeInt(*settings, "echo_time_ticks"));
         instrument.channel_settings.echo_feedback_percent =
             static_cast<int32_t>(takeInt(*settings, "echo_feedback_percent"));
       }
@@ -1118,10 +1177,10 @@ class Loader {
           } else {
             continue;
           }
-          automationEntry.parameter = static_cast<plugin::ParamId>(
-              automationValue.find("parameter") == nullptr
-                  ? plugin::InvalidParamId
-                  : automationValue.find("parameter")->asInt());
+          automationEntry.parameter =
+              static_cast<plugin::ParamId>(automationValue.find("parameter") == nullptr
+                                               ? plugin::InvalidParamId
+                                               : automationValue.find("parameter")->asInt());
           const json::Value* points = automationValue.find("points");
           if (points == nullptr || points->asArray() == nullptr) continue;
           for (const json::Value& point : *points->asArray()) {
@@ -1130,7 +1189,8 @@ class Loader {
             automationEntry.points.push_back(
                 AutomationPoint{(*pair)[0].asInt(), static_cast<float>((*pair)[1].asDouble())});
           }
-          if (!automationEntry.points.empty()) pattern.automation.push_back(std::move(automationEntry));
+          if (!automationEntry.points.empty())
+            pattern.automation.push_back(std::move(automationEntry));
         }
       }
 
@@ -1729,7 +1789,7 @@ SaveReport saveProject(const std::filesystem::path& bundle, const Project& proje
   // swap at the end has to be a rename within one filesystem, and /tmp is not
   // guaranteed to be on the same one as the user's project.
   const std::filesystem::path staging =
-      parent / ("." + bundle.filename().string() + ".saving-" + std::to_string(::getpid()));
+      parent / ("." + bundle.filename().string() + ".saving-" + std::to_string(processId()));
   std::filesystem::remove_all(staging, code);
   if (!std::filesystem::create_directory(staging, code)) {
     report.error = "Could not prepare a temporary folder next to '" + bundle.string() + "'.";
@@ -1802,11 +1862,26 @@ SaveReport saveProject(const std::filesystem::path& bundle, const Project& proje
   // last — and if that removal never happens, all that is left behind is a
   // hidden folder, not a lost project.
   if (std::filesystem::exists(bundle, code)) {
+#if defined(_WIN32)
+    const std::filesystem::path backup =
+        parent / ("." + bundle.filename().string() + ".previous-" + std::to_string(processId()));
+    std::filesystem::remove_all(backup, code);
+    std::filesystem::rename(bundle, backup, code);
+    if (code) return abandon("Could not replace '" + bundle.filename().string() + "'.");
+    std::filesystem::rename(staging, bundle, code);
+    if (code) {
+      std::error_code ignored;
+      std::filesystem::rename(backup, bundle, ignored);
+      return abandon("Could not replace '" + bundle.filename().string() + "'.");
+    }
+    std::filesystem::remove_all(backup, code);
+#else
     if (::renamex_np(staging.c_str(), bundle.c_str(), RENAME_SWAP) != 0) {
       return abandon("Could not replace '" + bundle.filename().string() +
                      "': " + std::strerror(errno));
     }
     std::filesystem::remove_all(staging, code);
+#endif
   } else {
     std::filesystem::rename(staging, bundle, code);
     if (code) {

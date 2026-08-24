@@ -16,6 +16,13 @@ if [[ "${1:-}" == "--debug" ]]; then
 fi
 
 FLUTTER=${FLUTTER:-flutter}
+FLUTTER_BUILD_ARGS=()
+if [[ -n "${OB_BUILD_NAME:-}" ]]; then
+  FLUTTER_BUILD_ARGS+=(--build-name "$OB_BUILD_NAME")
+fi
+if [[ -n "${OB_BUILD_NUMBER:-}" ]]; then
+  FLUTTER_BUILD_ARGS+=(--build-number "$OB_BUILD_NUMBER")
+fi
 
 echo "==> Engine ($BUILD_TYPE)"
 cmake -S engine -B build -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
@@ -27,7 +34,7 @@ ctest --test-dir build --output-on-failure
 echo "==> App"
 cd app
 $FLUTTER pub get
-$FLUTTER build macos $FLUTTER_MODE
+$FLUTTER build macos $FLUTTER_MODE "${FLUTTER_BUILD_ARGS[@]}"
 
 # Place the engine and scan helper next to the app binary so the built bundle is
 # self-contained. Proper signing and notarization is Stage 2 work (OB-2-06);

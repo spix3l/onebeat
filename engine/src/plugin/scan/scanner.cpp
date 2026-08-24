@@ -1,8 +1,14 @@
 #include "plugin/scan/scanner.h"
 
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -33,9 +39,22 @@ std::string bundledStockPluginPath() {
       override_path != nullptr && override_path[0] != '\0') {
     return override_path;
   }
+  fs::path binary_directory;
+#if defined(_WIN32)
+  HMODULE module = nullptr;
+  if (GetModuleHandleExW(
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          reinterpret_cast<LPCWSTR>(&StockPathAnchor), &module) == 0)
+    return {};
+  std::array<wchar_t, 32768> path{};
+  const DWORD length = GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
+  if (length == 0 || length >= path.size()) return {};
+  binary_directory = fs::path(path.data()).parent_path();
+#else
   Dl_info image{};
   if (::dladdr(&StockPathAnchor, &image) == 0 || image.dli_fname == nullptr) return {};
-  const fs::path binary_directory = fs::path(image.dli_fname).parent_path();
+  binary_directory = fs::path(image.dli_fname).parent_path();
+#endif
   if (binary_directory.filename() == "Frameworks") {
     return (binary_directory.parent_path() / "PlugIns").string();
   }
@@ -221,8 +240,15 @@ std::vector<BundleRef> discoverBundles(const std::vector<std::string>& directori
 }
 
 std::vector<std::string> PluginScanner::defaultSearchPaths(PluginFormat format) {
+#if defined(_WIN32)
+  const char* common_files = std::getenv("COMMONPROGRAMFILES");
+  const char* local_app_data = std::getenv("LOCALAPPDATA");
+  const std::string system = common_files != nullptr ? std::string(common_files) : std::string();
+  const std::string user = local_app_data != nullptr ? std::string(local_app_data) : std::string();
+#else
   const char* home = std::getenv("HOME");
   const std::string user = home != nullptr ? std::string(home) : std::string();
+#endif
 
   std::vector<std::string> paths;
   switch (format) {
@@ -230,22 +256,34 @@ std::vector<std::string> PluginScanner::defaultSearchPaths(PluginFormat format) 
       if (const std::string stock = bundledStockPluginPath(); !stock.empty()) {
         paths.push_back(stock);
       }
+#if defined(_WIN32)
+      if (!system.empty()) paths.push_back(system + "/CLAP");
+      if (!user.empty()) paths.push_back(user + "/Programs/Common/CLAP");
+#else
       paths.emplace_back("/Library/Audio/Plug-Ins/CLAP");
       if (!user.empty()) {
         paths.push_back(user + "/Library/Audio/Plug-Ins/CLAP");
       }
+#endif
       break;
     case PluginFormat::Vst3:
+#if defined(_WIN32)
+      if (!system.empty()) paths.push_back(system + "/VST3");
+      if (!user.empty()) paths.push_back(user + "/Programs/Common/VST3");
+#else
       paths.emplace_back("/Library/Audio/Plug-Ins/VST3");
       if (!user.empty()) {
         paths.push_back(user + "/Library/Audio/Plug-Ins/VST3");
       }
+#endif
       break;
     case PluginFormat::AudioUnit:
+#if !defined(_WIN32)
       paths.emplace_back("/Library/Audio/Plug-Ins/Components");
       if (!user.empty()) {
         paths.push_back(user + "/Library/Audio/Plug-Ins/Components");
       }
+#endif
       break;
     case PluginFormat::Unknown:
     case PluginFormat::Builtin:

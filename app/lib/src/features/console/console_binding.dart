@@ -1,4 +1,6 @@
 // ConsoleBinding — REPL and script console binding (UI-D-08).
+import 'dart:io' show Platform;
+
 import 'package:flutter/widgets.dart';
 
 import '../../design/tokens.dart';
@@ -8,11 +10,7 @@ import '../../ui_kit/kit_glyphs.dart';
 enum LogLevel { info, warn, error }
 
 class LogEntry {
-  const LogEntry({
-    required this.timestamp,
-    required this.message,
-    this.level = LogLevel.info,
-  });
+  const LogEntry({required this.timestamp, required this.message, this.level = LogLevel.info});
 
   final String timestamp;
   final String message;
@@ -20,11 +18,7 @@ class LogEntry {
 }
 
 class ConsoleBinding extends StatefulWidget {
-  const ConsoleBinding({
-    this.onClose,
-    this.onExecuteScript,
-    super.key,
-  });
+  const ConsoleBinding({this.onClose, this.onExecuteScript, super.key});
 
   final VoidCallback? onClose;
   final ValueChanged<String>? onExecuteScript;
@@ -39,9 +33,9 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
   LogLevel? _filterLevel;
 
   final List<LogEntry> _logs = <LogEntry>[
-    const LogEntry(
+    LogEntry(
       timestamp: '18:12:04.102',
-      message: '[engine] Initialized audio device CoreAudio 48000Hz (buffer 128)',
+      message: '[engine] Initialized audio device ${Platform.isWindows ? 'WASAPI' : 'CoreAudio'} 48000Hz (buffer 128)',
       level: LogLevel.info,
     ),
     const LogEntry(
@@ -69,20 +63,8 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
 
     final String now = DateTime.now().toIso8601String().substring(11, 23);
     setState(() {
-      _logs.add(
-        LogEntry(
-          timestamp: now,
-          message: '> $text',
-          level: LogLevel.info,
-        ),
-      );
-      _logs.add(
-        LogEntry(
-          timestamp: now,
-          message: 'Executed: $text',
-          level: LogLevel.info,
-        ),
-      );
+      _logs.add(LogEntry(timestamp: now, message: '> $text', level: LogLevel.info));
+      _logs.add(LogEntry(timestamp: now, message: 'Executed: $text', level: LogLevel.info));
       _inputController.clear();
     });
 
@@ -97,9 +79,8 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
   @override
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
-    final List<LogEntry> displayedLogs = _filterLevel == null
-        ? _logs
-        : _logs.where((LogEntry l) => l.level == _filterLevel).toList();
+    final List<LogEntry> displayedLogs =
+        _filterLevel == null ? _logs : _logs.where((LogEntry l) => l.level == _filterLevel).toList();
 
     return Container(
       color: tokens.color.surfaceDeep,
@@ -112,12 +93,7 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
             padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md),
             decoration: BoxDecoration(
               color: tokens.color.surfacePanel,
-              border: Border(
-                bottom: BorderSide(
-                  color: tokens.color.line,
-                  width: tokens.border.hairline,
-                ),
-              ),
+              border: Border(bottom: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
             ),
             child: Row(
               children: <Widget>[
@@ -125,10 +101,7 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
                 SizedBox(width: tokens.spacing.sm),
                 Text('REPL & engine diagnostics', style: tokens.type.label),
                 const Spacer(),
-                ObButton(
-                  label: 'Clear',
-                  onTap: _clearLogs,
-                ),
+                ObButton(label: 'Clear', onTap: _clearLogs),
                 if (widget.onClose != null) ...<Widget>[
                   SizedBox(width: tokens.spacing.sm),
                   GestureDetector(
@@ -164,21 +137,9 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(
-                        entry.timestamp,
-                        style: tokens.type.numericSmall.copyWith(
-                          color: tokens.color.textMuted,
-                        ),
-                      ),
+                      Text(entry.timestamp, style: tokens.type.numericSmall.copyWith(color: tokens.color.textMuted)),
                       SizedBox(width: tokens.spacing.sm),
-                      Expanded(
-                        child: Text(
-                          entry.message,
-                          style: tokens.type.numericSmall.copyWith(
-                            color: levelColor,
-                          ),
-                        ),
-                      ),
+                      Expanded(child: Text(entry.message, style: tokens.type.numericSmall.copyWith(color: levelColor))),
                     ],
                   ),
                 );
@@ -190,12 +151,7 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
             padding: EdgeInsets.all(tokens.spacing.sm),
             decoration: BoxDecoration(
               color: tokens.color.surfacePanel,
-              border: Border(
-                top: BorderSide(
-                  color: tokens.color.line,
-                  width: tokens.border.hairline,
-                ),
-              ),
+              border: Border(top: BorderSide(color: tokens.color.line, width: tokens.border.hairline)),
             ),
             child: Row(
               children: <Widget>[
@@ -204,20 +160,14 @@ class _ConsoleBindingState extends State<ConsoleBinding> {
                   child: EditableText(
                     controller: _inputController,
                     focusNode: _inputFocus,
-                    style: tokens.type.numeric.copyWith(
-                      color: tokens.color.textPrimary,
-                    ),
+                    style: tokens.type.numeric.copyWith(color: tokens.color.textPrimary),
                     cursorColor: tokens.color.accent,
                     backgroundCursorColor: tokens.color.surfaceDeep,
                     onSubmitted: (_) => _submitInput(),
                   ),
                 ),
                 SizedBox(width: tokens.spacing.sm),
-                ObButton(
-                  label: 'Run',
-                  tone: ObButtonTone.primary,
-                  onTap: _submitInput,
-                ),
+                ObButton(label: 'Run', tone: ObButtonTone.primary, onTap: _submitInput),
               ],
             ),
           ),
