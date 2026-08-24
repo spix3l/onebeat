@@ -152,8 +152,8 @@ otherwise would be dishonest. Carried forward as D2.
 | Cold — fresh CI runner, no caches, `tools/build.sh --debug` | **73 s** | 900 s |
 | Warm — `build/` and `app/build/` deleted, Xcode and pub caches intact | 19 s | — |
 
-The cold number is measured by the `clone-to-build` CI job on every push, so it
-cannot drift unnoticed.
+The cold number was measured by a `clone-to-build` CI job. That job has since
+been removed, so this is a point-in-time figure rather than an enforced budget.
 
 ## Accepted debt, carried into the backlog
 

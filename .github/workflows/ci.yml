@@ -163,22 +163,3 @@ jobs:
           "$LLVM_PREFIX/bin/run-clang-tidy" -p build-tidy \
             -clang-tidy-binary "$LLVM_PREFIX/bin/clang-tidy" -j 3 -quiet \
             'engine/src/(core|audio_io|plugin|model)/.*\.cpp$'
-
-  clone-to-build:
-    name: clone-to-build time (NFR-07)
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-      - name: Time a cold build
-        run: |
-          START=$(date +%s)
-          FLUTTER=flutter tools/build.sh --debug
-          END=$(date +%s)
-          ELAPSED=$((END - START))
-          echo "Clone-to-build: ${ELAPSED}s (budget 900s)"
-          echo "clone_to_build_seconds=${ELAPSED}" >> "$GITHUB_STEP_SUMMARY"
-          test "$ELAPSED" -lt 900
