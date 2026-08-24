@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/widgets.dart';
 
 import '../../core/engine_controller.dart' as core;
+import '../../design/tokens.dart';
 import '../../engine/engine_client.dart';
 import 'preferences_dialog.dart';
 import 'preferences_vm.dart';
@@ -96,9 +97,7 @@ class _PreferencesBindingState extends State<PreferencesBinding> {
 
   void _onRescanPlugins() {
     setState(() => _isScanning = true);
-    Future<void>.delayed(const Duration(milliseconds: 600), () {
-      // token-lint-ok: simulated scan delay
-      // token-lint-ok: simulated scan delay
+    Future<void>.delayed(OneBeatTheme.of(context).motion.scanFeedbackDelay, () {
       if (mounted) {
         setState(() => _isScanning = false);
       }

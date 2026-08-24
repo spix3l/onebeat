@@ -121,8 +121,8 @@ class _ChannelEditorBindingState extends State<ChannelEditorBinding> {
           ObWindowAction(icon: ObKitGlyphKind.close, onTap: widget.onClose, tooltip: 'Close channel editor'),
         ],
       ),
-      width: 920,
-      height: 760,
+      width: tokens.size.channelEditorWindowWidth,
+      height: tokens.size.channelEditorWindowHeight,
       onDragUpdate: widget.onDragUpdate,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,7 +181,12 @@ class _NativePluginEditorHost extends StatelessWidget {
   Widget build(BuildContext context) {
     final OneBeatTokens tokens = OneBeatTheme.of(context);
     return Container(
-      margin: EdgeInsets.fromLTRB(tokens.spacing.md, tokens.spacing.md, tokens.spacing.md, 0),
+      margin: EdgeInsets.fromLTRB(
+        tokens.spacing.md,
+        tokens.spacing.md,
+        tokens.spacing.md,
+        tokens.spacing.zero,
+      ),
       padding: EdgeInsets.symmetric(horizontal: tokens.spacing.md, vertical: tokens.spacing.sm),
       decoration: BoxDecoration(
         color: tokens.color.accentWash,

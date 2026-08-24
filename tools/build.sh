@@ -16,12 +16,15 @@ if [[ "${1:-}" == "--debug" ]]; then
 fi
 
 FLUTTER=${FLUTTER:-flutter}
-FLUTTER_BUILD_ARGS=()
+# Use positional parameters rather than an array here. The macOS 15 runner
+# still invokes the system Bash 3.2, where expanding an empty array under
+# `set -u` raises "unbound variable" instead of producing zero arguments.
+set --
 if [[ -n "${OB_BUILD_NAME:-}" ]]; then
-  FLUTTER_BUILD_ARGS+=(--build-name "$OB_BUILD_NAME")
+  set -- "$@" --build-name "$OB_BUILD_NAME"
 fi
 if [[ -n "${OB_BUILD_NUMBER:-}" ]]; then
-  FLUTTER_BUILD_ARGS+=(--build-number "$OB_BUILD_NUMBER")
+  set -- "$@" --build-number "$OB_BUILD_NUMBER"
 fi
 
 echo "==> Engine ($BUILD_TYPE)"
@@ -34,7 +37,7 @@ ctest --test-dir build --output-on-failure
 echo "==> App"
 cd app
 $FLUTTER pub get
-$FLUTTER build macos $FLUTTER_MODE "${FLUTTER_BUILD_ARGS[@]}"
+$FLUTTER build macos $FLUTTER_MODE "$@"
 
 # Place the engine and scan helper next to the app binary so the built bundle is
 # self-contained. Proper signing and notarization is Stage 2 work (OB-2-06);

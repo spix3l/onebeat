@@ -686,36 +686,6 @@ class OneBeatBindings {
   late final _ob_engine_instrument_set_soloed = _ob_engine_instrument_set_soloedPtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, int)>();
 
-  ob_status ob_engine_instrument_settings(
-    ffi.Pointer<ob_engine> engine,
-    ffi.Pointer<ffi.Char> utf8_instrument_id,
-    ffi.Pointer<ob_instrument_settings> out_settings,
-  ) {
-    return ob_status.fromValue(_ob_engine_instrument_settings(engine, utf8_instrument_id, out_settings));
-  }
-
-  late final _ob_engine_instrument_settingsPtr = _lookup<
-    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)>
-  >('ob_engine_instrument_settings');
-  late final _ob_engine_instrument_settings = _ob_engine_instrument_settingsPtr.asFunction<
-    int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)
-  >();
-
-  ob_status ob_engine_instrument_set_settings(
-    ffi.Pointer<ob_engine> engine,
-    ffi.Pointer<ffi.Char> utf8_instrument_id,
-    ffi.Pointer<ob_instrument_settings> settings,
-  ) {
-    return ob_status.fromValue(_ob_engine_instrument_set_settings(engine, utf8_instrument_id, settings));
-  }
-
-  late final _ob_engine_instrument_set_settingsPtr = _lookup<
-    ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)>
-  >('ob_engine_instrument_set_settings');
-  late final _ob_engine_instrument_set_settings = _ob_engine_instrument_set_settingsPtr.asFunction<
-    int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)
-  >();
-
   ob_status ob_engine_instrument_reorder(
     ffi.Pointer<ob_engine> engine,
     ffi.Pointer<ffi.Char> utf8_instrument_id,
@@ -945,6 +915,52 @@ class OneBeatBindings {
       >('ob_engine_instrument_set_route');
   late final _ob_engine_instrument_set_route = _ob_engine_instrument_set_routePtr
       .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ffi.Char>)>();
+
+  ob_status ob_engine_instrument_settings(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_instrument_settings> out_settings,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_settings(
+        engine,
+        utf8_instrument_id,
+        out_settings,
+      ),
+    );
+  }
+
+  late final _ob_engine_instrument_settingsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)
+        >
+      >('ob_engine_instrument_settings');
+  late final _ob_engine_instrument_settings = _ob_engine_instrument_settingsPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)>();
+
+  ob_status ob_engine_instrument_set_settings(
+    ffi.Pointer<ob_engine> engine,
+    ffi.Pointer<ffi.Char> utf8_instrument_id,
+    ffi.Pointer<ob_instrument_settings> settings,
+  ) {
+    return ob_status.fromValue(
+      _ob_engine_instrument_set_settings(
+        engine,
+        utf8_instrument_id,
+        settings,
+      ),
+    );
+  }
+
+  late final _ob_engine_instrument_set_settingsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)
+        >
+      >('ob_engine_instrument_set_settings');
+  late final _ob_engine_instrument_set_settings = _ob_engine_instrument_set_settingsPtr
+      .asFunction<int Function(ffi.Pointer<ob_engine>, ffi.Pointer<ffi.Char>, ffi.Pointer<ob_instrument_settings>)>();
 
   int ob_engine_project_can_undo(
     ffi.Pointer<ob_engine> engine,
@@ -3729,42 +3745,61 @@ final class ob_instrument_info extends ffi.Struct {
 final class ob_instrument_settings extends ffi.Struct {
   @ffi.Uint32()
   external int struct_size;
+
   @ffi.Int32()
   external int gate_percent;
+
   @ffi.Int64()
   external int shift_ticks;
+
   @ffi.Int32()
   external int cut_group;
+
   @ffi.Int32()
   external int cut_by_group;
+
   @ffi.Int32()
   external int max_polyphony;
+
   @ffi.Int32()
   external int mono;
+
   @ffi.Int32()
   external int portamento;
+
   @ffi.Int32()
   external int root_key;
+
   @ffi.Int32()
   external int key_low;
+
   @ffi.Int32()
   external int key_high;
+
   @ffi.Int32()
   external int fine_tune_cents;
+
   @ffi.Float()
   external double velocity_tracking;
+
   @ffi.Int32()
   external int mod_x;
+
   @ffi.Int32()
   external int mod_y;
+
   @ffi.Int32()
   external int arpeggiator;
+
   @ffi.Int32()
   external int arpeggiator_time_ticks;
+
   @ffi.Int32()
   external int arpeggiator_gate_percent;
+
   @ffi.Int32()
   external int echo_time_ticks;
+
   @ffi.Int32()
   external int echo_feedback_percent;
 }

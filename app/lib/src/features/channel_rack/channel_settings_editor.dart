@@ -303,7 +303,13 @@ class _ChoiceRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(child: Text(label, style: tokens.type.body)),
-          ObDropdown(label: label, value: value, items: items, width: 180, onSelected: onSelected),
+          ObDropdown(
+            label: label,
+            value: value,
+            items: items,
+            width: tokens.size.settingsChoiceWidth,
+            onSelected: onSelected,
+          ),
         ],
       ),
     );

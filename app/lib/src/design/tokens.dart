@@ -643,6 +643,7 @@ class SizeTokens {
   /// mixed controls shares a baseline.
   double get microFieldHeight => 26;
   double get dropdownWidth => 156;
+  double get settingsChoiceWidth => 180;
   double get chipHeight => 26;
   double get fxChipWidth => 67;
   double get chipDotSize => 6;
@@ -813,6 +814,8 @@ class SizeTokens {
   double get layoutsPillWidth => 168;
   double get detachedWindowWidth => 668;
   double get detachedWindowHeight => 760;
+  double get channelEditorWindowWidth => 920;
+  double get channelEditorWindowHeight => 760;
   double get pluginWindowWidth => 440;
   double get pluginWindowHeight => 340;
   double get synthWindowWidth => 760;
@@ -831,6 +834,12 @@ class SizeTokens {
   double get dockTabCardHeight => 58;
   double get dockTabTileSize => 24;
   double get dragGhostHeaderHeight => 26;
+
+  /// Startup loading composition: brand mark and the slim activity rail below
+  /// it. These are one authored lockup rather than general-purpose widths.
+  double get loadingLogoWidth => 280;
+  double get loadingTrackWidth => 160;
+  double get loadingTrackHeight => 2;
 }
 
 /// Motion tokens (FR-UX-06 groundwork). Durations are short on purpose: a DAW
@@ -850,6 +859,11 @@ class MotionTokens {
   /// enough that stopping on a glyph feels like asking a question.
   Duration get tooltipDelay => const Duration(milliseconds: 400);
   Duration get doubleTapWindow => const Duration(milliseconds: 300);
+
+  /// Feedback timings that communicate ongoing background work. Neither gates
+  /// the work itself; they only control the visible activity state.
+  Duration get scanFeedbackDelay => const Duration(milliseconds: 600);
+  Duration get loadingCycle => const Duration(milliseconds: 1400);
 
   /// Meter ballistics, in decibels per second, applied against wall-clock time
   /// so that a dropped frame cannot change the decay rate (OB-1-11 §3).

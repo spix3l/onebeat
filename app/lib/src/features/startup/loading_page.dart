@@ -10,10 +10,16 @@ class OneBeatLoadingPage extends StatefulWidget {
 }
 
 class _OneBeatLoadingPageState extends State<OneBeatLoadingPage> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1400),
-  )..repeat();
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: OneBeatTokens.dark().motion.loadingCycle,
+    )..repeat();
+  }
 
   @override
   void dispose() {
@@ -32,14 +38,18 @@ class _OneBeatLoadingPageState extends State<OneBeatLoadingPage> with SingleTick
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Image.asset('assets/branding/onebeat_logo.png', width: 280, filterQuality: FilterQuality.high),
+              Image.asset(
+                'assets/branding/onebeat_logo.png',
+                width: tokens.size.loadingLogoWidth,
+                filterQuality: FilterQuality.high,
+              ),
               SizedBox(height: tokens.spacing.xxl),
               AnimatedBuilder(
                 animation: _controller,
                 builder: (BuildContext context, Widget? child) {
                   return SizedBox(
-                    width: 160,
-                    height: 2,
+                    width: tokens.size.loadingTrackWidth,
+                    height: tokens.size.loadingTrackHeight,
                     child: Align(
                       alignment: Alignment(-1 + _controller.value * 2, 0),
                       child: FractionallySizedBox(widthFactor: 0.28, child: ColoredBox(color: tokens.color.accent)),
