@@ -550,7 +550,8 @@ typedef struct ob_instrument_settings {
 } ob_instrument_settings;
 OB_API ob_status ob_engine_instrument_settings(ob_engine* engine, const char* utf8_instrument_id,
                                                ob_instrument_settings* out_settings);
-OB_API ob_status ob_engine_instrument_set_settings(ob_engine* engine, const char* utf8_instrument_id,
+OB_API ob_status ob_engine_instrument_set_settings(ob_engine* engine,
+                                                   const char* utf8_instrument_id,
                                                    const ob_instrument_settings* settings);
 OB_API int32_t ob_engine_project_can_undo(ob_engine* engine);
 OB_API int32_t ob_engine_project_can_redo(ob_engine* engine);

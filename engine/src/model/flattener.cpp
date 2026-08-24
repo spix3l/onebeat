@@ -257,8 +257,8 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
             Note swung_note = note;
             swung_note.start = swungPosition(note.start, pattern->swing) + settings.shift_ticks;
             swung_note.length = std::max<Ticks>(
-                1, static_cast<Ticks>(std::llround(
-                       static_cast<double>(note.length) * settings.gate_percent / 100.0)));
+                1, static_cast<Ticks>(std::llround(static_cast<double>(note.length) *
+                                                   settings.gate_percent / 100.0)));
             collectOccurrences(swung_note, *clip, pattern_length, occurrences);
             for (const auto& [start, end] : occurrences) {
               ResolvedNote resolved;
@@ -286,14 +286,13 @@ FlattenResult flatten(const Project& project, const FlattenOptions& options) {
                                              automation.parameter, point.value});
             }
           } else if (automation.target_kind == AutomationSource::TargetKind::Effect) {
-            const auto index = result.effect_index.find(
-                std::make_pair(automation.mixer_track, automation.effect));
+            const auto index =
+                result.effect_index.find(std::make_pair(automation.mixer_track, automation.effect));
             if (index == result.effect_index.end()) continue;
             for (const AutomationPoint& point : automation.points) {
               if (point.position < 0 || point.position >= clip->length) continue;
-              effect_params.push_back(ResolvedEffectParam{clip->start + point.position,
-                                                          index->second, automation.parameter,
-                                                          point.value});
+              effect_params.push_back(ResolvedEffectParam{
+                  clip->start + point.position, index->second, automation.parameter, point.value});
             }
           }
         }

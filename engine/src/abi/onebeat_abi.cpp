@@ -2287,7 +2287,7 @@ ob_status ob_engine_instrument_set_route(ob_engine* engine, const char* utf8_ins
 }
 
 ob_status ob_engine_instrument_settings(ob_engine* engine, const char* utf8_instrument_id,
-                                             ob_instrument_settings* out_settings) {
+                                        ob_instrument_settings* out_settings) {
   if (engine == nullptr || out_settings == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "An engine and settings output are required.");
   }
@@ -2321,7 +2321,7 @@ ob_status ob_engine_instrument_settings(ob_engine* engine, const char* utf8_inst
 }
 
 ob_status ob_engine_instrument_set_settings(ob_engine* engine, const char* utf8_instrument_id,
-                                             const ob_instrument_settings* settings) {
+                                            const ob_instrument_settings* settings) {
   if (engine == nullptr || settings == nullptr) {
     return fail(OB_ERR_INVALID_ARGUMENT, "An engine and settings are required.");
   }
@@ -2499,10 +2499,10 @@ ob_status ob_engine_rack_set_length(ob_engine* engine, int32_t base_step_count) 
   if (pattern == nullptr) return fail(OB_ERR_INTERNAL, "The current pattern is unavailable.");
   // Zero is the persisted Auto mode. The model's effective-length helper
   // expands it to the shortest whole-bar span containing the pattern content.
-  const onebeat::model::Ticks length =
-      base_step_count == 0
-          ? 0
-          : static_cast<onebeat::model::Ticks>(base_step_count) * onebeat::model::TicksPerQuarter / 4;
+  const onebeat::model::Ticks length = base_step_count == 0
+                                           ? 0
+                                           : static_cast<onebeat::model::Ticks>(base_step_count) *
+                                                 onebeat::model::TicksPerQuarter / 4;
   /* Placements are the size the pattern *plays*, not the size it declares, so
    * that is what "this clip still fits the pattern" is measured against. A
    * pattern held open by a note past its declared end keeps its clips where
