@@ -1,13 +1,21 @@
 #include "audio_io/wasapi/wasapi_device.h"
 
+// These three groups are separate blocks on purpose: clang-format sorts within
+// a block, and the alphabetical order is the broken one here. <windows.h> has
+// to be first, and <mmdeviceapi.h> pulls in the propsys header that defines
+// DEFINE_PROPERTYKEY, which <functiondiscoverykeys_devpkey.h> is nothing but a
+// long list of uses of. Sorted together, the property keys expand before the
+// macro exists and every one of them is an undeclared identifier.
 #define NOMINMAX
+#include <windows.h>
+
+#include <mmdeviceapi.h>
+
 #include <audioclient.h>
 #include <avrt.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <ks.h>
 #include <ksmedia.h>
-#include <mmdeviceapi.h>
-#include <windows.h>
 
 #include <algorithm>
 #include <array>
