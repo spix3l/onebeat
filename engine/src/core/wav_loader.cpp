@@ -9,8 +9,16 @@
 namespace onebeat::core {
 namespace {
 
+// A backslash is a legal character in a POSIX filename, so it only counts as a
+// separator on the platform where it is one.
+#if defined(_WIN32)
+constexpr const char* PathSeparators = "/\\";
+#else
+constexpr const char* PathSeparators = "/";
+#endif
+
 std::string fileName(const std::string& path) {
-  const size_t slash = path.find_last_of('/');
+  const size_t slash = path.find_last_of(PathSeparators);
   return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
@@ -55,11 +63,14 @@ std::unique_ptr<SampleData> makeFallbackSample(double sample_rate) {
 
   // A short pitched blip with an exponential decay: enough to hear pitch,
   // velocity and voice-stealing behaviour without shipping a file.
+  // M_PI is a POSIX extension, not standard C++; MSVC only defines it behind
+  // _USE_MATH_DEFINES. Spelled out here as it is everywhere else in the engine.
+  constexpr double Pi = 3.14159265358979323846;
   constexpr double BaseHz = 220.0;
   for (int64_t frame = 0; frame < frames; ++frame) {
     const double time = static_cast<double>(frame) / sample_rate;
     const double envelope = std::exp(-time * 18.0);
-    const double phase = 2.0 * M_PI * BaseHz * time;
+    const double phase = 2.0 * Pi * BaseHz * time;
     data->samples[static_cast<size_t>(frame)] =
         static_cast<float>(envelope * (std::sin(phase) + 0.3 * std::sin(2.0 * phase)) * 0.7);
   }
