@@ -32,6 +32,19 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  engine-windows:
+    name: engine (Windows)
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      # The release is the only other thing that compiles the Windows sources,
+      # and finding a portability break there means finding it after the tag is
+      # already pushed. This job builds exactly what the release builds.
+      - name: Configure
+        run: cmake -S engine -B build-windows -A x64 -DONEBEAT_BUILD_TESTS=OFF -DONEBEAT_WERROR=OFF
+      - name: Build
+        run: cmake --build build-windows --config Release --target onebeat_engine --parallel 3
+
   sanitizers:
     name: ${{ matrix.name }}
     runs-on: macos-15

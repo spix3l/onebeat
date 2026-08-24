@@ -1,9 +1,18 @@
 #include "plugin/scan/plugin_library.h"
 
-#include <strings.h>
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+
+// `strcasecmp` is POSIX; MSVC spells the same function `_stricmp` and declares
+// it in <string.h> rather than <strings.h>.
+#if defined(_WIN32)
+#include <string.h>
+#define ONEBEAT_STRCASECMP _stricmp
+#else
+#include <strings.h>
+#define ONEBEAT_STRCASECMP strcasecmp
+#endif
 
 #include "core/diagnostics.h"
 #include "plugin/scan/subprocess_probe.h"
@@ -17,7 +26,7 @@ namespace {
 // tie-break the order would depend on filesystem enumeration order and the list
 // would shuffle between launches.
 bool byDisplayName(const PluginDescriptor& a, const PluginDescriptor& b) {
-  const int name = ::strcasecmp(a.name.text(), b.name.text());
+  const int name = ONEBEAT_STRCASECMP(a.name.text(), b.name.text());
   if (name != 0) {
     return name < 0;
   }

@@ -9,6 +9,15 @@
 #include <mutex>
 #include <string>
 
+// MSVC has no `__attribute__((format))`; the checking is a GCC/Clang nicety, so
+// it compiles away to nothing there rather than blocking the Windows build.
+#if defined(__GNUC__) || defined(__clang__)
+#define ONEBEAT_PRINTF_FORMAT(fmt_index, first_arg) \
+  __attribute__((format(printf, fmt_index, first_arg)))
+#else
+#define ONEBEAT_PRINTF_FORMAT(fmt_index, first_arg)
+#endif
+
 namespace onebeat::core {
 
 enum class LogLevel : uint8_t { Trace = 0, Debug = 1, Info = 2, Warn = 3, Error = 4 };
@@ -24,7 +33,7 @@ class Diagnostics {
 
   void log(LogLevel level, const char* category, const std::string& message);
   void logf(LogLevel level, const char* category, const char* format, ...)
-      __attribute__((format(printf, 4, 5)));
+      ONEBEAT_PRINTF_FORMAT(4, 5);
 
   const std::string& sessionLogPath() const { return session_path_; }
   const std::string& directory() const { return directory_; }

@@ -39,7 +39,10 @@ target_include_directories(onebeat_third_party SYSTEM INTERFACE
 # Warning / sanitizer discipline (NFR-08)
 # ---------------------------------------------------------------------------
 if(MSVC)
-  set(ONEBEAT_WARNINGS /W4 /permissive- /Zc:__cplusplus /wd4100 /wd4244 /wd4267)
+  # /wd4324: "structure was padded due to alignment specifier". Every hit is a
+  # deliberate `alignas(cache line)` in the lock-free ring buffers, where the
+  # padding is the point.
+  set(ONEBEAT_WARNINGS /W4 /permissive- /Zc:__cplusplus /wd4100 /wd4244 /wd4267 /wd4324)
   if(ONEBEAT_WERROR)
     list(APPEND ONEBEAT_WARNINGS /WX)
   endif()
